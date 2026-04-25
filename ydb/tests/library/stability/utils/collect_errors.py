@@ -468,6 +468,11 @@ class AgentErrorsCollector:
                 node_error.was_oom = has_oom
                 if has_verifies:
                     node_error.verifies = verify_hosts[node.host]
+                if has_san_errors:
+                    node_error.sanitizer_errors = 1
+                    node_error.sanitizer_output = self._get_sanitizer_output_for_host(
+                        node.host, warden_results
+                    )
                 node_errors.append(node_error)
 
                 # Add errors to result
@@ -481,6 +486,27 @@ class AgentErrorsCollector:
                     result.add_error(f'Node {node.host} has SAN errors')
 
         return node_errors, warden_results
+
+    @staticmethod
+    def _get_sanitizer_output_for_host(host: str, warden_results: WardenResults) -> str | None:
+        """Extract sanitizer violation text for a specific host from warden results.
+
+        Args:
+            host: Hostname to look up
+            warden_results: Parsed warden results
+
+        Returns:
+            Concatenated violation strings for the host, or None if none found.
+        """
+        fragments: list[str] = []
+        for name, check in warden_results.checks.items():
+            if 'sanitizer' not in name.lower():
+                continue
+            if check.is_ok():
+                continue
+            if host in check.affected_hosts:
+                fragments.extend(check.violations)
+        return '\n'.join(fragments) if fragments else None
 
     def get_core_hashes_by_pod(self, start_time: float, end_time: float) -> dict[str, list[tuple[str, str, str]]]:
         """Collect coredump hashes from all hosts via SSH/breakpad.

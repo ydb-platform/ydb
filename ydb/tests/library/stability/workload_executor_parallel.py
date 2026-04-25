@@ -183,14 +183,14 @@ class ParallelWorkloadTestBase:
 
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            node_errors, verify_errors, warden_results = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
+            node_errors, warden_results = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
 
             # Separate step for uploading results (AFTER all data preparation)
-            safe_upload_results(overall_result, run_config, node_errors, verify_errors)  # noqa: warden_results not uploaded yet
+            safe_upload_results(overall_result, run_config, node_errors)  # noqa: warden_results not uploaded yet
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors, verify_errors)
+            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -201,7 +201,7 @@ class ParallelWorkloadTestBase:
         self,
         errors_collector: AgentErrorsCollector,
         result: StressUtilTestResults,
-    ) -> tuple[list, dict, any]:
+    ) -> tuple[list, any]:
         """
         Processes workload result with diagnostic information from nemesis orchestrator.
 
@@ -215,7 +215,6 @@ class ParallelWorkloadTestBase:
         Returns:
             Tuple containing:
             - node_errors: List of node error objects
-            - verify_errors: Dictionary of verification errors (from warden)
             - warden_results: Full WardenResults from orchestrator
 
         Note:
@@ -225,7 +224,6 @@ class ParallelWorkloadTestBase:
         """
         with allure.step("Process workload result"):
             node_errors = []
-            verify_errors = {}
             warden_results = WardenResults()
 
             # Check node status and collect errors via orchestrator
@@ -267,9 +265,9 @@ class ParallelWorkloadTestBase:
                         workload_error_messages.append(err)
 
             # Generate allure report with warden results
-            create_parallel_allure_report(result, node_errors, verify_errors, warden_results)
+            create_parallel_allure_report(result, node_errors, warden_results)
 
-            return node_errors, verify_errors, warden_results
+            return node_errors, warden_results
 
     def _handle_final_status(
         self,
@@ -277,7 +275,6 @@ class ParallelWorkloadTestBase:
         result: StressUtilTestResults,
         preparation_result: dict[str, StressUtilDeployResult],
         node_errors: list,
-        verify_errors: dict
     ) -> None:
         """
         Handles final test status (fail, broken, etc.)
@@ -285,13 +282,12 @@ class ParallelWorkloadTestBase:
         Args:
             result: Test results object
             node_errors: List of node errors
-            verify_errors: Verification errors
 
         Raises:
             pytest.fail: If nodes have coredumps/OOMs
             Exception: If workload errors occurred
         """
-        nodes_with_issues = len(node_errors) + len(verify_errors)
+        nodes_with_issues = len(node_errors)
         workload_errors = []
         if result.errors:
             for err in result.errors:

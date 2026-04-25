@@ -1,4 +1,5 @@
 from copy import deepcopy
+import html
 import json
 import logging
 import allure
@@ -9,7 +10,6 @@ from ydb.tests.olap.lib.allure_utils import (
     NodeErrors,
     _attach_sanitizer_outputs,
     _produce_sanitizer_report,
-    _produce_verify_report,
     _set_coredumps,
     _set_logs_command,
     _set_monitoring,
@@ -22,7 +22,6 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 def create_parallel_allure_report(
     result: StressUtilTestResults,
     node_errors,
-    verify_errors,
     warden_results: WardenResults = None,
 ):
     """Creates an Allure report for workload test results.
@@ -30,7 +29,6 @@ def create_parallel_allure_report(
     Args:
         result: Stress test execution results
         node_errors: List of NodeErrors with diagnostic info
-        verify_errors: Dictionary of verification errors (legacy, may be empty)
         warden_results: Results from nemesis orchestrator warden checks
     """
     additional_table_strings = {}
@@ -40,7 +38,6 @@ def create_parallel_allure_report(
         end_time=end_time,
         addition_table_strings=additional_table_strings,
         node_errors=node_errors,
-        verify_errors=verify_errors,
         execution_result=result,
         warden_results=warden_results,
     )
@@ -52,7 +49,6 @@ def parallel_allure_test_description(
     addition_table_strings: dict[str, any] = None,
     attachments: tuple[str, str, allure.attachment_type] = None,
     node_errors: list[NodeErrors] = None,
-    verify_errors=None,
     addition_blocks: list[str] = [],
     execution_result: StressUtilTestResults = None,
     warden_results: WardenResults = None,
@@ -65,7 +61,6 @@ def parallel_allure_test_description(
         addition_table_strings: Additional key-value pairs for info table
         attachments: Tuple of (body, name, type) for attachments
         node_errors: List of node error objects
-        verify_errors: Verification errors
         addition_blocks: Additional HTML blocks to include
         execution_result: Test execution results
         warden_results: Results from nemesis orchestrator warden checks
@@ -116,7 +111,6 @@ def parallel_allure_test_description(
     '''
 
     html += _set_node_errors(node_errors)
-    html += _produce_verify_report(verify_errors)
 
     # Add warden checks status table and violations from orchestrator
     if warden_results is not None:
@@ -297,14 +291,7 @@ def _escape_html(text: str) -> str:
     """
     if not text:
         return ''
-    return (
-        text
-        .replace('&', '&amp;')
-        .replace('<', '&lt;')
-        .replace('>', '&gt;')
-        .replace('"', '&quot;')
-        .replace("'", '&#39;')
-    )
+    return html.escape(text, quote=True)
 
 
 def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str:

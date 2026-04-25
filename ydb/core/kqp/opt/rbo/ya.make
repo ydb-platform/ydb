@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    kqp_new_html_log.cpp
     kqp_rbo_transformer.cpp
     kqp_operator.cpp
     kqp_expression.cpp

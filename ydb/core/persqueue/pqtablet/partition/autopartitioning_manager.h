@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
+#include <ydb/core/persqueue/common/write_stats.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -21,11 +23,12 @@ public:
     virtual ~IAutopartitioningManager() = default;
 
     virtual void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") = 0;
+    virtual void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) = 0;
     virtual void CleanUp() = 0;
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;
     virtual std::optional<TString> SplitBoundary() = 0;
-    virtual std::vector<std::pair<TString, ui64>> GetWrittenBytes() = 0;
+    virtual NPQ::TWriteStats GetWriteStats() = 0;
 
     virtual void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) = 0;
 };

@@ -2,7 +2,7 @@
 
 // KLL-based partitioning keys for split-by-load; used only by autopartitioning_manager in this module.
 
-#include <ydb/core/persqueue/common/last_counter.h>
+#include "last_counter.h"
 
 #include <util/datetime/base.h>
 #include <ydb/library/kll_median/dynamic_sketch.h>
@@ -19,6 +19,7 @@ struct TPartitioningKeysManager {
     void Add(TUint128 key, ui64 weight, TInstant now);
     TUint128 GetMedianKey();
     bool MoreThanOneKey(TInstant since);
+    void Merge(const TPartitioningKeysManager& other);
 
 private:
     void RemoveOldSketches(TInstant now);

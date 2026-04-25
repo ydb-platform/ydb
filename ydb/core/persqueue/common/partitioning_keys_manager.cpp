@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/pqtablet/partition/partitioning_keys_manager.h>
+#include "partitioning_keys_manager.h"
 
 #include <util/generic/vector.h>
 
@@ -28,6 +28,23 @@ void TPartitioningKeysManager::Add(TUint128 key, ui64 weight, TInstant now) {
     RemoveOldSketches(now);
     EnsureSketch(now);
     Sketches.back().BytesSketch.Add(key, weight);
+}
+
+void TPartitioningKeysManager::Merge(const TPartitioningKeysManager& other) {
+    KeysCounter.Merge(other.KeysCounter);
+    auto currentSketch = Sketches.begin();
+    for (const auto& sketch : other.Sketches) {
+        while (currentSketch != Sketches.end() && currentSketch->StartTime + WindowSize < sketch.StartTime) {
+            ++currentSketch;
+        }
+        
+        if (currentSketch == Sketches.end()) {
+            EnsureSketch(sketch.StartTime);
+            currentSketch = std::prev(Sketches.end());
+        }
+
+        currentSketch->BytesSketch.Merge(sketch.BytesSketch);
+    }
 }
 
 TUint128 TPartitioningKeysManager::GetMedianKey() {

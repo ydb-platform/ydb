@@ -171,6 +171,16 @@ namespace NKikimr::NKll {
             Levels_.clear();
         }
 
+        void Merge(const TKllSketch<T>& other) {
+            size_t currentLevel = other.Levels_.size() - 1;
+            for (auto iter = other.Levels_.rbegin(); iter != other.Levels_.rend(); ++iter) {
+                for (const auto& item : iter->Items) {
+                    AddToLevel(currentLevel, item);
+                }
+                currentLevel--;
+            }
+        }
+
     private:
         struct TLevel {
             TLevel(ui64 weight, size_t levelSize)

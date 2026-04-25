@@ -48,7 +48,7 @@ def collect_orchestrator_cluster_safety_specs(
 class OrchestratorAggregatedSafetyCheck:
     """
     Aggregate over agent safety responses.
-    agent_source_class_name — agent catalog slot name (e.g. "unified_agent_verify_failed"); matched against the agent-reported check["name"] field. 
+    agent_source_class_name — agent catalog slot name (e.g. "unified_agent_verify_failed"); matched against the agent-reported check["name"] field.
     See UnifiedAgentVerifyFailedAggregated._row_matches_class.
     """
 

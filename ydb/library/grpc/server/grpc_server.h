@@ -19,6 +19,8 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
+
 namespace NMonitoring {
     struct TDynamicCounters;
 } // NMonitoring

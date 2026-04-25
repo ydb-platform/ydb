@@ -17,7 +17,6 @@ namespace {
 struct TPredicateCollectResult {
     TString ColumnName;
     TCollectResult Collect;
-    size_t ProcessedJsonNodes = 0;
 };
 
 struct TJsonNodeParams {
@@ -93,7 +92,7 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         if (jsonExists.OnError() && jsonExists.OnError().Maybe<TCoJust>()) {
             const auto arg = jsonExists.OnError().Cast<TCoJust>().Input();
             if (arg.Maybe<TCoBool>() && FromString<bool>(arg.Cast<TCoBool>().Literal().Value())) {
-                return std::unexpected("JSON_EXISTS with ON ERROR TRUE is not supported by JSON index");
+                return std::unexpected("JSON_EXISTS with ON ERROR TRUE is not supported");
             }
         }
     }
@@ -131,25 +130,55 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
 std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPredicateCollectResult> left,
     std::optional<TPredicateCollectResult> right, TCollectResult::ETokensMode mode, TExprContext& ctx, TPositionHandle pos)
 {
-    if ((left.has_value() && left->Collect.IsError()) || !right.has_value()) {
-        return left;
+    const bool leftValid  = left.has_value()  && !left->Collect.IsError();
+    const bool rightValid = right.has_value() && !right->Collect.IsError();
+
+    if (leftValid && rightValid) {
+        if (left->ColumnName != right->ColumnName) {
+            return MakeCollectError(ctx, pos, "Cross-column predicates are not supported");
+        }
+
+        auto merged = (mode == TCollectResult::ETokensMode::And)
+            ? MergeAnd(std::move(left->Collect), std::move(right->Collect))
+            : MergeOr(std::move(left->Collect), std::move(right->Collect));
+        return TPredicateCollectResult{std::move(left->ColumnName), std::move(merged)};
     }
 
-    if ((right.has_value() && right->Collect.IsError()) || !left.has_value()) {
-        return right;
+    // AND semantics: one of the operands must be valid
+    if (mode == TCollectResult::ETokensMode::And) {
+        if (leftValid) {
+            return left;
+        }
+
+        if (rightValid) {
+            return right;
+        }
+
+        if (left.has_value() && left->Collect.IsError()) {
+            return left;
+        }
+
+        if (right.has_value() && right->Collect.IsError()) {
+            return right;
+        }
+
+        return std::nullopt;
     }
 
-    if (left->ColumnName != right->ColumnName) {
-        auto error = TCollectResult(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Cross-column predicates are not supported"));
-        return TPredicateCollectResult{"", std::move(error)};
+    // OR semantics: both operands must be valid
+    if (mode == TCollectResult::ETokensMode::Or) {
+        if (left.has_value() && left->Collect.IsError()) {
+            return left;
+        }
+
+        if (right.has_value() && right->Collect.IsError()) {
+            return right;
+        }
+
+        return std::nullopt;
     }
 
-    size_t totalProcessed = left->ProcessedJsonNodes + right->ProcessedJsonNodes;
-    auto merged = (mode == TCollectResult::ETokensMode::And)
-        ? MergeAnd(std::move(left->Collect), std::move(right->Collect))
-        : MergeOr(std::move(left->Collect), std::move(right->Collect));
-    return TPredicateCollectResult{std::move(left->ColumnName), std::move(merged), totalProcessed};
+    Y_UNREACHABLE();
 }
 
 std::optional<TString> EncodeValueToJsonPath(const TExprBase& node) {
@@ -249,9 +278,7 @@ TPredicateCollectResult ParseAndCollectJson(const TString& columnName, const TSt
     NYql::TIssues parseIssues;
     const auto path = NYql::NJsonPath::ParseJsonPath(jsonPath, parseIssues, 1);
     if (!parseIssues.Empty()) {
-        auto error = TCollectResult(TIssue(ctx.GetPosition(pos), TStringBuilder()
-            << "Failed to parse JSON path expression: " << parseIssues.ToOneLineString()));
-        return TPredicateCollectResult{"", std::move(error)};
+        return MakeCollectError(ctx, pos, "Failed to parse JSON path expression: " + parseIssues.ToOneLineString());
     }
 
     auto collectResult = CollectJsonPath(path, callableType);
@@ -269,7 +296,7 @@ TPredicateCollectResult ParseAndCollectJson(const TString& columnName, const TSt
         }
     }
 
-    return TPredicateCollectResult{columnName, std::move(collectResult), 1};
+    return TPredicateCollectResult{columnName, std::move(collectResult)};
 }
 
 template<typename TJsonNode>
@@ -298,12 +325,11 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
     }
 
     if (IsJsonValueReturningNonIndexable(leftParams->ReturningType)) {
-        return std::nullopt;
+        return MakeCollectError(ctx, jsonSide.Pos(), "Date/time types in RETURNING clause are not supported");
     }
 
     if (leftParams->ReturningType.has_value() && *leftParams->ReturningType == EDataSlot::Bool) {
-        return MakeCollectError(ctx, otherSide.Pos(),
-            "Comparison with JSON_VALUE RETURNING Bool is not supported by JSON index");
+        return MakeCollectError(ctx, jsonSide.Pos(), "Comparison JSON_VALUE with RETURNING Bool is not supported");
     }
 
     std::optional<TExprBase> comparisonValue;
@@ -393,10 +419,6 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
 
             result = MergePredicateResults(std::move(result), std::move(nextResult),
                 TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
-
-            if (result.has_value() && result->Collect.IsError()) {
-                return result;
-            }
         }
 
         return result;
@@ -423,10 +445,6 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& node,
 
             result = MergePredicateResults(std::move(result), std::move(nextResult),
                 TCollectResult::ETokensMode::Or, ctx, nextNode.Pos());
-
-            if (result.has_value() && result->Collect.IsError()) {
-                return result;
-            }
         }
 
         return result;
@@ -464,7 +482,7 @@ std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& bod
 
     if (hasJsonQuery) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: JSON_QUERY is not supported by JSON index"));
+            << "Failed to extract search terms from predicate: JSON_QUERY is not supported"));
         return std::nullopt;
     }
 

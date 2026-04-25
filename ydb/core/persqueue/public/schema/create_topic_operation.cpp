@@ -50,6 +50,10 @@ private:
         LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
 
         auto& response = *ev->Get();
+        if (!response.Success) {
+            return ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Failed to get clusters list");
+        }
+
         ClustersList = std::move(response.ClustersList);
 
         return DoCreate();

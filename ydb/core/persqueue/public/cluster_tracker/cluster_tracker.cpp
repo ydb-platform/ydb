@@ -1,18 +1,23 @@
 #include "cluster_tracker.h"
+
+#include <util/string/join.h>
+
 #include <ydb/core/persqueue/public/pq_database.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>
+#include <util/string/builder.h>
 
 #include <tuple>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ranges>
 
 namespace NKikimr::NPQ::NClusterTracker {
 
@@ -28,6 +33,22 @@ bool TClustersList::TCluster::operator==(const TCluster& rhs) const {
 bool TClustersList::operator==(const TClustersList& rhs) const {
     return Clusters == rhs.Clusters && Version == rhs.Version;
 }
+
+TString TClustersList::DebugString() const {
+    auto names = Clusters | std::views::transform([](const auto& cluster) { return cluster.Name; });
+    return TStringBuilder() << "[" << JoinSeq(", ", names) << "]";
+}
+
+TString TClustersList::TCluster::DebugString() const {
+    TStringBuilder builder;
+    builder << "(" << Name << ", " << Datacenter << ", " << Balancer << ", ";
+    builder << (IsEnabled ? "enabled" : "disabled")  << ", ";
+    builder << (IsLocal ? "local" : "remote") << ", ";
+    builder << Weight << ")";
+
+    return TString(builder);
+}
+
 
 class TClusterTracker: public TActorBootstrapped<TClusterTracker> {
 public:
@@ -148,10 +169,11 @@ private:
         }
     }
 
-    void SendGetClustersListResponse(const TActorId& senderId) {
+    void SendGetClustersListResponse(const TActorId& senderId, bool success = true) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "SendGetClustersListResponse to " << senderId);
 
         auto ev = MakeHolder<TEvClusterTracker::TEvGetClustersListResponse>();
+        ev->Success = success;
         ev->ClustersList = ClustersList;
 
         Send(senderId, ev.Release());
@@ -166,11 +188,11 @@ private:
         }
     }
 
-    void ReplyAllGetClustersListRequests() {
+    void ReplyAllGetClustersListRequests(bool success = true) {
         LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "ReplyAllGetClustersListRequests GetClustersListRequests.size: " << GetClustersListRequests.size());
 
         for (const auto& requestId : GetClustersListRequests) {
-            SendGetClustersListResponse(requestId);
+            SendGetClustersListResponse(requestId, success);
         }
         GetClustersListRequests.clear();
     }
@@ -218,6 +240,7 @@ private:
 
         ClustersList = nullptr;
         Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
+        ReplyAllGetClustersListRequests(false);
     }
 
     template<typename TProtoRecord>

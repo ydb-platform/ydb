@@ -2,14 +2,12 @@
 
 #include "cluster_tracker_factory.h"
 
-#include <util/string/join.h>
 #include <ydb/core/base/events.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/string/builder.h>
 
 #include <vector>
 
@@ -30,32 +28,16 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         bool IsLocal = false;
         ui64 Weight = 1000;
 
-        TString DebugString() const {
-            TStringBuilder builder;
-            builder << "(" << Name << ", " << Datacenter << ", " << Balancer << ", ";
-            builder << (IsEnabled ? "enabled" : "disabled")  << ", ";
-            builder << (IsLocal ? "local" : "remote") << ", ";
-            builder << Weight << ")";
-
-            return TString(builder);
-        }
+        TString DebugString() const;
 
         bool operator==(const TCluster& other) const;
     };
 
     bool operator==(const TClustersList& other) const;
+    TString DebugString() const;
 
     std::vector<TCluster> Clusters;
     const TCluster* LocalCluster = nullptr;
-
-    const TString& GetLocalClusterName() const {
-        static const TString Empty = "";
-        return LocalCluster ? LocalCluster->Name : Empty;
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "[" << JoinSeq(", ", Clusters | std::views::transform([](const auto& cluster) { return cluster.DebugString(); })) << "]";
-    }
 
     i64 Version = 0;
 };
@@ -81,6 +63,7 @@ struct TEvClusterTracker {
     };
 
     struct TEvGetClustersListResponse : public NActors::TEventLocal<TEvGetClustersListResponse, EvGetClustersListResponse> {
+        bool Success = true;
         TClustersList::TConstPtr ClustersList;
     };
 

@@ -1,11 +1,102 @@
 #include "kqp_rbo.h"
-#include "kqp_html_log.h"
+#include "kqp_new_html_log.h"
 #include "kqp_plan_conversion_utils.h"
+
+#include <sstream>
 
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+namespace {
+
+PlanNode BuildPlanNode(const TIntrusivePtr<IOperator>& op, TExprContext& ctx, ui32 opts) {
+    TString label = op->ToString(ctx);
+    if (op->Props.StageId.has_value()) {
+        label += TStringBuilder() << " Stage:" << *op->Props.StageId;
+    }
+    PlanNode node(std::string(label.c_str()));
+
+    if ((opts & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata))
+        && op->Props.Metadata.has_value()) {
+        const auto& meta = *op->Props.Metadata;
+
+        TString typeStr;
+        switch (meta.Type) {
+            case EStatisticsType::BaseTable:         typeStr = "BaseTable"; break;
+            case EStatisticsType::FilteredFactTable: typeStr = "FilteredFactTable"; break;
+            case EStatisticsType::ManyManyJoin:      typeStr = "ManyManyJoin"; break;
+            default: typeStr = "Unknown"; break;
+        }
+        node.addMeta("Type", std::string(typeStr.c_str()));
+
+        TString storageStr;
+        switch (meta.StorageType) {
+            case EStorageType::RowStorage:    storageStr = "Row"; break;
+            case EStorageType::ColumnStorage: storageStr = "Column"; break;
+            case EStorageType::NA:            storageStr = "N/A"; break;
+            default: storageStr = "Unknown"; break;
+        }
+        node.addMeta("Storage", std::string(storageStr.c_str()));
+
+        if (!meta.KeyColumns.empty()) {
+            TStringBuilder keyCols;
+            for (size_t i = 0; i < meta.KeyColumns.size(); i++) {
+                if (i) keyCols << ", ";
+                keyCols << meta.KeyColumns[i].GetAlias() << "." << meta.KeyColumns[i].GetColumnName();
+            }
+            node.addMeta("KeyCols", std::string(keyCols.c_str()));
+        }
+
+        if (!meta.ShuffledByColumns.empty()) {
+            TStringBuilder cols;
+            for (size_t i = 0; i < meta.ShuffledByColumns.size(); i++) {
+                if (i) cols << ", ";
+                cols << meta.ShuffledByColumns[i].GetAlias() << "." << meta.ShuffledByColumns[i].GetColumnName();
+            }
+            node.addMeta("ShuffledBy", std::string(cols.c_str()));
+        }
+    }
+
+    if ((opts & (EPrintPlanOptions::PrintBasicStatistics | EPrintPlanOptions::PrintFullStatistics))
+        && op->Props.Statistics.has_value()) {
+        const auto& stats = *op->Props.Statistics;
+        std::ostringstream rowsStr, bytesStr;
+        rowsStr << stats.ERows;
+        bytesStr << stats.EBytes;
+        node.setStat(0, rowsStr.str());
+        node.setStat(1, bytesStr.str());
+    }
+
+    if (op->Props.Cost.has_value()) {
+        std::ostringstream costStr;
+        costStr << *op->Props.Cost;
+        node.addMeta("Cost", costStr.str());
+    }
+
+    for (const auto& child : op->Children) {
+        node.addChild(BuildPlanNode(child, ctx, opts));
+    }
+    return node;
+}
+
+PlanNode BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts) {
+    const auto& subplans = root.PlanProps.Subplans.PlanMap;
+    if (subplans.empty()) {
+        return BuildPlanNode(root.GetInput(), ctx, opts);
+    }
+    PlanNode container("Plan");
+    for (const auto& [iu, subplan] : subplans) {
+        PlanNode sub("Subplan [" + std::string(iu.GetFullName().c_str()) + "]");
+        sub.addChild(BuildPlanNode(CastOperator<IOperator>(subplan.Plan), ctx, opts));
+        container.addChild(sub);
+    }
+    container.addChild(BuildPlanNode(root.GetInput(), ctx, opts));
+    return container;
+}
+
+} // namespace
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
@@ -95,8 +186,9 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 
                     ComputeRequiredProps(root, Props, ctx);
                     if (ctx.HtmlTrace) {
-                        ctx.HtmlTrace->AddRule(rule->RuleName,
-                            root.PlanToString(ctx.ExprCtx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics));
+                        constexpr ui32 HtmlOpts = EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics;
+                        ctx.HtmlTrace->addRule(std::string(rule->RuleName.c_str()),
+                            BuildPlanNodeFromRoot(root, ctx.ExprCtx, HtmlOpts));
                     }
                     ++numMatches;
                     break;
@@ -118,8 +210,9 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
     constexpr ui32 HtmlPlanOpts = EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics;
 
     if (rboCtx.HtmlTrace) {
-        rboCtx.HtmlTrace->AddStage("Plan input");
-        rboCtx.HtmlTrace->AddRule("Original plan", root.PlanToString(ctx, HtmlPlanOpts));
+        rboCtx.HtmlTrace->setStatColumns({"ERows", "EBytes"});
+        rboCtx.HtmlTrace->addStage("Plan input");
+        rboCtx.HtmlTrace->addRule("Original plan", BuildPlanNodeFromRoot(root, ctx, HtmlPlanOpts));
     }
 
     if (needToLog) {
@@ -128,7 +221,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
 
     for (const auto& stage : Stages) {
         if (rboCtx.HtmlTrace) {
-            rboCtx.HtmlTrace->AddStage(stage->StageName);
+            rboCtx.HtmlTrace->addStage(std::string(stage->StageName.c_str()));
         }
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, rboCtx);

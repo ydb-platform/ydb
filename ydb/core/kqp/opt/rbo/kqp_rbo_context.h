@@ -14,7 +14,7 @@ namespace NKqp {
 
 using namespace NOpt;
 
-class TKqpOptimizerTraceHtml;
+class OptimizerTraceHTML;
 
 class TRBOContext {
 public:
@@ -46,7 +46,7 @@ public:
     std::optional<NJson::TJsonValue> ExplainJson;
 
     /// When non-null, rule applications append to this trace (see YDB_KQP_NEW_RBO_HTML_TRACE).
-    TKqpOptimizerTraceHtml* HtmlTrace;
+    OptimizerTraceHTML* HtmlTrace;
 };
 
 } // namespace NKqp

@@ -1,6 +1,6 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
-#include "kqp_html_log.h"
+#include "kqp_new_html_log.h"
 #include "kqp_plan_conversion_utils.h"
 
 #include <util/system/env.h>
@@ -298,14 +298,14 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
                 TMaybe<TString> htmlTracePath = TryGetEnv("YDB_KQP_NEW_RBO_HTML_TRACE");
-                std::optional<TKqpOptimizerTraceHtml> htmlTrace;
+                std::optional<OptimizerTraceHTML> htmlTrace;
                 if (htmlTracePath.Defined() && !htmlTracePath->empty()) {
                     htmlTrace.emplace();
                     rboCtx.HtmlTrace = &*htmlTrace;
                 }
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
                 if (htmlTrace && htmlTracePath.Defined()) {
-                    if (!htmlTrace->GenerateHtml(*htmlTracePath)) {
+                    if (!htmlTrace->generateHTML(std::string(htmlTracePath->c_str()))) {
                         YQL_CLOG(WARN, CoreDq) << "Failed to write new RBO HTML trace to " << *htmlTracePath;
                     }
                 }

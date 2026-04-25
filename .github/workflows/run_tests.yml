@@ -266,6 +266,7 @@ jobs:
       - name: Set variables based on build_preset
         id: set-vars
         run: |
+          echo "link_threads_count=12" >> $GITHUB_ENV
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=52" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
@@ -276,7 +277,8 @@ jobs:
             echo "threads_count=5" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
-            echo "threads_count=2" >> $GITHUB_ENV
+            echo "threads_count=18" >> $GITHUB_ENV
+            echo "link_threads_count=6" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."
@@ -349,6 +351,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ fromJson(env.threads_count) }}
+          link_threads: ${{ fromJson(env.link_threads_count) }}
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps }}

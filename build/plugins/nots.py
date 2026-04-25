@@ -336,6 +336,10 @@ def _wrap_file_path(s: str) -> str:
     return f"'{s}'" if " " in s else s
 
 
+def _escape_space(s: str) -> str:
+    return s.replace(' ', '\\ ')
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -1025,15 +1029,21 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
 def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
+    is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
 
     if not ts_outputs:
-        ymake.report_configure_error(
-            "\n"
-            "Module outputs are not set.\n"
-            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
-        )
-        return
+        if is_ts_package:
+            # it is possible for TS_PACKAGE to be without outdirs.
+            # we put fake value here in order to have a proper exclude value in _SET_TS_INPUTS_EXCLUDES
+            unit.set(["_TS_OUTPUTS_JOINED", "__ts_package_fake_output__"])
+        else:
+            ymake.report_configure_error(
+                "\n"
+                "Module outputs are not set.\n"
+                f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+            )
+            return
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -1062,12 +1072,18 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_ts_check_configure(unit: NotsUnitType) -> None:
+def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
+        if validation_mode == "TS_TEST_FOR":
+            ymake.report_configure_error(
+                f"{COLORS.red}Missing test script{COLORS.reset} \n"
+                f"{COLORS.cyan}TS_TEST_FOR{COLORS.reset} requires to use at least one {COLORS.cyan}TS_TEST{COLORS.reset} macro \n"
+                "https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR"
+            )
         return
 
     test_files = df.TestFiles.ts_check_srcs(unit, (), {})
@@ -1312,18 +1328,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
 
 @_with_report_configure_error
-def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_INOUTS")
-    if ts_files == "":
-        ymake.report_configure_error(
-            "\n"
-            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
-            "If you use the TS_FILES_GLOB, check the expression. For example, use `src/**/*` instead of `src/*`.\n"
-            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
-        )
-
-
-@_with_report_configure_error
 def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
@@ -1369,3 +1373,17 @@ def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
         unit.set([var_name, "experimental-compile"])
     else:
         raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
+
+
+@_with_report_configure_error
+def on_escape_spaces(unit: NotsUnitType, var_name: str) -> None:
+    prefix = "${ARCADIA_ROOT}/"
+    files = __strip_prefix(prefix, unit.get(var_name)).split(f" {prefix}")
+    unit.set([var_name, ""])
+    __set_append(unit, var_name, [prefix + _escape_space(f) for f in files])
+
+
+@_with_report_configure_error
+def on_ts_conf_error(unit: NotsUnitType, *messages: str) -> None:
+    msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
+    ymake.report_configure_error(msg)

@@ -4,9 +4,9 @@ This is a [type stub package](https://typing.python.org/en/latest/tutorials/exte
 for the [`protobuf`](https://github.com/protocolbuffers/protobuf) package. It can be used by type checkers
 to check code that uses `protobuf`. This version of
 `types-protobuf` aims to provide accurate annotations for
-`protobuf~=6.32.1`.
+`protobuf~=7.34.1`.
 
-Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 31.1 on [protobuf v32.1](https://github.com/protocolbuffers/protobuf/releases/tag/v32.1) (python `protobuf==6.32.1`).
+Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 34.1 on [protobuf v34.1](https://github.com/protocolbuffers/protobuf/releases/tag/v34.1) (python `protobuf==7.34.1`).
 
 This stub package is marked as [partial](https://typing.python.org/en/latest/spec/distributing.html#partial-stub-packages).
 If you find that annotations are missing, feel free to contribute and help complete them.
@@ -20,8 +20,8 @@ for more details. The source for this package can be found in the
 directory.
 
 This package was tested with the following type checkers:
-* [mypy](https://github.com/python/mypy/) 1.19.1
+* [mypy](https://github.com/python/mypy/) 1.20.0
 * [pyright](https://github.com/microsoft/pyright) 1.1.408
 
 It was generated from typeshed commit
-[`9e6b58fad088ca14346e6f7ffd80b9d84b83aed1`](https://github.com/python/typeshed/commit/9e6b58fad088ca14346e6f7ffd80b9d84b83aed1).
+[`4ab04d22631e5842838528ceaae19c3c532cdd43`](https://github.com/python/typeshed/commit/4ab04d22631e5842838528ceaae19c3c532cdd43).

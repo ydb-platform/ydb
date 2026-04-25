@@ -78,6 +78,9 @@ public:
     void SetRequestCompression(const TString& compression);
     void SetResponseCompression(const TString& compression);
 
+    void SetTraceparent(const TString& traceparent);
+    const TString& GetTraceparent() const;
+
     TString GetCommand() const;
     TString GetUrl(bool needProxy = false) const;
     TString GetHeaderAsString(const TString& hostName, const TString& requestId, bool includeParameters = true) const;
@@ -106,6 +109,8 @@ private:
 
     TString RequestCompression_ = "identity";
     TString ResponseCompression_ = "identity";
+
+    TString Traceparent_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

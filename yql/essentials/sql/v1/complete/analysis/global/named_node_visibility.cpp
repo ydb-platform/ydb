@@ -1,12 +1,8 @@
-#include "named_node.h"
+#include "named_node_visibility.h"
 
 #include "narrowing_visitor.h"
 
-#include <library/cpp/iterator/iterate_keys.h>
-#include <library/cpp/iterator/iterate_values.h>
-
 #include <util/generic/hash_set.h>
-#include <util/generic/ptr.h>
 
 namespace NSQLComplete {
 
@@ -14,10 +10,9 @@ namespace {
 
 class TVisitor: public TSQLv1NarrowingVisitor {
 public:
-    TVisitor(const TParsedInput& input, TNamedNodes* names, const TEnvironment* env)
+    TVisitor(const TParsedInput& input, THashSet<TString>* visible)
         : TSQLv1NarrowingVisitor(input)
-        , Names_(names)
-        , Env_(env)
+        , Visible_(visible)
     {
     }
 
@@ -33,26 +28,7 @@ public:
     }
 
     std::any visitDeclare_stmt(SQLv1::Declare_stmtContext* ctx) override {
-        auto* parameter = ctx->bind_parameter();
-        if (!parameter) {
-            return {};
-        }
-
-        TMaybe<std::string> id = GetName(parameter);
-        if (id.Empty() || id == "_") {
-            return {};
-        }
-
-        id->insert(0, "$");
-        const NYT::TNode* node = Env_->Parameters.FindPtr(*id);
-        id->erase(0, 1);
-
-        if (node) {
-            (*Names_)[*id] = *node;
-        } else {
-            (*Names_)[*id] = std::monostate();
-        }
-
+        VisitNullableCollecting(ctx->bind_parameter());
         return {};
     }
 
@@ -61,48 +37,20 @@ public:
         return {};
     }
 
-    std::any visitDefine_action_or_subquery_stmt(
-        SQLv1::Define_action_or_subquery_stmtContext* ctx) override {
-        VisitNullableCollecting(ctx->bind_parameter());
+    std::any visitDefine_action_or_subquery_stmt(SQLv1::Define_action_or_subquery_stmtContext* ctx) override {
         if (IsEnclosing(ctx)) {
             VisitNullableCollecting(ctx->action_or_subquery_args());
             return visitChildren(ctx);
         }
+        VisitNullableCollecting(ctx->bind_parameter());
         return {};
     }
 
     std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
-        VisitNullableCollecting(ctx->bind_parameter_list());
         if (IsEnclosing(ctx)) {
             visitChildren(ctx);
         }
-
-        auto* list = ctx->bind_parameter_list();
-        if (!list) {
-            return {};
-        }
-
-        auto parameters = list->bind_parameter();
-        if (parameters.size() != 1) {
-            return {};
-        }
-
-        auto* parameter = parameters[0];
-        if (!parameter) {
-            return {};
-        }
-
-        TMaybe<std::string> id = GetName(parameter);
-        if (id.Empty() || id == "_") {
-            return {};
-        }
-
-        if (auto* expr = ctx->expr()) {
-            (*Names_)[std::move(*id)] = expr;
-        } else {
-            (*Names_)[std::move(*id)] = std::monostate();
-        }
-
+        VisitNullableCollecting(ctx->bind_parameter_list());
         return {};
     }
 
@@ -115,15 +63,16 @@ public:
     }
 
     std::any visitLambda(SQLv1::LambdaContext* ctx) override {
-        VisitNullableCollecting(ctx->smart_parenthesis());
         if (IsEnclosing(ctx)) {
-            return visitChildren(ctx);
+            if (ctx->TOKEN_ARROW()) {
+                VisitNullableCollecting(ctx->smart_parenthesis());
+            }
+            visitChildren(ctx);
         }
         return {};
     }
 
-    std::any visitNamed_bind_parameter(
-        SQLv1::Named_bind_parameterContext* ctx) override {
+    std::any visitNamed_bind_parameter(SQLv1::Named_bind_parameterContext* ctx) override {
         VisitNullableCollecting(ctx->bind_parameter(0));
         return {};
     }
@@ -138,7 +87,7 @@ public:
             return {};
         }
 
-        (*Names_)[std::move(*id)] = std::monostate();
+        Visible_->insert(std::move(*id));
         return {};
     }
 
@@ -148,23 +97,24 @@ private:
             return;
         }
 
-        const bool old = IsCollecting_;
-        IsCollecting_ = true;
+        const bool old = std::exchange(IsCollecting_, true);
         visit(tree);
         IsCollecting_ = old;
     }
 
-    TNamedNodes* Names_;
-    const TEnvironment* Env_;
+    THashSet<TString>* Visible_;
     bool IsCollecting_ = false;
 };
 
 } // namespace
 
-TNamedNodes CollectNamedNodes(TParsedInput input, const TEnvironment& env) {
-    TNamedNodes names;
-    TVisitor(input, &names, &env).visit(input.SqlQuery);
-    return names;
+TVector<TString> VisibleNamedNodes(TParsedInput input) {
+    THashSet<TString> visible;
+    TVisitor(input, &visible).visit(input.SqlQuery);
+
+    TVector<TString> result(Reserve(visible.size()));
+    std::ranges::move(visible, std::back_inserter(result));
+    return result;
 }
 
 } // namespace NSQLComplete

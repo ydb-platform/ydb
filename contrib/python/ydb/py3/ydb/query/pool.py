@@ -52,7 +52,7 @@ class QuerySessionPool:
         :param driver: A driver instance.
         :param size: Max size of Session Pool.
         :param query_client_settings: ydb.QueryClientSettings object to configure QueryService behavior
-        :param workers_threads_count: A number of threads in executor used for *_async methods
+        :param workers_threads_count: A number of threads in executor used for ``*_async`` methods
         """
 
         self._driver = driver
@@ -73,7 +73,8 @@ class QuerySessionPool:
     def acquire(self, timeout: Optional[float] = None) -> QuerySession:
         """Acquire a session from Session Pool.
 
-        :param timeout: A timeout to wait in seconds.
+        :param timeout: Seconds to wait when pool is exhausted. Overrides the pool-level acquire_timeout.
+            None falls back to the pool-level default (which is also None — wait indefinitely).
 
         :return A QuerySession object.
         """

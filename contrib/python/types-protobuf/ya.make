@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.32.1.20260221)
+VERSION(7.34.1.20260402)
 
 LICENSE(Apache-2.0)
 
@@ -12,6 +12,7 @@ PY_SRCS(
     TOP_LEVEL
     google-stubs/_upb/_message.pyi
     google-stubs/protobuf/__init__.pyi
+    google-stubs/protobuf/any.pyi
     google-stubs/protobuf/any_pb2.pyi
     google-stubs/protobuf/api_pb2.pyi
     google-stubs/protobuf/compiler/__init__.pyi
@@ -20,6 +21,7 @@ PY_SRCS(
     google-stubs/protobuf/descriptor_database.pyi
     google-stubs/protobuf/descriptor_pb2.pyi
     google-stubs/protobuf/descriptor_pool.pyi
+    google-stubs/protobuf/duration.pyi
     google-stubs/protobuf/duration_pb2.pyi
     google-stubs/protobuf/empty_pb2.pyi
     google-stubs/protobuf/field_mask_pb2.pyi
@@ -31,22 +33,33 @@ PY_SRCS(
     google-stubs/protobuf/internal/encoder.pyi
     google-stubs/protobuf/internal/enum_type_wrapper.pyi
     google-stubs/protobuf/internal/extension_dict.pyi
+    google-stubs/protobuf/internal/field_mask.pyi
     google-stubs/protobuf/internal/message_listener.pyi
+    google-stubs/protobuf/internal/python_edition_defaults.pyi
     google-stubs/protobuf/internal/python_message.pyi
+    google-stubs/protobuf/internal/testing_refleaks.pyi
     google-stubs/protobuf/internal/type_checkers.pyi
     google-stubs/protobuf/internal/well_known_types.pyi
     google-stubs/protobuf/internal/wire_format.pyi
     google-stubs/protobuf/json_format.pyi
     google-stubs/protobuf/message.pyi
     google-stubs/protobuf/message_factory.pyi
+    google-stubs/protobuf/proto.pyi
+    google-stubs/protobuf/proto_builder.pyi
+    google-stubs/protobuf/proto_json.pyi
+    google-stubs/protobuf/proto_text.pyi
     google-stubs/protobuf/reflection.pyi
     google-stubs/protobuf/runtime_version.pyi
+    google-stubs/protobuf/service_reflection.pyi
     google-stubs/protobuf/source_context_pb2.pyi
     google-stubs/protobuf/struct_pb2.pyi
     google-stubs/protobuf/symbol_database.pyi
+    google-stubs/protobuf/text_encoding.pyi
     google-stubs/protobuf/text_format.pyi
+    google-stubs/protobuf/timestamp.pyi
     google-stubs/protobuf/timestamp_pb2.pyi
     google-stubs/protobuf/type_pb2.pyi
+    google-stubs/protobuf/unknown_fields.pyi
     google-stubs/protobuf/util/__init__.pyi
     google-stubs/protobuf/wrappers_pb2.pyi
 )

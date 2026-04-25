@@ -165,6 +165,7 @@ protected:
                     continue;
                 }
 
+                const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(op.Cast().DataSink().Cluster().StringValue(), *State_->Configuration);
                 if (auto maybeMap = op.Maybe<TYtMap>()) {
                     TYtMap map = maybeMap.Cast();
                     TVector<const TItemExprType*> structItems;
@@ -205,7 +206,7 @@ protected:
                         .Build();
 
                     auto outStructType = ctx.MakeType<TStructExprType>(structItems);
-                    TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                    TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                     if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                         if (const auto s = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -270,7 +271,7 @@ protected:
                         structItems.push_back(prevOutType->GetItems()[*pos]);
                     }
 
-                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), nativeTypeCompatibility);
                     mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
@@ -733,7 +734,7 @@ protected:
         }
 
         TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(list);
-        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic; })) {
+        if (AllOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return !info->Meta->IsDynamic && !info->Meta->HasRLS; })) {
             TExprNodeList calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             TSet<TStringBuf> rowNumberCols;
             for (auto& calcNode : calcs) {

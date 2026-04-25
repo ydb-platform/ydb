@@ -144,14 +144,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _create_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _create_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _create_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -170,14 +168,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _delete_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _delete_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _delete_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -197,14 +193,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _attach_call(
         self: "BaseQuerySession[SyncDriver]",
-    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]:
-        ...
+    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]: ...
 
     @overload
     def _attach_call(
         self: "BaseQuerySession[AsyncDriver]",
-    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]:
-        ...
+    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]: ...
 
     def _attach_call(
         self,
@@ -233,8 +227,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
-        ...
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
     def _execute_call(
@@ -250,8 +243,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
-        ...
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
         self,

@@ -42,7 +42,7 @@ std::exception_ptr WrapSystemError(
     const std::exception& ex)
 {
     if (auto errorResponse = dynamic_cast<const TErrorResponse*>(&ex); errorResponse != nullptr) {
-        return std::make_exception_ptr(errorResponse);
+        return std::make_exception_ptr(*errorResponse);
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
@@ -51,7 +51,7 @@ std::exception_ptr WrapSystemError(
         {"host", context.HostName},
         {"method", context.Method},
     });
-    TTransportError errorResponse(std::move(outer));
+    TErrorResponse errorResponse(std::move(outer), context.RequestId);
 
     return std::make_exception_ptr(errorResponse);
 }
@@ -125,8 +125,12 @@ private:
         Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
-        } catch (const TErrorResponse &) {
-            throw;
+        } catch (const TErrorResponse& e) {
+            // If we can read more meaningful error, we'll throw that error.
+            // If we can't read such error, we'll rethrow original WriteError_ below.
+            if (!e.IsTransportError()) {
+                throw;
+            }
         } catch (...) {
         }
         std::rethrow_exception(WriteError_);
@@ -256,6 +260,16 @@ void THttpHeader::SetServiceTicket(const TString& ticket)
     ServiceTicket_ = ticket;
 }
 
+void THttpHeader::SetTraceparent(const TString& traceparent)
+{
+    Traceparent_ = traceparent;
+}
+
+const TString& THttpHeader::GetTraceparent() const
+{
+    return Traceparent_;
+}
+
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
 {
     InputFormat_ = format;
@@ -353,10 +367,15 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
+
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
     headers->Add("Content-Encoding", RequestCompression_);
     headers->Add("Accept-Encoding", ResponseCompression_);
+
+    if (Traceparent_) {
+        headers->Add("traceparent", Traceparent_);
+    }
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;

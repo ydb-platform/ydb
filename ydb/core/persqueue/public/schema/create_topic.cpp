@@ -204,7 +204,7 @@ struct TCreateTopicStrategy: public ICreateTopicStrategy {
     }
 
     TResult ApplyChanges(
-        const TString localCluster,
+        const TString& localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig

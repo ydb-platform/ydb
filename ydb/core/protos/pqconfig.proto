@@ -357,6 +357,7 @@ message TPQTabletConfig {
     optional bool RequireAuthRead = 8 [default = false];
     optional string Producer = 9;
     reserved 10; // optional string Ident = 10;
+    reserved "Ident"
     optional string Topic = 11;
     optional string DC = 12;
 

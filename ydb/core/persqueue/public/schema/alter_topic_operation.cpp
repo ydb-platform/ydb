@@ -95,7 +95,8 @@ private:
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: " << ev->Get()->ClustersList->DebugString());
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
+            << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
 
         auto& response = *ev->Get();
         if (!response.Success) {

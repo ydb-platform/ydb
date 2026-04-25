@@ -20,7 +20,7 @@ struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
     }
 
     NPQ::NSchema::TResult ApplyChanges(
-        const TString localCluster,
+        const TString& localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig

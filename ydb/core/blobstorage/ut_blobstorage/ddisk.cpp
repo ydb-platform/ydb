@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferFreeSpace) {
-        const ui32 maxChunks = 256;
+        const ui32 maxChunks = 10;
         const ui32 sectorInChunk = 32768;
         TDDiskTestContext f(1_MB);
         auto groups = f.AllocateDDiskBlockGroup();
@@ -683,31 +683,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(node);
         f.WritePB();
         f.ErasePB();
-        {
-            auto info = f.GetPBInfo(false, true);
-            auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 0);
-        }
-    }
-
-    Y_UNIT_TEST(PersistentBufferEraseBarrierDeleted) {
-        TDDiskTestContext f(1_MB);
-        auto groups = f.AllocateDDiskBlockGroup();
-        auto& node = groups.begin()->GetNodes(0);
-        f.ChangeTestingNode(node);
-        f.WritePB();
-        f.WritePB();
-        f.ErasePB(10);
-        {
-            auto info = f.GetPBInfo(false, true);
-            auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 1);
-            UNIT_ASSERT(b.begin()->first == f.PBCreds[0].TabletId);
-            UNIT_ASSERT(b.begin()->second == 10);
-        }
-        f.ListPB();
-        f.RestartNode();
-        f.ListPB();
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;

@@ -762,11 +762,11 @@ struct TEvBlobStorage {
         EvQuerySyncToken,
         EvSyncToken,
         EvReleaseSyncToken,
+        EvStartCompactionFromDefrag,
         EvAcquireVDiskOperationToken,
         EvVDiskOperationToken,
         EvReleaseVDiskOperationToken,
         EvStartupCatchupDone,
-        EvStartCompactionFromDefrag,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

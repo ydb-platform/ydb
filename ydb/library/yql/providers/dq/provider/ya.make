@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    yql_dq_control.cpp
+    yql_dq_control.h
     yql_dq_datasink_constraints.cpp
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h

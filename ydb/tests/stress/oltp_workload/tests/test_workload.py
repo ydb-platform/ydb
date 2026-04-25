@@ -2,7 +2,7 @@
 import pytest
 
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 from ydb.tests.library.stress.fixtures import StressFixture
 from ydb.tests.library.harness.util import LogLevels
 
@@ -23,10 +23,6 @@ class TestYdbWorkload(StressFixture):
             extra_feature_flags=self._feature_flags()
         )
 
-<<<<<<< HEAD
-    def test(self):
-        client = YdbClient(self.endpoint, self.database, True)
-=======
     @pytest.fixture(scope="function")
     def setup_tli(self):
         yield from self.setup_cluster(
@@ -38,7 +34,6 @@ class TestYdbWorkload(StressFixture):
 
     def test(self, setup_common):
         client = InstrumentedYdbClient(self.endpoint, self.database, True)
->>>>>>> 9d71186919d (TLI Stress tests (#34985))
         client.wait_connection()
         try:
             with WorkloadRunner(client, 'oltp_workload', 120) as runner:

@@ -1,16 +1,21 @@
 RECURSE(
     actors
+    api
     common
+    config
     counters
     expr_nodes
     helper
     interface
+    local_gateway
     mkql
     opt
     planner
     provider
     runtime
     scheduler
+    service
+    stats_collector
     task_runner
     task_runner_actor
     worker_manager

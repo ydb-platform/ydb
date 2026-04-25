@@ -12,7 +12,6 @@ RECURSE(
     planner
     provider
     runtime
-    scheduler
     service
     stats_collector
     task_runner

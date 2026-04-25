@@ -2,7 +2,7 @@
 
 A backup collection organizes full and incremental backups of selected [row-oriented tables](table.md#row-oriented-tables) into managed chains. It allows **recovery to the state of the latest backup in the chain**, providing protection against accidental data loss such as erroneous deletions or modifications.
 
-{% note info %} 
+{% note info %}
 
 For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections).
 

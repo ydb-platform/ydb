@@ -41,7 +41,6 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());
         targetTabletConfig.SetProducer(sourceTabletConfig.GetProducer());
         targetTabletConfig.SetTopic(sourceTabletConfig.GetTopic());
-        targetTabletConfig.SetIdent(sourceTabletConfig.GetIdent());
 
         return {};
     }

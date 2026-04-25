@@ -5901,7 +5901,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     RequireAuthWrite: true
     RequireAuthRead: false
     Producer: "acc"
-    Ident: "acc"
     Topic: "topic3"
     DC: "dc1"
     FormatVersion: 0

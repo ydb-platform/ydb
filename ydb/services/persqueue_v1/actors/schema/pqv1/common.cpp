@@ -225,7 +225,6 @@ TResult ApplyChangesInt( // create and alter
         pqTabletConfig->SetDC(converter->GetCluster());
         pqTabletConfig->SetProducer(converter->GetLegacyProducer());
         pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-        pqTabletConfig->SetIdent(converter->GetLegacyProducer());
     }
 
     //Sets legacy 'logtype'.

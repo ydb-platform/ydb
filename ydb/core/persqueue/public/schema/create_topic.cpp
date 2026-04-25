@@ -113,7 +113,6 @@ TResult ApplyChangesInt(
         pqTabletConfig->SetDC(converter->GetCluster());
         pqTabletConfig->SetProducer(converter->GetLegacyProducer());
         pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-        pqTabletConfig->SetIdent(converter->GetLegacyProducer());
     }
 
     const auto& channelProfiles = pqConfig.GetChannelProfiles();

@@ -30,7 +30,20 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         if (topicInfo.CdcStream) {
             return {Ydb::StatusIds::SCHEME_ERROR, "Full alter of CDC stream is forbidden"};
         }
-        return ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
+        auto result = ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
+        if (!result) {
+            return result;
+        }
+
+        const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
+        auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
+        targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
+        targetTabletConfig.SetDC(sourceTabletConfig.GetDC());
+        targetTabletConfig.SetProducer(sourceTabletConfig.GetProducer());
+        targetTabletConfig.SetTopic(sourceTabletConfig.GetTopic());
+        targetTabletConfig.SetIdent(sourceTabletConfig.GetIdent());
+
+        return {};
     }
 
     const Ydb::PersQueue::V1::AlterTopicRequest Request;
@@ -56,7 +69,6 @@ public:
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), std::move(database)),
-            .ValidateClusters = true,
         }));
     }
 

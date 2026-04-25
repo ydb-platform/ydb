@@ -46,7 +46,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     bool operator==(const TClustersList& other) const;
 
     std::vector<TCluster> Clusters;
-    TCluster* LocalCluster = nullptr;
+    const TCluster* LocalCluster = nullptr;
 
     const TString& GetLocalClusterName() const {
         static const TString Empty = "";

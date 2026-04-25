@@ -143,8 +143,6 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
 
-        LOG_D("BEFORE: " << TopicInfo.Info->Description.DebugString());
-
         auto result = Settings.Strategy->ApplyChanges(
             GetLocalClusterName(ClustersList),
             TopicInfo,
@@ -152,13 +150,9 @@ private:
             *config,
             TopicInfo.Info->Description
         );
-        LOG_D("AFTER: " << config->DebugString());
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         }
-        // if (result && Settings.ValidateClusters) {
-        //     result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
-        // }
 
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));

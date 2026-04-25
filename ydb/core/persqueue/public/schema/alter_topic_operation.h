@@ -29,8 +29,6 @@ struct TAlterTopicOperationSettings {
     std::unique_ptr<IAlterTopicStrategy> Strategy;
     bool IfExists = false;
     ui64 Cookie = 0;
-    bool ValidateClusters = false;
-
 };
 
 

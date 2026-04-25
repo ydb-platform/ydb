@@ -205,7 +205,7 @@ TResult ApplyChangesInt( // create and alter
 
     bool local = !settings.client_write_disabled();
 
-    if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+    if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                 pqConfig.GetRoot(),
                 pqConfig.GetTestDatabaseRoot(),

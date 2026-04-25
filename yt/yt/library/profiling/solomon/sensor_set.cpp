@@ -294,7 +294,9 @@ void TSensorSet::ReadSensors(
 
     readOptions.Sparse = Options_.Sparse;
     readOptions.Global = Options_.Global;
-    readOptions.DisableSensorsRename = Options_.DisableSensorsRename;
+    if (Options_.DisableSensorsRename.has_value()) {
+        readOptions.DisableSensorsRename = Options_.DisableSensorsRename.value();
+    }
     readOptions.DisableDefault = Options_.DisableDefault;
     readOptions.MemOnly = Options_.MemOnly;
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
@@ -330,6 +332,10 @@ int TSensorSet::ReadSensorValues(
 
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
+    }
+
+    if (Options_.DisableSensorsRename.has_value()) {
+        readOptions.DisableSensorsRename = Options_.DisableSensorsRename.value();
     }
 
     int valuesRead = 0;
@@ -413,7 +419,9 @@ void TSensorSet::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& ex
     cube->set_sparse(Options_.Sparse);
     cube->set_global(Options_.Global);
     cube->set_disable_default(Options_.DisableDefault);
-    cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
+    if (Options_.DisableSensorsRename.has_value()) {
+        cube->set_disable_sensors_rename(Options_.DisableSensorsRename.value());
+    }
     cube->set_summary_policy(ToProto(Options_.SummaryPolicy));
 
     CountersCube_.DumpCube(cube, extraProjections);

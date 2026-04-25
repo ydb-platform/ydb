@@ -2078,7 +2078,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d'))");
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e'))");
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$ ? (@.k1 == 1 && @.k2 == 2)') == true)");
-            ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
+
+            // AND: JE in JSON_QUERY + indexable JE -> extract indexable
+            ValidateTokens(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k2"});
+            // OR: indexable JE + JE in JSON_QUERY -> error
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b'))");
 
             // JSON_EXISTS with TRUE ON ERROR is negation
@@ -2090,7 +2093,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     // JSON index does not support JSON_QUERY, every predicate that references it should fail term extraction
-    // No comments ;)
     Y_UNIT_TEST(JsonQueryTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateError(db, R"(JSON_QUERY(Text, '$.k1') IS NOT NULL)");
@@ -2150,19 +2152,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)");
             ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)"); 
 
-            // JSON_VALUE comparison with true rewrites to JSON_VALUE without boolean comparison
+            // JV(...) == true is equivalent to standalone JV(...) - collects trueSuffix token
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
             ValidateTokens(db, R"(true == JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)", {"\2k1" + trueSuffix});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
 
-            // JSON_VALUE comparison with false rewrites to NOT JSON_VALUE
+            // JV comparison with false rewrites to NOT JSON_VALUE
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
             ValidateError(db, R"(false == JSON_VALUE(Text, '$.k1' RETURNING Bool))");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != true)");
             ValidateError(db, R"(NOT JSON_VALUE(Text, '$.k1' RETURNING Bool))");
 
-            // JSON_VALUE RETURNING Bool with range comparisons - not extractable
+            // JV RETURNING Bool with range comparisons - not extractable
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > true)");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) >= true)");
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) < true)");
@@ -2180,7 +2182,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\2k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\2k1"});
 
-            // JSON_VALUE op JSON_VALUE - both collectable
+            // JV op JV - both collectable
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == JSON_VALUE(Text, '$.k2' RETURNING Int32))",
                 {"\2k1", "\2k2"}, "and");
@@ -2329,7 +2331,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' RETURNING Int32) == 1)");
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d') == "1")");
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e' RETURNING Int32) == 1)");
-            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")");
+
+            // AND: JV1 inside JSON_QUERY is non-indexable, but JV2 == "w" IS indexable - post-filter applies
+            ValidateTokens(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")", {"\1b" + strSuffix("w")});
+            // OR: JV1 inside JSON_QUERY is non-indexable, but JV2 == "w" IS indexable - post-filter does not apply
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u OR JSON_VALUE(Text, '$.b') == "w")");
 
             // DEFAULT ON EMPTY with non-NULL value is negation
@@ -2347,8 +2352,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
-    // CollectJsonIndexPredicate: no JSON_*, only JSON, JSON with non-JSON column, OR rules, path parse, mixed support
-    Y_UNIT_TEST(JsonCombinations) {
+    // CollectJsonIndexPredicate: without JSON_*, only JSON, JSON with non-JSON column, AND rules, OR rules, path parse, mixed support
+    Y_UNIT_TEST(JsonCombinationsTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // No JSON_* in the filter - "no JSON_* functions found"
             ValidateError(db, R"(Key = 1ul)");
@@ -2443,6 +2448,222 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             // Nested JSON_* functions as source - specific error message
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1'), '$.k2') == "1")", "Nested JSON_* functions are not supported");
+
+            // JSON_EXISTS TRUE ON ERROR + JE -> JE tokens
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            // Symmetric: error operand on right -> JE tokens
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))",
+                {"\1a"});
+
+            // JSON_VALUE DEFAULT 12 ON EMPTY + JE -> JE tokens
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY) > 10 AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY) > 10)",
+                {"\1a"});
+
+            // JSON_VALUE DEFAULT 12 ON ERROR + JE -> JE tokens
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10 AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10)",
+                {"\1a"});
+
+            // Both ON EMPTY and ON ERROR with non-NULL DEFAULT
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND (JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10))",
+                {"\1a"});
+
+            // Multiple non-indexable JV forms AND'd with a single JPRED
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
+                   AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
+                   AND JSON_EXISTS(Text, '$.a')
+                   AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                    AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
+                   AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR))",
+                {"\1a"});
+
+            // JV(... RETURNING Bool) == literal + JE -> JE tokens
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)",
+                {"\1a"});
+
+            // Range comparison on Bool + JE
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > true AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Bool) > true)",
+                {"\1a"});
+
+            // JV(Bool) compared with another JV(Bool) + JE
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool))",
+                {"\1a"});
+
+            // both error-producing returning types should behave identically inside AND
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\2k1" + trueSuffix, "\1a"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
+                   AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\2k1" + trueSuffix, "\1a"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
+                   AND JSON_EXISTS(Text, '$.a')
+                   AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)",
+                {"\2k1" + trueSuffix, "\1a"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
+                   AND JSON_EXISTS(Text, '$.a')
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01"))",
+                {"\2k1" + trueSuffix, "\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01"))",
+                {"\2k1" + trueSuffix, "\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
+                   AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)",
+                {"\2k1" + trueSuffix, "\1a"});
+
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a", "\2k1" + trueSuffix});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false))",
+                {"\1a", "\2k1" + trueSuffix});
+
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a", "\2k1" + trueSuffix});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false))",
+                {"\1a", "\2k1" + trueSuffix});
+            ValidateTokens(db,
+                R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false))",
+                {"\1a"});
+
+            // Same shape but with a comparison form that is supported alone -
+            // proves that NOT does not change tokens regardless of inner form
+            ValidateTokens(db,
+                R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1))",
+                {"\1a"});
+
+            // Inner OR: JE OR (non-JSON column predicate)
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            // Inner OR: JE OR (arithmetic JV - nullopt branch)
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            // Inner OR: JE OR (RETURNING Bool comparison - error branch)
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k2' RETURNING Bool) != true))
+                   AND JSON_EXISTS(Text, '$.a'))",
+                {"\1a"});
+            // Symmetric: outer AND has the bad OR on the right
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.a')
+                   AND (JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u)))",
+                {"\1a"});
+            // Two valid JPREDs combined with the bad OR: tokens of both JPREDs
+            ValidateTokens(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))
+                   AND JSON_EXISTS(Text, '$.a')
+                   AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0))",
+                {"\1a", "\1b" + numSuffix(0)});
+
+            // Same forms alone 
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
+
+            // Same forms inside OR with another JPRED -> error
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.a'))");
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
+                   OR JSON_EXISTS(Text, '$.a'))");
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false
+                   OR JSON_EXISTS(Text, '$.a'))");
+
+            // (JE OR PRED) at top level - error
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.k1')
+                   OR (JSON_VALUE(Text, '$.k2' RETURNING Bool) >= true))");
+
+            // AND of multiple error-producing forms with no JPRED at all -> error
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR)
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Bool) == false)");
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Bool) == false)");
+
+            // Error AND non-recognised PRED (no JPRED either) -> error
+            ValidateError(db,
+                R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND Data = "d1"u)");
         });
     }
 }

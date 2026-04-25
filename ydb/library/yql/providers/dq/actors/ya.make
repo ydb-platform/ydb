@@ -20,13 +20,9 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/yson
     ydb/library/mkql_proto
-    yql/essentials/core/services
-    yql/essentials/core/services/mounts
-    yql/essentials/core/user_data
     yql/essentials/core
     ydb/library/yql/utils/actors
     ydb/library/yql/utils/actor_log
-    yql/essentials/utils/backtrace
     yql/essentials/utils/log
     ydb/public/api/protos
     ydb/public/lib/yson_value

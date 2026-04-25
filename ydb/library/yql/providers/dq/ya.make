@@ -7,7 +7,6 @@ RECURSE(
     expr_nodes
     helper
     interface
-    local_gateway
     mkql
     opt
     planner

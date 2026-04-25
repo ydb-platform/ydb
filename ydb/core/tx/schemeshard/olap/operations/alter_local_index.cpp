@@ -154,9 +154,26 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         TTableIndexInfo::TPtr alterData = indexIt->second->CreateNextVersion();
-        alterData->IndexKeys = newIndexData->AlterData->IndexKeys;
+        if (!newIndexData->AlterData->IndexKeys.empty()) {
+            alterData->IndexKeys = newIndexData->AlterData->IndexKeys;
+        }
         alterData->State = NKikimrSchemeOp::EIndexStateReady;
-        alterData->SpecializedIndexDescription = newIndexData->AlterData->SpecializedIndexDescription;
+
+        switch (indexIt->second->Type) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+                std::get<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription).MergeFrom(
+                    std::get<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription));
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+                std::get<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription).MergeFrom(
+                    std::get<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription));
+                break;
+            }
+            default: {
+                Y_ABORT("unexpected index type in TAlterLocalIndex::Propose");
+            }
+        }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLocalIndex, indexPath.Base()->PathId);

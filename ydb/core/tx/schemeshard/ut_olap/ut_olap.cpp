@@ -1477,9 +1477,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     BloomNGrammFilter {
                         ColumnId: 3
                         NGrammSize: 3
-                        FilterSizeBytes: 512
-                        HashesCount: 3
-                        RecordsCount: 128
+                        FalsePositiveProbability: 0.01
+                        CaseSensitive: true
                     }
                 }
             }

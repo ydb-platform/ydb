@@ -3791,3 +3791,531 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         RunConcurrentCleanerVsUserCdcRace(/* enableCascade = */ false);
     }
 } // TBackupCollectionTests
+
+// ============================================================================
+// TSchemeShardColumnRollbackTests
+//
+// Verifies that Schema::TableIndex::AlterVersion (the persisted DB column,
+// not just the in-memory mirror) is kept consistent with each impl-table's
+// AlterVersion after every op that bumps an impl-table version.
+//
+// Invariant:  ReadPersistedIndexAlterVersion(idxPathId) >= ReadImplTableSchemaVersion(implPath)
+//
+// This catches a class of regression where the in-memory mirror is advanced
+// (so derivation still works) but the persist call is dropped, silently
+// breaking rollback to a pre-derivation binary.
+// ============================================================================
+Y_UNIT_TEST_SUITE(TSchemeShardColumnRollbackTests) {
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    // Read Schema::TableIndex::AlterVersion directly from the schemeshard
+    // local DB, bypassing the in-memory mirror entirely.
+    // This is the byte a pre-derivation binary would re-hydrate at boot.
+    ui64 ReadPersistedIndexAlterVersion(TTestActorRuntime& runtime,
+                                        ui64 schemeshardTabletId,
+                                        const TPathId& indexPathId)
+    {
+        // Try TableIndex first (non-migrated layout, single-column key).
+        const auto q1 = Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let select '('AlterVersion))
+                (return (AsList
+                    (SetResult 'Result (SelectRow 'TableIndex key select))
+                ))
+            )
+        )", indexPathId.LocalPathId);
+
+        auto r1 = LocalMiniKQL(runtime, schemeshardTabletId, q1);
+        const auto& opt1 = r1.GetValue().GetStruct(0).GetOptional();
+        if (opt1.HasOptional()) {
+            return opt1.GetOptional().GetStruct(0).GetOptional().GetUint64();
+        }
+
+        // Fallback: MigratedTableIndex (compound-key layout).
+        const auto q2 = Sprintf(R"(
+            (
+                (let key '('('OwnerPathId (Uint64 '%lu))
+                           '('LocalPathId (Uint64 '%lu))))
+                (let select '('AlterVersion))
+                (return (AsList
+                    (SetResult 'Result (SelectRow 'MigratedTableIndex key select))
+                ))
+            )
+        )", indexPathId.OwnerId, indexPathId.LocalPathId);
+
+        auto r2 = LocalMiniKQL(runtime, schemeshardTabletId, q2);
+        const auto& opt2 = r2.GetValue().GetStruct(0).GetOptional();
+        UNIT_ASSERT_C(opt2.HasOptional(),
+            "no row in TableIndex or MigratedTableIndex for pathId "
+            << indexPathId.OwnerId << ":" << indexPathId.LocalPathId);
+        return opt2.GetOptional().GetStruct(0).GetOptional().GetUint64();
+    }
+
+    // Read the impl table's own TableSchemaVersion from its private describe.
+    ui64 ReadImplTableSchemaVersion(TTestActorRuntime& runtime, const TString& implPath) {
+        auto desc = DescribePrivatePath(runtime, implPath);
+        return desc.GetPathDescription().GetTable().GetTableSchemaVersion();
+    }
+
+    // Extract (SchemeshardId, PathId) for a path via DescribePrivatePath.
+    TPathId LookupPathId(TTestActorRuntime& runtime, const TString& path) {
+        auto desc = DescribePrivatePath(runtime, path);
+        const auto& self = desc.GetPathDescription().GetSelf();
+        return TPathId(self.GetSchemeshardId(), self.GetPathId());
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 1: CDC on impl table advances persisted index AlterVersion
+    // -----------------------------------------------------------------------
+
+    void RunPersistedIndexAlterVersion_AdvancesOnCdcOnImpl(bool enableCascade) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedsOnIndexTables(true)
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription { Name: "T"
+                Columns { Name: "k" Type: "Uint64" }
+                Columns { Name: "v" Type: "Utf8" }
+                KeyColumnNames: ["k"] }
+            IndexDescription { Name: "Idx" KeyColumnNames: ["v"] Type: EIndexTypeGlobal }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto idxPathId = LookupPathId(runtime, "/MyRoot/T/Idx");
+        const TString implPath = "/MyRoot/T/Idx/indexImplTable";
+
+        const ui64 implV0 = ReadImplTableSchemaVersion(runtime, implPath);
+        const ui64 mirrorV0 = ReadPersistedIndexAlterVersion(
+            runtime, TTestTxConfig::SchemeShard, idxPathId);
+        UNIT_ASSERT_VALUES_EQUAL(mirrorV0, implV0);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/T/Idx", R"(
+            TableName: "indexImplTable"
+            StreamDescription { Name: "s1" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatJson }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 implV1 = ReadImplTableSchemaVersion(runtime, implPath);
+        const ui64 mirrorV1 = ReadPersistedIndexAlterVersion(
+            runtime, TTestTxConfig::SchemeShard, idxPathId);
+
+        UNIT_ASSERT_C(implV1 > implV0, "CDC must bump impl table version");
+        UNIT_ASSERT_C(mirrorV1 >= implV1,
+            "ROLLBACK VIOLATED: persisted TableIndex.AlterVersion=" << mirrorV1
+            << " < impl.TableSchemaVersion=" << implV1
+            << " (cascade=" << enableCascade << ")");
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnCdcOnImpl) {
+        RunPersistedIndexAlterVersion_AdvancesOnCdcOnImpl(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnCdcOnImpl_NoCascade) {
+        RunPersistedIndexAlterVersion_AdvancesOnCdcOnImpl(/* enableCascade = */ false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 2: CopyTable dst impl-table finalize advances persisted index AlterVersion
+    // -----------------------------------------------------------------------
+
+    void RunPersistedIndexAlterVersion_AdvancesOnCopyTableDst(bool enableCascade) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription { Name: "Src"
+                Columns { Name: "k" Type: "Uint64" }
+                Columns { Name: "v" Type: "Utf8" }
+                KeyColumnNames: ["k"] }
+            IndexDescription { Name: "Idx" KeyColumnNames: ["v"] Type: EIndexTypeGlobal }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Src"
+                DstPath: "/MyRoot/Dst"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto dstIdxPathId = LookupPathId(runtime, "/MyRoot/Dst/Idx");
+        const TString dstImplPath = "/MyRoot/Dst/Idx/indexImplTable";
+
+        const ui64 dstImplV = ReadImplTableSchemaVersion(runtime, dstImplPath);
+        const ui64 dstMirrorV = ReadPersistedIndexAlterVersion(
+            runtime, TTestTxConfig::SchemeShard, dstIdxPathId);
+
+        UNIT_ASSERT_C(dstMirrorV >= dstImplV,
+            "ROLLBACK VIOLATED: persisted Dst/Idx TableIndex.AlterVersion=" << dstMirrorV
+            << " < impl.TableSchemaVersion=" << dstImplV
+            << " (cascade=" << enableCascade << ")");
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnCopyTableDst) {
+        RunPersistedIndexAlterVersion_AdvancesOnCopyTableDst(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnCopyTableDst_NoCascade) {
+        RunPersistedIndexAlterVersion_AdvancesOnCopyTableDst(/* enableCascade = */ false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 3: Incremental-restore finalize advances persisted index AlterVersion
+    // -----------------------------------------------------------------------
+
+    void RunPersistedIndexAlterVersion_AdvancesOnIncrementalRestoreFinalize(bool enableCascade) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableBackupService(true)
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        // Mirror the incremental-restore scenario from
+        // RunBackupBackupCollectionInvariantScenario.
+        auto& tenv = env;
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        tenv.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        tenv.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/T"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
+            collectionSettings);
+        tenv.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "T"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value1" Type: "Utf8" }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription {
+                Name: "Idx1"
+                KeyColumnNames: ["Value1"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        tenv.TestWaitNotification(runtime, txId);
+
+        // Full backup first (required before incremental).
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        tenv.TestWaitNotification(runtime, txId);
+
+        // Incremental backup — this creates the changefeed on the impl table
+        // and then finalizes (cascade-publish path).
+        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        tenv.TestWaitNotification(runtime, txId);
+        tenv.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        const auto idxPathId = LookupPathId(runtime, "/MyRoot/T/Idx1");
+        const TString implPath = "/MyRoot/T/Idx1/indexImplTable";
+
+        const ui64 implV = ReadImplTableSchemaVersion(runtime, implPath);
+        const ui64 mirrorV = ReadPersistedIndexAlterVersion(
+            runtime, TTestTxConfig::SchemeShard, idxPathId);
+
+        UNIT_ASSERT_C(mirrorV >= implV,
+            "ROLLBACK VIOLATED: persisted T/Idx1 TableIndex.AlterVersion=" << mirrorV
+            << " < impl.TableSchemaVersion=" << implV
+            << " (cascade=" << enableCascade << ")");
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnIncrementalRestoreFinalize) {
+        RunPersistedIndexAlterVersion_AdvancesOnIncrementalRestoreFinalize(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_AdvancesOnIncrementalRestoreFinalize_NoCascade) {
+        RunPersistedIndexAlterVersion_AdvancesOnIncrementalRestoreFinalize(/* enableCascade = */ false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 4: Multi-index full + incremental backup persists AlterVersion for
+    // every index's impl tables.
+    //
+    // BackupBackupCollection fans out CDC-on-impl operations across every impl
+    // table of every index.  BackupIncrementalBackupCollection (rotate) drops
+    // and re-creates per-impl CDC streams.  The cascade-publish path is the
+    // sole column writer for this path (no AlterTableIndex sub-op is emitted),
+    // so if the persist calls are absent the column stays stale.
+    //
+    // Invariant checked: for every index I and every impl table child C of I:
+    //   ReadPersistedIndexAlterVersion(I.pathId) >= ReadImplTableSchemaVersion(C.path)
+    // -----------------------------------------------------------------------
+
+    // Returns map: indexName -> vector of impl-table paths under it.
+    // CDC streams are excluded; only EPathTypeTable children are collected.
+    static THashMap<TString, TVector<TString>>
+    EnumerateIndexImpls(TTestActorRuntime& runtime, const TString& tablePath) {
+        THashMap<TString, TVector<TString>> out;
+        auto tableDesc = DescribePrivatePath(runtime, tablePath);
+        for (const auto& idx : tableDesc.GetPathDescription().GetTable().GetTableIndexes()) {
+            const TString idxPath = tablePath + "/" + idx.GetName();
+            auto idxDesc = DescribePrivatePath(runtime, idxPath);
+            for (const auto& child : idxDesc.GetPathDescription().GetChildren()) {
+                if (child.GetPathType() == NKikimrSchemeOp::EPathTypeTable) {
+                    out[idx.GetName()].push_back(idxPath + "/" + child.GetName());
+                }
+            }
+        }
+        return out;
+    }
+
+    void RunPersistedIndexAlterVersion_MultiIndexBackup(bool enableCascade) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableBackupService(true)
+            .EnableCascadePublication(enableCascade));
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+
+        // Register the backup collection targeting T.
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/T"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
+            collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create T with two global indexes (Idx1, Idx2).
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "T"
+                Columns { Name: "Key"    Type: "Uint64" }
+                Columns { Name: "Value1" Type: "Utf8"   }
+                Columns { Name: "Value2" Type: "Utf8"   }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription {
+                Name: "Idx1"
+                KeyColumnNames: ["Value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "Idx2"
+                KeyColumnNames: ["Value2"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Full backup — fans out CDC creation to every impl table of every index.
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Snapshot the impl table versions right after full backup.
+        // We'll use these to confirm that incremental backup actually bumped them.
+        auto implsAfterFull = EnumerateIndexImpls(runtime, "/MyRoot/T");
+        THashMap<TString, ui64> implVAfterFull;
+        for (const auto& [idxName, impls] : implsAfterFull) {
+            for (const auto& implPath : impls) {
+                implVAfterFull[implPath] = ReadImplTableSchemaVersion(runtime, implPath);
+            }
+        }
+
+        // Incremental backup — drops + re-creates CDC streams on every impl table.
+        // Cascade-publish runs for each impl table finalize.
+        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        // For every index and every impl table: persisted AlterVersion >= impl version.
+        auto impls = EnumerateIndexImpls(runtime, "/MyRoot/T");
+        UNIT_ASSERT_C(!impls.empty(),
+            "EnumerateIndexImpls returned empty — table has no indexes?");
+
+        for (const auto& [idxName, implPaths] : impls) {
+            UNIT_ASSERT_C(!implPaths.empty(),
+                "Index " << idxName << " has no impl tables");
+
+            const auto idxPathId = LookupPathId(runtime, "/MyRoot/T/" + idxName);
+            const ui64 persistedV = ReadPersistedIndexAlterVersion(
+                runtime, TTestTxConfig::SchemeShard, idxPathId);
+
+            for (const auto& implPath : implPaths) {
+                const ui64 implV = ReadImplTableSchemaVersion(runtime, implPath);
+
+                UNIT_ASSERT_C(implV > implVAfterFull.at(implPath),
+                    "cascade=" << enableCascade
+                    << " impl table " << implPath
+                    << " did not advance after incremental backup: "
+                    << implVAfterFull.at(implPath) << " -> " << implV);
+
+                UNIT_ASSERT_C(persistedV >= implV,
+                    "ROLLBACK VIOLATED on /MyRoot/T/" << idxName
+                    << ": persisted=" << persistedV
+                    << " impl=" << implV
+                    << " after stage=afterIncremental"
+                    << " (cascade=" << enableCascade << ")"
+                    << " implPath=" << implPath);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_MultiIndexBackup) {
+        RunPersistedIndexAlterVersion_MultiIndexBackup(/* enableCascade = */ true);
+    }
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_MultiIndexBackup_NoCascade) {
+        RunPersistedIndexAlterVersion_MultiIndexBackup(/* enableCascade = */ false);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 5: Reboot re-hydrates persisted AlterVersion into the in-memory mirror
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_SurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedsOnIndexTables(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription { Name: "T"
+                Columns { Name: "k" Type: "Uint64" } Columns { Name: "v" Type: "Utf8" }
+                KeyColumnNames: ["k"] }
+            IndexDescription { Name: "Idx" KeyColumnNames: ["v"] Type: EIndexTypeGlobal }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto idxPathId = LookupPathId(runtime, "/MyRoot/T/Idx");
+        const TString implPath = "/MyRoot/T/Idx/indexImplTable";
+
+        // Trigger cascade (CDC on impl bumps impl AV -> cascade writes column).
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot/T/Idx", R"(
+            TableName: "indexImplTable"
+            StreamDescription { Name: "s1" Mode: ECdcStreamModeKeysOnly Format: ECdcStreamFormatJson }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 implV = ReadImplTableSchemaVersion(runtime, implPath);
+        const ui64 mirrorV_before = ReadPersistedIndexAlterVersion(runtime, TTestTxConfig::SchemeShard, idxPathId);
+        UNIT_ASSERT_VALUES_EQUAL(mirrorV_before, implV);
+
+        // Simulate restart: scheme-board re-elects, schemeshard reloads from local DB.
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After reboot, column re-hydrates into TTableIndexInfo::AlterVersion.
+        // Describer (whether derivation or mirror) must report a value >= impl AV.
+        const ui64 mirrorV_after = ReadPersistedIndexAlterVersion(runtime, TTestTxConfig::SchemeShard, idxPathId);
+        UNIT_ASSERT_VALUES_EQUAL(mirrorV_after, mirrorV_before);
+
+        // The describe-time SchemaVersion (what an old binary's describer would emit)
+        // must still be >= the impl table's published version.
+        auto idxDesc = DescribePrivatePath(runtime, "/MyRoot/T/Idx");
+        UNIT_ASSERT_C(
+            idxDesc.GetPathDescription().GetSelf().GetVersion().GetTableIndexVersion() >= implV,
+            "post-reboot describe stale: index=" << idxDesc.GetPathDescription().GetSelf().GetVersion().GetTableIndexVersion()
+            << " impl=" << implV);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 6: Vector index with two impl tables - persisted AlterVersion = max(children)
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(PersistedIndexAlterVersion_VectorIndexMultiImpl) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // EIndexTypeGlobalVectorKmeansTree creates two impl tables:
+        //   indexImplLevelTable + indexImplPostingTable.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "vectors"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_vector"
+                KeyColumnNames: ["embedding"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 4 }, clusters: 4, levels: 2 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto idxPathId = LookupPathId(runtime, "/MyRoot/vectors/idx_vector");
+        const TString levelPath   = "/MyRoot/vectors/idx_vector/indexImplLevelTable";
+        const TString postingPath = "/MyRoot/vectors/idx_vector/indexImplPostingTable";
+
+        const ui64 baseline  = ReadPersistedIndexAlterVersion(runtime, TTestTxConfig::SchemeShard, idxPathId);
+        const ui64 levelV0   = ReadImplTableSchemaVersion(runtime, levelPath);
+        const ui64 postingV0 = ReadImplTableSchemaVersion(runtime, postingPath);
+        UNIT_ASSERT_VALUES_EQUAL(baseline, Max(levelV0, postingV0));
+
+        // Bump only the posting table via TestAlterTable on its PartitionConfig
+        // (same trick as VectorIndexSchemaVersionDerivedFromMaxImplTable).
+        TestAlterTable(runtime, ++txId, "/MyRoot/vectors/idx_vector", R"(
+            Name: "indexImplPostingTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 2000000000
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 levelV1   = ReadImplTableSchemaVersion(runtime, levelPath);
+        const ui64 postingV1 = ReadImplTableSchemaVersion(runtime, postingPath);
+        const ui64 colV1     = ReadPersistedIndexAlterVersion(runtime, TTestTxConfig::SchemeShard, idxPathId);
+
+        UNIT_ASSERT_C(postingV1 > postingV0, "PostingTable AlterVersion should advance");
+        UNIT_ASSERT_VALUES_EQUAL(levelV1, levelV0);
+        UNIT_ASSERT_VALUES_EQUAL(colV1, Max(levelV1, postingV1));
+
+        // Reboot — verify post-reboot mirror still reflects max.
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        const ui64 colV_postReboot = ReadPersistedIndexAlterVersion(runtime, TTestTxConfig::SchemeShard, idxPathId);
+        UNIT_ASSERT_VALUES_EQUAL(colV_postReboot, colV1);
+
+        auto idxDesc = DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector");
+        UNIT_ASSERT_C(
+            idxDesc.GetPathDescription().GetSelf().GetVersion().GetTableIndexVersion() >= postingV1,
+            "post-reboot vector idx describe stale");
+    }
+
+} // TSchemeShardColumnRollbackTests

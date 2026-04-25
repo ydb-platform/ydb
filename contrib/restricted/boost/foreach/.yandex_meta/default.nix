@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_foreach = stdenv.mkDerivation rec {
     pname = "boost_foreach";
-    version = "1.90.0";
+    version = "1.91.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

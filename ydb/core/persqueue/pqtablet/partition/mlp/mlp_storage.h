@@ -362,9 +362,152 @@ private:
         ui64 LastOffset;
     };
 
+    class TOrderedMessageGroups: TNonCopyable {
+    public:
+        using TOffsetToMessageGroupIdMap = TMap<ui64, ui32>;
+
+        void InsertOrAssign(ui32 messageGroupId, ui64 offset) {
+            auto [mit, newMessageGroupid] = MessageGroupId.try_emplace(messageGroupId, TOffsetToMessageGroupIdMap::iterator());
+            if (newMessageGroupid) {
+                auto oit  = InsertNewOffset(offset, messageGroupId);
+                mit->second = oit;
+                return;
+            }
+            if (offset == mit->second->first) {
+                return;
+            }
+            auto nh = OffsetToMessageGroupId.extract(mit->second);
+            Y_ASSERT(nh);
+            nh.key() = offset;
+            nh.mapped() = messageGroupId;
+            auto ins = OffsetToMessageGroupId.insert(std::move(nh));
+            Y_ASSERT(ins.inserted);
+            mit->second = ins.position;
+        }
+
+
+        void InsertUnique(ui32 messageGroupId, ui64 offset) {
+            auto oit = InsertNewOffset(offset, messageGroupId);
+            auto [_, unqiueMessageGroupId] = MessageGroupId.insert_or_assign(messageGroupId, oit);
+            Y_ASSERT(unqiueMessageGroupId);
+        }
+
+
+        bool EraseIfExist(ui32 messageGroupId, ui64 offset) {
+            return EraseImpl(messageGroupId, offset, false);
+        }
+
+        bool EraseExist(ui32 messageGroupId, ui64 offset) {
+            return EraseImpl(messageGroupId, offset, true);
+        }
+            /*
+        void EraseIfExist(TOffsetToMessageGroupIdMap::const_iterator it) {
+            const ui32 messageGroupId = it->second;
+            auto mit = MessageGroupId.find(messageGroupId);
+            Y_ASSERT(mit != MessageGroupId.end());
+            if (mit != MessageGroupId.end()) {
+                Y_ASSERT(mit->second == it);
+                MessageGroupId.erase(mit);
+            }
+            OffsetToMessageGroupId.extract(it).swap(NextNode);
+        }
+            */
+
+        bool EraseImpl(ui32 messageGroupId, ui64 offset, bool assumeExitst) {
+            auto oit = OffsetToMessageGroupId.find(offset);
+            bool hasOffset = oit != OffsetToMessageGroupId.end();
+            auto mit = MessageGroupId.find(messageGroupId);
+            bool hasMessageGroupId = mit != MessageGroupId.end();
+            if (assumeExitst) {
+                if (!hasOffset || !hasMessageGroupId) {
+                    TStringBuilder sb;
+                    sb << "EraseIfExist: " << messageGroupId << " " << offset << " " << hasOffset << " " << hasMessageGroupId << '\n';
+                    for (auto& [offset, messageGroupId] : OffsetToMessageGroupId) {
+                        sb << " O: " << offset << " " << messageGroupId << '\n';
+                    }
+                    for (auto& [messageGroupId, it] : MessageGroupId) {
+                        sb << " M: " << messageGroupId << " " << it->first << "->" << it->second << '\n';
+                    }
+                    Y_ABORT("%s", sb.c_str());
+                }
+
+            }
+            Y_ASSERT(hasOffset || !assumeExitst);
+            Y_ASSERT(hasMessageGroupId || !assumeExitst);
+            Y_ASSERT(hasMessageGroupId == hasOffset);
+            if (hasMessageGroupId) {
+                Y_ASSERT(mit->second == oit);
+                MessageGroupId.erase(mit);
+            }
+            if (hasOffset) {
+                auto nh = OffsetToMessageGroupId.extract(oit);
+                if (!NextNode) {
+                    NextNode = std::move(nh);
+                }
+            }
+            return hasMessageGroupId;
+        }
+
+
+        bool ContainsMessageGroupId(ui32 messageGroupId) const {
+            return MessageGroupId.contains(messageGroupId);
+        }
+        bool ContainsOffset(ui64 offset) const {
+            return OffsetToMessageGroupId.contains(offset);
+        }
+        /*
+        auto begin() const {
+            return OffsetToMessageGroupId.begin();
+        }
+        auto end() const {
+            return OffsetToMessageGroupId.end();
+        }
+            */
+
+        auto IterateOffsets() const {
+            return TIteratorRange(OffsetToMessageGroupId.begin(), OffsetToMessageGroupId.end());
+        }
+
+        auto IterateMessageGroups() const {
+            return IterateKeys(MessageGroupId);
+        }
+
+        void clear() {
+            OffsetToMessageGroupId.clear();
+            MessageGroupId.clear();
+        }
+
+        size_t size() const {
+            Y_ASSERT(OffsetToMessageGroupId.size() == MessageGroupId.size());
+            return OffsetToMessageGroupId.size();
+        }
+    private:
+        TOffsetToMessageGroupIdMap::iterator InsertNewOffset(ui64 offset, ui32 messageGroupId) {
+             if (NextNode) {
+                NextNode.key() = offset;
+                NextNode.mapped() = messageGroupId;
+                auto i = OffsetToMessageGroupId.insert(std::move(NextNode));
+                Y_ASSERT(i.inserted);
+                if (!i.inserted) {
+                    i.position->second = messageGroupId;
+                }
+                return i.position;
+            } else {
+                auto [it, inserted] = OffsetToMessageGroupId.insert_or_assign(offset, messageGroupId);
+                Y_ASSERT(inserted);
+                return it;
+            }
+        }
+
+    private:
+        TOffsetToMessageGroupIdMap OffsetToMessageGroupId;
+        absl::flat_hash_map<ui32, TOffsetToMessageGroupIdMap::iterator> MessageGroupId;
+        TOffsetToMessageGroupIdMap::node_type NextNode;
+    };
+
     struct TMessageGroups {
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
-        absl::flat_hash_set<ui32> UnlockedMessageGroupsId; // without parents
+        TOrderedMessageGroups UnlockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
 

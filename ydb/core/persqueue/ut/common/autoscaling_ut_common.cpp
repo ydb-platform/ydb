@@ -1,6 +1,38 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
+#include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+
 namespace NKikimr::NPQ::NTest {
+
+namespace {
+
+class TAlterTopicSetPartitionWriteSpeedInRpsStrategy : public NKikimr::NPQ::NSchema::IAlterTopicStrategy {
+public:
+    TAlterTopicSetPartitionWriteSpeedInRpsStrategy(TString topicName, ui64 writeSpeedInRequestsPerSecond)
+        : TopicName_(std::move(topicName))
+        , WriteSpeedInRps_(writeSpeedInRequestsPerSecond)
+    {}
+
+    const TString& GetTopicName() const override {
+        return TopicName_;
+    }
+
+    NKikimr::NPQ::NSchema::TResult ApplyChanges(
+        NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
+        NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
+        bool /*isCdcStream*/) override
+    {
+        targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInRequestsPerSecond(WriteSpeedInRps_);
+        return {};
+    }
+
+private:
+    TString TopicName_;
+    ui64 WriteSpeedInRps_;
+};
+
+} // namespace
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -100,20 +132,20 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
-void AlterTopicPartitionWriteSpeedInRequestsPerSecond(TTopicSdkTestSetup& setup, ui64& txId, ui64 writeSpeedInRequestsPerSecond) {
-    const TString topicPath = TStringBuilder() << "/Root/" << TEST_TOPIC;
-    const auto describe = DescribePath(setup.GetRuntime(), topicPath, true, true, true);
-    UNIT_ASSERT_C(describe.GetPathDescription().HasPersQueueGroup(), "DescribePath: no PersQueueGroup");
-
-    NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName(TString{TEST_TOPIC});
-    scheme.MutablePQTabletConfig()->CopyFrom(describe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig());
-    scheme.MutablePQTabletConfig()->ClearPartitionIds();
-    scheme.MutablePQTabletConfig()->ClearPartitions();
-    scheme.MutablePQTabletConfig()->ClearAllPartitions();
-    scheme.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInRequestsPerSecond(writeSpeedInRequestsPerSecond);
-
-    DoRequest(setup, txId, scheme);
+void AlterTopicPartitionWriteSpeedInRequestsPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInRequestsPerSecond) {
+    auto& runtime = setup.GetRuntime();
+    const auto parent = runtime.AllocateEdgeActor();
+    TString database(setup.GetDatabase());
+    const auto aid = runtime.Register(NKikimr::NPQ::NSchema::CreateAlterTopicOperationActor(parent, {
+        .Database = std::move(database),
+        .Strategy = std::make_unique<TAlterTopicSetPartitionWriteSpeedInRpsStrategy>(TString{TEST_TOPIC}, writeSpeedInRequestsPerSecond),
+    }));
+    runtime.EnableScheduleForActor(aid);
+    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvAlterTopicResponse>(parent, TDuration::Seconds(120));
+    UNIT_ASSERT(reply);
+    const auto& alter = *reply->Get();
+    UNIT_ASSERT_C(alter.Status == Ydb::StatusIds::SUCCESS,
+        "AlterTopicOperation (partition WriteSpeedInRequestsPerSecond): " << alter.ErrorMessage);
 }
 
 TWriteMessage Msg(const TString& data, ui64 seqNo) {

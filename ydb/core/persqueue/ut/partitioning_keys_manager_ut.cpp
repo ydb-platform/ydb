@@ -9,7 +9,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/string.h>
-#include <ydb/core/persqueue/pqtablet/partition/partitioning_keys_manager.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 

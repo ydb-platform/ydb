@@ -228,9 +228,6 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
-        // If the dst impl table's parent is a TableIndex, sync the index version.
-        NTableIndexVersion::SyncParentIndexVersion(path, table, OperationId, context, db);
-
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
@@ -285,14 +282,12 @@ public:
                 srcTable->AlterVersion += 1;
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
-                // Sync parent index version if srcPath is an impl table.
-                NTableIndexVersion::SyncParentIndexVersion(srcPath, srcTable, OperationId, context, db);
-
-                // Sync child index versions if srcPath is a main table.
-                NTableIndexVersion::SyncChildIndexVersions(srcPath, srcTable, srcTable->AlterVersion, OperationId, context, db);
             }
 
-            context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, srcPathId, context.SS);
+            // Use cascade publish so that if srcPathId is an index impl table,
+            // the parent TableIndex (and the main table) are also republished
+            // with the updated embedded schema versions.
+            context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, srcPathId, context.SS, db);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);

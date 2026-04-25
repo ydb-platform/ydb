@@ -95,7 +95,7 @@ public:
     // state changes, the parent's cached describe carries the fresh child version.
     // Gated by FeatureFlags.EnableCascadePublication: when disabled, behaves like
     // PublishToSchemeBoard (single path only).
-    void PublishToSchemeBoardWithAncestors(TOperationId opId, TPathId pathId, TSchemeShard* ss);
+    void PublishToSchemeBoardWithAncestors(TOperationId opId, TPathId pathId, TSchemeShard* ss, NIceDb::TNiceDb& db);
 
     void Send(TActorId dst, ::NActors::IEventBase* message, ui64 cookie = 0, ui32 flags = 0);
     template <typename TEvent>

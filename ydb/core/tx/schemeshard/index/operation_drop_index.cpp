@@ -173,12 +173,8 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
-        // Sync remaining child index versions with main table
-        // (excluding the one being dropped - skipPlannedToDrop=true)
-        NTableIndexVersion::SyncChildIndexVersions(path, table, table->AlterVersion, OperationId, context, db, true);
-
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS, db);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

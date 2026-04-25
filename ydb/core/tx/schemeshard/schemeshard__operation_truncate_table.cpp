@@ -145,16 +145,17 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
-        // This check means that the table being processed is the main one.
-        if (!path.Parent()->IsTableIndex()) {
-            NTableIndexVersion::SyncChildIndexVersions(
-                path.Base(), table, table->AlterVersion,
-                OperationId, context, db
-            );
-        }
-
         context.SS->ClearDescribePathCaches(path.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+        // When this sub-op targets an impl table, cascade the publish up through
+        // the parent index and grandparent main table so their SchemeBoard entries
+        // carry an up-to-date DeriveIndexSchemaVersion value.  Without this the
+        // KQP compile cache sees a stale index SchemaVersion and rejects queries
+        // with a "schema version mismatch" error.
+        if (path.Parent()->IsTableIndex()) {
+            context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path.Base()->PathId, context.SS, db);
+        } else {
+            context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+        }
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

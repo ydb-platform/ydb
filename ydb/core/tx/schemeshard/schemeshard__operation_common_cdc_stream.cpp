@@ -125,18 +125,12 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     table->AlterVersion += 1;
     context.SS->PersistTableAlterVersion(db, pathId, table);
-
-    // If the table is an indexImplTable (parent is a TableIndex), keep the
-    // parent index's AlterVersion in sync with the impl table and bump the
-    // grandparent main table's DirAlterVersion so its GeneralVersion advances.
-    NTableIndexVersion::SyncParentIndexVersion(path, table, OperationId, context, db);
-
     context.SS->ClearDescribePathCaches(path);
 
     // Cascade publication republishes this path together with all its ancestors
     // up to the domain root, so that parent describes (which embed child
     // versions, e.g. TableIndex.SchemaVersion) reflect the current child state.
-    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, pathId, context.SS);
+    context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, pathId, context.SS, db);
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
     return true;

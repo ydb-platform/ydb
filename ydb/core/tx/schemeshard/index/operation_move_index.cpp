@@ -286,10 +286,8 @@ public:
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 
-        NTableIndexVersion::SyncChildIndexVersions(path.Base(), table, table->AlterVersion, OperationId, context, db);
-
         context.SS->ClearDescribePathCaches(path.Base());
-        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS, db);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }

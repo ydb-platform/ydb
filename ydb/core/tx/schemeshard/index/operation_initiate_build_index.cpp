@@ -179,7 +179,7 @@ public:
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);
-        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, tablePath->PathId, context.SS);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, tablePath->PathId, context.SS, db);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

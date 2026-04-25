@@ -59,7 +59,6 @@ END()
 
 RECURSE(
     events
-    yt
 )
 
 RECURSE_FOR_TESTS(

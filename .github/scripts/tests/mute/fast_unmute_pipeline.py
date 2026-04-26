@@ -23,16 +23,17 @@ from mute.fast_unmute_comments import (
     format_bullet_list,
 )
 from mute.fast_unmute_github import (
+    PROJECT_ID,
     PROJECT_STATUS_ON_FAST_UNMUTE_FAIL,
+    PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN,
     PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS,
     add_label_to_issue,
     fetch_issue_closers,
-    fetch_issue_node_ids,
+    fetch_issue_label_names,
+    fetch_issue_numbers_in_manual_unmute_project,
     fetch_issue_states,
-    issue_eligible_for_manual_fast_unmute_entry,
     remove_label_from_issue,
     reopen_issue,
-    set_fast_unmute_reopen_project_status,
     set_manual_unmute_project_board_status,
 )
 from mute.fast_unmute_ydb import (
@@ -49,7 +50,11 @@ from mute.fast_unmute_ydb import (
     upsert_fast_unmute_grace_row,
     upsert_rows,
 )
-from mute.update_mute_issues import add_issue_comment, parse_body
+from mute.update_mute_issues import (
+    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
+    add_issue_comment,
+    parse_body,
+)
 
 # GitHub ``__typename`` is ``User`` for PAT-based bot accounts; skip known bot logins (M2).
 BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
@@ -123,7 +128,7 @@ def abandon_fast_unmute_if_issue_not_completed(ydb_wrapper, table_path, grace_ta
         issue_id = meta.get('id')
         state = meta.get('state') or ''
         state_reason = meta.get('state_reason') or ''
-        if issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
+        if (state or '').strip().upper() == 'CLOSED' and (state_reason or '').strip().upper() == 'COMPLETED':
             continue
         if not issue_id:
             logging.warning(
@@ -185,7 +190,9 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
         return
 
     issue_numbers = {int(c['issue_number']) for c in candidates if c.get('issue_number') is not None}
+    in_project_issue_numbers = fetch_issue_numbers_in_manual_unmute_project(issue_numbers)
     closers = fetch_issue_closers(issue_numbers)
+    labels_by_issue = fetch_issue_label_names(issue_numbers)
 
     muted_cache = {}
     now = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -203,6 +210,13 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
             )
             continue
         issue_number = int(issue_number_raw)
+        if issue_number not in in_project_issue_numbers:
+            _LOG.debug(
+                'enter: skip #%s: issue is not in project %s',
+                issue_number,
+                PROJECT_ID,
+            )
+            continue
 
         closer = closers.get(issue_number) or {}
         if closer.get('type') != 'User':
@@ -219,6 +233,14 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                 'enter: skip #%s: closer login %r is bot-denylisted',
                 issue_number,
                 login,
+            )
+            continue
+        labels = labels_by_issue.get(issue_number) or set()
+        if MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL in labels:
+            _LOG.debug(
+                'enter: skip #%s: already has label %r',
+                issue_number,
+                MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
             )
             continue
 
@@ -277,7 +299,7 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
 
         upsert_rows(ydb_wrapper, table_path, issue_rows)
 
-        set_fast_unmute_reopen_project_status(issue_id)
+        set_manual_unmute_project_board_status(issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN)
         raw_login = (closer.get('login') or '').strip()
         closer_mention_line = f'@{raw_login}\n\n' if raw_login else ''
         add_issue_comment(
@@ -406,7 +428,10 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
     if affected_issues:
         remaining = count_rows_per_issue(ydb_wrapper, table_path, affected_issues)
         issues_to_delabel = {num for num in affected_issues if remaining.get(num, 0) == 0}
-        issue_ids = fetch_issue_node_ids(affected_issues)
+        issue_ids = {
+            issue_number: data['id']
+            for issue_number, data in fetch_issue_states(affected_issues).items()
+        }
 
         for issue_number in sorted(issues_ttl_shutdown):
             issue_id = issue_ids.get(issue_number)
@@ -474,6 +499,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
             )
+            add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
 
         for issue_number in issues_to_delabel:
             issue_id = issue_ids.get(issue_number)

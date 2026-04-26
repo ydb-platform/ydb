@@ -3,6 +3,7 @@
 import logging
 
 from mute.update_mute_issues import (
+    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
     MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     ORG_NAME,
     PROJECT_ID,
@@ -11,7 +12,6 @@ from mute.update_mute_issues import (
     run_query,
 )
 
-LABEL_NAME = MANUAL_FAST_UNMUTE_GITHUB_LABEL
 _LABEL_ID_CACHE = {}
 
 PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN = 'Observation'
@@ -216,17 +216,10 @@ def set_manual_unmute_project_board_status(issue_node_id, status_label):
         logging.warning('manual_unmute: updateProjectV2ItemFieldValue failed: %s', exc)
 
 
-def set_fast_unmute_reopen_project_status(issue_node_id):
-    """Set org project Status → Observation when entering fast-unmute."""
-    set_manual_unmute_project_board_status(
-        issue_node_id, PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN
-    )
-
-
-def _get_label_id():
+def _get_label_id(label_name):
     """Resolve the pre-created label node id (cached). Returns None if missing."""
-    if LABEL_NAME in _LABEL_ID_CACHE:
-        return _LABEL_ID_CACHE[LABEL_NAME]
+    if label_name in _LABEL_ID_CACHE:
+        return _LABEL_ID_CACHE[label_name]
 
     query = """
     query ($owner: String!, $name: String!, $labelName: String!) {
@@ -237,25 +230,25 @@ def _get_label_id():
     """
     result = run_query(
         query,
-        {'owner': ORG_NAME, 'name': REPO_NAME, 'labelName': LABEL_NAME},
+        {'owner': ORG_NAME, 'name': REPO_NAME, 'labelName': label_name},
     )
     label = (((result.get('data') or {}).get('repository') or {}).get('label') or {})
     label_id = label.get('id')
     if not label_id:
         logging.warning(
             "Label %r not found in %s/%s — create it manually in the repository labels page",
-            LABEL_NAME,
+            label_name,
             ORG_NAME,
             REPO_NAME,
         )
         return None
-    _LABEL_ID_CACHE[LABEL_NAME] = label_id
+    _LABEL_ID_CACHE[label_name] = label_id
     return label_id
 
 
-def add_label_to_issue(issue_id):
-    """Attach the fast-unmute label. Idempotent — GitHub ignores duplicates."""
-    label_id = _get_label_id()
+def add_label_to_issue(issue_id, label_name=MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+    """Attach a label to issue. Idempotent — GitHub ignores duplicates."""
+    label_id = _get_label_id(label_name)
     if not label_id:
         return
     mutation = """
@@ -268,12 +261,14 @@ def add_label_to_issue(issue_id):
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
     except Exception as exc:
-        logging.warning('Failed to add label to issue %s: %s', issue_id, exc)
+        logging.warning(
+            'Failed to add label %r to issue %s: %s', label_name, issue_id, exc
+        )
 
 
-def remove_label_from_issue(issue_id):
-    """Detach the fast-unmute label. No-op if label is not present."""
-    label_id = _get_label_id()
+def remove_label_from_issue(issue_id, label_name=MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+    """Detach a label from issue. No-op if the label is not present."""
+    label_id = _get_label_id(label_name)
     if not label_id:
         return
     mutation = """
@@ -286,7 +281,71 @@ def remove_label_from_issue(issue_id):
     try:
         run_query(mutation, {'labelableId': issue_id, 'labelIds': [label_id]})
     except Exception as exc:
-        logging.warning('Failed to remove label from issue %s: %s', issue_id, exc)
+        logging.warning(
+            'Failed to remove label %r from issue %s: %s', label_name, issue_id, exc
+        )
+
+
+def fetch_issue_label_names(issue_numbers):
+    """Return ``{issue_number: {label_name, ...}}`` from GitHub GraphQL."""
+    result = {}
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
+    if not numbers:
+        return result
+    chunk_size = 50
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        subqueries = [
+            f"n{n}: issue(number: {n}) {{ labels(first: 40) {{ nodes {{ name }} }} }}" for n in chunk
+        ]
+        query = f"""
+        query {{
+            repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
+                {' '.join(subqueries)}
+            }}
+        }}
+        """
+        response = run_query(query)
+        repo_data = (response.get('data') or {}).get('repository') or {}
+        for number in chunk:
+            node = repo_data.get(f'n{number}') or {}
+            labels = (node.get('labels') or {}).get('nodes') or []
+            result[number] = {
+                str(label.get('name') or '').strip()
+                for label in labels
+                if (label or {}).get('name')
+            }
+    return result
+
+
+def fetch_issue_numbers_in_manual_unmute_project(issue_numbers):
+    """Return issue numbers that currently have a card in configured manual-unmute project."""
+    result = set()
+    numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
+    if not numbers:
+        return result
+    chunk_size = 50
+    for i in range(0, len(numbers), chunk_size):
+        chunk = numbers[i : i + chunk_size]
+        subqueries = [
+            f"n{n}: issue(number: {n}) {{ projectItems(first: 40) {{ nodes {{ project {{ number }} }} }} }}"
+            for n in chunk
+        ]
+        query = f"""
+        query {{
+            repository(owner: "{ORG_NAME}", name: "{REPO_NAME}") {{
+                {' '.join(subqueries)}
+            }}
+        }}
+        """
+        response = run_query(query)
+        repo_data = (response.get('data') or {}).get('repository') or {}
+        for number in chunk:
+            node = repo_data.get(f'n{number}') or {}
+            items = (node.get('projectItems') or {}).get('nodes') or []
+            if any(int((item.get('project') or {}).get('number') or -1) == int(PROJECT_ID) for item in items):
+                result.add(number)
+    return result
 
 
 def fetch_issue_states(issue_numbers):
@@ -326,11 +385,3 @@ def fetch_issue_states(issue_numbers):
     return result
 
 
-def fetch_issue_node_ids(issue_numbers):
-    """Return ``{issue_number: issue_node_id}`` (same GraphQL batching as ``fetch_issue_states``)."""
-    return {n: data['id'] for n, data in fetch_issue_states(issue_numbers).items()}
-
-
-def issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
-    """Same gate as YDB candidate issues: closed by human as completed."""
-    return (state or '').strip().upper() == 'CLOSED' and (state_reason or '').strip().upper() == 'COMPLETED'

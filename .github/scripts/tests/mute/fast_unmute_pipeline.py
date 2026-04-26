@@ -191,8 +191,8 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
 
     issue_numbers = {int(c['issue_number']) for c in candidates if c.get('issue_number') is not None}
     in_project_issue_numbers = fetch_issue_numbers_in_manual_unmute_project(issue_numbers)
-    closers = fetch_issue_closers(issue_numbers)
-    labels_by_issue = fetch_issue_label_names(issue_numbers)
+    closers = fetch_issue_closers(in_project_issue_numbers)
+    labels_by_issue = fetch_issue_label_names(in_project_issue_numbers)
 
     muted_cache = {}
     now = datetime.datetime.now(tz=datetime.timezone.utc)

@@ -254,8 +254,6 @@ TString SerializeEvent(const TEvent& ev) {
     return data;
 }
 
-} // anonymous namespace
-
 TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
     TString data;
 
@@ -276,6 +274,8 @@ TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
 
     return data;
 }
+
+} // anonymous namespace
 
 TCloudEventsActor::TCloudEventsActor()
 {

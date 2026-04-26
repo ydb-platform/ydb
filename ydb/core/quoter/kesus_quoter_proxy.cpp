@@ -347,8 +347,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     THashMap<ui64, std::vector<TString>> CookieToResourcePath;
     ui64 NextCookie = 1;
 
-    TInstant LastReplicationReport = TInstant::Zero();
-    TDuration MinReplicationReportPeriod = TDuration::Max();
+    TInstant NextReplicationReport = TInstant::Max();
 
     THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
     THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
@@ -445,7 +444,9 @@ private:
 
     void SetResProps(TResourceState* resState, const NKikimrKesus::TStreamingQuoterResource& props) {
         resState->SetProps(props, ServerVersion);
-        MinReplicationReportPeriod = Min(resState->ReplicationReportPeriod, MinReplicationReportPeriod);
+        if (resState->ReplicationReportPeriod != TDuration::Max()) {
+            NextReplicationReport = Min(NextReplicationReport, TActivationContext::Now());
+        }
     }
 
     TResourceState* FindResource(ui64 id) {
@@ -647,7 +648,8 @@ private:
 
     void SendDeferredEvents() {
         const TInstant now = TActivationContext::Now();
-        if (MinReplicationReportPeriod != TDuration::Max() && LastReplicationReport + MinReplicationReportPeriod < now) {
+        if (NextReplicationReport != TInstant::Max() && now >= NextReplicationReport) {
+            NextReplicationReport = TInstant::Max();
             for (auto& [_, res] : Resources) {
                 if (res->ReplicationEnabled) {
                     CheckReplicationReport(*res, now);
@@ -903,7 +905,7 @@ private:
         ConnectToKesus(true);
         DisconnectTime = TActivationContext::Now();
         OfflineAllocationCookie = NextCookie++;
-        MinReplicationReportPeriod = TDuration::Max();
+        NextReplicationReport = TInstant::Max();
         MarkAllActiveResourcesForOfflineAllocation();
         if (Counters.Disconnects) {
             ++*Counters.Disconnects;
@@ -1128,14 +1130,15 @@ private:
     }
 
     void CheckReplicationReport(TResourceState& res, TInstant now) {
-        if (res.LastReplicationReport + res.ReplicationReportPeriod < now) {
+        Y_ASSERT(res.ReplicationReportPeriod < TDuration::Max());
+        if (res.LastReplicationReport + res.ReplicationReportPeriod <= now) {
             ReportReplicationSession(res);
             // `LastReplicationReport` must be aligned to send resources' stats in one message
             // in case they have the same `ReportPeriod`
-            Y_ASSERT(res.ReplicationReportPeriod < TDuration::Max());
             ui64 periodUs = res.ReplicationReportPeriod.MicroSeconds();
             res.LastReplicationReport = TInstant::MicroSeconds(now.MicroSeconds() / periodUs * periodUs);
         }
+        NextReplicationReport = Min(NextReplicationReport, res.LastReplicationReport + res.ReplicationReportPeriod);
     }
 
     static TString GetLogPrefix(const TVector<TString>& path) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 namespace NYql::NDq {
 
 /*
@@ -83,6 +85,18 @@ struct TDqAsyncStats {
         FilteredRows += other.FilteredRows;
         QueuedBytes += other.QueuedBytes;
         QueuedRows += other.QueuedRows;
+    }
+
+    void GetMinData(const TDqAsyncStats& other) {
+        Bytes = std::min(Bytes, other.Bytes);
+        DecompressedBytes = std::min(DecompressedBytes, other.DecompressedBytes);
+        Rows = std::min(Rows, other.Rows);
+        Chunks = std::min(Chunks, other.Chunks);
+        Splits = std::min(Splits, other.Splits);
+        FilteredBytes = std::min(FilteredBytes, other.FilteredBytes);
+        FilteredRows = std::min(FilteredRows, other.FilteredRows);
+        QueuedBytes = std::min (QueuedBytes, other.QueuedBytes);
+        QueuedRows = std::min (QueuedRows, other.QueuedRows);
     }
 
     void MergeTime(const TDqAsyncStats& other) {

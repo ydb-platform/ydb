@@ -13,7 +13,7 @@ PROTO_NAMESPACE(
     contrib/libs/grpc
 )
 
-PY_NAMESPACE("src.proto.grpc.health.v1")
+PY_NAMESPACE("grpc.health.v1")
 
 GRPC()
 

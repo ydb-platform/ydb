@@ -70,6 +70,9 @@ void FinishWithError(
     }
 
     auto* sys = NActors::TActivationContext::ActorSystem();
+    // FinishWithError is used for early Propose-time rejects of topic requests.
+    // The operation does not proceed to the normal completion path in these cases,
+    // so the error cloud event is sent immediately instead of via context.OnComplete.
     auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
     sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
@@ -110,9 +113,7 @@ bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
         NKikimrScheme::StatusSuccess,
         TString());
 
-    TDone::ProgressState(context);
-
-    return false;
+    return TDone::ProgressState(context);
 }
 
 } // NKikimr::NSchemeShard

@@ -49,7 +49,7 @@ void ValidateQueries(const TString& jsonPath, TVector<TString> expectedQueries, 
     auto result = ParseAndCollect(jsonPath, callableType, tokensMode);
 
     TVector<TString> resultVector;
-    std::move(result.begin(), result.end(), std::back_inserter(resultVector));
+    std::copy(result.begin(), result.end(), std::back_inserter(resultVector));
 
     std::sort(resultVector.begin(), resultVector.end());
     std::sort(expectedQueries.begin(), expectedQueries.end());
@@ -1875,6 +1875,71 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         CheckMerge(
             MergeOr(MakeTokens({first}), MakeTokens({second})),
             {first, second}, EMode::Or);
+    }
+
+    // The empty string token ("") represents the root context object ($)
+    Y_UNIT_TEST(MergeAndOr_EmptyPathToken) {
+        const TString root = "";
+        const TString a = "\2a";
+        const TString ab = "\2a\2b";
+        const TString b = "\2b";
+
+        // OR: root token covers any other token -> only root survives
+        CheckMerge(
+            MergeOr(MakeTokens({root}), MakeTokens({a})),
+            {root}, EMode::Or);
+
+        CheckMerge(
+            MergeOr(MakeTokens({a}), MakeTokens({root})),
+            {root}, EMode::Or);
+
+        // OR: root in a multi-token set — all others pruned
+        CheckMerge(
+            MergeOr(MakeTokens({root, a}, EMode::Or), MakeTokens({ab, b}, EMode::Or)),
+            {root}, EMode::Or);
+
+        // AND: root is more general than any other token -> root is pruned
+        CheckMerge(
+            MergeAnd(MakeTokens({root}), MakeTokens({a})),
+            {a}, EMode::And);
+
+        CheckMerge(
+            MergeAnd(MakeTokens({a}), MakeTokens({root})),
+            {a}, EMode::And);
+
+        // AND: root with multiple non-empty tokens -> root pruned, others kept
+        CheckMerge(
+            MergeAnd(MakeTokens({root, a}, EMode::And), MakeTokens({ab, b}, EMode::And)),
+            {ab, b}, EMode::And);
+
+        // Root on both sides: deduplication leaves a single token -> NotSet mode, no pruning
+        CheckMerge(
+            MergeOr(MakeTokens({root}), MakeTokens({root})),
+            {root}, EMode::NotSet);
+
+        CheckMerge(
+            MergeAnd(MakeTokens({root}), MakeTokens({root})),
+            {root}, EMode::NotSet);
+
+        // Root with a literal-suffixed token (path + value): root is still a prefix -> same rules
+        const TString aNum = a + numSuffix(1.0);
+        CheckMerge(
+            MergeOr(MakeTokens({root}), MakeTokens({aNum})),
+            {root}, EMode::Or);
+
+        CheckMerge(
+            MergeAnd(MakeTokens({root}), MakeTokens({aNum})),
+            {aNum}, EMode::And);
+
+        // Root with a sibling pair: both siblings extend root, so root covers both in OR
+        CheckMerge(
+            MergeOr(MakeTokens({root}), MakeTokens({a, b}, EMode::Or)),
+            {root}, EMode::Or);
+
+        // AND: root with siblings -> root pruned, siblings kept
+        CheckMerge(
+            MergeAnd(MakeTokens({root}), MakeTokens({a, b}, EMode::And)),
+            {a, b}, EMode::And);
     }
 
     Y_UNIT_TEST(TokenizeJson) {

@@ -105,30 +105,26 @@ void PruneRedundantTokens(TCollectResult::TTokens& tokens, TCollectResult::EToke
     }
 
     TCollectResult::TTokens result;
-    for (const auto& token : tokens) {
-        bool redundant = false;
-        for (const auto& other : tokens) {
-            if (other == token) {
+    std::optional<TString> lastKept;
+
+    if (mode == TCollectResult::ETokensMode::Or) {
+        // OR: keep minimal tokens (roots). Token is redundant if a shorter prefix is already kept
+        for (const auto& token : tokens) {
+            if (lastKept.has_value() && token.StartsWith(*lastKept)) {
                 continue;
             }
-
-            if (mode == TCollectResult::ETokensMode::Or) {
-                // token is redundant if some shorter other is its prefix (other covers token)
-                if (other.size() < token.size() && token.StartsWith(other)) {
-                    redundant = true;
-                    break;
-                }
-            } else {
-                // AND: token is redundant if some longer other starts with it (other implies token)
-                if (other.size() > token.size() && other.StartsWith(token)) {
-                    redundant = true;
-                    break;
-                }
-            }
-        }
-
-        if (!redundant) {
             result.insert(token);
+            lastKept = token;
+        }
+    } else {
+        // AND: keep maximal tokens (leaves). Token is redundant if a longer token that starts with it is already kept
+        for (auto it = tokens.rbegin(); it != tokens.rend(); ++it) {
+            const auto& token = *it;
+            if (lastKept.has_value() && lastKept->StartsWith(token)) {
+                continue;
+            }
+            result.insert(token);
+            lastKept = token;
         }
     }
 

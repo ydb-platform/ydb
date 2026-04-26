@@ -1,5 +1,8 @@
 #include "kqp_opt_log_json_index.h"
 
+#include <expected>
+#include <functional>
+
 #include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>

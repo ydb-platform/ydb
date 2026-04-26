@@ -472,9 +472,15 @@ public:
             MoveFrom(EState::SPLIT_BY_BYTES);
         }
 
-        return (scaleStatusMessages == NKikimrPQ::EScaleStatus::NEED_SPLIT || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) ?
-            NKikimrPQ::EScaleStatus::NEED_SPLIT :
-            NKikimrPQ::EScaleStatus::NORMAL;
+        if (scaleStatusMessages == NKikimrPQ::EScaleStatus::NEED_SPLIT || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
+            return NKikimrPQ::EScaleStatus::NEED_SPLIT;
+        }
+
+        if (scaleStatusMessages == NKikimrPQ::EScaleStatus::NEED_MERGE || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_MERGE) {
+            return NKikimrPQ::EScaleStatus::NEED_MERGE;
+        }
+
+        return NKikimrPQ::EScaleStatus::NORMAL;
     }
 
     std::optional<TString> SplitBoundary() override {

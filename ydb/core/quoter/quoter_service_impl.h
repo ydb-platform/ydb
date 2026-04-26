@@ -320,6 +320,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void StartCleanupPass();
     void ScheduleNextCleanupPass();
     void HandleCleanup();
+    void EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvQuota::TEvRequest::TPtr &ev);

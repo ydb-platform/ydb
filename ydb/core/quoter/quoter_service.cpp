@@ -1109,12 +1109,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         if (resUpdate.ResourceState == EUpdateState::Broken
             || (resUpdate.ResourceState == EUpdateState::Evict && quores.QueueHead == Max<ui32>()))
         {
-            BLOG_I("closing resource on ProxyUpdate " << quoter.QuoterName << ":" << quores.Resource);
-            Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
-
-            ForbidResource(quores);
-            quoter.ResourcesIndex.erase(quores.Resource);
-            quoter.Resources.erase(resourceIt);
+            EvictResource(quoter, resUpdate.ResourceId, "ProxyUpdate");
             continue;
         }
 
@@ -1188,6 +1183,21 @@ void TQuoterService::HandleCleanup() {
     }
 
     ScheduleNextCleanupPass();
+}
+
+void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason) {
+    auto resourceIt = quoter.Resources.find(resourceId);
+    if (resourceIt == quoter.Resources.end()) {
+        return;
+    }
+
+    TResource &quores = *resourceIt->second;
+    BLOG_I("closing resource on " << reason << " " << quoter.QuoterName << ":" << quores.Resource);
+    Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
+
+    ForbidResource(quores);
+    quoter.ResourcesIndex.erase(quores.Resource);
+    quoter.Resources.erase(resourceIt);
 }
 
 void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {

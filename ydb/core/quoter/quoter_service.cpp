@@ -856,12 +856,24 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
             PRE() {
                 str << "LastProcessed: " << LastProcessed << "\n"
                     << "Quoters:\n";
+                bool firstQuoter = true;
                 for (auto& [quoterId, quoterState] : Quoters) {
+                    if (firstQuoter) {
+                        firstQuoter = false;
+                    } else {
+                        str << "\n";
+                    }
                     str << "  Name: " << quoterState.QuoterName << "\n"
                         << "  Id: " << quoterId << "\n"
                         << "  ProxyId: " << quoterState.ProxyId << "\n"
                         << "  Resources:\n";
+                    bool firstRes = true;
                     for (auto& [resId, resPtr] : quoterState.Resources) {
+                        if (firstRes) {
+                            firstRes = false;
+                        } else {
+                            str << "\n";
+                        }
                         str << "    Id: " << resId << "\n";
                         if (resPtr) {
                             str << "    Name: " << resPtr->Resource << "\n"

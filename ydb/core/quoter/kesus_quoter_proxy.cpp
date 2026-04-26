@@ -486,9 +486,14 @@ private:
                         << "Connected: " << (Connected ? "true" : "false") << "\n"
                         << "DisconnectTime: " << DisconnectTime << "\n"
                         << "Resources:\n";
+                    bool firstRes = true;
                     for (auto& [name, res] : Resources) {
+                        if (firstRes) {
+                            firstRes = false;
+                        } else {
+                            str << "\n";
+                        }
                         str << "  Resource: " << name << "\n";
-
                         if (res) {
                             str << "  Id: " << res->ResId << "\n"
                                 << "  Available: " << res->Available << "\n"

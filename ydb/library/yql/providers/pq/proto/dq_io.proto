@@ -71,6 +71,12 @@ message TOffsetPredicate {           // (partition = PartitionId AND offset >= B
     optional uint64 End = 3;         // exclusive
 }
 
+message TWriteTimePredicate {           // (partition = PartitionId AND write_time >= Begin AND write_time < End)
+    optional uint64 PartitionId = 1; // all partitions if not set
+    optional uint64 Begin = 2;       // inclusive  
+    optional uint64 End = 3;         // exclusive
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -105,6 +111,7 @@ message TDqPqTopicSource {
     repeated string UserSchemaColumns = 31;
     bool StopAtCurrentEndOffsets = 32;
     repeated TOffsetPredicate OffsetPredicate = 33;
+    repeated TWriteTimePredicate WriteTimePredicate = 34;
 }
 
 message TDqPqTopicSink {

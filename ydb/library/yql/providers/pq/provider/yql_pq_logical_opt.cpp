@@ -35,7 +35,7 @@ struct TPushdownSettings: public NPushdown::TSettings {
         Enable(
             // Operator features
             EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes |
+            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
             EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
             EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
 
@@ -344,11 +344,16 @@ public:
         }
 
         if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter222. Lambda is already not empty";
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
 
         if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
@@ -432,28 +437,37 @@ public:
 
         TString offsetPredicateSerializedProto;
         {
-            auto offsetSettings = TPushdownSettings();
-            offsetSettings.EnableMember("_yql_sys_offset");
-            offsetSettings.Enable(NPushdown::TSettings::EFeatureFlag::InOperator);
-            NPushdown::TPredicateNode offsetPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), offsetSettings);
-            if (!offsetPredicate.IsEmpty()) {
+            auto settings = TPushdownSettings();
+            settings.EnableMember("_yql_sys_offset");
+            NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+            if (!predicate.IsEmpty()) {
                 NYql::NConnector::NApi::TPredicate proto;
                 TStringBuilder err;
-                if (NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
+                if (NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
                     YQL_ENSURE(proto.SerializeToString(&offsetPredicateSerializedProto));
                 }
             }
-            // // rm
-            // TStringBuilder err;
-            // if (!NYql::SerializeFilterPredicate(ctx, offsetPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
-            //     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-            //     return node;
-            // }
-            // TString predicateSql = NYql::FormatPredicate(predicateProto);
-            // Cerr  << "offset predicate " << predicateSql << Endl;
         }
 
-        if (sharedReadingPridicateSerializedProto.empty() && !isPartitionListUpdated && offsetPredicateSerializedProto.empty()) {
+        TString writeTimePredicateSerializedProto;
+        {
+            auto settings = TPushdownSettings();
+            settings.EnableMember("_yql_sys_write_time");
+            settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
+            NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+            if (!predicate.IsEmpty()) {
+                NYql::NConnector::NApi::TPredicate proto;
+                TStringBuilder err;
+                if (NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
+                    YQL_ENSURE(proto.SerializeToString(&writeTimePredicateSerializedProto));
+                }
+            }
+        }
+
+        if (sharedReadingPridicateSerializedProto.empty()
+            && !isPartitionListUpdated
+            && offsetPredicateSerializedProto.empty()
+            && writeTimePredicateSerializedProto.empty()) {
             return node;
         }
 
@@ -471,6 +485,7 @@ public:
                             .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
                             .Partitions(partitionList)
                             .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
+                            .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
                             .Build()
                         .Build()
                     .Build()
@@ -485,6 +500,7 @@ public:
                     .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
                     .Partitions(partitionList)
                     .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
+                    .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
                     .Build()
                 .Build()
             .Done();

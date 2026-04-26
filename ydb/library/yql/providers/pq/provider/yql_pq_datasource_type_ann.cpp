@@ -329,7 +329,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 9, 11, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 10, 12, ctx)) {
             return TStatus::Error;
         }
 

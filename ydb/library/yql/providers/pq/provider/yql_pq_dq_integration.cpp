@@ -212,6 +212,7 @@ public:
                     .RowType(expandedRowType)
                     .Partitions(emptyList)
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
@@ -432,19 +433,35 @@ public:
                 NYql::NConnector::NApi::TPredicate filterPredicateProto;
                 auto filterSerializedProto = topicSource.FilterPredicate().Ref().Content();
                 YQL_ENSURE(filterPredicateProto.ParseFromString(filterSerializedProto));
+                TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
+                Cerr << "Filter predicate: " << filterPredicateSql << Endl;
 
                 NYql::NConnector::NApi::TPredicate offsetPredicateProto;
                 auto offsetSerializedProto = topicSource.OffsetPredicate().Ref().Content();
                 YQL_ENSURE(offsetPredicateProto.ParseFromString(offsetSerializedProto));
-
-                TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
                 TString offsetPredicateSql = NYql::FormatPredicate(offsetPredicateProto);
-
-                Cerr << "Filter predicate: " << filterPredicateSql << Endl;
                 Cerr << "Offset predicate: " << offsetPredicateSql << Endl;
 
+                NYql::NConnector::NApi::TPredicate writeTimePredicateProto;
+                auto writeTimeSerializedProto = topicSource.WriteTimePredicate().Ref().Content();
+                YQL_ENSURE(writeTimePredicateProto.ParseFromString(writeTimeSerializedProto));
+                TString writeTimeTPredicateSql = NYql::FormatPredicate(writeTimePredicateProto);
+                Cerr << "writeTimeTPredicateSql predicate: " << writeTimeTPredicateSql << Endl;
+
                 if (!streamingTopicRead) {
-                    FillOffsetPredicate(offsetPredicateProto, srcDesc);
+                    std::vector<NPq::NProto::TOffsetPredicate> offsetPredicates;
+                    FillPredicate<NPq::NProto::TOffsetPredicate>(offsetPredicateProto, offsetPredicates);
+                    if (!offsetPredicates.empty()) {
+                        srcDesc.MutableOffsetPredicate()->Assign(offsetPredicates.begin(), offsetPredicates.end());
+                    }
+
+                    std::vector<NPq::NProto::TWriteTimePredicate> timePredicates;
+                    FillPredicate<NPq::NProto::TWriteTimePredicate>(writeTimePredicateProto, timePredicates);
+                    if (!timePredicates.empty()) {
+                        srcDesc.MutableWriteTimePredicate()->Assign(timePredicates.begin(), timePredicates.end());
+                    }
+
+                    // TODO : check disposition
                 }
                 if (sharedReading) {
                     srcDesc.SetPredicate(filterPredicateSql);
@@ -961,7 +978,8 @@ public:
         return true;
     }
 
-    void FillOffsetComparation(NConnector::NApi::TPredicate_TComparison comparison, NPq::NProto::TOffsetPredicate& proto) {
+    template<typename TProto>
+    void FillComparation(NConnector::NApi::TPredicate_TComparison comparison, TProto& proto) {
         bool leftIsColumn = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kColumn;
         bool leftIsValue = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
         bool rightIsColumn = comparison.right_value().payload_case() == NConnector::NApi::TExpression::kColumn;
@@ -1024,24 +1042,25 @@ public:
         }
     }
 
-    bool FillOffsetPredicate(const NConnector::NApi::TPredicate& predicate, NPq::NProto::TDqPqTopicSource& srcDesc) {
+    template<typename TProto>
+    bool FillPredicate(const NConnector::NApi::TPredicate& predicate, std::vector<TProto>& predicates) {
          if (predicate.payload_case() == NConnector::NApi::TPredicate::kConjunction) {
-            NPq::NProto::TOffsetPredicate proto;
+            TProto proto;
             for (const auto& predicate :  predicate.conjunction().operands()) {
                 if (predicate.payload_case() != NConnector::NApi::TPredicate::kComparison) {
                     continue;
                 }
-                FillOffsetComparation(predicate.comparison(), proto);
+                FillComparation(predicate.comparison(), proto);
             }
             if (proto.HasBegin() || proto.HasEnd()) {
-                srcDesc.AddOffsetPredicate()->CopyFrom(proto);
+                predicates.push_back(proto);
             }
         }
         if (predicate.payload_case() == NConnector::NApi::TPredicate::kComparison) {
-            NPq::NProto::TOffsetPredicate proto; 
-            FillOffsetComparation(predicate.comparison(), proto);
+            TProto proto; 
+            FillComparation(predicate.comparison(), proto);
             if (proto.HasBegin() || proto.HasEnd()) {
-                srcDesc.AddOffsetPredicate()->CopyFrom(proto);
+                predicates.push_back(proto);
             }
         }
         if (predicate.payload_case() == NConnector::NApi::TPredicate::kIn) {
@@ -1060,9 +1079,11 @@ public:
                 offsets.insert(offset);
             }
             if (!offsets.empty()) {
-                auto* proto = srcDesc.AddOffsetPredicate();
-                proto->SetBegin(*offsets.begin());
-                proto->SetEnd(*offsets.rbegin() + 1);
+
+                TProto proto; 
+                proto.SetBegin(*offsets.begin());
+                proto.SetEnd(*offsets.rbegin() + 1);
+                predicates.push_back(proto);
             }
         }
         return true;

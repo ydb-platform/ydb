@@ -300,6 +300,7 @@ public:
         IngressStats.Level = statsLevel;
 
         YQL_ENSURE(SourceParams.OffsetPredicateSize() <= 1, "Multiple OffsetPredicate is not implemented");
+        
         for (const auto& predicateOffset: SourceParams.GetOffsetPredicate()) {
             YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
 
@@ -311,6 +312,18 @@ public:
             }
             SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset);
         }
+
+        for (const auto& predicateWriteTime: SourceParams.GetWriteTimePredicate()) {
+            YQL_ENSURE(!predicateWriteTime.HasPartitionId(), "Not empty PartitionId is not implemented");
+
+            if (predicateWriteTime.HasBegin()) {
+                BeginWriteTime = TInstant::MicroSeconds(predicateWriteTime.GetBegin());
+            }
+            if (predicateWriteTime.HasEnd()) {
+                EndWriteTime = TInstant::MicroSeconds(predicateWriteTime.GetEnd());
+            }
+        }
+        SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset << ", BeginWriteTime " << BeginWriteTime << ", EndWriteTime " << EndWriteTime);
     }
 
     ~TDqPqReadActor() {
@@ -1217,6 +1230,8 @@ private:
     bool PartitionCountTimerScheduled = false;
     TMaybe<ui64> BeginOffset;
     TMaybe<ui64> EndOffset;
+    TMaybe<TInstant> BeginWriteTime;
+    TMaybe<TInstant> EndWriteTime;
 };
 
 ui32 ExtractPartitionsFromParams(

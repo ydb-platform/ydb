@@ -1173,18 +1173,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
 
         test("SystemMetadata('partition_id') = 0 \
-           OR SystemMetadata('partition_id') >= 2)", 3, [&](TResultSetParser& resultSet) {
+           OR SystemMetadata('partition_id') >= 2", 3, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
             || resultSet.ColumnParser(2).GetString() == "data2"
             || resultSet.ColumnParser(2).GetString() == "data3");
         });
 
         test("(SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') >=0) \
-           OR (SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') >=1)", 3, [&](TResultSetParser& resultSet) {
+           OR (SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') >=1)", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
         });
 
-        test("SystemMetadata('partition_id') = 0 and key = 'data0')", 3, [&](TResultSetParser& resultSet) {
+        test("SystemMetadata('partition_id') = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 0);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(2).GetString(), "data0");
         });

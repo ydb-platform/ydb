@@ -1072,13 +1072,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
 
-        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 800);
+        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 120);
 
         auto tiny = TString(32, 'x');
         auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
         auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
 
-        for (ui32 i = 0; i < 120; ++i) {
+        for (ui32 i = 0; i < 121; ++i) {
             UNIT_ASSERT(writeSession_1->Write(Msg(tiny, 1 + i)));
             UNIT_ASSERT(writeSession_2->Write(Msg(tiny, 1000 + i)));
         }

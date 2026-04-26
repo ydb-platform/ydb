@@ -25,7 +25,7 @@ public:
     ) override
     {
         NKikimr::NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
-        targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInRequestsPerSecond(WriteSpeedInMessagesPerSec_);
+        targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(WriteSpeedInMessagesPerSec_);
         return {};
     }
 

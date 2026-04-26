@@ -12,6 +12,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 
+#include <util/generic/strbuf.h>
+
 namespace NKikimr::NPQ {
 
 using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
@@ -73,19 +75,26 @@ public:
 class TWindowedAutopartitioningManager : public IAutopartitioningManager {
     static constexpr size_t Precision = 100;
 public:
-    TWindowedAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ui64 maxQuotaPerSec, const TString& tag = "bytes")
+    TWindowedAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ui64 maxUsagePerSec, const TString& tag = "bytes")
         : Config(config)
         , Tag(tag)
         , PartitionId(partitionId),
         KeysManager(
             Min<size_t>(DEFAULT_NUM_SKETCHES, config.GetPartitionStrategy().GetScaleThresholdSeconds()),
             TDuration::Seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds())),
-        MaxQuotaPerSec(maxQuotaPerSec)
+        MaxUsagePerSec(maxUsagePerSec)
     {
-        RecreateSumQuota();
+        RecreateSumMetric();
     }
 
     void OnWrite(const TString& sourceId, ui64 delta, const TString& key = "") override  {
+        PQ_LOG_D("TAutopartitioningManager::OnWrite"
+            << " sourceId# " << sourceId
+            << " delta# " << delta
+            << " key# " << key
+            << " isEnabled# " << IsEnabled()
+            << " SumMetric# " << SumMetric->GetValue()
+            << " Tag# " << Tag);
         if (!IsEnabled()) {
             return;
         }
@@ -172,7 +181,7 @@ public:
         }
 
         auto now = TInstant::Now();
-        const auto quotaSpeedUsagePercent = SumMetric->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxQuotaPerSec;
+        const auto usagePercent = SumMetric->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxUsagePerSec;
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
         auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
@@ -186,23 +195,24 @@ public:
 
         PQ_LOG_D("TPartition::CheckScaleStatus"
             << " splitMergeAvgWriteBytes# " << SumMetric->GetValue()
-            << " quotaSpeedUsagePercent# " << quotaSpeedUsagePercent
+            << " usagePercent# " << usagePercent
             << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-            << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+            << " totalPartitionWriteSpeed# " << MaxUsagePerSec
             << " sourceIdCount=" << sourceIdCount
             << " canSplit=" << canSplit
-            << " verdict=" << (splitEnabled && canSplit && quotaSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
+            << " tag# " << Tag
+            << " verdict=" << (splitEnabled && canSplit && usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
         );
 
-        auto shouldSplit = quotaSpeedUsagePercent
+        auto shouldSplit = usagePercent
                 >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
 
         if (splitEnabled && canSplit && shouldSplit) {
             PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
-        } else if (mergeEnabled && quotaSpeedUsagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
+        } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
             PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
-                << " quotaSpeedUsagePercent: " << quotaSpeedUsagePercent);
+                << " usagePercent: " << usagePercent);
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;
@@ -210,7 +220,7 @@ public:
 
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
         if (config.GetPartitionStrategy().GetScaleThresholdSeconds() != SumMetric->GetDuration().Seconds()) {
-            RecreateSumQuota();
+            RecreateSumMetric();
         }
     }
 
@@ -223,7 +233,7 @@ public:
         };
     }
 
-    void RecreateSumQuota() {
+    void RecreateSumMetric() {
         SumMetric.ConstructInPlace(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), Precision);
     }
 
@@ -235,9 +245,9 @@ public:
         KeysManager.Merge(keysManager);
     }
 
-private:
+protected:
     bool IsEnabled() {
-        return MaxQuotaPerSec > 0;
+        return MaxUsagePerSec > 0;
     }
 
     bool IsInKeyRange(const TString& key, const auto& keyRange) {
@@ -345,7 +355,31 @@ private:
     NPQ::TPartitioningKeysManager KeysManager;
     TLastCounter<TString> SourceIdCounter;
     TInstant LastCleanUp;
-    ui64 MaxQuotaPerSec;
+    ui64 MaxUsagePerSec;
+};
+
+class TBytesAutopartitioningManager : public TWindowedAutopartitioningManager {
+public:
+    TBytesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TString& tag = "bytes")
+        : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), tag) {
+    }
+
+    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
+        MaxUsagePerSec = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+        this->TWindowedAutopartitioningManager::UpdateConfig(config);
+    }
+};
+
+class TMessagesAutopartitioningManager : public TWindowedAutopartitioningManager {
+public:
+    TMessagesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TString& tag = "messages")
+        : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), tag) {
+    }
+
+    void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
+        MaxUsagePerSec = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
+        this->TWindowedAutopartitioningManager::UpdateConfig(config);
+    }
 };
 
 class TStatefulAutopartitioningManager : public IAutopartitioningManager {
@@ -385,17 +419,15 @@ public:
     TStatefulAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId) {
         AutopartitioningManagers.emplace(
             TAG_BYTES,
-            std::make_unique<TWindowedAutopartitioningManager>(
+            std::make_unique<TBytesAutopartitioningManager>(
                 config,
                 partitionId,
-                config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
                 TAG_BYTES));
         AutopartitioningManagers.emplace(
             TAG_MESSAGES,
-            std::make_unique<TWindowedAutopartitioningManager>(
+            std::make_unique<TMessagesAutopartitioningManager>(
                 config,
                 partitionId,
-                config.GetPartitionConfig().GetWriteSpeedInRequestsPerSecond(),
                 TAG_MESSAGES));
     }
 

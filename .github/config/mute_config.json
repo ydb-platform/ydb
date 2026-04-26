@@ -19,7 +19,9 @@
   "branch_overrides": {
     "main": [
       "relwithdebinfo",
-      "release-asan"
+      "release-asan",
+      "release-tsan",
+      "release-msan"
     ]
   }
 }

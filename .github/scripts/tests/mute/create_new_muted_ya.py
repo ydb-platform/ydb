@@ -8,6 +8,7 @@ import ydb
 import logging
 import sys
 from collections import defaultdict
+from urllib.parse import quote_plus
 
 # Runnable as ``python3 .github/scripts/tests/mute/create_new_muted_ya.py``: expose package ``mute``.
 _mutedir = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +20,11 @@ for _p in (_tests_dir, _scripts_dir, os.path.join(_scripts_dir, 'analytics')):
 
 from mute.mute_check import YaMuteCheck
 from mute.update_mute_issues import (
+    add_issue_label,
+    CURRENT_TEST_HISTORY_DASHBOARD,
     ORG_NAME,
     PROJECT_ID,
+    add_issue_comment,
     close_unmuted_issues,
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,
@@ -51,6 +55,23 @@ repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
+
+_TEST_MONITOR_JOB_NAMES = (
+    'Nightly-run',
+    'Regression-run',
+    'Regression-run_Large',
+    'Regression-run_Small_and_Medium',
+    'Regression-run_compatibility',
+    'Regression-whitelist-run',
+    'Postcommit_relwithdebinfo',
+    'Postcommit_asan',
+)
+
+
+def _sql_utf8_in(values):
+    escaped = [str(v).replace("'", "''") for v in values if v is not None]
+    return ', '.join(f"'{v}'" for v in escaped)
+
 
 def load_manual_unmute_config():
     """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
@@ -962,18 +983,279 @@ def _compute_summary_from_counts(row):
     return f"p-{pass_count}, f-{fail_count}, m-{mute_count}, s-{skip_count}, total-{total_runs}"
 
 
+def _format_run_timestamp(value):
+    if value is None:
+        return 'unknown'
+    if isinstance(value, datetime.datetime):
+        return value.astimezone(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    if isinstance(value, datetime.date):
+        return value.strftime('%Y-%m-%d')
+    if isinstance(value, int):
+        return datetime.datetime.fromtimestamp(value / 1_000_000, tz=datetime.timezone.utc).strftime(
+            '%Y-%m-%d %H:%M:%S UTC'
+        )
+    return str(value)
+
+
+def _is_sanitizer_issue(error_text):
+    if not error_text:
+        return False
+    sanitizer_patterns = [
+        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        r'runtime error:',
+        r'==\d+==.*runtime error:',
+        r'detected memory leaks',
+        r'==\d+==.*detected memory leaks',
+    ]
+    for pattern in sanitizer_patterns:
+        if re.search(pattern, str(error_text), re.IGNORECASE | re.MULTILINE):
+            return True
+    return False
+
+
+def _normalize_debug_error_type(error_type, status_description):
+    if _is_sanitizer_issue(status_description):
+        return 'SANITIZER'
+    et = str(error_type or '').upper()
+    return et or 'n/a'
+
+
+def _github_run_url(job_id):
+    if not job_id:
+        return ''
+    return f"https://github.com/ydb-platform/ydb/actions/runs/{job_id}"
+
+
+def _single_test_history_link(full_name, branch, build_type):
+    encoded_name = quote_plus(f"__in_{full_name}")
+    encoded_branch = quote_plus(str(branch or 'main'))
+    encoded_build_type = quote_plus(str(build_type or DEFAULT_BUILD_TYPE))
+    return (
+        f"{CURRENT_TEST_HISTORY_DASHBOARD}full_name={encoded_name}"
+        f"&branch={encoded_branch}&build_type={encoded_build_type}"
+    )
+
+
+def _compose_full_name_from_row(row):
+    full_name = row.get('full_name')
+    if full_name:
+        return str(full_name)
+    suite_folder = row.get('suite_folder')
+    test_name = row.get('test_name')
+    if suite_folder and test_name:
+        return f"{suite_folder}/{test_name}"
+    return ''
+
+
+def load_latest_failure_debug_links(ydb_wrapper, branch, build_type, full_names, window_days):
+    """Load latest failed/muted run links (stderr/log/logsdir) per full_name."""
+    if not full_names:
+        return {}
+    try:
+        table_path = ydb_wrapper.get_table_path('test_results')
+    except KeyError:
+        logging.warning('test_results table is not registered in ydb_qa_config — debug links disabled')
+        return {}
+
+    branch_esc = str(branch).replace("'", "''")
+    bt_esc = str(build_type).replace("'", "''")
+    jobs_in_sql = _sql_utf8_in(_TEST_MONITOR_JOB_NAMES)
+    names = sorted({str(n) for n in full_names if n})
+    target_names = set(names)
+    pairs = []
+    for name in names:
+        if '/' not in name:
+            continue
+        suite_folder, test_name = name.rsplit('/', 1)
+        suite_esc = suite_folder.replace("'", "''")
+        test_esc = test_name.replace("'", "''")
+        pairs.append((suite_esc, test_esc))
+    if not pairs:
+        return {}
+
+    pair_predicate = ' OR '.join(
+        f"(suite_folder = '{suite}' AND test_name = '{test}')"
+        for suite, test in pairs
+    )
+    query = f"""
+    SELECT
+        suite_folder,
+        test_name,
+        job_id,
+        status,
+        error_type,
+        status_description,
+        duration,
+        run_timestamp,
+        stderr,
+        stdout,
+        log,
+        logsdir
+    FROM `{table_path}`
+    WHERE branch = '{branch_esc}'
+        AND build_type = '{bt_esc}'
+        AND job_name IN ({jobs_in_sql})
+        AND (pull IS NULL OR NOT String::Contains(pull, 'manual'))
+        AND ({pair_predicate})
+        AND status IN ('failure', 'error', 'mute')
+        AND run_timestamp >= CurrentUtcTimestamp() - {int(window_days)} * Interval("P1D")
+    ORDER BY run_timestamp DESC
+    """
+    try:
+        rows = ydb_wrapper.execute_scan_query(query, query_name='mute_issue_debug_links')
+    except Exception as exc:
+        logging.warning('Failed to load debug links from test_results: %s', exc)
+        return {}
+
+    latest = {}
+    for row in rows:
+        full_name = _compose_full_name_from_row(row)
+        if full_name not in target_names:
+            continue
+        if not full_name or full_name in latest:
+            continue
+        latest[full_name] = {
+            'job_id': row.get('job_id'),
+            'run_url': _github_run_url(row.get('job_id')),
+            'test_name': row.get('test_name'),
+            'status': row.get('status') or 'unknown',
+            'error_type': row.get('error_type') or '',
+            'status_description': row.get('status_description') or '',
+            'duration': row.get('duration'),
+            'run_timestamp': _format_run_timestamp(row.get('run_timestamp')),
+            'stderr': row.get('stderr'),
+            'stdout': row.get('stdout'),
+            'log': row.get('log'),
+            'logsdir': row.get('logsdir'),
+        }
+    return latest
+
+
+def build_debug_links_comment(full_names, debug_links, branch='main', build_type=DEFAULT_BUILD_TYPE):
+    lines = [
+        "| test_name | status | type | duration | run | history | last_run | stderr | stdout | log | logsdir |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    any_link = False
+    for full_name in sorted({str(n) for n in full_names if n}):
+        data = debug_links.get(full_name)
+        if data:
+            test_name = str(data.get('test_name') or '').replace('|', '\\|')
+        else:
+            test_name = full_name.rsplit('/', 1)[-1] if '/' in full_name else full_name
+            test_name = test_name.replace('|', '\\|')
+        name_cell = f"`{test_name}`"
+        if not data:
+            lines.append(
+                f"| {name_cell} | n/a | n/a | n/a | n/a | "
+                f"[link]({_single_test_history_link(full_name, branch, build_type)}) | n/a | n/a | n/a | n/a | n/a |"
+            )
+            continue
+
+        def link_cell(key):
+            nonlocal any_link
+            url = data.get(key)
+            if not url:
+                return "n/a"
+            any_link = True
+            return f"[link]({url})"
+
+        duration_val = data.get('duration')
+        duration_cell = "n/a"
+        if duration_val is not None:
+            try:
+                duration_cell = f"`{float(duration_val):.2f}s`"
+            except (TypeError, ValueError):
+                duration_cell = f"`{str(duration_val).replace('|', '\\|')}`"
+
+        lines.append(
+            f"| {name_cell} | `{data.get('status') or 'unknown'}` | "
+            f"`{_normalize_debug_error_type(data.get('error_type'), data.get('status_description')).replace('|', '\\|')}` | "
+            f"{duration_cell} | "
+            f"`{(data.get('run_timestamp') or 'unknown').replace('|', '\\|')}` | "
+            f"[link]({_single_test_history_link(full_name, branch, build_type)}) | "
+            f"{link_cell('run_url')} | {link_cell('stderr')} | {link_cell('stdout')} | "
+            f"{link_cell('log')} | {link_cell('logsdir')} |"
+        )
+
+    if not any_link:
+        lines.append("")
+        lines.append("_No stderr/stdout/log/logsdir links found in recent failed runs._")
+    return "\n".join(lines)
+
+
+def split_debug_links_comment(comment_body, max_length=60000):
+    """Split large debug-links markdown into multiple comments."""
+    header = '### Debug links (latest failed run)'
+    hidden_llm_hint = (
+        "<!-- LLM: Явно классифицируй проблему: TEST_ISSUE,YDB_ISSUE,TEST_INFRA_ISSUE"
+        "постарайся найти root cause проблемы  и коммит, где проблема могла возникнуть."
+        "Оцени критичность проблемы: HIGH, MEDIUM, LOW."
+        "По возможности предложи фикс.  -->"
+    )
+    body = (comment_body or '').strip()
+    if not body:
+        return [f"{header}\n{hidden_llm_hint}"]
+
+    # Blocks are separated by blank lines in generated markdown.
+    blocks = [b.strip() for b in body.split('\n\n') if b.strip()]
+    chunks = []
+    current = []
+    current_len = 0
+
+    for block in blocks:
+        block_len = len(block) + (2 if current else 0)
+        if current and (len(header) + 1 + current_len + block_len) > max_length:
+            chunks.append('\n\n'.join(current))
+            current = [block]
+            current_len = len(block)
+        else:
+            current.append(block)
+            current_len += block_len
+
+    if current:
+        chunks.append('\n\n'.join(current))
+
+    if len(chunks) == 1:
+        return [f"{header}\n{hidden_llm_hint}\n{chunks[0]}"]
+
+    result = []
+    total = len(chunks)
+    for idx, chunk in enumerate(chunks, start=1):
+        result.append(f"{header} (part {idx}/{total})\n{hidden_llm_hint}\n{chunk}")
+    return result
+
+
+def _sanitize_filename_part(value):
+    cleaned = re.sub(r'[^A-Za-z0-9._-]+', '_', str(value or 'issue'))
+    return cleaned.strip('_') or 'issue'
+
+
 def create_mute_issues(
     all_tests,
     file_path,
     aggregated_tests,
+    ydb_wrapper,
+    failures_window_days,
+    add_debug_info=False,
+    ai_review_label='need ai review',
+    dump_issue_content_dir='',
     close_issues=True,
     branch='main',
     build_type=DEFAULT_BUILD_TYPE,
 ):
     tests_from_file = read_tests_from_file(file_path)
-    issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
-    muted_tests_in_issues = get_muted_tests_from_issues(issues_index)
-    manual_fast_unmute_issue_by_test = map_tests_to_manual_fast_unmute_issue_url(issues_index)
+    dump_mode = bool(dump_issue_content_dir)
+    if dump_mode:
+        os.makedirs(dump_issue_content_dir, exist_ok=True)
+        issues_index = {}
+        muted_tests_in_issues = {}
+        manual_fast_unmute_issue_by_test = {}
+    else:
+        issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
+        muted_tests_in_issues = get_muted_tests_from_issues(issues_index)
+        manual_fast_unmute_issue_by_test = map_tests_to_manual_fast_unmute_issue_url(issues_index)
     prepared_tests_by_suite = {}
     temp_tests_by_suite = {}
     
@@ -983,7 +1265,7 @@ def create_mute_issues(
     # Check and close issues if needed
     closed_issues = []
     partially_unmuted_issues = []
-    if close_issues:
+    if close_issues and not dump_mode:
         closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
     monitor_by_name = {}
@@ -1107,26 +1389,89 @@ def create_mute_issues(
     results = []
     queue_items = []
     for item in prepared_tests_by_suite:
+        tests_in_issue = prepared_tests_by_suite[item]
+        first_test = tests_in_issue[0]
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        raw_owner = first_test['owner']
         owner_value = canonical_team_slug(raw_owner)
+        test_full_names = [t.get('full_name') for t in tests_in_issue if t.get('full_name')]
+        if dump_mode:
+            issue_key = f"{_sanitize_filename_part(item)}_{_sanitize_filename_part(title)[:80]}"
+            issue_dir = os.path.join(dump_issue_content_dir, issue_key)
+            os.makedirs(issue_dir, exist_ok=True)
+            with open(os.path.join(issue_dir, 'title.txt'), 'w', encoding='utf-8') as f:
+                f.write(title + '\n')
+            with open(os.path.join(issue_dir, 'body.md'), 'w', encoding='utf-8') as f:
+                f.write(body + '\n')
+            if add_debug_info:
+                debug_links = load_latest_failure_debug_links(
+                    ydb_wrapper,
+                    first_test.get('branch', branch),
+                    first_test.get('build_type', build_type),
+                    test_full_names,
+                    failures_window_days,
+                )
+                comment_body = build_debug_links_comment(
+                    test_full_names,
+                    debug_links,
+                    branch=first_test.get('branch', branch),
+                    build_type=first_test.get('build_type', build_type),
+                )
+                comment_chunks = split_debug_links_comment(comment_body)
+                for idx, chunk in enumerate(comment_chunks, start=1):
+                    with open(os.path.join(issue_dir, f'debug_comment_{idx}.md'), 'w', encoding='utf-8') as f:
+                        f.write(chunk + '\n')
+            results.append(
+                {
+                    'message': f"Dumped issue draft '{title}' to {issue_dir}",
+                    'owner': owner_value,
+                }
+            )
+            continue
+
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
             issue_url = result['issue_url']
+            issue_id = result.get('issue_id')
             results.append(
                 {
                     'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+            if add_debug_info and issue_id:
+                comments_posted = False
+                try:
+                    debug_links = load_latest_failure_debug_links(
+                        ydb_wrapper,
+                        first_test.get('branch', branch),
+                        first_test.get('build_type', build_type),
+                        test_full_names,
+                        failures_window_days,
+                    )
+                    comment_body = build_debug_links_comment(
+                        test_full_names,
+                        debug_links,
+                        branch=first_test.get('branch', branch),
+                        build_type=first_test.get('build_type', build_type),
+                    )
+                    for comment_chunk in split_debug_links_comment(comment_body):
+                        add_issue_comment(issue_id, comment_chunk)
+                    comments_posted = True
+                except Exception as exc:
+                    logging.warning('Failed to post debug links comment to issue %s: %s', issue_url, exc)
+                if comments_posted:
+                    try:
+                        add_issue_label(issue_id, ai_review_label)
+                    except Exception as exc:
+                        logging.warning('Failed to add label %r to issue %s: %s', ai_review_label, issue_url, exc)
             try:
                 issue_number = int(issue_url.rstrip('/').split('/')[-1])
             except (ValueError, IndexError):
                 issue_number = None
             if issue_number:
-                first_test = prepared_tests_by_suite[item][0]
                 queue_items.append({
                     'github_issue_number': issue_number,
                     'github_issue_url': issue_url,
@@ -1478,6 +1823,10 @@ def mute_worker(args):
                 all_data,
                 file_path,
                 aggregated_tests=aggregated_for_mute,
+                ydb_wrapper=ydb_wrapper,
+                failures_window_days=mute_window_days,
+                add_debug_info=args.add_debug_info,
+                dump_issue_content_dir=args.dump_issue_content_dir,
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,
@@ -1535,6 +1884,17 @@ if __name__ == "__main__":
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument(
+        '--add_debug_info',
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help='Post debug-links comments and add "need ai review" label for created issues',
+    )
+    create_issues_parser.add_argument(
+        '--dump_issue_content_dir',
+        default='',
+        help='If set, do not create GitHub issues; dump issue body/debug comments into this directory',
+    )
     create_issues_parser.add_argument(
         '--build-type',
         default=DEFAULT_BUILD_TYPE,

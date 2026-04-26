@@ -250,7 +250,7 @@ def create_and_add_issue_to_project(title, body, project_id=PROJECT_ID, org_name
         else:
             print(f"Error: Issue {title}: {issue_url}  not modified")
             return result
-    result = {'issue_url': issue_url, 'owner': owner, 'title': title}
+    result = {'issue_url': issue_url, 'issue_id': issue_id, 'owner': owner, 'title': title}
     return result
 
 
@@ -379,8 +379,9 @@ def generate_github_issue_title_and_body(test_data):
         f"full_name={quote_plus(f'__in_{test}')}"
         for test in test_full_names
     )
-    branch_param = f"&branch={branch}"
-    test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_name_params}{branch_param}"
+    branch_param = f"&branch={quote_plus(str(branch))}"
+    build_type_param = f"&build_type={quote_plus(str(build_type))}"
+    test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_name_params}{branch_param}{build_type_param}"
 
     # owner
     # Тело сообщения и кодирование
@@ -584,6 +585,57 @@ def add_issue_comment(issue_id, comment):
         print(f"Added comment to issue {issue_id}")
     else:
         print(f"Error: Failed to add comment to issue {issue_id}")
+
+
+def add_issue_label(issue_id, label_name):
+    """Attach repository label to issue by label name."""
+    if not label_name:
+        return
+
+    query_label = """
+    query ($org: String!, $repo: String!, $label: String!) {
+      organization(login: $org) {
+        repository(name: $repo) {
+          label(name: $label) {
+            id
+          }
+        }
+      }
+    }
+    """
+    label_result = run_query(
+        query_label,
+        {
+            "org": ORG_NAME,
+            "repo": REPO_NAME,
+            "label": label_name,
+        },
+    )
+    label_id = (
+        (label_result.get('data') or {})
+        .get('organization', {})
+        .get('repository', {})
+        .get('label', {})
+        .get('id')
+    )
+    if not label_id:
+        print(f"Warning: label {label_name!r} not found in {ORG_NAME}/{REPO_NAME}, skipping")
+        return
+
+    mutation = """
+    mutation ($issueId: ID!, $labelId: ID!) {
+      addLabelsToLabelable(input: {labelableId: $issueId, labelIds: [$labelId]}) {
+        labelable {
+          __typename
+        }
+      }
+    }
+    """
+    result = run_query(mutation, {"issueId": issue_id, "labelId": label_id})
+    if not result.get('errors'):
+        print(f"Added label {label_name!r} to issue {issue_id}")
+    else:
+        print(f"Error: Failed to add label {label_name!r} to issue {issue_id}")
 
 def update_issue_status(issue_id, status_field_id, status_option_id, issue_url):
     """Updates the status of an issue in the project.

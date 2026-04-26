@@ -1128,10 +1128,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         }
     }
 
-    if (quoter.Empty()) {
-        BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName);
-        return BreakQuoter(quoterIt);
-    }
+    BreakQuoterIfEmpty(quoterIt, "ProxyUpdate");
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
@@ -1198,6 +1195,16 @@ void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStrin
     ForbidResource(quores);
     quoter.ResourcesIndex.erase(quores.Resource);
     quoter.Resources.erase(resourceIt);
+}
+
+bool TQuoterService::BreakQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason) {
+    if (!quoterIt->second.Empty()) {
+        return false;
+    }
+
+    BLOG_I("closing quoter on " << reason << " as no activity left " << quoterIt->second.QuoterName);
+    BreakQuoter(quoterIt);
+    return true;
 }
 
 void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {

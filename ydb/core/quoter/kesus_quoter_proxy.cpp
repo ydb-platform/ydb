@@ -929,7 +929,7 @@ private:
                         KESUS_PROXY_LOG_INFO("Initialized new session with resource \"" << resourcePaths[i] << "\"");
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
                             BreakResource(*resState, GetProxyUpdateEv());
-                            ResIndex.erase(resState->ResId);
+                            ResIndex[resState->ResId] = Resources.end();
                         }
                         resState->ResId = resResult.GetResourceId();
                         ResIndex[resState->ResId] = resourceIt;

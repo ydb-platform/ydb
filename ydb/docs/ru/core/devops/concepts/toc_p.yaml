@@ -1,6 +1,8 @@
 items:
 - name: Системные требования
   href: system-requirements.md
+- name: Планирование ёмкости хранилища
+  href: capacity-planning.md
 - name: Версионирование
   href: versioning.md
 - name: Обслуживание

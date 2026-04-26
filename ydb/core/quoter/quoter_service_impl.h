@@ -282,6 +282,11 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
         GenericError,
     };
 
+    enum EWakeupTag : ui64 {
+        WakeupTagTick = 0,
+        WakeupTagCleanup = 1,
+    };
+
     void ScheduleNextTick(TInstant requested, TResource &quores);
     TInstant TimeToGranularity(TInstant rawTime);
     void TryTickSchedule(TInstant now = TInstant::Zero());
@@ -314,6 +319,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void Handle(TEvQuota::TEvProxySession::TPtr &ev);
     void Handle(TEvQuota::TEvProxyUpdate::TPtr &ev);
     void Handle(TEvQuota::TEvRpcTimeout::TPtr &ev);
+    void Handle(TEvents::TEvWakeup::TPtr &ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev);
     void HandleTick();
 
@@ -340,7 +346,7 @@ public:
             hFunc(TEvQuota::TEvProxySession, Handle);
             hFunc(TEvQuota::TEvProxyUpdate, Handle);
             hFunc(TEvQuota::TEvRpcTimeout, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, HandleTick);
+            hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "

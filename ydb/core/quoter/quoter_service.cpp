@@ -1143,6 +1143,20 @@ void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
     Counters.ResultRpcDeadline->Inc();
 }
 
+void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
+    switch (ev->Get()->Tag) {
+    case WakeupTagTick:
+        HandleTick();
+        return;
+    case WakeupTagCleanup:
+        // Reserved for periodic idle-resource cleanup added in later steps.
+        return;
+    default:
+        BLOG_WARN("Unknown TEvWakeup tag: " << ev->Get()->Tag);
+        return;
+    }
+}
+
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
     THolder<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release());
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);

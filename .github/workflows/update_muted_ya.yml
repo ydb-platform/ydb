@@ -23,7 +23,7 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
   REVIEWERS: '["ci"]'
-  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
 
 jobs:
   setup:

@@ -69,18 +69,14 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
     ]
 
 
-def kikimr_grep_kernel_log_safety_warden_factory(
-        executor=None,
-        lines_after=5,
-        hours_back=24,
-):
+def kikimr_grep_kernel_log_safety_warden_factory(list_of_host_names, ssh_username, lines_after=5, hours_back=24):
     markers = ['Out of memory: Kill process']
 
     return [
         GrepJournalctlKernelForPatternsSafetyWarden(
-            executor,
+            list_of_host_names,
             list_of_markers=markers,
-            lines_after=lines_after,
-            hours_back=hours_back,
+            username=ssh_username,
+            lines_after=lines_after
         )
     ]

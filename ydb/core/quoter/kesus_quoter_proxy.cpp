@@ -347,6 +347,9 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     THashMap<ui64, std::vector<TString>> CookieToResourcePath;
     ui64 NextCookie = 1;
 
+    TInstant LastReplicationReport = TInstant::Zero();
+    TDuration MinReplicationReportPeriod = TDuration::Max();
+
     THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
     THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
     THolder<NKesus::TEvKesus::TEvReportResources> ReplicationEv;
@@ -440,6 +443,11 @@ private:
         }
     }
 
+    void SetResProps(TResourceState* resState, const NKikimrKesus::TStreamingQuoterResource& props) {
+        resState->SetProps(props, ServerVersion);
+        MinReplicationReportPeriod = Min(resState->ReplicationReportPeriod, MinReplicationReportPeriod);
+    }
+
     TResourceState* FindResource(ui64 id) {
         const auto indexIt = ResIndex.find(id);
         return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
@@ -514,17 +522,23 @@ private:
                                 << "  Props: " << res->Props.ShortDebugString() << "\n";
                         }
                     }
-                    str << "UpdateEv: " << (UpdateEv ? "" : "null") << "\n";
+                    str << "UpdateEv: ";
                     if (UpdateEv) {
-
+                        str << UpdateEv->Record.ResourcesInfoSize() << "\n";
+                    } else {
+                        str << "null" << "\n";
                     }
-                    str << "AccountEv: " << (AccountEv ? "" : "null") << "\n";
+                    str << "AccountEv: ";
                     if (AccountEv) {
-
+                        str << AccountEv->Record.ResourcesInfoSize() << "\n";
+                    } else {
+                        str << "null" << "\n";
                     }
-                    str << "ReplicationEv: " << (ReplicationEv ? "" : "null") << "\n";
+                    str << "ReplicationEv: ";
                     if (ReplicationEv) {
-
+                        str << ReplicationEv->Record.ResourcesInfoSize() << "\n";
+                    } else {
+                        str << "null" << "\n";
                     }
                 }
                 str << "</div>";
@@ -632,33 +646,39 @@ private:
     }
 
     void SendDeferredEvents() {
-        for (auto& [_, res] : Resources) {
-            if (res->ReplicationEnabled) {
-                CheckReplicationReport(*res, TActivationContext::Now());
+        const TInstant now = TActivationContext::Now();
+        if (MinReplicationReportPeriod != TDuration::Max() && LastReplicationReport + MinReplicationReportPeriod < now) {
+            for (auto& [_, res] : Resources) {
+                if (res->ReplicationEnabled) {
+                    CheckReplicationReport(*res, now);
+                }
             }
         }
 
-        if (Connected && UpdateEv) {
-            KESUS_PROXY_LOG_TRACE("UpdateConsumptionState(" << UpdateEv->Record << ")");
-            NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
-        }
-        UpdateEv.Reset();
+        if (Connected) {
+            if (UpdateEv) {
+                KESUS_PROXY_LOG_TRACE("UpdateConsumptionState(" << UpdateEv->Record << ")");
+                NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
+            }
 
-        if (Connected && AccountEv && AccountEv->Record.GetResourcesInfo().size() > 0) {
-            KESUS_PROXY_LOG_TRACE("AccountResources(" << AccountEv->Record << ")");
-            NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
-        }
-        AccountEv.Reset();
+            if (AccountEv && AccountEv->Record.GetResourcesInfo().size() > 0) {
+                KESUS_PROXY_LOG_TRACE("AccountResources(" << AccountEv->Record << ")");
+                NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
+            }
 
-        if (Connected && ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
-            KESUS_PROXY_LOG_TRACE("ReportResources(" << ReplicationEv->Record << ")");
-            NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
+            if (ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
+                KESUS_PROXY_LOG_TRACE("ReportResources(" << ReplicationEv->Record << ")");
+                NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
+            }
         }
-        ReplicationEv.Reset();
 
         if (ProxyUpdateEv && ProxyUpdateEv->Resources) {
             SendToService(std::move(ProxyUpdateEv));
         }
+
+        UpdateEv.Reset();
+        AccountEv.Reset();
+        ReplicationEv.Reset();
     }
 
     void ScheduleOfflineAllocation() {
@@ -770,7 +790,8 @@ private:
     }
 
     void ReportReplicationSession(TResourceState& res) {
-        if (Connected && res.ReplicationEnabled) {
+        if (Connected) {
+            Y_ASSERT(res.ReplicationEnabled);
             InitReplicationEv();
             auto* resInfo = ReplicationEv->Record.AddResourcesInfo();
             resInfo->SetResourceId(res.ResId);
@@ -882,6 +903,7 @@ private:
         ConnectToKesus(true);
         DisconnectTime = TActivationContext::Now();
         OfflineAllocationCookie = NextCookie++;
+        MinReplicationReportPeriod = TDuration::Max();
         MarkAllActiveResourcesForOfflineAllocation();
         if (Counters.Disconnects) {
             ++*Counters.Disconnects;
@@ -909,7 +931,7 @@ private:
                         }
                         resState->ResId = resResult.GetResourceId();
                         ResIndex[resState->ResId] = resourceIt;
-                        resourceIt->second->SetProps(resResult.GetEffectiveProps(), ServerVersion);
+                        SetResProps(resourceIt->second.Get(), resResult.GetEffectiveProps());
                         if (resourceIt->second->ReplicationEnabled) { // use initial availiable only in replicated mode
                             resourceIt->second->SetAvailable(resResult.GetInitialAvailable());
                         }
@@ -938,7 +960,7 @@ private:
                 const auto amount = allocatedInfo.GetAmount();
                 KESUS_PROXY_LOG_TRACE("Kesus allocated {\"" << res->Resource << "\", " << amount << "}");
                 if (allocatedInfo.HasEffectiveProps()) { // changed
-                    res->SetProps(allocatedInfo.GetEffectiveProps(), ServerVersion);
+                    SetResProps(res, allocatedInfo.GetEffectiveProps());
                 }
                 res->SetAvailable(res->Available + amount);
                 res->LastAllocated = now;

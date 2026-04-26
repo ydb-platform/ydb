@@ -3,7 +3,6 @@
 import logging
 
 from mute.update_mute_issues import (
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     ORG_NAME,
     PROJECT_ID,
     REPO_NAME,

@@ -4,7 +4,7 @@
 import os
 
 # noinspection PyUnresolvedReferences
-from ydb.tests.library.nemesis.safety_warden import GrepLogFileForMarkers, GrepDMesgForPatternsSafetyWarden
+from ydb.tests.library.nemesis.safety_warden import GrepLogFileForMarkers, GrepJournalctlKernelForPatternsSafetyWarden
 # noinspection PyUnresolvedReferences
 from ydb.tests.library.nemesis.safety_warden import GrepGzippedLogFilesForMarkersSafetyWarden
 
@@ -69,11 +69,11 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
     ]
 
 
-def kikimr_grep_dmesg_safety_warden_factory(list_of_host_names, ssh_username, lines_after=5):
+def kikimr_grep_kernel_log_safety_warden_factory(list_of_host_names, ssh_username, lines_after=5, hours_back=24):
     markers = ['Out of memory: Kill process']
 
     return [
-        GrepDMesgForPatternsSafetyWarden(
+        GrepJournalctlKernelForPatternsSafetyWarden(
             list_of_host_names,
             list_of_markers=markers,
             username=ssh_username,

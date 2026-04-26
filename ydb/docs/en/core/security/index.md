@@ -24,7 +24,7 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
     For more information about access rights, see [{#T}](./authorization.md#right).
 
-- **Access levels** in {{ ydb-short-name }} are used to determine the list of additional cluster management operations permitted for a given user or group. {{ ydb-short-name }} uses hierarchical access levels: database, viewer, monitoring, and administration. Higher levels automatically include all lower level privileges.
+- **Access levels** in {{ ydb-short-name }} are used to determine the list of additional cluster management operations permitted for a given user or group. {{ ydb-short-name }} uses hierarchical access levels: database, viewer, monitoring, and administration. Higher levels automatically include all lower level privileges. In addition, there are two special non-hierarchical lists: bootstrap (for initial cluster bootstrap) and register node (for dynamic node registration).
 
     For more information about access levels, see [{#T}](./authorization.md#access-level-lists).
 

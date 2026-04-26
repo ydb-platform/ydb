@@ -1128,7 +1128,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         }
     }
 
-    BreakQuoterIfEmpty(quoterIt, "ProxyUpdate");
+    CloseQuoterIfEmpty(quoterIt, "ProxyUpdate");
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
@@ -1154,6 +1154,7 @@ void TQuoterService::HandleCleanup() {
         StartCleanupPass();
     }
 
+    const TInstant now = TActivationContext::Now();
     size_t resourcesProcessed = 0;
     while (!CleanupQuoters.empty() && resourcesProcessed < CleanupBatchLimit) {
         const ui64 quoterId = CleanupQuoters.front();
@@ -1164,13 +1165,26 @@ void TQuoterService::HandleCleanup() {
             continue;
         }
 
-        for (const auto& [resourceId, _] : quoterIt->second.Resources) {
-            Y_UNUSED(resourceId);
-            Y_UNUSED(_);
+        TVector<ui64> resourcesToEvict;
+        for (const auto& [resourceId, resHolder] : quoterIt->second.Resources) {
             ++resourcesProcessed;
 
-            // Resource cleanup conditions and eviction are added in later steps.
+            const TResource& quores = *resHolder.Get();
+            if (quores.Activation == TInstant::Zero()
+                && quores.NextTick == TInstant::Zero()
+                && quores.QueueHead == Max<ui32>()
+                && now - quores.LastTick >= CleanupResourceIdlePeriod
+                && now - quores.LastAllocated >= CleanupResourceIdlePeriod)
+            {
+                resourcesToEvict.push_back(resourceId);
+            }
         }
+
+        for (ui64 resourceId : resourcesToEvict) {
+            EvictResource(quoterIt->second, resourceId, "Cleanup");
+        }
+
+        CloseQuoterIfEmpty(quoterIt, "Cleanup");
     }
 
     if (!CleanupQuoters.empty()) {
@@ -1197,7 +1211,7 @@ void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStrin
     quoter.Resources.erase(resourceIt);
 }
 
-bool TQuoterService::BreakQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason) {
+bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason) {
     if (!quoterIt->second.Empty()) {
         return false;
     }

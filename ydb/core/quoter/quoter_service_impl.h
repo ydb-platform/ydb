@@ -242,6 +242,7 @@ struct TQuoterState {
 class TQuoterService : public TActorBootstrapped<TQuoterService> {
     static constexpr TDuration CleanupPeriod = TDuration::Minutes(1);
     static constexpr size_t CleanupBatchLimit = 1000;
+    static constexpr TDuration CleanupResourceIdlePeriod = TDuration::Hours(1);
 
     TQuoterServiceConfig Config;
     TInstant LastProcessed;
@@ -321,7 +322,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void ScheduleNextCleanupPass();
     void HandleCleanup();
     void EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason);
-    bool BreakQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason);
+    bool CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvQuota::TEvRequest::TPtr &ev);

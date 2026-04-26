@@ -117,24 +117,24 @@ void TestAddJsonIndex(const std::string& type, bool nullable, bool covered) {
             [["d1"];[10u];"\0\3literal string"];
             [["array data 6"];[15u];"\0\4\0\0\0\0\0\200F@"];
             [["data 2"];[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
-            [["object data 7"];[16u];"\2id"];
-            [["object data 7"];[16u];"\2id\0\4\0\0\0\0@\x87\xE4@"];
-            [["object data 7"];[16u];"\5brand"];
-            [["object data 7"];[16u];"\5brand\0\3bricks"];
-            [["object data 7"];[16u];"\5parts"];
-            [["object data 7"];[16u];"\5parts\2id"];
-            [["object data 7"];[16u];"\5parts\2id\0\4\0\0\0\0\x80\xC3\xDF@"];
-            [["object data 7"];[16u];"\5parts\2id\0\4\0\0\0\0\xC0\xC2\xDF@"];
-            [["object data 7"];[16u];"\5parts\4name"];
-            [["object data 7"];[16u];"\5parts\4name\0\0031x3"];
-            [["object data 7"];[16u];"\5parts\4name\0\0033x5"];
-            [["object data 7"];[16u];"\5parts\5count"];
-            [["object data 7"];[16u];"\5parts\5count\0\4\0\0\0\0\0\0\x1C@"];
-            [["object data 7"];[16u];"\5parts\5count\0\4\0\0\0\0\0\0001@"];
-            [["object data 7"];[16u];"\5price"];
-            [["object data 7"];[16u];"\5price\0\2"];
-            [["object data 7"];[16u];"\npart_count"];
-            [["object data 7"];[16u];"\npart_count\0\4\0\0\0\0\0\xE4\x95@"]
+            [["object data 7"];[16u];"\3id"];
+            [["object data 7"];[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
+            [["object data 7"];[16u];"\6brand"];
+            [["object data 7"];[16u];"\6brand\0\3bricks"];
+            [["object data 7"];[16u];"\6parts"];
+            [["object data 7"];[16u];"\6parts\3id"];
+            [["object data 7"];[16u];"\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@"];
+            [["object data 7"];[16u];"\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@"];
+            [["object data 7"];[16u];"\6parts\5name"];
+            [["object data 7"];[16u];"\6parts\5name\0\0031x3"];
+            [["object data 7"];[16u];"\6parts\5name\0\0033x5"];
+            [["object data 7"];[16u];"\6parts\6count"];
+            [["object data 7"];[16u];"\6parts\6count\0\4\0\0\0\0\0\0\x1C@"];
+            [["object data 7"];[16u];"\6parts\6count\0\4\0\0\0\0\0\0001@"];
+            [["object data 7"];[16u];"\6price"];
+            [["object data 7"];[16u];"\6price\0\2"];
+            [["object data 7"];[16u];"\x0bpart_count"];
+            [["object data 7"];[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
         ])", FormatResultSetYson(index));
     } else {
         CompareYson(R"([
@@ -153,24 +153,24 @@ void TestAddJsonIndex(const std::string& type, bool nullable, bool covered) {
             [[10u];"\0\3literal string"];
             [[15u];"\0\4\0\0\0\0\0\200F@"];
             [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
-            [[16u];"\2id"];
-            [[16u];"\2id\0\4\0\0\0\0@\x87\xE4@"];
-            [[16u];"\5brand"];
-            [[16u];"\5brand\0\3bricks"];
-            [[16u];"\5parts"];
-            [[16u];"\5parts\2id"];
-            [[16u];"\5parts\2id\0\4\0\0\0\0\x80\xC3\xDF@"];
-            [[16u];"\5parts\2id\0\4\0\0\0\0\xC0\xC2\xDF@"];
-            [[16u];"\5parts\4name"];
-            [[16u];"\5parts\4name\0\0031x3"];
-            [[16u];"\5parts\4name\0\0033x5"];
-            [[16u];"\5parts\5count"];
-            [[16u];"\5parts\5count\0\4\0\0\0\0\0\0\x1C@"];
-            [[16u];"\5parts\5count\0\4\0\0\0\0\0\0001@"];
-            [[16u];"\5price"];
-            [[16u];"\5price\0\2"];
-            [[16u];"\npart_count"];
-            [[16u];"\npart_count\0\4\0\0\0\0\0\xE4\x95@"]
+            [[16u];"\3id"];
+            [[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
+            [[16u];"\6brand"];
+            [[16u];"\6brand\0\3bricks"];
+            [[16u];"\6parts"];
+            [[16u];"\6parts\3id"];
+            [[16u];"\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@"];
+            [[16u];"\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@"];
+            [[16u];"\6parts\5name"];
+            [[16u];"\6parts\5name\0\0031x3"];
+            [[16u];"\6parts\5name\0\0033x5"];
+            [[16u];"\6parts\6count"];
+            [[16u];"\6parts\6count\0\4\0\0\0\0\0\0\x1C@"];
+            [[16u];"\6parts\6count\0\4\0\0\0\0\0\0001@"];
+            [[16u];"\6price"];
+            [[16u];"\6price\0\2"];
+            [[16u];"\x0bpart_count"];
+            [[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
         ])", FormatResultSetYson(index));
     }
 }
@@ -603,25 +603,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];""];
-                [[3u];"\2k3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -655,31 +655,31 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(R"([
-                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[1u];"\2k3\0\3v3"];
-                [[1u];"\2k3\0\0"];
-                [[1u];"\2k3"];
+                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\3k3\0\3v3"];
+                [[1u];"\3k3\0\0"];
+                [[1u];"\3k3"];
                 [[1u];""];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];"\2k2\0\3v2"];
-                [[3u];"\2k2\0\1"];
-                [[3u];"\2k2"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\1"];
+                [[3u];"\3k2"];
                 [[3u];""];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
                 [[5u];""];
-                [[5u];"\2k5"];
-                [[5u];"\2k5\0\0"];
-                [[5u];"\2k5\0\3v5"];
-                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+                [[5u];"\3k5"];
+                [[5u];"\3k5\0\0"];
+                [[5u];"\3k5\0\3v5"];
+                [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -732,25 +732,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];""];
-                [[3u];"\2k3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -784,31 +784,31 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(R"([
-                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[1u];"\2k3\0\3v3"];
-                [[1u];"\2k3\0\0"];
-                [[1u];"\2k3"];
+                [[1u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\3k3\0\3v3"];
+                [[1u];"\3k3\0\0"];
+                [[1u];"\3k3"];
                 [[1u];""];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[3u];"\2k2\0\3v2"];
-                [[3u];"\2k2\0\1"];
-                [[3u];"\2k2"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\3k2\0\3v2"];
+                [[3u];"\3k2\0\1"];
+                [[3u];"\3k2"];
                 [[3u];""];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
                 [[5u];""];
-                [[5u];"\2k5"];
-                [[5u];"\2k5\0\0"];
-                [[5u];"\2k5\0\3v5"];
-                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+                [[5u];"\3k5"];
+                [[5u];"\3k5\0\0"];
+                [[5u];"\3k5\0\3v5"];
+                [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -861,25 +861,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];""];
-                [[3u];"\2k3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -911,35 +911,35 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[2u];"\2k2\0\3v2"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2\0\3v2"];
                 [[3u];""];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[5u];"\2k3"];
-                [[5u];"\2k3\0\0"];
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[5u];"\3k3"];
+                [[5u];"\3k3\0\0"];
                 [[5u];""];
-                [[5u];"\2k3\0\3v3"];
-                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[6u];"\2k2\0\1"];
-                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[6u];"\2k2"];
+                [[5u];"\3k3\0\3v3"];
+                [[5u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\3k2\0\1"];
+                [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\3k2"];
                 [[6u];""];
-                [[6u];"\2k2\0\3v2"]
+                [[6u];"\3k2\0\3v2"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -957,35 +957,35 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[2u];"\2k2\0\3v2"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2\0\3v2"];
                 [[3u];""];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[5u];"\2k3"];
-                [[5u];"\2k3\0\0"];
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[5u];"\3k3"];
+                [[5u];"\3k3\0\0"];
                 [[5u];""];
-                [[5u];"\2k3\0\3v3"];
-                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
-                [[6u];"\2k2\0\1"];
-                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
-                [[6u];"\2k2"];
+                [[5u];"\3k3\0\3v3"];
+                [[5u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\3k2\0\1"];
+                [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\3k2"];
                 [[6u];""];
-                [[6u];"\2k2\0\3v2"]
+                [[6u];"\3k2\0\3v2"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -1020,25 +1020,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\2k2"];
-                [[2u];"\2k2\0\1"];
-                [[2u];"\2k2\0\3v2"];
-                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\3k2"];
+                [[2u];"\3k2\0\1"];
+                [[2u];"\3k2\0\3v2"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];""];
-                [[3u];"\2k3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -1079,25 +1079,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];""];
-                [[2u];"\3k10"];
-                [[2u];"\3k10\0\1"];
-                [[2u];"\3k10\0\3v10"];
-                [[2u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[2u];"\4k10"];
+                [[2u];"\4k10\0\1"];
+                [[2u];"\4k10\0\3v10"];
+                [[2u];"\4k10\0\4\0\0\0\0\0\0$@"];
                 [[3u];""];
-                [[3u];"\3k10"];
-                [[3u];"\3k10\0\1"];
-                [[3u];"\3k10\0\3v10"];
-                [[3u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[3u];"\4k10"];
+                [[3u];"\4k10\0\1"];
+                [[3u];"\4k10\0\3v10"];
+                [[3u];"\4k10\0\4\0\0\0\0\0\0$@"];
                 [[4u];""];
-                [[4u];"\2k4"];
-                [[4u];"\2k4\0\1"];
-                [[4u];"\2k4\0\3v4"];
-                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+                [[4u];"\3k4"];
+                [[4u];"\3k4\0\1"];
+                [[4u];"\3k4\0\3v4"];
+                [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -1141,25 +1141,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\4k100"];
-                [[1u];"\4k100\0\0"];
-                [[1u];"\4k100\0\3v100"];
-                [[1u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[1u];"\5k100"];
+                [[1u];"\5k100\0\0"];
+                [[1u];"\5k100\0\3v100"];
+                [[1u];"\5k100\0\4\0\0\0\0\0\0Y@"];
                 [[2u];""];
-                [[2u];"\4k100"];
-                [[2u];"\4k100\0\0"];
-                [[2u];"\4k100\0\3v100"];
-                [[2u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[2u];"\5k100"];
+                [[2u];"\5k100\0\0"];
+                [[2u];"\5k100\0\3v100"];
+                [[2u];"\5k100\0\4\0\0\0\0\0\0Y@"];
                 [[3u];""];
-                [[3u];"\4k100"];
-                [[3u];"\4k100\0\0"];
-                [[3u];"\4k100\0\3v100"];
-                [[3u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[3u];"\5k100"];
+                [[3u];"\5k100\0\0"];
+                [[3u];"\5k100\0\3v100"];
+                [[3u];"\5k100\0\4\0\0\0\0\0\0Y@"];
                 [[4u];""];
-                [[4u];"\4k100"];
-                [[4u];"\4k100\0\0"];
-                [[4u];"\4k100\0\3v100"];
-                [[4u];"\4k100\0\4\0\0\0\0\0\0Y@"]
+                [[4u];"\5k100"];
+                [[4u];"\5k100\0\0"];
+                [[4u];"\5k100\0\3v100"];
+                [[4u];"\5k100\0\4\0\0\0\0\0\0Y@"]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -1219,15 +1219,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             CompareYson(R"([
                 [[1u];""];
-                [[1u];"\2k1"];
-                [[1u];"\2k1\0\0"];
-                [[1u];"\2k1\0\3v1"];
-                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[1u];"\3k1"];
+                [[1u];"\3k1\0\0"];
+                [[1u];"\3k1\0\3v1"];
+                [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[3u];""];
-                [[3u];"\2k3"];
-                [[3u];"\2k3\0\0"];
-                [[3u];"\2k3\0\3v3"];
-                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\3k3"];
+                [[3u];"\3k3\0\0"];
+                [[3u];"\3k3\0\3v3"];
+                [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
@@ -1770,11 +1770,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(JsonExistsTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Basic path exists cases
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key'))", {"\3key"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\2k1\2k2" + numSuffix(2)});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))", {"\2k1" + trueSuffix, "\2k2" + falseSuffix}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))", {"\2k1" + nullSuffix, "\2k2" + strSuffix("str")}, "or");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') == true)", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key'))", {"\4key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\3k1\3k2" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))", {"\3k1" + trueSuffix, "\3k2" + falseSuffix}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))", {"\3k1" + nullSuffix, "\3k2" + strSuffix("str")}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key') == true)", {"\4key"});
 
             // Negated JSON_EXISTS is not supported by JSON index
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key') == false)");
@@ -1785,97 +1785,97 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // AND combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "and");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') AND JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
 
             // OR combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true && @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null && @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")') OR JSON_EXISTS(Text, '$ ? (@.k3 == true || @.k4 == false)'))",
-                {"\2k1" + nullSuffix, "\2k2" + strSuffix("str"), "\2k3" + trueSuffix, "\2k4" + falseSuffix}, "or");
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str"), "\3k3" + trueSuffix, "\3k4" + falseSuffix}, "or");
 
             // Mixed combinations
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "or");
+                {"\3k1", "\3k2", "\3k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "or");
+                {"\3k1", "\3k2", "\3k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "or");
+                {"\3k1", "\3k2", "\3k3"}, "or");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')) AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND (JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3')))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')) AND (JSON_EXISTS(Text, '$.k3') AND JSON_EXISTS(Text, '$.k4')))",
-                {"\2k1", "\2k2", "\2k3", "\2k4"}, "and");
+                {"\3k1", "\3k2", "\3k3", "\3k4"}, "and");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "or");
+                {"\3k1", "\3k2", "\3k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR (JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3')))",
-                {"\2k1", "\2k2", "\2k3"}, "or");
+                {"\3k1", "\3k2", "\3k3"}, "or");
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') OR JSON_EXISTS(Text, '$.k4')))",
-                {"\2k1", "\2k2", "\2k3", "\2k4"}, "or");
+                {"\3k1", "\3k2", "\3k3", "\3k4"}, "or");
 
             // AND with non-indexable predicate
             ValidateTokens(db,
                 R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" AND JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1")",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1'))",
-                {"\2k1"}, "and");
+                {"\3k1"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1")",
-                {"\2k1"}, "and");
+                {"\3k1"}, "and");
             ValidateTokens(db,
                 R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1" AND JSON_EXISTS(Text, '$.k3'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3') AND Data = "d1")",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
 
             // OR with non-indexable predicate - not extractable
             ValidateError(db, R"(Data = "d1" OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
@@ -1895,10 +1895,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" OR JSON_EXISTS(Text, '$.k2'))");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR Data = "d1")");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR Data = "d1")");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND Data = "d1")", {"\2k1", "\2k2"}, "or");
-            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND Data = "d1")", {"\2k1", "\2k2"}, "or");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND Data = "d1")", {"\3k1", "\3k2"}, "or");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND Data = "d1")", {"\3k1", "\3k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR Data = "d1" AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1" OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
 
             // NOT JSON_EXISTS and wrapped-NOT forms fall through to "nothing to extract"
             ValidateError(db, R"(NOT JSON_EXISTS(Text, '$.k1'))");
@@ -1906,111 +1906,111 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(NOT (JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')))");
 
             // Filter equality - covers every literal type, the token carries the value suffix
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == null)'))", {"\2k1\2k2" + nullSuffix});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == true)'))", {"\2k1\2k2" + trueSuffix});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == false)'))", {"\2k1\2k2" + falseSuffix});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == "abc")'))", {"\2k1\2k2" + strSuffix("abc")});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 42)'))", {"\2k1\2k2" + numSuffix(42)});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == -1.5)'))", {"\2k1\2k2" + numSuffix(-1.5)});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 == @.k2)'))", {"\2k1\2k2" + numSuffix(2)});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? ("s" == @.k2)'))", {"\2k1\2k2" + strSuffix("s")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == null)'))", {"\3k1\3k2" + nullSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == true)'))", {"\3k1\3k2" + trueSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == false)'))", {"\3k1\3k2" + falseSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == "abc")'))", {"\3k1\3k2" + strSuffix("abc")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 42)'))", {"\3k1\3k2" + numSuffix(42)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == -1.5)'))", {"\3k1\3k2" + numSuffix(-1.5)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 == @.k2)'))", {"\3k1\3k2" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? ("s" == @.k2)'))", {"\3k1\3k2" + strSuffix("s")});
 
             // Filter inequality / range - path only, no value suffix
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != 2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 > 2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 < 2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 >= 2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 <= 2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != null)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != "abc")'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 > @.k2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 < @.k2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 >= @.k2)'))", {"\2k1\2k2"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 <= @.k2)'))", {"\2k1\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != 2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 > 2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 < 2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 >= 2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 <= 2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != null)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != "abc")'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 > @.k2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 < @.k2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 >= @.k2)'))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (2 <= @.k2)'))", {"\3k1\3k2"});
 
             // Filter path-vs-path comparisons - two tokens, AND mode (value suffix dropped)
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == @.k2)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 != @.k2)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > @.k2)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 < @.k2)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 >= @.k2)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 <= @.k2)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == @.k2)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 != @.k2)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > @.k2)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 < @.k2)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 >= @.k2)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 <= @.k2)'))", {"\3k1", "\3k2"}, "and");
 
             // Filter arithmetic (path vs literal) - path only, no value suffix
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - 1 == 0)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 == 4)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / 2 == 1)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % 2 == 0)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 > 2)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 != 4)'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - 1 == 0)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 == 4)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / 2 == 1)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % 2 == 0)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 > 2)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * 2 != 4)'))", {"\3k1"});
 
             // Filter arithmetic (path vs path) - two tokens, AND mode
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - @.k2 > 0)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * @.k2 < 10)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / @.k2 >= 1)'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % @.k2 != 0)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 - @.k2 > 0)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 * @.k2 < 10)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 / @.k2 >= 1)'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 % @.k2 != 0)'))", {"\3k1", "\3k2"}, "and");
 
             // Filter unary operators - path only
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (+@.k1 == 1)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 > 0)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() == 1)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() > 5)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() == 3)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() > 0)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size() ? (@ == 3)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1.abs() == -1)'))", {"\2k1"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() - @.k2.abs() == 0)'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (+@.k1 == 1)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 > 0)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() == 1)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() > 5)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() == 3)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.size() > 0)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1.size() ? (@ == 3)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1.abs() == -1)'))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() - @.k2.abs() == 0)'))", {"\3k1", "\3k2"}, "and");
 
             // && / || inside jsonpath - mode propagates from inner operator
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 != 2)'))",
-                {"\2k1" + numSuffix(1), "\2k2"}, "and");
+                {"\3k1" + numSuffix(1), "\3k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 != 2)'))",
-                {"\2k1" + numSuffix(1), "\2k2"}, "or");
+                {"\3k1" + numSuffix(1), "\3k2"}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > 0 && @.k2 < 10)'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 > 0 || @.k2 < 10)'))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2 && @.k2 * 2 == 4)'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + 1 == 2 || @.k2 * 2 == 4)'))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1.abs() == 1 && @.k2.size() > 0)'))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (-@.k1 == -1 || @.k2 % 2 == 0)'))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
 
             // Three-way && / || inside jsonpath
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2 && @.k3 == 3)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "and");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "and");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 == 2 || @.k3 == 3)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
 
             // Mixed && and || inside jsonpath
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? ((@.k1 == 1 && @.k2 == 2) || @.k3 == 3)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || (@.k2 == 2 && @.k3 == 3))'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? ((@.k1 > 0 && @.k2 != null) || @.k3 == "text")'))",
-                {"\2k1", "\2k2", "\2k3" + strSuffix("text")}, "or");
+                {"\3k1", "\3k2", "\3k3" + strSuffix("text")}, "or");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5 && @.k3 == "text" || @.k4 == null)'))",
-                {"\2k1", "\2k2", "\2k3" + strSuffix("text"), "\2k4" + nullSuffix}, "or");
+                {"\3k1", "\3k2", "\3k3" + strSuffix("text"), "\3k4" + nullSuffix}, "or");
 
             // Outer SQL AND/OR over filters with &&/|| inside
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2)') AND JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "and");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3"}, "and");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 || @.k2 == 2)') AND JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 == 1 && @.k2 == 2)') OR JSON_EXISTS(Text, '$ ? (@.k3 > 0)'))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3"}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3"}, "or");
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$ ? (@.k1 + @.k2 == 5)') AND JSON_EXISTS(Text, '$ ? (-@.k3 == -3)'))",
-                {"\2k1", "\2k2", "\2k3"}, "and");
+                {"\3k1", "\3k2", "\3k3"}, "and");
 
             // Outer range comparison with bool literal (non-equality): errors
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > true)");
@@ -2029,8 +2029,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(true != JSON_EXISTS(Text, '$.k1'))");
 
             // JSON_EXISTS comparison with true rewrites to JSON_EXISTS without boolean comparison
-            ValidateTokens(db, R"(true == JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
-            ValidateTokens(db, R"(false != JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"(true == JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
+            ValidateTokens(db, R"(false != JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
 
             // JSON_EXISTS comparison with false rewrites to NOT JSON_EXISTS
             ValidateError(db, R"(false == JSON_EXISTS(Text, '$.k1'))");
@@ -2048,12 +2048,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2') <= true)");
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') > false OR JSON_EXISTS(Text, '$.k2') < true)");
             // AND: non-indexable range cmp on k1, but standalone JE($.k2) IS indexable - post-filter applies
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2'))", {"\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') >= true AND JSON_EXISTS(Text, '$.k2'))", {"\3k2"});
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') >= true OR JSON_EXISTS(Text, '$.k2') == true)");
 
             // Outer AND/OR over cross JSON_EXISTS comparisons
             // AND: JE1 > JE2 not indexable, but standalone JE($.k3) IS indexable - post-filter applies
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k3"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') > JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\3k3"});
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') != JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))");
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') >= JSON_EXISTS(Text, '$.k2')) AND (JSON_EXISTS(Text, '$.k3') <= JSON_EXISTS(Text, '$.k4')))");
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') == JSON_EXISTS(Text, '$.k2')) OR (JSON_EXISTS(Text, '$.k3') != JSON_EXISTS(Text, '$.k4')))");
@@ -2080,15 +2080,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$ ? (@.k1 == 1 && @.k2 == 2)') == true)");
 
             // AND: JE in JSON_QUERY + indexable JE -> extract indexable
-            ValidateTokens(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\3k2"});
             // OR: indexable JE + JE in JSON_QUERY -> error
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b'))");
 
             // JSON_EXISTS with TRUE ON ERROR is negation
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key' TRUE ON ERROR))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' FALSE ON ERROR))", {"\3key"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' ERROR ON ERROR))", {"\3key"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' UNKNOWN ON ERROR))", {"\3key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' FALSE ON ERROR))", {"\4key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' ERROR ON ERROR))", {"\4key"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' UNKNOWN ON ERROR))", {"\4key"});
         });
     }
 
@@ -2125,19 +2125,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(JsonValueTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Supported RETURNING types
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int8) == 1t)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint8) == 1ut)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int16) == 1s)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint16) == 1us)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint32) == 1u)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 1l)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 1ul)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) == 1.0f)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) == 1.0)", {"\2k1" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == "value"s)", {"\2k1" + strSuffix("value")});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "value"u)", {"\2k1" + strSuffix("value")});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int8) == 1t)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint8) == 1ut)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int16) == 1s)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint16) == 1us)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint32) == 1u)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 1l)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 1ul)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) == 1.0f)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) == 1.0)", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) == "value"s)", {"\3k1" + strSuffix("value")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "value"u)", {"\3k1" + strSuffix("value")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\3k1" + trueSuffix});
 
             // Not supported RETURNING types
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))");
@@ -2145,18 +2145,18 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Timestamp) == Timestamp("2021-01-01T00:00:00Z"))");
 
             // Default RETURNING type is Utf8
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "1")", {"\2k1" + strSuffix("1")});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "string")", {"\2k1" + strSuffix("string")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "1")", {"\3k1" + strSuffix("1")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == "string")", {"\3k1" + strSuffix("string")});
 
             // Negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NULL)");
             ValidateError(db, R"(JSON_VALUE(Text, '$.key') IS NOT NULL)"); 
 
             // JV(...) == true is equivalent to standalone JV(...) - collects trueSuffix token
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\2k1" + trueSuffix});
-            ValidateTokens(db, R"(true == JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)", {"\2k1" + trueSuffix});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\2k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)", {"\3k1" + trueSuffix});
+            ValidateTokens(db, R"(true == JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\3k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)", {"\3k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool))", {"\3k1" + trueSuffix});
 
             // JV comparison with false rewrites to NOT JSON_VALUE
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)");
@@ -2175,41 +2175,41 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) <= false)");
 
             // Comparison with other literals
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 10)", {"\2k1" + numSuffix(10)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 10)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < 10)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 10)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 10)", {"\3k1" + numSuffix(10)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 10)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < 10)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= 10)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= 10)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != 10)", {"\3k1"});
 
             // JV op JV - both collectable
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) != JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) >= JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) < JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) <= JSON_VALUE(Text, '$.k2' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k2' RETURNING Int32) == JSON_VALUE(Text, '$.k1' RETURNING Int32))",
-                {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= JSON_VALUE(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= JSON_VALUE(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
 
             // JSON_VALUE RETURNING Bool comparison is not supported
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool))");
@@ -2223,92 +2223,92 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) > JSON_VALUE(Text, '$.k2' RETURNING Bool)))");
 
             // For some nodes inside the path, the collected result cannot be combined with == operator
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 starts with "1"') == "true")", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == 2)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.*' RETURNING Int32) == 2)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1[*]' RETURNING Int32) == 2)", {"\2k1" + numSuffix(2)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 + 1' RETURNING Int32) == 2)", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == 2' RETURNING Bool))", {"\2k1" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 starts with "1"') == "true")", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.size()' RETURNING Int32) == 2)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.*' RETURNING Int32) == 2)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1[*]' RETURNING Int32) == 2)", {"\3k1" + numSuffix(2)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 + 1' RETURNING Int32) == 2)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == 2' RETURNING Bool))", {"\3k1" + numSuffix(2)});
 
             // BETWEEN clause (replaces with JSON_VALUE >= 1 AND JSON_VALUE <= 10)
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) BETWEEN 1 AND 10)", {"\3k1"});
 
             // AND/OR combinations - numeric equality
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "and");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2)}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2)}, "or");
 
             // AND/OR combinations - string equality
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1') == "a" AND JSON_VALUE(Text, '$.k2') == "b")",
-                {"\2k1" + strSuffix("a"), "\2k2" + strSuffix("b")}, "and");
+                {"\3k1" + strSuffix("a"), "\3k2" + strSuffix("b")}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1') == "a" OR JSON_VALUE(Text, '$.k2') == "b")",
-                {"\2k1" + strSuffix("a"), "\2k2" + strSuffix("b")}, "or");
+                {"\3k1" + strSuffix("a"), "\3k2" + strSuffix("b")}, "or");
 
             // AND/OR with range comparisons - path-only tokens
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 5 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) < 10)",
-                {"\2k1", "\2k2"}, "and");
+                {"\3k1", "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) > 5 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) < 10)",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
 
             // AND/OR mixing equality and range
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1') == "a" AND JSON_VALUE(Text, '$.k2' RETURNING Int32) > 0)",
-                {"\2k1" + strSuffix("a"), "\2k2"}, "and");
+                {"\3k1" + strSuffix("a"), "\3k2"}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1') == "a" OR JSON_VALUE(Text, '$.k2' RETURNING Int32) > 0)",
-                {"\2k1" + strSuffix("a"), "\2k2"}, "or");
+                {"\3k1" + strSuffix("a"), "\3k2"}, "or");
 
             // Three-way AND/OR
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 AND JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "and");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "and");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 OR JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
 
             // Mixed AND/OR (AND binds tighter): both cases produce "or"
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 OR JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2 AND JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3)",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
 
             // Comparison operators with strings - path-only token (no value suffix for non-equality)
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > "abc")", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < "xyz")", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= "abc")", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= "xyz")", {"\2k1"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != "abc")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') > "abc")", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') < "xyz")", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') >= "abc")", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') <= "xyz")", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') != "abc")", {"\3k1"});
 
             // Flipped operand order - string comparisons
-            ValidateTokens(db, R"("abc" < JSON_VALUE(Text, '$.k1'))", {"\2k1"});
-            ValidateTokens(db, R"("abc" > JSON_VALUE(Text, '$.k1'))", {"\2k1"});
-            ValidateTokens(db, R"("abc" != JSON_VALUE(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"("abc" < JSON_VALUE(Text, '$.k1'))", {"\3k1"});
+            ValidateTokens(db, R"("abc" > JSON_VALUE(Text, '$.k1'))", {"\3k1"});
+            ValidateTokens(db, R"("abc" != JSON_VALUE(Text, '$.k1'))", {"\3k1"});
 
             // Flipped operand order - numeric comparisons
-            ValidateTokens(db, R"(10 < JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
-            ValidateTokens(db, R"(10 > JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
-            ValidateTokens(db, R"(10 >= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
-            ValidateTokens(db, R"(10 <= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
-            ValidateTokens(db, R"(10 != JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\2k1"});
+            ValidateTokens(db, R"(10 < JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\3k1"});
+            ValidateTokens(db, R"(10 > JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\3k1"});
+            ValidateTokens(db, R"(10 >= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\3k1"});
+            ValidateTokens(db, R"(10 <= JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\3k1"});
+            ValidateTokens(db, R"(10 != JSON_VALUE(Text, '$.k1' RETURNING Int32))", {"\3k1"});
 
             // STARTS WITH - path only token
-            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix"))", {"\2k1"});
-            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix") AND JSON_VALUE(Text, '$.k1') == "a")", {"\2k1", "\2k1" + strSuffix("a")});
+            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix"))", {"\3k1"});
+            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1'), "prefix") AND JSON_VALUE(Text, '$.k1') == "a")", {"\3k1" + strSuffix("a")});
 
             // ENDS WITH - path only token
-            ValidateTokens(db, R"(EndsWith(JSON_VALUE(Text, '$.k1'), "suffix"))", {"\2k1"});
+            ValidateTokens(db, R"(EndsWith(JSON_VALUE(Text, '$.k1'), "suffix"))", {"\3k1"});
 
             // LIKE - path only token / ILIKE - not extractable (Re2)
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') LIKE "pattern%")", {"\2k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') LIKE "pattern%")", {"\3k1"});
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1') ILIKE "pattern%")"); // udf
 
             // REGEXP - not extractable (Re2)
@@ -2318,7 +2318,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // If JV1 is the only JSON node - nothing to extract
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix")");
             // AND: JV1 inside concat is non-indexable, but JV2 == "b" IS indexable - post-filter applies
-            ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")", {"\2k2" + strSuffix("b")});
+            ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1') || "suffix") == "value_suffix" AND JSON_VALUE(Text, '$.k2') == "b")", {"\3k2" + strSuffix("b")});
 
             // Nested JSON_QUERY as JSON source for JSON_VALUE - not extractable
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER), '$.k2' RETURNING Int32) == 1)");
@@ -2333,19 +2333,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(JSON_QUERY(JSON_QUERY(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.b' WITHOUT ARRAY WRAPPER), '$.c' WITHOUT ARRAY WRAPPER), '$.d' WITHOUT ARRAY WRAPPER), '$.e' RETURNING Int32) == 1)");
 
             // AND: JV1 inside JSON_QUERY is non-indexable, but JV2 == "w" IS indexable - post-filter applies
-            ValidateTokens(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")", {"\1b" + strSuffix("w")});
+            ValidateTokens(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u AND JSON_VALUE(Text, '$.b') == "w")", {"\2b" + strSuffix("w")});
             // OR: JV1 inside JSON_QUERY is non-indexable, but JV2 == "w" IS indexable - post-filter does not apply
             ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.a' WITHOUT ARRAY WRAPPER), '$.k' RETURNING Utf8) == "v"u OR JSON_VALUE(Text, '$.b') == "w")");
 
             // DEFAULT ON EMPTY with non-NULL value is negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY) > 10)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON EMPTY) > 10)", {"\3key"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON EMPTY) > 10)", {"\3key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON EMPTY) > 10)", {"\4key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON EMPTY) > 10)", {"\4key"});
 
             // DEFAULT ON ERROR with non-NULL value is negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON ERROR) > 10)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON ERROR) > 10)", {"\3key"});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON ERROR) > 10)", {"\3key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON ERROR) > 10)", {"\4key"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON ERROR) > 10)", {"\4key"});
 
             // Both DEFAULT ON EMPTY and DEFAULT ON ERROR with non-NULL value are negation too
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10)");
@@ -2359,10 +2359,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"((Data = "a"u) OR (Data = "b"u))");
 
             // JSON_* only (tokens in explain are successful)
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
 
             // JSON_* together with a non-JSON column
-            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u)))", {"\2k1"});
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u)))", {"\3k1"});
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u)))");
 
             // JSONPath that cannot be parsed for index extraction
@@ -2370,46 +2370,46 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             // OR: an indexable branch and a non-indexable branch (JSON_VALUE in an arithmetic expression)
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))", {"\2k1"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))", {"\3k1"});
 
             ValidateError(db, R"(((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11) OR JSON_EXISTS(Text, '$.k1'))");
-            ValidateTokens(db, R"(((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"});
+            ValidateTokens(db, R"(((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
 
             // AND: indexable JSON with unsupported JSON (RETURNING Date) - collect error
-            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))))", {"\2k1"});
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))))", {"\3k1"});
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Date) == Date("2021-01-01"))))");
 
             // OR: one disjunct is indexable, the other is not
             ValidateError(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR ((JSON_VALUE(Text, '$.k1' RETURNING Int32) + 10) > 11)))");
             ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 AND ((JSON_VALUE(Text, '$.k1' RETURNING Int32) + 10) > 11)))",
-                {"\2k1" + numSuffix(1)}, "and");
+                {"\3k1" + numSuffix(1)}, "and");
 
             // AND: several indexable JSON_* in one filter
             ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)))",
-                {"\2k1" + numSuffix(1), "\2k1"});
+                {"\3k1" + numSuffix(1)});
             ValidateTokens(db, R"((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0)))",
-                {"\1a", "\1b" + numSuffix(0)});
+                {"\2a", "\2b" + numSuffix(0)});
 
             // OR: only JSON_*; three-way
             ValidateTokens(db,
                 R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2) OR (JSON_VALUE(Text, '$.k3' RETURNING Int32) == 3))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2), "\2k3" + numSuffix(3)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2), "\3k3" + numSuffix(3)}, "or");
 
             // OR: a non-JSON disjunct
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (Key = 1ul)))");
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) OR (Key = 1ul)))");
-            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\2k1" + numSuffix(1), "\2k1"}, "or");
-            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\2k1" + numSuffix(1), "\2k1"}, "and");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\3k1"}, "or");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1) AND (Key = 1ul)))", {"\3k1" + numSuffix(1)}, "and");
 
             // (indexable subexpression) OR (indexable) - "or" mode for tokens
             ValidateTokens(db,
                 R"(((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0)) OR (JSON_EXISTS(Text, '$.c'))))",
-                {"\1a", "\1b" + numSuffix(0), "\1c"}, "or");
+                {"\2a", "\2b" + numSuffix(0), "\2c"}, "or");
 
             // AND: three indexable JSON_* in one filter
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.a') AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0) AND (JSON_VALUE(Text, '$.c') == "z"u)))",
-                {"\1a", "\1b" + numSuffix(0), "\1c" + strSuffix("z")}, "and");
+                {"\2a", "\2b" + numSuffix(0), "\2c" + strSuffix("z")}, "and");
 
             // AND with JSON_QUERY in the same predicate
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
@@ -2418,27 +2418,27 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // Case 1: non-indexable is arithmetic JSON_VALUE
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             // Case 2: symmetric (non-indexable first)
             ValidateTokens(db,
                 R"(((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0) AND (JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             // Case 3: non-indexable is RETURNING Date (treated as post-filter)
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) AND (JSON_VALUE(Text, '$.k3' RETURNING Date) == Date("2021-01-01")))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             // Case 4: OR branch contains (indexable AND non-indexable)
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1') OR (JSON_EXISTS(Text, '$.k2') AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0)))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             // Case 5: symmetric (non-indexable-AND first)
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') AND ((JSON_VALUE(Text, '$.x' RETURNING Int32) + 1) > 0)) OR JSON_EXISTS(Text, '$.k2'))",
-                {"\2k1", "\2k2"}, "or");
+                {"\3k1", "\3k2"}, "or");
             // Case 6: OR of two indexable JV comparisons AND a non-indexable RETURNING Date JV
             ValidateTokens(db,
                 R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1 OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 2) AND (JSON_VALUE(Text, '$.k3' RETURNING Date) == Date("2021-01-01")))",
-                {"\2k1" + numSuffix(1), "\2k2" + numSuffix(2)}, "or");
+                {"\3k1" + numSuffix(1), "\3k2" + numSuffix(2)}, "or");
 
             // Non-indexable RETURNING types now caught by whitelist (Date, Datetime, Timestamp already tested above)
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Date) > Date("2021-01-01"))");
@@ -2451,184 +2451,184 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // JSON_EXISTS TRUE ON ERROR + JE -> JE tokens
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             // Symmetric: error operand on right -> JE tokens
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))",
-                {"\1a"});
+                {"\2a"});
 
             // JSON_VALUE DEFAULT 12 ON EMPTY + JE -> JE tokens
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY) > 10 AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY) > 10)",
-                {"\1a"});
+                {"\2a"});
 
             // JSON_VALUE DEFAULT 12 ON ERROR + JE -> JE tokens
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10 AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10)",
-                {"\1a"});
+                {"\2a"});
 
             // Both ON EMPTY and ON ERROR with non-NULL DEFAULT
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND (JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON EMPTY DEFAULT 12 ON ERROR) > 10))",
-                {"\1a"});
+                {"\2a"});
 
             // Multiple non-indexable JV forms AND'd with a single JPRED
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
                    AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
                    AND JSON_EXISTS(Text, '$.a')
                    AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                     AND JSON_VALUE(Text, '$.k1' RETURNING Int DEFAULT 12 ON ERROR) > 10
                    AND JSON_EXISTS(Text, '$.k2' TRUE ON ERROR))",
-                {"\1a"});
+                {"\2a"});
 
             // JV(... RETURNING Bool) == literal + JE -> JE tokens
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == false AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)",
-                {"\1a"});
+                {"\2a"});
 
             // Range comparison on Bool + JE
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) > true AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a') AND JSON_VALUE(Text, '$.k1' RETURNING Bool) > true)",
-                {"\1a"});
+                {"\2a"});
 
             // JV(Bool) compared with another JV(Bool) + JE
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == JSON_VALUE(Text, '$.k2' RETURNING Bool))",
-                {"\1a"});
+                {"\2a"});
 
             // both error-producing returning types should behave identically inside AND
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
                    AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
                    AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
                    AND JSON_EXISTS(Text, '$.a')
                    AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
                    AND JSON_EXISTS(Text, '$.a')
                    AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01"))",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true
                    AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01"))",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND JSON_VALUE(Text, '$.k2' RETURNING Date) == Date("2021-01-01")
                    AND JSON_VALUE(Text, '$.k1' RETURNING Bool) == true)",
-                {"\2k1" + trueSuffix, "\1a"});
+                {"\3k1" + trueSuffix, "\2a"});
 
             ValidateTokens(db,
                 R"((JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a", "\2k1" + trueSuffix});
+                {"\2a", "\3k1" + trueSuffix});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) == false))",
-                {"\1a", "\2k1" + trueSuffix});
+                {"\2a", "\3k1" + trueSuffix});
 
             ValidateTokens(db,
                 R"((JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a", "\2k1" + trueSuffix});
+                {"\2a", "\3k1" + trueSuffix});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false))",
-                {"\1a", "\2k1" + trueSuffix});
+                {"\2a", "\3k1" + trueSuffix});
             ValidateTokens(db,
                 R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Bool) != false))",
-                {"\1a"});
+                {"\2a"});
 
             // Same shape but with a comparison form that is supported alone -
             // proves that NOT does not change tokens regardless of inner form
             ValidateTokens(db,
                 R"(NOT (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1)
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND NOT (JSON_VALUE(Text, '$.k1' RETURNING Int32) == 1))",
-                {"\1a"});
+                {"\2a"});
 
             // Inner OR: JE OR (non-JSON column predicate)
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             // Inner OR: JE OR (arithmetic JV - nullopt branch)
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR ((JSON_VALUE(Text, '$.k2' RETURNING Int32) + 10) > 11))
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             // Inner OR: JE OR (RETURNING Bool comparison - error branch)
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR (JSON_VALUE(Text, '$.k2' RETURNING Bool) != true))
                    AND JSON_EXISTS(Text, '$.a'))",
-                {"\1a"});
+                {"\2a"});
             // Symmetric: outer AND has the bad OR on the right
             ValidateTokens(db,
                 R"(JSON_EXISTS(Text, '$.a')
                    AND (JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u)))",
-                {"\1a"});
+                {"\2a"});
             // Two valid JPREDs combined with the bad OR: tokens of both JPREDs
             ValidateTokens(db,
                 R"((JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))
                    AND JSON_EXISTS(Text, '$.a')
                    AND (JSON_VALUE(Text, '$.b' RETURNING Int32) == 0))",
-                {"\1a", "\1b" + numSuffix(0)});
+                {"\2a", "\2b" + numSuffix(0)});
 
             // Same forms alone 
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
@@ -2675,7 +2675,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             */
 
             // J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // P -> ERROR
             ValidateError(db, R"((Data = "d1"u))");
             // PJ -> ERROR
@@ -2685,15 +2685,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // OR rule: all sides must be indexable
 
             // J AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
             // J AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\3k1"}, "and");
             // P AND J -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // J AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1"}, "and");
             // PJ AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // P AND P -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u))");
             // P AND PJ -> ERROR
@@ -2704,7 +2704,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
 
             // J OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // J OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
             // P OR J -> ERROR
@@ -2723,79 +2723,79 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
 
             // J AND J AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\3k1", "\3k2", "\3k3"}, "and");
             // J AND J AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\3k1", "\3k2"}, "and");
             // J AND J AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1", "\3k2"}, "and");
             // J AND P AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
             // J AND P AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND (Data = "d1"u))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND (Data = "d1"u))", {"\3k1"}, "and");
             // J AND P AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1"}, "and");
             // J AND PJ AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
             // J AND PJ AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))", {"\3k1"}, "and");
             // J AND PJ AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1"}, "and");
             // P AND J AND J -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
             // P AND J AND P -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\3k1"}, "and");
             // P AND J AND PJ -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1"}, "and");
             // P AND P AND J -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // P AND P AND P -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) AND (Data = "d1"u))");
             // P AND P AND PJ -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // P AND PJ AND J -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // P AND PJ AND P -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
             // P AND PJ AND PJ -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // PJ AND J AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "and");
             // PJ AND J AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u))", {"\3k1"}, "and");
             // PJ AND J AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1"}, "and");
             // PJ AND P AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // PJ AND P AND P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND (Data = "d1"u))");
             // PJ AND P AND PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // PJ AND PJ AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\2k1"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
             // PJ AND PJ AND P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
             // PJ AND PJ AND PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J AND J OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\3k1", "\3k2", "\3k3"}, "or");
             // J AND J OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR (Data = "d1"u))");
             // J AND J OR PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J AND P OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // J AND P OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR (Data = "d1"u))");
             // J AND P OR PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND (Data = "d1"u) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J AND PJ OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // J AND PJ OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR (Data = "d1"u))");
             // J AND PJ OR PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // P AND J OR J -> OK
-            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // P AND J OR P -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
             // P AND J OR PJ -> ERROR
@@ -2813,7 +2813,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // P AND PJ OR PJ -> ERROR
             ValidateError(db, R"((Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // PJ AND J OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // PJ AND J OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u))");
             // PJ AND J OR PJ -> ERROR
@@ -2831,19 +2831,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // PJ AND PJ OR PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J OR J AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))", {"\3k1", "\3k2", "\3k3"}, "or");
             // J OR J AND P -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND (Data = "d1"u))", {"\3k1", "\3k2"}, "or");
             // J OR J AND PJ -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))", {"\3k1", "\3k2"}, "or");
             // J OR P AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // J OR P AND P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND (Data = "d1"u))");
             // J OR P AND PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR (Data = "d1"u) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J OR PJ AND J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\2k1", "\2k2"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k2'))", {"\3k1", "\3k2"}, "or");
             // J OR PJ AND P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND (Data = "d1"u))");
             // J OR PJ AND PJ -> ERROR
@@ -2885,7 +2885,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // PJ OR PJ AND PJ -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) AND JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
             // J OR J OR J -> OK
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\2k1", "\2k2", "\2k3"}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR JSON_EXISTS(Text, '$.k3'))", {"\3k1", "\3k2", "\3k3"}, "or");
             // J OR J OR P -> ERROR
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR (Data = "d1"u))");
             // J OR J OR PJ -> ERROR

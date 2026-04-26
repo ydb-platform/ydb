@@ -49,6 +49,7 @@ ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.Spli
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigration
 ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigrationViaDropCreate
+ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
@@ -63,6 +64,7 @@ ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_sec
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start2
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed

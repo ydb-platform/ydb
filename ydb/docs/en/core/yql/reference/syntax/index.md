@@ -97,3 +97,49 @@
 
 {% endif %}
 
+{% if feature_transfer %}
+
+* [CREATE TRANSFER](create-transfer.md)
+* [ALTER TRANSFER](alter-transfer.md)
+* [DROP TRANSFER](drop-transfer.md)
+
+{% endif %}
+{% if feature_backup_collections %}
+
+* [CREATE BACKUP COLLECTION](create-backup-collection.md)
+* [BACKUP](backup.md)
+* [RESTORE](restore-backup-collection.md)
+* [DROP BACKUP COLLECTION](drop-backup-collection.md)
+
+{% endif %}
+
+* [COMMIT](commit.md)
+
+{% if feature_view %}
+
+* [CREATE VIEW](create-view.md)
+* [ALTER VIEW](alter-view.md)
+* [DROP VIEW](drop-view.md)
+
+{% endif %}
+
+{% if feature_federated_queries %}
+
+* [CREATE OBJECT (TYPE SECRET)](create-object-type-secret.md)
+
+{% endif %}
+
+{% if feature_user_and_group %}
+
+* [CREATE USER](create-user.md)
+* [ALTER USER](alter-user.md)
+* [DROP USER](drop-user.md)
+* [CREATE GROUP](create-group.md)
+* [ALTER GROUP](alter-group.md)
+* [DROP GROUP](drop-group.md)
+* [GRANT](grant.md)
+* [REVOKE](revoke.md)
+
+{% endif %}
+
+* [Unsupported statements](not_yet_supported.md)

@@ -1,4 +1,9 @@
 items:
+- name: Backup collections recipes
+  href: backup-collections/index.md
+  include:
+    mode: link
+    path: backup-collections/toc_p.yaml
 - name: YDB SDK
   include:
     mode: link

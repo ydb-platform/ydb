@@ -18,11 +18,13 @@ public:
     }
 
     NKikimr::NPQ::NSchema::TResult ApplyChanges(
+        const NKikimr::NPQ::NDescriber::TTopicInfo& /*topicInfo*/,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
-        bool /*isCdcStream*/) override
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+    ) override
     {
+        NKikimr::NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
         targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInRequestsPerSecond(WriteSpeedInMessagesPerSec_);
         return {};
     }

@@ -245,7 +245,7 @@ def _get_label_id(label_name):
     return label_id
 
 
-def add_label_to_issue(issue_id, label_name=MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+def add_label_to_issue(issue_id, label_name):
     """Attach a label to issue. Idempotent — GitHub ignores duplicates."""
     label_id = _get_label_id(label_name)
     if not label_id:
@@ -265,7 +265,7 @@ def add_label_to_issue(issue_id, label_name=MANUAL_FAST_UNMUTE_GITHUB_LABEL):
         )
 
 
-def remove_label_from_issue(issue_id, label_name=MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+def remove_label_from_issue(issue_id, label_name):
     """Detach a label from issue. No-op if the label is not present."""
     label_id = _get_label_id(label_name)
     if not label_id:

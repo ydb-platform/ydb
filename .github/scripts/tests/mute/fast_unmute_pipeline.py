@@ -51,6 +51,7 @@ from mute.fast_unmute_ydb import (
     upsert_rows,
 )
 from mute.update_mute_issues import (
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
     add_issue_comment,
     parse_body,
@@ -151,7 +152,7 @@ def abandon_fast_unmute_if_issue_not_completed(ydb_wrapper, table_path, grace_ta
             )
             rows_deleted += 1
 
-        remove_label_from_issue(issue_id)
+        remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
         set_manual_unmute_project_board_status(issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_FAIL)
         add_issue_comment(
             issue_id,
@@ -318,7 +319,7 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                 workflow_run_url=run_url,
             ),
         )
-        add_label_to_issue(issue_id)
+        add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
 
         new_rows.extend(issue_rows)
         for row in issue_rows:
@@ -507,7 +508,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
         for issue_number in issues_to_delabel:
             issue_id = issue_ids.get(issue_number)
             if issue_id:
-                remove_label_from_issue(issue_id)
+                remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
 
     logging.info('manual_unmute_cleanup: removed %d row(s)', delete_count)
 

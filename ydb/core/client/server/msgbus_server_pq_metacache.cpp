@@ -246,21 +246,20 @@ private:
         TVector<std::pair<TString, TString>> GetTopics() const {
             TVector<std::pair<TString, TString>> ret;
             if (FirstRequestDone) {
-                return {};
-                // for (auto i: SecondTryTopics) {
-                //     auto account = Topics[i]->GetAccount_();
-                //     if (!account.Defined() || account->empty()) {
-                //         continue;
-                //     } else if (DbRoot.empty()) {
-                //         continue;
-                //     }
-                //     Topics[i]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
-                //     auto second = Topics[i]->GetSecondaryPath("");
-                //     if (!second.Defined()) {
-                //         continue;
-                //     }
-                //     ret.push_back(std::make_pair(*second, Topics[i]->GetDatabase().GetOrElse("")));
-                // }
+                for (auto i: SecondTryTopics) {
+                    auto account = Topics[i]->GetAccount_();
+                    if (!account.Defined() || account->empty()) {
+                        continue;
+                    } else if (DbRoot.empty()) {
+                        continue;
+                    }
+                    Topics[i]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
+                    auto second = Topics[i]->GetSecondaryPath("");
+                    if (!second.Defined()) {
+                        continue;
+                    }
+                    ret.push_back(std::make_pair(*second, Topics[i]->GetDatabase().GetOrElse("")));
+                }
             } else {
                 for (auto& t : Topics) {
                     ret.push_back(std::make_pair(t->GetPrimaryPath(), t->GetDatabase().GetOrElse("")));
@@ -285,6 +284,8 @@ private:
 
         for (auto& t : ev->Get()->Topics) {
             Y_ABORT_UNLESS(t != nullptr);
+            Y_ABORT_UNLESS(!t->GetOriginalTopic().Contains("rt3."),
+                       "rt3 topic names are not supported: %s", t->GetOriginalTopic().c_str());
         }
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,

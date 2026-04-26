@@ -382,6 +382,7 @@ void TQuoterService::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(QUOTER_SERVICE_PROVIDER));
 
     Become(&TThis::StateFunc);
+    ScheduleNextCleanupPass();
 }
 
 void TQuoterService::TryTickSchedule(TInstant now) {
@@ -1143,13 +1144,59 @@ void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
     Counters.ResultRpcDeadline->Inc();
 }
 
+void TQuoterService::StartCleanupPass() {
+    CleanupQuoters = {};
+
+    for (const auto& [quoterId, _] : Quoters) {
+        Y_UNUSED(_);
+        CleanupQuoters.push(quoterId);
+    }
+}
+
+void TQuoterService::ScheduleNextCleanupPass() {
+    Schedule(CleanupPeriod, new TEvents::TEvWakeup(WakeupTagCleanup));
+}
+
+void TQuoterService::HandleCleanup() {
+    if (CleanupQuoters.empty()) {
+        StartCleanupPass();
+    }
+
+    size_t resourcesProcessed = 0;
+    while (!CleanupQuoters.empty() && resourcesProcessed < CleanupBatchLimit) {
+        const ui64 quoterId = CleanupQuoters.front();
+        CleanupQuoters.pop();
+
+        auto quoterIt = Quoters.find(quoterId);
+        if (quoterIt == Quoters.end()) {
+            continue;
+        }
+
+        for (const auto& [resourceId, _] : quoterIt->second.Resources) {
+            Y_UNUSED(resourceId);
+            Y_UNUSED(_);
+            ++resourcesProcessed;
+
+            // Resource cleanup conditions and eviction are added in later steps.
+        }
+    }
+
+    if (!CleanupQuoters.empty()) {
+        // Allow external requests to be processed
+        Send(SelfId(), new TEvents::TEvWakeup(WakeupTagCleanup));
+        return;
+    }
+
+    ScheduleNextCleanupPass();
+}
+
 void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
     switch (ev->Get()->Tag) {
     case WakeupTagTick:
         HandleTick();
         return;
     case WakeupTagCleanup:
-        // Reserved for periodic idle-resource cleanup added in later steps.
+        HandleCleanup();
         return;
     default:
         BLOG_WARN("Unknown TEvWakeup tag: " << ev->Get()->Tag);

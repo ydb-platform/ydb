@@ -14,6 +14,7 @@
 
 #include <util/generic/set.h>
 #include <util/generic/deque.h>
+#include <util/generic/queue.h>
 
 namespace NKikimr {
 namespace NQuoter {
@@ -239,6 +240,9 @@ struct TQuoterState {
 };
 
 class TQuoterService : public TActorBootstrapped<TQuoterService> {
+    static constexpr TDuration CleanupPeriod = TDuration::Minutes(1);
+    static constexpr size_t CleanupBatchLimit = 1000;
+
     TQuoterServiceConfig Config;
     TInstant LastProcessed;
 
@@ -257,6 +261,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     TQuoterState StaticRatedQuoter; // ??? could be just static rated quoters, w/o all fancy quoter stuff
 
     bool TickScheduled;
+    TQueue<ui64> CleanupQuoters;
 
     TMap<ui64, TDeque<TEvQuota::TProxyStat>> StatsToPublish; // quoterId -> stats
 
@@ -312,6 +317,9 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void FeedResource(TResource &quores);
     void AllocateResource(TResource &quores);
     void PublishStats();
+    void StartCleanupPass();
+    void ScheduleNextCleanupPass();
+    void HandleCleanup();
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvQuota::TEvRequest::TPtr &ev);

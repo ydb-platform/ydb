@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         UNIT_ASSERT_VALUES_EQUAL(data, "value = de\x02, key = 5\nvalue = ab\x02, key = 2\n");
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingError) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -375,9 +375,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         });
         CreateShardedTable(server, sender, "/Root", "table-1", options);
 
-        // First row has invalid format (no \x02 format byte), should stop immediately
+        // First row has wrong dimension (correct format byte but 4 bytes instead of 3), should stop immediately
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
-            "(1, \"ab\"), (2, \"ab\x02\"), (5, \"de\x02\");");
+            "(1, \"\x30\x30\x30\x02\"), (2, \"ab\x02\"), (5, \"de\x02\");");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
         auto datashards = GetTableShards(server, sender, kTable);
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
         TString issuesStr = issues.ToOneLineString();
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
     Y_UNIT_TEST(NullEmbedding) {

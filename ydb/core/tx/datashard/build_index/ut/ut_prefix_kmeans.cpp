@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         return {reply->Record.GetStatus(), issues.ToOneLineString()};
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingError) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -905,12 +905,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // user-1: 2 valid rows, 1 invalid row with wrong format byte
+        // user-1: 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
             "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
             "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
-            "(\"user-1\", 13, \"invalid\", \"1-three\");");
+            "(\"user-1\", 13, \"\x30\x30\x30\2\", \"1-three\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
@@ -918,10 +918,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
         UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
-    Y_UNIT_TEST(EmptyEmbeddingError) {
+    Y_UNIT_TEST(EmptyEmbeddingSkipped) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -941,18 +941,18 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // Row with empty embedding
+        // Row with empty embedding (should be skipped, not fail)
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
-            "(\"user-1\", 11, \"\", \"1-one\");");
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\", \"1-two\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
         auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Empty vector data");
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::DONE);
     }
 
     Y_UNIT_TEST(NullEmbedding) {

@@ -527,13 +527,15 @@ protected:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
-        if (row.at(EmbeddingPos).IsNull()) {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
             return;
         }
 
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            InvalidEmbeddingError = Clusters->FormatError(embedding);
+            if (Clusters->IsFatalFormatError(embedding)) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
 
@@ -555,12 +557,14 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        if (row.at(EmbeddingPos).IsNull()) {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
             return;
         }
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            InvalidEmbeddingError = Clusters->FormatError(embedding);
+            if (Clusters->IsFatalFormatError(embedding)) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);

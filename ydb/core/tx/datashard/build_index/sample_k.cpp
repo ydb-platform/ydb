@@ -141,13 +141,15 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        if (Clusters && row.Get(0).IsNull()) {
+        if (Clusters && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
             return EScan::Feed;
         }
 
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
-            return EScan::Final;
+            if (Clusters->IsFatalFormatError(row.Get(0).AsRef())) {
+                InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
+            }
+            return EScan::Feed;
         }
 
         if (SkipForeign) {

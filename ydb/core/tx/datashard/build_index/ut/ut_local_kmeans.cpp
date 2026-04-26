@@ -1248,7 +1248,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         return {reply->Record.GetStatus(), issues.ToOneLineString()};
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingError) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -1267,22 +1267,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         options.Shards(1);
         CreateMainTable(server, sender, options);
 
-        // 2 valid rows (with \x02 format byte), 1 invalid row with wrong format byte
+        // 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
             "(1, \"\x30\x30\2\", \"one\"),"
             "(2, \"\x31\x31\2\", \"two\"),"
-            "(3, \"invalid\", \"three\");");
+            "(3, \"\x30\x30\x30\2\", \"three\");");
 
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
         auto [status, issuesStr] = DoLocalKMeansCheckIssues(server, sender);
         UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
-    Y_UNIT_TEST(EmptyEmbeddingError) {
+    Y_UNIT_TEST(EmptyEmbeddingSkipped) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -1301,17 +1301,17 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         options.Shards(1);
         CreateMainTable(server, sender, options);
 
-        // Row with empty embedding
+        // Row with empty embedding (should be skipped, not fail)
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
-            "(1, \"\", \"one\");");
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\", \"two\");");
 
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
         auto [status, issuesStr] = DoLocalKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Empty vector data");
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::DONE);
     }
 
     Y_UNIT_TEST(NullEmbedding) {

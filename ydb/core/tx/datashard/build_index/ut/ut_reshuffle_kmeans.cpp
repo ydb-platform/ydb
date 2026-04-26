@@ -981,7 +981,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UNIT_ASSERT(secondPosting.Contains("key = 5,"));
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingError) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -1001,12 +1001,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         CreateMainTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        // 2 valid rows, 1 invalid row with wrong format byte
+        // 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
             "(1, \"\x30\x30\2\", \"one\"),"
             "(2, \"\x31\x31\2\", \"two\"),"
-            "(3, \"invalid\", \"three\");");
+            "(3, \"\x30\x30\x30\2\", \"three\");");
 
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
         TString issuesStr = issues.ToOneLineString();
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Invalid vector format byte");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
     Y_UNIT_TEST(NullEmbedding) {

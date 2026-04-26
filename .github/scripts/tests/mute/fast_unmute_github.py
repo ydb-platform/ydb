@@ -323,6 +323,7 @@ def fetch_issue_numbers_in_manual_unmute_project(issue_numbers):
     numbers = sorted({int(n) for n in (issue_numbers or []) if n is not None})
     if not numbers:
         return result
+    target_project_number = int(PROJECT_ID)
     chunk_size = 50
     for i in range(0, len(numbers), chunk_size):
         chunk = numbers[i : i + chunk_size]
@@ -342,7 +343,11 @@ def fetch_issue_numbers_in_manual_unmute_project(issue_numbers):
         for number in chunk:
             node = repo_data.get(f'n{number}') or {}
             items = (node.get('projectItems') or {}).get('nodes') or []
-            if any(int((item.get('project') or {}).get('number') or -1) == int(PROJECT_ID) for item in items):
+            if any(
+                int((item.get('project') or {}).get('number') or -1)
+                == target_project_number
+                for item in items
+            ):
                 result.add(number)
     return result
 

@@ -62,6 +62,11 @@ BOT_LOGINS = frozenset({'ydbot', 'github-actions'})
 _LOG = logging.getLogger('manual_unmute')
 
 
+def issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
+    """Gate for manual fast-unmute: issue must be CLOSED as COMPLETED."""
+    return (state or '').strip().upper() == 'CLOSED' and (state_reason or '').strip().upper() == 'COMPLETED'
+
+
 def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
     """Calendar days a ``fast_unmute_grace`` row is kept (same rule as ``expire_fast_unmute_grace``).
 
@@ -128,7 +133,7 @@ def abandon_fast_unmute_if_issue_not_completed(ydb_wrapper, table_path, grace_ta
         issue_id = meta.get('id')
         state = meta.get('state') or ''
         state_reason = meta.get('state_reason') or ''
-        if (state or '').strip().upper() == 'CLOSED' and (state_reason or '').strip().upper() == 'COMPLETED':
+        if issue_eligible_for_manual_fast_unmute_entry(state, state_reason):
             continue
         if not issue_id:
             logging.warning(
@@ -484,9 +489,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             )
 
         success_comment_issues = (
-            issues_to_delabel
-            & issues_cleared_via_unmute
-            - issues_ttl_shutdown
+            (issues_to_delabel & issues_cleared_via_unmute) - issues_ttl_shutdown
         )
         for issue_number in sorted(success_comment_issues):
             issue_id = issue_ids.get(issue_number)

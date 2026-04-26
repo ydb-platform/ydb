@@ -124,7 +124,7 @@ protected:
     const TString DATABASE = "/Root";
     const TString TOPIC_PARENT = "/Root/PQ";
 
-    const TString VALID_TOPIC_NAME = "rt3.dc1--topic1";
+    const TString VALID_TOPIC_NAME = "topic1";
     const TString VALID_SHORT_TOPIC_NAME = "topic1";
     const TString VALID_TOPIC_PATH = TOPIC_PARENT + "/" + VALID_TOPIC_NAME;
 
@@ -325,11 +325,11 @@ Y_UNIT_TEST_F(UnknownPartition, TUpdateOffsetsInTransactionFixture) {
 }
 
 Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TUpdateOffsetsInTransactionFixture) {
-    TestTopicPaths("//Root//PQ//rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
+    TestTopicPaths("//Root//PQ//topic1", "/Root/PQ/topic1");
 }
 
 Y_UNIT_TEST_F(RelativePath, TUpdateOffsetsInTransactionFixture) {
-    TestTopicPaths("PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
+    TestTopicPaths("PQ/topic1", "/Root/PQ/topic1");
 }
 
 Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {

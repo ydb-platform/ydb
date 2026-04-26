@@ -26,8 +26,8 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
-    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
-    const static TString DEFAULT_TOPIC_PATH = "/Root/PQ/rt3.dc1--topic1";
+    const static TString DEFAULT_TOPIC_NAME = "topic1";
+    const static TString DEFAULT_TOPIC_PATH = "/Root/PQ/account1/topic1";
 
     const static TString SHORT_TOPIC_NAME = "topic1";
 }
@@ -53,7 +53,6 @@ namespace NKikimr::NPersQueueTests {
             annoyingClient.InitUserRegistry();
             annoyingClient.MkDir("/Root", "account1");
             annoyingClient.MkDir("/Root/PQ", "account1");
-            annoyingClient.CreateTopicNoLegacy(DEFAULT_TOPIC_PATH, 5, false);
             annoyingClient.CreateTopicNoLegacy("/Root/PQ/account1/topic1", 5, false);
             annoyingClient.CreateTopicNoLegacy("/Root/account2/topic2", 5);
         }

@@ -101,28 +101,25 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
     auto* source = SourcesSequentially.front()->MutableAs<IDataSource>();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx())
-        ("has_cursor", source->HasCursor())("prefetch_triggered", source->IsPrefetchTriggered())("streaming", source->IsStreamingMode());
-    // HasCursor()==false means prefetch already started the next fetch.
-    // HasCursor()==true means prefetch was skipped or streaming is off, so start it now.
+        ("has_cursor", source->HasCursor())("streaming", source->IsStreamingMode());
+    // HasCursor() is the single source of truth for whether we still need to advance.
+    //   HasCursor()==false: ContinueCursor() has already been invoked (e.g. by the
+    //     streaming prefetch path in TSyncPointResult::OnSourceReady), which resets
+    //     ScriptCursor.  Nothing to do here.
+    //   HasCursor()==true:  prefetch was skipped (backpressure limit) or streaming
+    //     is off, so advance the cursor now.
+    // Note: PrefetchTriggered is intentionally not consulted here.  ContinueCursor()
+    // unconditionally resets both ScriptCursor and PrefetchTriggered in the streaming
+    // path, so a (HasCursor && PrefetchTriggered) state cannot be observed when this
+    // ack-driven Continue() runs.
     if (source->HasCursor()) {
-        // Skip ContinueCursor(): prefetch already advanced to the next page.
-        if (source->IsStreamingMode() && source->IsPrefetchTriggered()) {
-            // Prefetch already ran; just reset the flag.
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_continue_cursor_prefetch_already_triggered")
-                ("source_idx", source->GetSourceIdx())
-                ("page_index", source->GetCurrentEarlyPageIndex())
-                ("total_pages", source->GetEarlyPages().size())
-                ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted());
-            source->SetPrefetchTriggered(false);
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "call_continue_cursor")
-                ("source_idx", source->GetSourceIdx())
-                ("page_index", source->GetCurrentEarlyPageIndex())
-                ("total_pages", source->GetEarlyPages().size())
-                ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted())
-                ("has_more_pages", source->HasMorePages());
-            source->ContinueCursor(SourcesSequentially.front());
-        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "call_continue_cursor")
+            ("source_idx", source->GetSourceIdx())
+            ("page_index", source->GetCurrentEarlyPageIndex())
+            ("total_pages", source->GetEarlyPages().size())
+            ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted())
+            ("has_more_pages", source->HasMorePages());
+        source->ContinueCursor(SourcesSequentially.front());
     }
 }
 

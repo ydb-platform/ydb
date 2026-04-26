@@ -359,17 +359,15 @@ public:
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
             // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
             NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-            // if (sharedReadingPredicate.IsEmpty()) {
-            //     return node;
-            // }
-
-            TStringBuilder err;
-            NYql::NConnector::NApi::TPredicate predicateProto;
-            if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
-                ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                return node;
+            if (!sharedReadingPredicate.IsEmpty()) {
+                TStringBuilder err;
+                NYql::NConnector::NApi::TPredicate predicateProto;
+                if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                    return node;
+                }
+                YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
             }
-            YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
         }
 
         bool isPartitionListUpdated = false;

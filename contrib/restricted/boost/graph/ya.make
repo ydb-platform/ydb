@@ -27,7 +27,6 @@ PEERDIR(
     contrib/restricted/boost/conversion
     contrib/restricted/boost/core
     contrib/restricted/boost/detail
-    contrib/restricted/boost/foreach
     contrib/restricted/boost/function
     contrib/restricted/boost/integer
     contrib/restricted/boost/iterator

@@ -212,18 +212,19 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(AbstractRemoteCommandExecutionSa
         )
 
 
-class GrepDMesgForPatternsSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
-    def __init__(self, list_of_hosts, list_of_markers, lines_after=1, username=None):
-        name = "GrepDMesgForPatternsSafetyWarden for markers = {markers} on targets = {targets}".format(
+class GrepJournalctlKernelForPatternsSafetyWarden(AbstractRemoteCommandExecutionSafetyWarden):
+    def __init__(self, list_of_hosts, list_of_markers, lines_after=1, username=None, hours_back=24):
+        name = "GrepJournalctlKernelForPatternsSafetyWarden for markers = {markers} on targets = {targets}".format(
             markers=list_of_markers, targets=list_of_hosts
         )
+        since_value = '{hours} hours ago'.format(hours=hours_back)
         remote_command = [
-            'dmesg', '-T',
+            'sudo', 'journalctl', '-k', '--no-pager', '--since', "'{since}'".format(since=since_value),
             '|',
             'grep',
             '-A', str(lines_after),
         ] + construct_list_of_grep_pattern_arguments(list_of_markers)
 
-        super(GrepDMesgForPatternsSafetyWarden, self).__init__(
-            name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after
+        super(GrepJournalctlKernelForPatternsSafetyWarden, self).__init__(
+            name, list_of_hosts, remote_command=remote_command, username=username, split_line_size=lines_after,
         )

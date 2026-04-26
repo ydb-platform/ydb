@@ -15,6 +15,8 @@ REPO_NAME = 'ydb'
 PROJECT_ID = '45'
 # GitHub issue label set by ``mute/fast_unmute_github.py`` while fast-unmute rows exist.
 MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
+# GitHub issue label set once fast-unmute flow completed successfully.
+MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 

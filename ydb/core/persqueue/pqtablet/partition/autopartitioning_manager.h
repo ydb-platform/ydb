@@ -19,7 +19,7 @@ class TPartitionId;
 using TUint128 = unsigned __int128;
 
 struct TAutopartitioningManagerSnapshot {
-    std::vector<std::pair<TString, ui64>> PerSourceMetrics;
+    std::unordered_map<TString, std::vector<std::pair<TString, ui64>>> PerSourceMetrics;
     std::unordered_map<TString, NPQ::TPartitioningKeysManager> KeysManagers;
 };
 
@@ -27,7 +27,7 @@ class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
 
-    virtual void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") = 0;
+    virtual void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") = 0;
     virtual void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) = 0;
     virtual void CleanUp() = 0;
 

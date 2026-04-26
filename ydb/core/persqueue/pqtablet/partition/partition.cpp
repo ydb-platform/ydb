@@ -1558,7 +1558,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
 
     auto amSnapshot = AutopartitioningManager->GetSnapshot();
     response->WriteStats = TWriteStats{
-        .WrittenBytes = std::move(amSnapshot.PerSourceMetrics),
+        .PerSourceMetrics = std::move(amSnapshot.PerSourceMetrics),
         .PartitioningKeysManagers = std::move(amSnapshot.KeysManagers),
     };
 
@@ -2728,8 +2728,19 @@ void TPartition::RunPersist() {
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
 
-            for (auto& [sourceId, writtenBytes] : writeInfo->WriteStats.WrittenBytes) {
-                AutopartitioningManager->OnWrite(sourceId, writtenBytes);
+            std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
+            if (auto it = writeInfo->WriteStats.PerSourceMetrics.find("bytes"); it != writeInfo->WriteStats.PerSourceMetrics.end()) {
+                for (const auto& [sourceId, writtenBytes] : it->second) {
+                    perSourceMetrics[sourceId].first = writtenBytes;
+                }
+            }
+            if (auto it = writeInfo->WriteStats.PerSourceMetrics.find("messages"); it != writeInfo->WriteStats.PerSourceMetrics.end()) {
+                for (const auto& [sourceId, messagesWritten] : it->second) {
+                    perSourceMetrics[sourceId].second = messagesWritten;
+                }
+            }
+            for (const auto& [sourceId, metrics] : perSourceMetrics) {
+                AutopartitioningManager->OnWrite(sourceId, metrics.first, metrics.second);
             }
             for (auto& [tag, keysManager] : writeInfo->WriteStats.PartitioningKeysManagers) {
                 AutopartitioningManager->AddKeysStats(tag, keysManager);

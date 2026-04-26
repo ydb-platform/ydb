@@ -41,9 +41,10 @@ public:
         Y_UNUSED(config);
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
+    void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
         Y_UNUSED(sourceId);
-        Y_UNUSED(size);
+        Y_UNUSED(bytes);
+        Y_UNUSED(messages);
         Y_UNUSED(key);
     }
 
@@ -87,7 +88,8 @@ public:
         RecreateSumMetric();
     }
 
-    void OnWrite(const TString& sourceId, ui64 delta, const TString& key = "") override  {
+protected:
+    void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
         PQ_LOG_D("TAutopartitioningManager::OnWrite"
             << " sourceId# " << sourceId
             << " delta# " << delta
@@ -226,7 +228,9 @@ public:
 
     TAutopartitioningManagerSnapshot GetSnapshot() override {
         return {
-            .PerSourceMetrics = GetSerializedMetrics(),
+            .PerSourceMetrics = {
+                {Tag, GetSerializedMetrics()},
+            },
             .KeysManagers = {
                 {Tag, KeysManager},
             },
@@ -364,6 +368,11 @@ public:
         : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), tag) {
     }
 
+    void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
+        Y_UNUSED(messages);
+        OnWriteImpl(sourceId, bytes, key);
+    }
+
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
         MaxUsagePerSec = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         this->TWindowedAutopartitioningManager::UpdateConfig(config);
@@ -374,6 +383,11 @@ class TMessagesAutopartitioningManager : public TWindowedAutopartitioningManager
 public:
     TMessagesAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, const TString& tag = "messages")
         : TWindowedAutopartitioningManager(config, partitionId, config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), tag) {
+    }
+
+    void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
+        Y_UNUSED(bytes);
+        OnWriteImpl(sourceId, messages, key);
     }
 
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) override {
@@ -431,9 +445,9 @@ public:
                 TAG_MESSAGES));
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
+    void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
         for (auto& [tag, autopartitioningManager] : AutopartitioningManagers) {
-            autopartitioningManager->OnWrite(sourceId, size, key);
+            autopartitioningManager->OnWrite(sourceId, bytes, messages, key);
         }
     }
 
@@ -480,13 +494,12 @@ public:
         auto bytesAutopartitioningManagerSnapshot = GetAutopartitioningManager(TAG_BYTES).GetSnapshot();
         auto messagesAutopartitioningManagerSnapshot = GetAutopartitioningManager(TAG_MESSAGES).GetSnapshot();
 
+        bytesAutopartitioningManagerSnapshot.PerSourceMetrics.merge(
+            messagesAutopartitioningManagerSnapshot.PerSourceMetrics);
         bytesAutopartitioningManagerSnapshot.KeysManagers.merge(
             messagesAutopartitioningManagerSnapshot.KeysManagers);
 
-        return {
-            .PerSourceMetrics = std::move(bytesAutopartitioningManagerSnapshot.PerSourceMetrics),
-            .KeysManagers = std::move(bytesAutopartitioningManagerSnapshot.KeysManagers),
-        };
+        return bytesAutopartitioningManagerSnapshot;
     }
 
     void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) override {
@@ -514,8 +527,8 @@ public:
     TSupportiveAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId) : AutopartitioningManager(config, partitionId) {
     }
 
-    void OnWrite(const TString& sourceId, ui64 size, const TString& key = "") override {
-        AutopartitioningManager.OnWrite(sourceId, size, key);
+    void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") override {
+        AutopartitioningManager.OnWrite(sourceId, bytes, messages, key);
     }
 
     void CleanUp() override {
@@ -535,7 +548,7 @@ public:
     }
 
     TAutopartitioningManagerSnapshot GetSnapshot() override {
-        return {};
+        return AutopartitioningManager.GetSnapshot();
     }
 
     void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) override {

@@ -7,8 +7,8 @@
 namespace NKikimr::NPQ {
 
 struct TWriteStats {
-    // SourceId->WrittenBytes
-    std::vector<std::pair<TString, ui64>> WrittenBytes;
+    // Tag -> (SourceId -> metric value)
+    std::unordered_map<TString, std::vector<std::pair<TString, ui64>>> PerSourceMetrics;
     std::unordered_map<TString, NPQ::TPartitioningKeysManager> PartitioningKeysManagers;
 };
 

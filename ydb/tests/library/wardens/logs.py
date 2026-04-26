@@ -77,6 +77,7 @@ def kikimr_grep_kernel_log_safety_warden_factory(list_of_host_names, ssh_usernam
             list_of_host_names,
             list_of_markers=markers,
             username=ssh_username,
-            lines_after=lines_after
+            lines_after=lines_after,
+            hours_back=hours_back
         )
     ]

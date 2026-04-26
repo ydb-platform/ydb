@@ -36,8 +36,11 @@ NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
 
 // Keys may contain binary data (e.g. a zero byte), so we prefix each key with its
 // varint-encoded length (LEB128). This allows unambiguous prefix-scan queries.
+// Key lengths are encoded as (actual_length + 1) so that the encoded length byte is never
+// zero. This reserves \x00 exclusively for the literal separator used in AppendJsonIndexLiteral,
+// preventing ambiguity between an empty-key path component and the start of a literal suffix
 void AppendKey(TString& prefix, TStringBuf key) {
-    size_t size = key.size();
+    size_t size = key.size() + 1;
     do {
         if (size < 0x80) {
             prefix.push_back((ui8)size);
@@ -82,6 +85,56 @@ bool IsPredicateType(EJsonPathItemType type) {
     }
 }
 
+// Remove redundant tokens based on prefix (ancestor/descendant) relationships
+//
+// OR  -> keep roots (minimal tokens): if token A is a prefix of token B, B is redundant
+//        because any match for B also matches A (ancestor covers descendant)
+//
+// AND -> keep leaves (maximal tokens): if token A is a prefix of token B, A is redundant
+//        because requiring both A and B is satisfied by B alone (descendant implies ancestor)
+//
+// String prefix check is unambiguous because:
+//   1. AppendKey encodes key lengths as (actual_length + 1), so no key-length byte is ever \x00
+//   2. AppendJsonIndexLiteral always starts the literal suffix with \x00
+// Therefore \x00 can only appear at the start of a literal suffix, never inside the path portion
+// A token B whose content after position A.size() starts with \x00 has the SAME path as A but
+// carries a value constraint - still a valid ancestor/descendant relationship for pruning.
+void PruneRedundantTokens(TCollectResult::TTokens& tokens, TCollectResult::ETokensMode mode) {
+    if (tokens.size() <= 1 || mode == TCollectResult::ETokensMode::NotSet) {
+        return;
+    }
+
+    TCollectResult::TTokens result;
+    for (const auto& token : tokens) {
+        bool redundant = false;
+        for (const auto& other : tokens) {
+            if (other == token) {
+                continue;
+            }
+
+            if (mode == TCollectResult::ETokensMode::Or) {
+                // token is redundant if some shorter other is its prefix (other covers token)
+                if (other.size() < token.size() && token.StartsWith(other)) {
+                    redundant = true;
+                    break;
+                }
+            } else {
+                // AND: token is redundant if some longer other starts with it (other implies token)
+                if (other.size() > token.size() && other.StartsWith(token)) {
+                    redundant = true;
+                    break;
+                }
+            }
+        }
+
+        if (!redundant) {
+            result.insert(token);
+        }
+    }
+
+    tokens = std::move(result);
+}
+
 TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
     TCollectResult::ETokensMode incompatibleMode, TCollectResult::ETokensMode combinedMode)
 {
@@ -104,7 +157,9 @@ TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
 
     leftTokens.insert(rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
-        left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : combinedMode);
+        auto finalMode = hasMix ? TCollectResult::ETokensMode::Or : combinedMode;
+        left.SetTokensMode(finalMode);
+        PruneRedundantTokens(leftTokens, finalMode);
     }
     return left;
 }

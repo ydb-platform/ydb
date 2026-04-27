@@ -167,19 +167,26 @@ public:
         return *std::max_element(ReservationsPerPage.begin(), ReservationsPerPage.end());
     }
 
-    // Returns true if reservations are monotonically increasing (indicating the bug).
+    // Returns true if reservations are monotonically non-decreasing across all
+    // pages and strictly increase at least once. This matches the regression
+    // signature: without the page-range filter, every subsequent page reserves
+    // memory for itself plus all remaining pages, so the per-page reservation
+    // sequence grows linearly (k × size for the k-th page) and never decreases.
     bool IsReservationMonotonicallyIncreasing() const {
         TGuard<TAdaptiveLock> g(Lock);
         if (ReservationsPerPage.size() < 3) {
             return false;
         }
-        ui32 increasingRuns = 0;
+        bool sawStrictIncrease = false;
         for (size_t i = 1; i < ReservationsPerPage.size(); ++i) {
+            if (ReservationsPerPage[i] < ReservationsPerPage[i - 1]) {
+                return false;
+            }
             if (ReservationsPerPage[i] > ReservationsPerPage[i - 1]) {
-                ++increasingRuns;
+                sawStrictIncrease = true;
             }
         }
-        return increasingRuns > ReservationsPerPage.size() / 2;
+        return sawStrictIncrease;
     }
 };
 

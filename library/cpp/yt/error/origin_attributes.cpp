@@ -135,7 +135,7 @@ TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes)
 TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
 {
     TOriginAttributes result;
-    if (attributes == nullptr) {
+    if (!attributes) {
         return result;
     }
 

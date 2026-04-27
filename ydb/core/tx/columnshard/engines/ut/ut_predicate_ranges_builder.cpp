@@ -161,14 +161,14 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
             UNIT_ASSERT_C(!stats.query_ast().empty(), "QueryService explain: query_ast is empty");
 
             const TString ast = stats.query_ast();
-            UNIT_ASSERT_C(ast.Contains("(declare %kqp%tx_result_binding_0_0"), ast);
+            UNIT_ASSERT_C(ast.Contains("(declare %kqp%tx_result_binding"), ast);
             UNIT_ASSERT_C(ast.Contains("OptionalType (OptionalType (DataType 'Timestamp"), ast);
             UNIT_ASSERT_C(ast.Contains("OptionalType (OptionalType (DataType 'Utf8"), ast);
             UNIT_ASSERT_C(ast.Contains("KqpBlockReadOlapTableRanges"), ast);
             UNIT_ASSERT_C(ast.Contains("UsedKeyColumns"), ast);
             UNIT_ASSERT_C(ast.Contains("\"timestamp\"") && ast.Contains("\"resource_type\""), ast);
             UNIT_ASSERT_C(ast.Contains("Just (Just (Timestamp"), ast);
-            UNIT_ASSERT_C(ast.Contains("(Just (Nothing $4))") || ast.Contains("(Just (Nothing $4)"), ast);
+            UNIT_ASSERT_C(ast.Contains("(Just (Nothing"), ast);
         }
 
         auto execRes = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

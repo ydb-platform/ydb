@@ -211,7 +211,7 @@ namespace NYql::NDq {
 
         void Handle(TEvListSplitsPart::TPtr ev) {
             auto response = ev->Get()->Response;
-            Y_ABORT_UNLESS(response.splits_size() == 1);
+            Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 
@@ -373,7 +373,7 @@ namespace NYql::NDq {
 
         void ProcessReceivedData(const NConnector::NApi::TReadSplitsResponse& resp) {
             auto startCycleCount = GetCycleCountFast();
-            Y_ABORT_UNLESS(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
+            Y_ENSURE(resp.payload_case() == NConnector::NApi::TReadSplitsResponse::PayloadCase::kArrowIpcStreaming);
             if (ResultChunks) {
                 ResultChunks->Inc();
                 if (resp.has_stats()) {
@@ -383,13 +383,14 @@ namespace NYql::NDq {
             }
             auto guard = Guard(*Alloc);
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
+            Y_ENSURE(!resp.arrow_ipc_streaming().empty());
             const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
-            Y_ABORT_UNLESS(data.ok());
+            Y_ENSURE(data.ok(), data.status().ToString());
             const auto& value = data.ValueOrDie();
-            Y_ABORT_UNLESS(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size());
+            Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
             std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
             for (size_t i = 0; i != columns.size(); ++i) {
-                Y_ABORT_UNLESS(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
+                Y_ENSURE(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
                 columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
             }
 

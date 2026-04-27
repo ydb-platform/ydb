@@ -44,14 +44,23 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         context.SS->PersistPath(db, path->PathId);
 
+        auto parentPath = TPath::Init(path->PathId, context.SS).Parent();
+        ++parentPath->DirAlterVersion;
+        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
+
         context.SS->ClearDescribePathCaches(path);
+        context.SS->ClearDescribePathCaches(parentPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+        if (!context.SS->DisablePublicationsOfDropping) {
+            context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
+        }
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
@@ -102,8 +111,21 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+        if (!Transaction.HasCreateTableIndex()) {
+            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "CreateTableIndex is not present");
+            return result;
+        }
+
         const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
         const TString& parentPathStr = Transaction.GetWorkingDir();
+
+        if (!tableIndexCreation.HasName()) {
+            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in CreateTableIndex");
+            return result;
+        }
+
         const TString& name = tableIndexCreation.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -121,7 +143,8 @@ public:
                 .NotEmpty()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting();
+                .NotUnderDeleting()
+                .IsTableIndex();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -129,7 +152,25 @@ public:
             }
         }
 
-        Y_ABORT_UNLESS(indexPath.Base()->IsTableIndex());
+        // Validate parent path
+        NSchemeShard::TPath parentPath = indexPath.Parent();
+        {
+            NSchemeShard::TPath::TChecker checks = parentPath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsUnderOperation()
+                .IsUnderTheSameOperation(OperationId.GetTxId())
+                .IsColumnTable();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
 
         auto indexIt = context.SS->Indexes.find(indexPath.Base()->PathId);
         if (indexIt == context.SS->Indexes.end() || indexIt->second->AlterData) {
@@ -142,6 +183,53 @@ public:
         if (!newIndexData) {
             result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, errStr);
             return result;
+        }
+
+        // Validate that the new index type matches the existing index type
+        if (newIndexData->AlterData->Type != indexIt->second->Type) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Cannot alter index type from "
+                    << NKikimrSchemeOp::EIndexType_Name(indexIt->second->Type)
+                    << " to "
+                    << NKikimrSchemeOp::EIndexType_Name(newIndexData->AlterData->Type));
+            return result;
+        }
+
+        // Validate index type before mutating state
+        switch (indexIt->second->Type) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Unexpected index type " << static_cast<int>(indexIt->second->Type)
+                    << " in TAlterLocalIndex::Propose. Only local bloom filter types are supported.");
+                return result;
+        }
+
+        // Validate variant types before mutating in-memory state
+        // This prevents partial state corruption if validation fails
+        switch (indexIt->second->Type) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+                if (!std::holds_alternative<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "SpecializedIndexDescription does not hold TBloomFilter for index type LocalBloomFilter");
+                    return result;
+                }
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+                if (!std::holds_alternative<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter");
+                    return result;
+                }
+                break;
+            }
+            default:
+                // These cases should have been caught by the validation switch above
+                Y_ABORT("Unexpected index type in variant validation");
+                break;
         }
 
         auto guard = context.DbGuard();
@@ -159,20 +247,33 @@ public:
         }
         alterData->State = NKikimrSchemeOp::EIndexStateReady;
 
+        // Now that alterData is created, validate it holds the correct variant type
+        // and copy the specialized description
         switch (indexIt->second->Type) {
             case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
-                std::get<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription).MergeFrom(
-                    std::get<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription));
+                if (!std::holds_alternative<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "alterData SpecializedIndexDescription does not hold TBloomFilter for index type LocalBloomFilter");
+                    return result;
+                }
+                std::get<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription) =
+                    std::get<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription);
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
-                std::get<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription).MergeFrom(
-                    std::get<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription));
+                if (!std::holds_alternative<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription)) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "alterData SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter");
+                    return result;
+                }
+                std::get<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription) =
+                    std::get<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription);
                 break;
             }
-            default: {
-                Y_ABORT("unexpected index type in TAlterLocalIndex::Propose");
-            }
+            default:
+                // These cases should have been caught by the validation switch above
+                Y_ABORT("Unexpected index type in data copy switch");
+                break;
         }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

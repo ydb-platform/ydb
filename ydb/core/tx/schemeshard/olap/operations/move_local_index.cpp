@@ -47,23 +47,71 @@ public:
         TPathId dstPathId = txState->TargetPathId;
         TPathElement::TPtr dstPath = context.SS->PathsById.at(dstPathId);
 
-        // Finalize the new index: set StepCreated and persist
-        dstPath->StepCreated = step;
-        context.SS->PersistCreateStep(db, dstPathId, step);
+        // The source path is the OLD index being moved
+        TPathId srcPathId = txState->SourcePathId;
 
-        Y_ABORT_UNLESS(context.SS->Indexes.contains(dstPathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPathId);
-        context.SS->PersistTableIndex(db, dstPathId);
-        context.SS->Indexes[dstPathId] = indexData->AlterData;
+        // Capture source and destination names before any irreversible mutations
+        // This is critical because we'll drop the source path below
+        const TString srcName = TPath::Init(srcPathId, context.SS).LeafName();
+        const TString dstName = TPath::Init(dstPathId, context.SS).LeafName();
+
+        // Rename the index in the column table's schema (both proto and in-memory)
+        // This must be done BEFORE irreversible mutations to allow graceful failure
+        TPath parentPath = TPath::Init(dstPathId, context.SS).Parent();
+        TPathId tablePathId = parentPath->PathId;
+        if (context.SS->ColumnTables.contains(tablePathId)) {
+            auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(tablePathId);
+            auto* schema = tableInfo->Description.MutableSchema();
+            bool renamed = false;
+            for (auto& indexProto : *schema->MutableIndexes()) {
+                if (indexProto.GetName() == srcName) {
+                    indexProto.SetName(dstName);
+                    renamed = true;
+                    break;
+                }
+            }
+            if (!renamed) {
+                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Index not found in schema during rename"
+                    << ", srcPathId: " << srcPathId
+                    << ", dstPathId: " << dstPathId
+                    << ", srcName: " << srcName
+                    << ", dstName: " << dstName
+                    << ", tablePathId: " << tablePathId
+                    << ". This may indicate a concurrent operation or partial failure.");
+                // Schema inconsistency: the scheme tree has the index under the new name
+                // but the column table's schema still references the old name.
+                // This could cause downstream queries to fail or produce incorrect results.
+                // Abort the operation to maintain consistency.
+                context.SS->ChangeTxState(db, OperationId, TTxState::Invalid);
+                return false;
+            }
+            context.SS->PersistColumnTable(db, tablePathId, *tableInfo);
+        }
+
+        // Finalize the new index: set StepCreated and persist
+        // Idempotency guard: only finalize if StepCreated is not already set
+        if (dstPath->StepCreated == InvalidStepId) {
+            dstPath->StepCreated = step;
+            context.SS->PersistCreateStep(db, dstPathId, step);
+
+            context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
+
+            Y_ABORT_UNLESS(context.SS->Indexes.contains(dstPathId));
+            TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPathId);
+            Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
+            context.SS->PersistTableIndex(db, dstPathId);
+            context.SS->Indexes[dstPathId] = indexData->AlterData;
+        }
 
         // Drop the source index path (stored in SourcePathId)
-        TPathId srcPathId = txState->SourcePathId;
         if (context.SS->PathsById.contains(srcPathId)) {
             TPathElement::TPtr srcPath = context.SS->PathsById.at(srcPathId);
             if (!srcPath->Dropped()) {
                 srcPath->SetDropped(step, OperationId.GetTxId());
                 context.SS->PersistDropStep(db, srcPathId, step, OperationId);
                 context.SS->PersistRemoveTableIndex(db, srcPathId);
+                context.SS->Indexes.erase(srcPathId);
 
                 context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Sub(1);
 
@@ -76,23 +124,6 @@ public:
                 auto parentDir = TPath::Init(srcPathId, context.SS).Parent();
                 DecAliveChildrenDirect(OperationId, parentDir.Base(), context);
             }
-        }
-
-        // Rename the index in the column table's schema (both proto and in-memory)
-        TPath parentPath = TPath::Init(dstPathId, context.SS).Parent();
-        TPathId tablePathId = parentPath->PathId;
-        if (context.SS->ColumnTables.contains(tablePathId)) {
-            auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(tablePathId);
-            auto* schema = tableInfo->Description.MutableSchema();
-            const TString srcName = TPath::Init(srcPathId, context.SS).LeafName();
-            const TString dstName = TPath::Init(dstPathId, context.SS).LeafName();
-            for (auto& indexProto : *schema->MutableIndexes()) {
-                if (indexProto.GetName() == srcName) {
-                    indexProto.SetName(dstName);
-                    break;
-                }
-            }
-            context.SS->PersistColumnTable(db, tablePathId, *tableInfo);
         }
 
         // Publish changes
@@ -268,6 +299,7 @@ public:
 
         auto newIndexPath = dstPath.Base();
 
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveLocalIndex, newIndexPath->PathId);
         txState.State = TTxState::Propose;
         txState.SourcePathId = srcPath.Base()->PathId;

@@ -431,6 +431,7 @@ struct TLocalBloomNgramFilterSettings {
     uint32_t FilterSizeBytes = 0;
     uint32_t RecordsCount = 0;
     std::optional<bool> CaseSensitive;
+    std::optional<double> FalsePositiveProbability;
 
     static TLocalBloomNgramFilterSettings FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto);
     void SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const;

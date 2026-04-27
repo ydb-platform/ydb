@@ -616,6 +616,18 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                     ngram->SetNGrammSize(*settings.NgramSize);
                 }
 
+                if (settings.HashesCount) {
+                    ngram->SetHashesCount(*settings.HashesCount);
+                }
+
+                if (settings.FilterSizeBytes) {
+                    ngram->SetFilterSizeBytes(*settings.FilterSizeBytes);
+                }
+
+                if (settings.RecordsCount) {
+                    ngram->SetRecordsCount(*settings.RecordsCount);
+                }
+
                 if (settings.CaseSensitive) {
                     ngram->SetCaseSensitive(*settings.CaseSensitive);
                 }

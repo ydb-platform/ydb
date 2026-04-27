@@ -264,4 +264,82 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             "/MyRoot/TableCopy/ValueIndex2/" + implTable2Name),
             {NLs::PathExist});
     }
+
+    // Priority 1 Test 3: Consistent copy of column table with local bloom indexes
+    Y_UNIT_TEST(ConsistentCopyColumnTableWithLocalBloomIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        // Enable feature flags for local indexes as scheme objects and column table backup
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        // 1. Create column table with local bloom indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableWithLocalIndexes"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_bloom"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+                Indexes {
+                    Id: 2
+                    Name: "idx_ngram"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        NGrammSize: 3
+                        FalsePositiveProbability: 0.01
+                        CaseSensitive: true
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // 2. Perform consistent copy with backup flag (required for column tables)
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/ColumnTableWithLocalIndexes"
+                DstPath: "/MyRoot/ColumnTableWithLocalIndexesCopy"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // 3. Verify the copied table exists
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy"),
+                          {NLs::PathExist});
+
+        // 4. Verify both local bloom indexes exist as scheme objects
+        auto bloomIndexDesc = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy/idx_bloom", true, true);
+        UNIT_ASSERT(bloomIndexDesc.GetPathDescription().HasTableIndex());
+        UNIT_ASSERT_VALUES_EQUAL(bloomIndexDesc.GetPathDescription().GetTableIndex().GetType(),
+                                NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+        UNIT_ASSERT_VALUES_EQUAL(bloomIndexDesc.GetPathDescription().GetTableIndex().GetState(),
+                                NKikimrSchemeOp::EIndexStateReady);
+
+        auto ngramIndexDesc = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy/idx_ngram", true, true);
+        UNIT_ASSERT(ngramIndexDesc.GetPathDescription().HasTableIndex());
+        UNIT_ASSERT_VALUES_EQUAL(ngramIndexDesc.GetPathDescription().GetTableIndex().GetType(),
+                                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
+        UNIT_ASSERT_VALUES_EQUAL(ngramIndexDesc.GetPathDescription().GetTableIndex().GetState(),
+                                NKikimrSchemeOp::EIndexStateReady);
+    }
 }

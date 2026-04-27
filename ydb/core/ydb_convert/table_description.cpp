@@ -922,6 +922,8 @@ void FillColumnTableIndexesFromOlapColumnSchema(
                 if (bloom.HasFalsePositiveProbability()) {
                     ydbIndex->mutable_local_bloom_filter_index()->set_false_positive_probability(
                         bloom.GetFalsePositiveProbability());
+                } else {
+                    ydbIndex->mutable_local_bloom_filter_index();
                 }
 
                 break;
@@ -1644,6 +1646,43 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
+void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settings,
+    const NKikimrSchemeOp::TIndexDescription& tableIndex
+) {
+    if (tableIndex.HasBloomFilterDescription()) {
+        const auto& desc = tableIndex.GetBloomFilterDescription();
+        if (desc.HasFalsePositiveProbability()) {
+            settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
+        }
+    }
+}
+
+void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterIndex& settings,
+    const NKikimrSchemeOp::TIndexDescription& tableIndex
+) {
+    if (tableIndex.HasBloomNGrammFilterDescription()) {
+        const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
+        if (desc.HasFalsePositiveProbability()) {
+            settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
+        }
+        if (desc.HasNGrammSize()) {
+            settings.set_ngram_size(desc.GetNGrammSize());
+        }
+        if (desc.HasHashesCount()) {
+            settings.set_hashes_count(desc.GetHashesCount());
+        }
+        if (desc.HasFilterSizeBytes()) {
+            settings.set_filter_size_bytes(desc.GetFilterSizeBytes());
+        }
+        if (desc.HasRecordsCount()) {
+            settings.set_records_count(desc.GetRecordsCount());
+        }
+        if (desc.HasCaseSensitive()) {
+            settings.set_case_sensitive(desc.GetCaseSensitive());
+        }
+    }
+}
+
 template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
 
@@ -1739,33 +1778,10 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             );
             break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
-            if (tableIndex.HasBloomFilterDescription()) {
-                const auto& desc = tableIndex.GetBloomFilterDescription();
-                if (desc.HasFalsePositiveProbability()) {
-                    index->mutable_local_bloom_filter_index()->set_false_positive_probability(desc.GetFalsePositiveProbability());
-                }
-            }
+            FillLocalBloomFilterIndexSettings(*index->mutable_local_bloom_filter_index(), tableIndex);
             break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
-            if (tableIndex.HasBloomNGrammFilterDescription()) {
-                const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
-                auto* ngramIndex = index->mutable_local_bloom_ngram_filter_index();
-                if (desc.HasNGrammSize()) {
-                    ngramIndex->set_ngram_size(desc.GetNGrammSize());
-                }
-                if (desc.HasHashesCount()) {
-                    ngramIndex->set_hashes_count(desc.GetHashesCount());
-                }
-                if (desc.HasFilterSizeBytes()) {
-                    ngramIndex->set_filter_size_bytes(desc.GetFilterSizeBytes());
-                }
-                if (desc.HasRecordsCount()) {
-                    ngramIndex->set_records_count(desc.GetRecordsCount());
-                }
-                if (desc.HasCaseSensitive()) {
-                    ngramIndex->set_case_sensitive(desc.GetCaseSensitive());
-                }
-            }
+            FillLocalBloomNgramFilterIndexSettings(*index->mutable_local_bloom_ngram_filter_index(), tableIndex);
             break;
         case NKikimrSchemeOp::EIndexTypeInvalid:
             break;

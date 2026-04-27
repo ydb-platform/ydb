@@ -5,6 +5,10 @@
 #include "rpc_common/rpc_common.h"
 #include "table_settings.h"
 
+#include <cmath>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -137,17 +141,47 @@ private:
             }
         }
 
-        // Assign temporary IDs to columns so we can reference them in indexes
+        // Assign temporary IDs to columns so we can reference them in indexes.
+        // Keep nextColId monotonic and collision-free even if explicit ids are non-monotonic.
         ui32 nextColId = 1;
+        THashSet<ui32> usedColIds;
         THashMap<TString, ui32> colNameToId;
         for (auto& col : *schema->MutableColumns()) {
-            if (!col.HasId()) {
-                col.SetId(nextColId);
+            if (col.HasId()) {
+                if (!usedColIds.insert(col.GetId()).second) {
+                    issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate column ID " << col.GetId() << " for column '" << col.GetName() << "'"));
+                    return false;
+                }
+                nextColId = Max(nextColId, col.GetId() + 1);
+                continue;
             }
+
+            while (usedColIds.contains(nextColId)) {
+                ++nextColId;
+            }
+
+            col.SetId(nextColId);
+            usedColIds.insert(nextColId);
+            ++nextColId;
+        }
+
+        for (const auto& col : schema->GetColumns()) {
             colNameToId[col.GetName()] = col.GetId();
-            nextColId = col.GetId() + 1;
         }
         schema->SetNextColumnId(nextColId);
+
+        // Validate index names: check for empty and duplicate names
+        THashSet<TString> indexNames;
+        for (const auto& index : req.indexes()) {
+            if (index.name().empty()) {
+                issues.AddIssue(NYql::TIssue("Index name cannot be empty"));
+                return false;
+            }
+            if (!indexNames.insert(index.name()).second) {
+                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate index name: " << index.name()));
+                return false;
+            }
+        }
 
         ui32 nextIndexId = 1;
         for (const auto& index : req.indexes()) {
@@ -156,10 +190,20 @@ private:
             olapIndex->SetName(index.name());
             switch (index.type_case()) {
                 case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex() ||
+                        !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        issues.AddIssue(NYql::TIssue("Local bloom filter index is not enabled"));
+                        return false;
+                    }
                     olapIndex->SetClassName("BLOOM_FILTER");
                     auto* bloom = olapIndex->MutableBloomFilter();
                     if (index.local_bloom_filter_index().has_false_positive_probability()) {
-                        bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
+                        double fpp = index.local_bloom_filter_index().false_positive_probability();
+                        if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
+                            return false;
+                        }
+                        bloom->SetFalsePositiveProbability(fpp);
                     }
                     if (index.index_columns().size() != 1) {
                         issues.AddIssue(NYql::TIssue("Bloom filter index supports exactly one column"));
@@ -176,9 +220,22 @@ private:
                     break;
                 }
                 case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex() ||
+                        !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        issues.AddIssue(NYql::TIssue("Local bloom ngram filter index is not enabled"));
+                        return false;
+                    }
                     olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
                     auto* ngram = olapIndex->MutableBloomNGrammFilter();
                     const auto& idxProto = index.local_bloom_ngram_filter_index();
+                    if (idxProto.has_false_positive_probability()) {
+                        double fpp = idxProto.false_positive_probability();
+                        if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
+                            return false;
+                        }
+                        ngram->SetFalsePositiveProbability(fpp);
+                    }
                     if (idxProto.ngram_size()) {
                         ngram->SetNGrammSize(idxProto.ngram_size());
                     }

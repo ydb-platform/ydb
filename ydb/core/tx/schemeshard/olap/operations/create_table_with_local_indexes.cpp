@@ -11,6 +11,38 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
     const TString& tableName = createDescription.GetName();
     const TString& workingDir = tx.GetWorkingDir();
 
+    // Validate schema and indexes before pushing any parts to result
+    // This ensures that if validation fails, we return a reject with the correct part ID (subTxId=0)
+    // rather than a reject with subTxId=1 after already pushing the table creation part
+    if (!createDescription.HasSchemaPresetName() && createDescription.HasSchema()) {
+        if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+            const auto& schema = createDescription.GetSchema();
+            if (schema.IndexesSize()) {
+                TSimpleErrorCollector errors;
+                TOlapSchema tableSchema;
+                if (!tableSchema.ParseFromProto(schema, errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+                    TString msg = errors->Ok() ? TString("Failed to parse column table schema") : errors->GetErrorMessage();
+                    return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, msg)};
+                }
+
+                NKikimrSchemeOp::TColumnTableSchema normalizedSchema;
+                tableSchema.Serialize(normalizedSchema);
+
+                auto columnIdToName = NOlap::BuildColumnIdToNameMap(normalizedSchema);
+
+                // Validate all indexes before creating any operations
+                for (const auto& indexProto : normalizedSchema.GetIndexes()) {
+                    NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+                    if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                        return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
+                            TStringBuilder() << "Failed to convert index '" << indexProto.GetName() << "' to creation config")};
+                    }
+                }
+            }
+        }
+    }
+
+    // Now that validation has passed, push the table creation operation
     result.push_back(CreateNewColumnTable(NextPartId(nextId, result), tx));
 
     if (createDescription.HasSchemaPresetName() || !createDescription.HasSchema()) {
@@ -26,10 +58,11 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         return result;
     }
 
+    // Re-parse the schema (we already validated it above, so this should succeed)
     TSimpleErrorCollector errors;
     TOlapSchema tableSchema;
     if (!tableSchema.ParseFromProto(schema, errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
-        TString msg = errors->Ok() ? TString("Failed to parse column table schema") : errors->GetErrorMessage();
+        TString msg = errors->Ok() ? TString("Failed to parse column table schema after validation") : errors->GetErrorMessage();
         return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError, msg)};
     }
 
@@ -41,7 +74,8 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
     for (const auto& indexProto : normalizedSchema.GetIndexes()) {
         NKikimrSchemeOp::TIndexCreationConfig indexConfig;
         if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
-            continue;
+            return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Failed to convert index '" << indexProto.GetName() << "' to creation config after validation")};
         }
 
         auto scheme = TransactionTemplate(
@@ -51,106 +85,6 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         *scheme.MutableCreateTableIndex() = std::move(indexConfig);
 
         result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
-    }
-
-    return result;
-}
-
-TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    TVector<ISubOperation::TPtr> result;
-
-    const TString& parentPathStr = tx.GetWorkingDir();
-    TString tableName;
-    if (tx.HasAlterColumnTable()) {
-        tableName = tx.GetAlterColumnTable().GetName();
-    } else if (tx.HasAlterTable()) {
-        tableName = tx.GetAlterTable().GetName();
-    }
-
-    TPath tablePath = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
-    if (!tablePath.IsResolved() || tablePath.IsDeleted() || !tablePath->IsColumnTable()) {
-        result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
-        return result;
-    }
-
-    THashSet<TString> existingIndexNames;
-    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-        auto it = context.SS->PathsById.find(childPathId);
-        if (it != context.SS->PathsById.end() && it->second->IsTableIndex() && !it->second->Dropped()) {
-            existingIndexNames.insert(childName);
-        }
-    }
-
-    bool hasAlterSchema = tx.HasAlterColumnTable() && tx.GetAlterColumnTable().HasAlterSchema();
-    THashSet<TString> newIndexNames;
-    THashSet<TString> droppedIndexNames;
-
-    if (hasAlterSchema) {
-        const auto& alterSchema = tx.GetAlterColumnTable().GetAlterSchema();
-
-        for (const auto& upsertIdx : alterSchema.GetUpsertIndexes()) {
-            newIndexNames.insert(upsertIdx.GetName());
-        }
-
-        for (const auto& dropIdx : alterSchema.GetDropIndexes()) {
-            droppedIndexNames.insert(dropIdx);
-        }
-    }
-
-    bool hasIndexChanges = !newIndexNames.empty() || !droppedIndexNames.empty();
-
-    if (!hasIndexChanges || !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-        result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
-        return result;
-    }
-
-    {
-        result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
-    }
-
-    if (hasAlterSchema) {
-        const auto& alterSchema = tx.GetAlterColumnTable().GetAlterSchema();
-
-        for (const auto& upsertIdx : alterSchema.GetUpsertIndexes()) {
-            const TString& indexName = upsertIdx.GetName();
-
-            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
-            if (!NOlap::ConvertRequestedIndexToCreationConfig(upsertIdx, indexConfig)) {
-                continue;
-            }
-
-            if (existingIndexNames.contains(indexName)) {
-                auto scheme = TransactionTemplate(
-                    parentPathStr + "/" + tableName,
-                    NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
-                scheme.SetInternal(true);
-                *scheme.MutableCreateTableIndex() = std::move(indexConfig);
-
-                result.push_back(CreateAlterLocalIndex(NextPartId(nextId, result), scheme));
-            } else {
-                auto scheme = TransactionTemplate(
-                    parentPathStr + "/" + tableName,
-                    NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
-                scheme.SetInternal(true);
-                *scheme.MutableCreateTableIndex() = std::move(indexConfig);
-
-                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
-            }
-        }
-
-        for (const auto& dropIdx : alterSchema.GetDropIndexes()) {
-            if (!existingIndexNames.contains(dropIdx)) {
-                continue;
-            }
-
-            auto scheme = TransactionTemplate(
-                parentPathStr + "/" + tableName,
-                NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-            scheme.SetInternal(true);
-            scheme.MutableDrop()->SetName(dropIdx);
-
-            result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), scheme));
-        }
     }
 
     return result;

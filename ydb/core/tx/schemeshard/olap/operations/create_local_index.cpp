@@ -44,13 +44,22 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, path->PathId, step);
 
+        context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
+
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+
+        TPathElement::TPtr parentDir = context.SS->PathsById.at(path->ParentPathId);
+        ++parentDir->DirAlterVersion;
+        context.SS->PersistPathDirAlterVersion(db, parentDir);
+        context.SS->ClearDescribePathCaches(parentDir);
+        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
@@ -89,7 +98,7 @@ class TCreateLocalIndex: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
         default:
             return nullptr;
         }
@@ -101,16 +110,6 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
-        const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = tableIndexCreation.GetName();
-
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateLocalIndex Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
-
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasCreateTableIndex()) {
@@ -118,10 +117,20 @@ public:
             return result;
         }
 
+        const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = tableIndexCreation.GetName();
+
         if (!tableIndexCreation.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in CreateTableIndex");
             return result;
         }
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TCreateLocalIndex Propose"
+                         << ", path: " << parentPathStr << "/" << name
+                         << ", operationId: " << OperationId
+                         << ", at schemeshard: " << ssId);
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
@@ -144,6 +153,10 @@ public:
                         .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                         .IsUnderTheSameOperation(OperationId.GetTxId());
                 }
+            } else {
+                // For non-Ready states (e.g., standalone CreateLocalIndex requests),
+                // validate that the parent table is not under another operation to prevent conflicts
+                checks.NotUnderOperation();
             }
 
             if (!checks) {

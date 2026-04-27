@@ -2814,14 +2814,14 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TBloomFilter>()
                     .ParseFromString(description);
-                Y_ENSURE(success || description.empty(), description);
+                Y_ENSURE(success, description);
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TBloomNGrammFilter>()
                     .ParseFromString(description);
-                Y_ENSURE(success || description.empty(), description);
+                Y_ENSURE(success, description);
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeInvalid:

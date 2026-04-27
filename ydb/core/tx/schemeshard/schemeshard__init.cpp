@@ -1406,6 +1406,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Self->IsOldArgonHashFormatMigrationCompleted = isOldArgonHashFormatMigrationCompletedVal;
         }
 
+        {
+            ui64 isLocalIndexMigrationCompletedVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_IsLocalIndexMigrationCompleted,
+                isLocalIndexMigrationCompletedVal));
+            Self->IsLocalIndexMigrationCompleted = isLocalIndexMigrationCompletedVal;
+        }
+
 #undef RETURN_IF_NO_PRECHARGED
 
         if (!Self->IsSchemeShardConfigured()) {
@@ -3687,7 +3694,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     srcPath->DbRefCount++;
                 }
 
-                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence) {
+                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence || txState.TxType == TTxState::TxMoveLocalIndex) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
                     TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
                     Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
@@ -5795,18 +5802,45 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
+        // Skip migration if it has already been completed
+        if (Self->IsLocalIndexMigrationCompleted) {
+            return;
+        }
+
         // Skip tables being created or altered — AlterColumnTableWithLocalIndexes
         // is a composite operation that may also create index scheme objects.
+        // Also skip tables with in-flight local index operations to avoid conflicts.
         THashSet<TPathId> tablesUnderOperation;
         for (const auto& [opId, txState] : Self->TxInFlight) {
-            if (txState.TxType == TTxState::TxCreateColumnTable
+            TPathId pathIdToSkip = txState.TargetPathId;
+
+            if (txState.TxType == TTxState::TxCreateLocalIndex
+                || txState.TxType == TTxState::TxAlterLocalIndex
+                || txState.TxType == TTxState::TxDropLocalIndex
+                || txState.TxType == TTxState::TxMoveLocalIndex)
+            {
+                // Get the parent table path from the index path
+                if (Self->PathsById.contains(txState.TargetPathId)) {
+                    auto indexPath = Self->PathsById.at(txState.TargetPathId);
+                    pathIdToSkip = indexPath->ParentPathId;
+                }
+            } else if (txState.TxType == TTxState::TxCreateColumnTable
                 || txState.TxType == TTxState::TxAlterColumnTable)
             {
-                tablesUnderOperation.insert(txState.TargetPathId);
+                // For table operations, TargetPathId is already the table path
+                pathIdToSkip = txState.TargetPathId;
+            } else {
+                continue;
+            }
+
+            if (pathIdToSkip != InvalidPathId) {
+                tablesUnderOperation.insert(pathIdToSkip);
             }
         }
 
         bool anyChanged = false;
+        bool anyErrors = false;
+        bool anySkipped = false;
 
         for (const TPathId& tablePathId : Self->ColumnTables.GetAllPathIds()) {
             const TColumnTableInfo& tableInfo = *Self->ColumnTables.at(tablePathId);
@@ -5815,6 +5849,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 continue;
             }
             if (tablesUnderOperation.contains(tablePathId)) {
+                anySkipped = true;
                 continue;
             }
 
@@ -5837,6 +5872,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             // Remove orphaned scheme objects: index children that no longer exist in schema
+
+            // First collect orphaned children to avoid iterator invalidation
+            TVector<std::pair<TString, TPathId>> orphanedChildren;
             for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
                 auto childIt = Self->PathsById.find(childPathId);
                 if (childIt == Self->PathsById.end()
@@ -5848,13 +5886,35 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (schemaIndexNames.contains(childName)) {
                     continue;
                 }
+                orphanedChildren.emplace_back(childName, childPathId);
+            }
 
-                // This scheme object has no matching index in schema — drop it
-                childIt->second->SetDropped(TStepId(1), TTxId(1));
-                Self->PersistDropStep(db, childPathId, TStepId(1), {});
+            // Now perform the actual removal in a second pass
+            for (const auto& [childName, childPathId] : orphanedChildren) {
+                auto childIt = Self->PathsById.find(childPathId);
+                if (childIt == Self->PathsById.end()) {
+                    continue;
+                }
+
+                // This scheme object has no matching index in schema — drop it.
+                // Use a real non-zero step/tx id so the path is consistently treated as dropped
+                auto dropStep = childIt->second->StepCreated;
+                auto dropTxId = childIt->second->CreateTxId;
+                if (dropStep == InvalidStepId || dropTxId == InvalidTxId) {
+                    dropStep = tablePath->StepCreated;
+                    dropTxId = tablePath->CreateTxId;
+                }
+                childIt->second->SetDropped(dropStep, dropTxId);
+                Self->PersistDropStep(db, childPathId, dropStep, TOperationId(dropTxId, 0));
                 Self->PersistRemoveTableIndex(db, childPathId);
+                Self->Indexes.erase(childPathId);
 
                 tablePath->DecAliveChildrenPrivate();
+                tablePath->RemoveChild(childName, childPathId);
+
+                Y_ABORT_UNLESS(tablePath->AllChildrenCount > 0);
+                --tablePath->AllChildrenCount;
+                Self->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Sub(1);
 
                 auto domainInfo = Self->ResolveDomainInfo(childPathId);
                 domainInfo->DecPathsInside(Self);
@@ -5888,15 +5948,37 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 NKikimrSchemeOp::TIndexCreationConfig indexConfig;
                 if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Failed to convert OLAP index to creation config during migration"
+                        << ", table path id: " << tablePath->PathId
+                        << ", index name: " << indexName
+                        << ", table name: " << tablePath->Name
+                        << ". Index will be skipped and may need manual intervention.");
+                    anyErrors = true;
                     continue;
                 }
                 if (indexConfig.GetKeyColumnNames().empty()) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "OLAP index has empty key column names during migration"
+                        << ", table path id: " << tablePath->PathId
+                        << ", index name: " << indexName
+                        << ", table name: " << tablePath->Name
+                        << ". Index will be skipped and may need manual intervention.");
+                    anyErrors = true;
                     continue;
                 }
 
                 TString errStr;
                 TTableIndexInfo::TPtr indexInfo = TTableIndexInfo::Create(indexConfig, errStr);
                 if (!indexInfo) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Failed to create index scheme object during migration"
+                        << ", table path id: " << tablePath->PathId
+                        << ", index name: " << indexName
+                        << ", table name: " << tablePath->Name
+                        << ", error: " << errStr
+                        << ". Index will be skipped and may need manual intervention.");
+                    anyErrors = true;
                     continue;
                 }
 
@@ -5910,13 +5992,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tablePath->Owner);
                 indexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
                 indexPath->PathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges;
-                indexPath->StepCreated = TStepId(1);
-                indexPath->CreateTxId = TTxId(1);
-                indexPath->LastTxId = TTxId(1);
+                indexPath->StepCreated = tablePath->StepCreated;
+                indexPath->CreateTxId = tablePath->CreateTxId;
+                indexPath->LastTxId = tablePath->CreateTxId;
 
                 Self->PathsById[indexPathId] = indexPath;
 
-                tablePath->DbRefCount++;
                 tablePath->AllChildrenCount++;
                 tablePath->IncAliveChildrenPrivate();
                 tablePath->AddChild(indexName, indexPathId, false);
@@ -5930,6 +6011,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->PersistPath(db, indexPathId);
                 Self->PersistTableIndex(db, indexPathId);
                 Self->Indexes[indexPathId] = indexInfo->AlterData;
+                Self->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
                 ++tablePath->DirAlterVersion;
                 Self->PersistPathDirAlterVersion(db, tablePath);
@@ -5940,6 +6022,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         if (anyChanged) {
             Self->PersistUpdateNextPathId(db);
+        }
+
+        // Only mark migration as completed if there were no errors AND no tables were skipped
+        // If errors occurred, migration will be retried on restart
+        // If tables were skipped (due to in-flight operations), migration will be retried on restart
+        // to ensure those tables get their indexes migrated
+        if (!anyErrors && !anySkipped) {
+            Self->IsLocalIndexMigrationCompleted = true;
+            Self->PersistLocalIndexMigrationCompleted(db);
+        } else if (anySkipped) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Local index migration deferred: " << tablesUnderOperation.size() << " table(s) skipped due to in-flight operations. "
+                "Migration will be retried on next schemeshard restart.");
         }
     }
 

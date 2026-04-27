@@ -201,8 +201,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
     // Global indexes fall through to the logic below that inspects impl table children.
     if (path.Base()->IsTableIndex()) {
         const auto& pathId = path.Base()->PathId;
-        if (Self->Indexes.contains(pathId)) {
-            auto indexInfo = Self->Indexes.at(pathId);
+        if (auto it = Self->Indexes.find(pathId); it != Self->Indexes.end()) {
+            auto indexInfo = it->second;
             switch (indexInfo->Type) {
                 case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
@@ -304,9 +304,18 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
             if (childEl->Dropped() || childEl->IsMigrated()) {
                 continue;
             }
-            if (pathEl->IsColumnTable() && !childEl->IsTableIndex()) {
+            if (pathEl->IsColumnTable() && childEl->IsSystemDirectory()) {
                 // .sys directory is not included in the children listing
                 continue;
+            }
+            // Filter out local index children when EnableLocalIndexAsSchemeObject is disabled
+            if (pathEl->IsColumnTable() && childEl->IsTableIndex()) {
+                const auto* indexInfo = Self->Indexes.FindPtr(childId);
+                if (indexInfo && *indexInfo &&
+                    TTableIndexInfo::IsLocalIndex((*indexInfo)->Type) &&
+                    !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                    continue;
+                }
             }
             auto entry = pathDescription->AddChildren();
 

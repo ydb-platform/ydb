@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NSchemeShard::NOlap {
 
@@ -25,17 +26,21 @@ inline bool ConvertOlapIndexToCreationConfig(
     if (indexProto.HasBloomFilter()) {
         config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
         for (ui32 colId : indexProto.GetBloomFilter().GetColumnIds()) {
-            if (auto it = columnIdToName.find(colId); it != columnIdToName.end()) {
-                config.AddKeyColumnNames(it->second);
+            auto it = columnIdToName.find(colId);
+            if (it == columnIdToName.end()) {
+                return false;
             }
+            config.AddKeyColumnNames(it->second);
         }
         *config.MutableBloomFilterDescription() = indexProto.GetBloomFilter();
         return true;
     } else if (indexProto.HasBloomNGrammFilter()) {
         config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
-        if (auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId()); it != columnIdToName.end()) {
-            config.AddKeyColumnNames(it->second);
+        auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId());
+        if (it == columnIdToName.end()) {
+            return false;
         }
+        config.AddKeyColumnNames(it->second);
         *config.MutableBloomNGrammFilterDescription() = indexProto.GetBloomNGrammFilter();
         return true;
     }
@@ -60,9 +65,14 @@ inline bool ConvertOlapIndexToRequested(
                 bf->SetFalsePositiveProbability(src.GetBloomFilter().GetFalsePositiveProbability());
             }
             for (ui32 colId : src.GetBloomFilter().GetColumnIds()) {
-                if (auto it = columnIdToName.find(colId); it != columnIdToName.end()) {
-                    bf->AddColumnNames(it->second);
+                auto it = columnIdToName.find(colId);
+                if (it == columnIdToName.end()) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "ConvertOlapIndexToRequested: BloomFilter column ID " << colId
+                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    return false;
                 }
+                bf->AddColumnNames(it->second);
             }
             if (src.GetBloomFilter().HasDataExtractor()) {
                 *bf->MutableDataExtractor() = src.GetBloomFilter().GetDataExtractor();
@@ -75,9 +85,14 @@ inline bool ConvertOlapIndexToRequested(
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
             auto* nf = dst.MutableBloomNGrammFilter();
             if (src.GetBloomNGrammFilter().HasColumnId()) {
-                if (auto it = columnIdToName.find(src.GetBloomNGrammFilter().GetColumnId()); it != columnIdToName.end()) {
-                    nf->SetColumnName(it->second);
+                auto it = columnIdToName.find(src.GetBloomNGrammFilter().GetColumnId());
+                if (it == columnIdToName.end()) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "ConvertOlapIndexToRequested: BloomNGrammFilter column ID " << src.GetBloomNGrammFilter().GetColumnId()
+                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    return false;
                 }
+                nf->SetColumnName(it->second);
             }
             if (src.GetBloomNGrammFilter().HasNGrammSize()) {
                 nf->SetNGrammSize(src.GetBloomNGrammFilter().GetNGrammSize());
@@ -108,6 +123,8 @@ inline bool ConvertOlapIndexToRequested(
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
             return false;
     }
+
+    return false;
 }
 
 inline bool ConvertRequestedIndexToCreationConfig(
@@ -125,7 +142,9 @@ inline bool ConvertRequestedIndexToCreationConfig(
                 config.AddKeyColumnNames(colName);
             }
             auto* desc = config.MutableBloomFilterDescription();
-            desc->SetFalsePositiveProbability(bf.GetFalsePositiveProbability());
+            if (bf.HasFalsePositiveProbability()) {
+                desc->SetFalsePositiveProbability(bf.GetFalsePositiveProbability());
+            }
             if (bf.HasDataExtractor()) {
                 *desc->MutableDataExtractor() = bf.GetDataExtractor();
             }

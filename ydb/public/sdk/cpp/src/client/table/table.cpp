@@ -2835,16 +2835,30 @@ TLocalBloomNgramFilterSettings TLocalBloomNgramFilterSettings::FromProto(const Y
     if (proto.has_case_sensitive()) {
         settings.CaseSensitive = proto.case_sensitive();
     }
+    if (proto.has_false_positive_probability()) {
+        settings.FalsePositiveProbability = proto.false_positive_probability();
+    }
     return settings;
 }
 
 void TLocalBloomNgramFilterSettings::SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const {
-    proto.set_ngram_size(NgramSize);
-    proto.set_hashes_count(HashesCount);
-    proto.set_filter_size_bytes(FilterSizeBytes);
-    proto.set_records_count(RecordsCount);
+    if (NgramSize != 0) {
+        proto.set_ngram_size(NgramSize);
+    }
+    if (HashesCount != 0) {
+        proto.set_hashes_count(HashesCount);
+    }
+    if (FilterSizeBytes != 0) {
+        proto.set_filter_size_bytes(FilterSizeBytes);
+    }
+    if (RecordsCount != 0) {
+        proto.set_records_count(RecordsCount);
+    }
     if (CaseSensitive) {
         proto.set_case_sensitive(*CaseSensitive);
+    }
+    if (FalsePositiveProbability) {
+        proto.set_false_positive_probability(*FalsePositiveProbability);
     }
 }
 

@@ -22,6 +22,7 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
     path->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, path->PathId, txState.PlanStep, operationId);
     context.SS->PersistRemoveTableIndex(db, path->PathId);
+    context.SS->Indexes.erase(path->PathId);
 
     context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
@@ -133,6 +134,13 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+
+        if (!Transaction.HasDrop()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Drop is not present");
+            return result;
+        }
+
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetDrop().GetName();
 
@@ -142,13 +150,6 @@ public:
                          << ", pathId: " << Transaction.GetDrop().GetId()
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
-
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
-
-        if (!Transaction.HasDrop()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Drop is not present");
-            return result;
-        }
 
         TPath index = Transaction.GetDrop().HasId()
             ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
@@ -198,6 +199,7 @@ public:
         context.DbChanges.PersistPath(index.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropLocalIndex, index.Base()->PathId);
         txState.MinStep = TStepId(1);
         txState.State = TTxState::Propose;

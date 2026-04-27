@@ -1557,6 +1557,60 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_C(!foundSys, ".sys must not be visible under column table");
         }
 
+        // Drop one of the two indexes and verify that only one remains
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                DropIndexes: "bloom_key"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify that only one index child remains
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "ngram_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify that only one index remains in the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomKey = false;
+            bool foundNgramData = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key") {
+                    foundBloomKey = true;
+                }
+                if (idx.GetName() == "ngram_data") {
+                    foundNgramData = true;
+                }
+            }
+            UNIT_ASSERT_C(!foundBloomKey, "bloom_key index should not exist after drop");
+            UNIT_ASSERT_C(foundNgramData, "ngram_data index must still exist");
+        }
+
+        // Verify that the dropped index scheme object no longer exists
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        // Verify that the remaining index scheme object still exists
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/ngram_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTableLifecycle"
             ColumnShardCount: 1
@@ -1656,6 +1710,17 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexKeys({"data"}),
             });
+        }
+
+        // Test dropping table with local index children - should succeed and drop indexes automatically
+        TestDropColumnTable(runtime, ++txId, "/MyRoot", "TestTableLifecycle");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify both table and local index are dropped
+        TestLs(runtime, "/MyRoot/TestTableLifecycle", false, NLs::PathNotExist);
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
+            TestDescribeResult(descr, {NLs::PathNotExist});
         }
     }
 
@@ -1913,6 +1978,371 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
             TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+        }
+
+        // Turn off feature flag and restart schemeshard
+        // Verify that scheme objects are ignored when feature flag is disabled
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After turning off flag: scheme object children still exist but are ignored
+        // The children count should still be 1, but they should not be visible in public describe
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Verify that indexes still exist in the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableCreate");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_key index must exist in column table schema");
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_data" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_data index must exist in column table schema");
+        }
+
+        // Test that local index operations work when feature flag is disabled
+        // but don't create scheme object children
+
+        // Create a new table with local index - should succeed without scheme object children
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableNoSchemeObjects"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_no_scheme"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the table was created but has no scheme object children
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableNoSchemeObjects");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Verify the index exists in the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableNoSchemeObjects");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_no_scheme" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_no_scheme index must exist in column table schema");
+        }
+
+        // Alter an existing table to add a local index - should succeed without scheme object children
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableAlter"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bloom_alter_no_scheme"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["data"]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the table still has no scheme object children
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Verify the new index exists in the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_alter_no_scheme" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_alter_no_scheme index must exist in column table schema");
+        }
+
+        // Turn feature flag back on to verify scheme object children are created again
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+        // Create a new table with local index - should succeed with scheme object children
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableWithSchemeObjects"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_with_scheme"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the index was created as a scheme object child
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableWithSchemeObjects");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_with_scheme");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Test dropping local index with feature flag enabled
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableWithSchemeObjects"
+            AlterSchema {
+                DropIndexes: "bloom_with_scheme"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the scheme object child was removed
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableWithSchemeObjects");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Verify the index was removed from the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableWithSchemeObjects");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_with_scheme" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(!foundBloom, "bloom_with_scheme index should not exist in column table schema after drop");
+        }
+
+        // Turn feature flag off and test dropping local index without scheme object
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+
+        // Drop the local index from TestTableNoSchemeObjects (created earlier with flag off)
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableNoSchemeObjects"
+            AlterSchema {
+                DropIndexes: "bloom_no_scheme"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the table still has no scheme object children
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableNoSchemeObjects");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Verify the index was removed from the column table schema
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableNoSchemeObjects");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_no_scheme" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(!foundBloom, "bloom_no_scheme index should not exist in column table schema after drop");
+        }
+    }
+
+    // Test orphaned index scheme object cleanup: when scheme object children exist
+    // but their corresponding indexes are removed from the column table schema,
+    // they should be cleaned up during initialization.
+    Y_UNIT_TEST(LocalIndexOrphanedCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Create column table with two bloom filter indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CleanupTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [3]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify initial state: two scheme object children
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+
+        // Remove one index from the schema (this removes it from column table schema
+        // but the scheme object child still exists, creating an orphan)
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CleanupTable"
+            AlterSchema {
+                DropIndexes: ["bloom_key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify: bloom_key is gone from schema but scheme object still exists (orphaned)
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomKey = false;
+            bool foundBloomData = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key") foundBloomKey = true;
+                if (idx.GetName() == "bloom_data") foundBloomData = true;
+            }
+            UNIT_ASSERT_C(!foundBloomKey, "bloom_key should be removed from schema");
+            UNIT_ASSERT_C(foundBloomData, "bloom_data should still exist in schema");
+        }
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            // The scheme object child was removed by the ALTER operation
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify the dropped index scheme object no longer exists
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+
+        // Restart SchemeShard to verify orphaned cleanup doesn't break anything
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After restart: state should remain consistent
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // Verify the remaining index still exists and is valid
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+
+        // Test case: Re-create an index with the same name as the dropped one
+        // This verifies that RemoveChild was called during orphaned cleanup,
+        // allowing a new index with the same name to be created
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CleanupTable"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["key"]
+                        FalsePositiveProbability: 0.02
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify the new index was created successfully
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[1].GetName(), "bloom_key");
+        }
+
+        // Verify the new index is valid
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_key");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"key"}),
+            });
         }
     }
 

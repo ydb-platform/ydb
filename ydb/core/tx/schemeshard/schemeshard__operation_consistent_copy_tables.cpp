@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_info_types.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -240,7 +241,7 @@ bool CreateConsistentCopyTables(
                     << ", indexType: " << NKikimrSchemeOp::EIndexType_Name(indexDesc.GetType()));
             }
         }
-        
+
         // Log column table info if available
         if (context.SS->ColumnTables.contains(srcPath.Base()->PathId)) {
             TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(srcPath.Base()->PathId).GetPtr();
@@ -309,7 +310,12 @@ bool CreateConsistentCopyTables(
                 return false;
             }
             scheme->SetInternal(tx.GetInternal());
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), *scheme));
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
+            }
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
                 TPath srcImplTable = srcIndexPath.Child(srcImplTableName);

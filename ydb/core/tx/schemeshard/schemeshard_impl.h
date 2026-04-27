@@ -418,6 +418,7 @@ public:
     bool EnableMoveColumnTable = false;
 
     bool IsOldArgonHashFormatMigrationCompleted = false;
+    bool IsLocalIndexMigrationCompleted = false;
 
     TShardDeleter ShardDeleter;
 
@@ -954,6 +955,8 @@ public:
 
 
     void PersistInitState(NIceDb::TNiceDb& db);
+
+    void PersistLocalIndexMigrationCompleted(NIceDb::TNiceDb& db);
 
     void PersistStorageBillingTime(NIceDb::TNiceDb& db);
 

@@ -2204,13 +2204,13 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 CREATE TABLE `/Root/test_bloom` (
                     Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid),
                     INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01)
-                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1))",
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);)",
                 R"(--!syntax_v1
                 CREATE TABLE `/Root/test_bloom_plain` (
                     Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid)
-                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1))",
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);)",
                 R"(--!syntax_v1
-                ALTER TABLE `/Root/test_bloom_plain` ADD INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01))",
+                ALTER TABLE `/Root/test_bloom_plain` ADD INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01);)",
             },
             {
                 "global_sync",

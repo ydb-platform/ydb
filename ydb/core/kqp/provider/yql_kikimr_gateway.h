@@ -75,8 +75,11 @@ struct TIndexDescription {
 
     struct TLocalBloomNgramFilterDescription {
         std::optional<ui32> NgramSize;
-        std::optional<double> FalsePositiveProbability;
+        std::optional<ui32> HashesCount;
+        std::optional<ui32> FilterSizeBytes;
+        std::optional<ui32> RecordsCount;
         std::optional<bool> CaseSensitive;
+        std::optional<double> FalsePositiveProbability;
     };
 
     enum class EType : ui32 {
@@ -161,10 +164,43 @@ struct TIndexDescription {
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
             }
-            case EType::LocalBloomFilter:
-            case EType::LocalBloomNgramFilter:
-                YQL_ENSURE(false, << "Local bloom index type is not represented by NKikimrSchemeOp::TIndexDescription");
+            case EType::LocalBloomFilter: {
+                TLocalBloomFilterDescription bloomDesc;
+                if (index.HasBloomFilterDescription()) {
+                    const auto& desc = index.GetBloomFilterDescription();
+                    if (desc.HasFalsePositiveProbability()) {
+                        bloomDesc.FalsePositiveProbability = desc.GetFalsePositiveProbability();
+                    }
+                }
+                SpecializedIndexDescription = std::move(bloomDesc);
                 break;
+            }
+            case EType::LocalBloomNgramFilter: {
+                TLocalBloomNgramFilterDescription ngramDesc;
+                if (index.HasBloomNGrammFilterDescription()) {
+                    const auto& desc = index.GetBloomNGrammFilterDescription();
+                    if (desc.HasNGrammSize()) {
+                        ngramDesc.NgramSize = desc.GetNGrammSize();
+                    }
+                    if (desc.HasHashesCount()) {
+                        ngramDesc.HashesCount = desc.GetHashesCount();
+                    }
+                    if (desc.HasFilterSizeBytes()) {
+                        ngramDesc.FilterSizeBytes = desc.GetFilterSizeBytes();
+                    }
+                    if (desc.HasRecordsCount()) {
+                        ngramDesc.RecordsCount = desc.GetRecordsCount();
+                    }
+                    if (desc.HasCaseSensitive()) {
+                        ngramDesc.CaseSensitive = desc.GetCaseSensitive();
+                    }
+                    if (desc.HasFalsePositiveProbability()) {
+                        ngramDesc.FalsePositiveProbability = desc.GetFalsePositiveProbability();
+                    }
+                }
+                SpecializedIndexDescription = std::move(ngramDesc);
+                break;
+            }
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
         }

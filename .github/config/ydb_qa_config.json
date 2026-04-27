@@ -6,10 +6,14 @@
           "connection_timeout": 60,
           "tables": {
               "test_results": "test_results/test_runs_column",
-              "test_results_backup": "test_results/test_runs",
               "testowners": "test_results/analytics/testowners",
               "tests_monitor": "test_results/analytics/tests_monitor",
+<<<<<<< HEAD
               "test_muted_monitor_mart": "test_results/analytics/test_muted_monitor_mart",
+=======
+              "muted_tests_daily_by_team": "test_results/analytics/muted_tests_daily_by_team",
+              "muted_tests_with_issue_and_area": "test_results/analytics/muted_tests_with_issue_and_area",
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
               "test_history_fast": "test_results/analytics/test_history_fast",
               "github_issue_mapping": "test_results/analytics/github_issue_mapping",
               "flaky_tests_window": "test_results/analytics/flaky_tests_window_1_days",

@@ -37,7 +37,7 @@ except ImportError:
     print("⚠️ Matplotlib not available. Install with: pip install matplotlib")
 
 # Configuration constants
-MUTE_UPDATE_SHOW_DIFF = False  # Set to True to show +/- statistics in mute update messages
+MUTE_UPDATE_SHOW_DIFF = True  # Set to True to show +/- statistics in mute update messages
 
 # Teams blacklisted from weekly/monthly updates
 PERIOD_UPDATE_BLACKLIST = {
@@ -91,8 +91,14 @@ def get_all_team_data(use_yesterday=False):
     Get all team data (stats + trends) from YDB in one optimized query.
     
     Args:
+<<<<<<< HEAD
         use_yesterday (bool): If True, use yesterday's data for development convenience
         
+=======
+        use_yesterday: If True, use yesterday's data for development convenience.
+        build_type: ``muted_tests_with_issue_and_area.build_type`` filter; ``"all"`` = no filter.
+
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
     Returns:
         dict: Dictionary with team names as keys and their data, or None if error
     """
@@ -118,18 +124,33 @@ def get_all_team_data(use_yesterday=False):
     
     # Get table path from config
     with YDBWrapper() as ydb_wrapper:
+<<<<<<< HEAD
         test_muted_monitor_mart_table = ydb_wrapper.get_table_path("test_muted_monitor_mart")
     
     # Single optimized query for all data
+=======
+        muted_tests_with_issue_and_area_table = ydb_wrapper.get_table_path("muted_tests_with_issue_and_area")
+
+    bt_clause = _sql_build_type_clause(build_type)
+
+    # Single optimized query for all data from muted tests mart with issue/area enrichment.
+    # Keep +today semantics event-like: tests whose mute_state_change_date is target date.
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
     all_data_query = f"""
     SELECT 
         owner,
         date_window,
-        COUNT(*) as daily_count,
-        SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
-    FROM `{test_muted_monitor_mart_table}`
+        COUNT(DISTINCT full_name) as daily_count,
+        SUM(
+            CASE
+                WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1
+                ELSE 0
+            END
+        ) as today_count
+    FROM `{muted_tests_with_issue_and_area_table}`
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
+<<<<<<< HEAD
     AND is_muted = 1
     AND branch = 'main'
     AND build_type = 'relwithdebinfo'
@@ -137,6 +158,11 @@ def get_all_team_data(use_yesterday=False):
     AND resolution != 'Skipped'
     GROUP BY owner, date_window
     ORDER BY owner, date_window
+=======
+    AND branch = '{branch}'{bt_clause}
+    GROUP BY owner_team, date_window
+    ORDER BY owner_team, date_window
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
     """
     
     # Execute query
@@ -202,8 +228,6 @@ def get_all_team_data(use_yesterday=False):
             yesterday_total = trend[yesterday_str]
             today_total = data['stats']['total']
             today_new = data['stats']['today']
-            
-            # minus_today = yesterday_total - (today_total - today_new)
             data['stats']['minus_today'] = max(0, yesterday_total - (today_total - today_new))
     
     print(f"📊 Processed data for {len(team_data)} teams")
@@ -531,7 +555,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         # Format statistics with color coding and emojis
         if show_diff:
             if today > 0 and minus_today > 0:
-                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted /🟢-{minus_today} unmuted*"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🟢-{minus_today} unmuted /🔴+{today} muted*"
             elif today > 0:
                 message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted*"
             elif minus_today > 0:
@@ -1152,7 +1176,23 @@ def main():
     parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
     parser.add_argument('--include-plots', action='store_true', help='Include trend plots in messages (requires matplotlib)')
     parser.add_argument('--debug-plots-dir', help='Directory to save debug plot files (enables debug mode)')
+<<<<<<< HEAD
     
+=======
+    parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='muted_tests_with_issue_and_area filter; use "all" to include every build_type (default: relwithdebinfo)',
+    )
+    parser.add_argument(
+        '--branch',
+        default=DEFAULT_BRANCH,
+        dest='branch',
+        help=f'Branch filter for YDB queries (default: {DEFAULT_BRANCH})',
+    )
+
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
     args = parser.parse_args()
     
     # Validate mode-specific requirements

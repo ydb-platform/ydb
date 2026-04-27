@@ -211,7 +211,11 @@ graph TB
     
     CommentMergedPR --> UpdateAnalyticsAfterMerge[📊 Update Analytics<br/>upload_muted_tests<br/>flaky_tests_history<br/>tests_monitor<br/>export_issues<br/>github_issue_mapping<br/>test_muted_monitor_mart]
     
+<<<<<<< HEAD
     UpdateAnalyticsAfterMerge --> SendTelegram[📨 Send Telegram Messages<br/>with trend plots<br/>to team channels]
+=======
+    UpdateAnalyticsAfterMerge --> AsyncAnalytics[⏱️ export_issues / mappings /<br/>muted_tests_with_issue_and_area …<br/>collect_analytics_fast<br/>~every 30 min, separate workflow]
+>>>>>>> ceca83e4fd3 (Mute: cleanup after delete different mute dash source (#38891))
     
     SendTelegram --> End2([End])
     

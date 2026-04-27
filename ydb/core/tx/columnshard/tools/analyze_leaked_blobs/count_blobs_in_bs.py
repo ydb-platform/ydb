@@ -344,6 +344,20 @@ class Report:
         self.logoblobs_total += 1
         self.channels[min(record.channel, 2)].add(record)
 
+    def draw_plots(self, output_dir: Path) -> None:
+        draw_records_count_distribution(
+            blobs=list(self.channels[2].blobs_keep()),
+            title="Records Count Distribution (Keep Blobs)",
+            filename="keep_blobs_records_count_distribution.png",
+            output_dir=output_dir,
+        )
+        draw_unique_local_count_distribution(
+            blobs=list(self.channels[2].blobs_keep()),
+            title="Unique Local Count Distribution (Keep Blobs)",
+            filename="keep_blobs_unique_local_count_distribution.png",
+            output_dir=output_dir,
+        )
+
     def print(self) -> None:
         if self.non_data_lines_skipped:
             print(f"note: skipped non-data lines: {self.non_data_lines_skipped}", file=sys.stderr)
@@ -458,8 +472,61 @@ def parse_leaked_blob_ids(path: Path) -> set[str]:
                 blob_ids.add(match.group(0))
     return blob_ids
 
+def draw_records_count_distribution(blobs: list[Blob], title: str, filename: str, output_dir: Path) -> None:
+    if not blobs:
+        return
 
-def print_leaked_blobs_stats(report: Report, leaked_blob_ids: set[str]) -> None:
+    # Each blob contributes one value: number of records for this blob.
+    records_per_blob = [blob.total for blob in blobs]
+    max_records = max(records_per_blob)
+    if max_records <= 0:
+        return
+
+    import matplotlib.pyplot as plt
+
+    # Integer histogram buckets: 1, 2, ..., max_records.
+    bins = [i - 0.5 for i in range(1, max_records + 2)]
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.hist(records_per_blob, bins=bins, edgecolor="black", linewidth=0.8)
+    ax.set_title(title)
+    ax.set_xlabel("Records per blob")
+    ax.set_ylabel("Blobs count (log scale)")
+    ax.set_yscale("log")
+    ax.set_xlim(0.5, max_records + 0.5)
+    ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5, alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(output_dir / filename, dpi=140)
+    plt.close(fig)
+
+def draw_unique_local_count_distribution(blobs: list[Blob], title: str, filename: str, output_dir: Path) -> None:
+    if not blobs:
+        return
+
+    # Each blob contributes one value: number of records for this blob.
+    unique_local_count_per_blob = [blob.local_union.bit_count() for blob in blobs]
+    max_records = max(unique_local_count_per_blob)
+    if max_records <= 0:
+        return
+
+    import matplotlib.pyplot as plt
+
+    # Integer histogram buckets: 0, 1, 2, ..., max_records.
+    bins = [i - 0.5 for i in range(0, max_records + 2)]
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.hist(unique_local_count_per_blob, bins=bins, edgecolor="black", linewidth=0.8)
+    ax.set_title(title)
+    ax.set_xlabel("Unique local count per blob")
+    ax.set_ylabel("Blobs count (log scale)")
+    ax.set_yscale("log")
+    ax.set_xlim(-0.5, max_records + 0.5)
+    ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5, alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(output_dir / filename, dpi=140)
+    plt.close(fig)
+
+def print_leaked_blobs_stats(report: Report, leaked_blob_ids: set[str], output_dir: Path) -> None:
     channel = report.channels[2]
 
     found_blobs: list[Blob] = []
@@ -516,6 +583,8 @@ def print_leaked_blobs_stats(report: Report, leaked_blob_ids: set[str]) -> None:
     left()
     left()
     log.flush()
+    draw_records_count_distribution(keep_blobs, "Records Count Distribution (Leaked Keep Blobs)", "leaked_keep_blobs_records_count_distribution.png", output_dir)
+    draw_unique_local_count_distribution(keep_blobs, "Unique Local Count Distribution (Leaked Keep Blobs)", "leaked_keep_blobs_unique_local_count_distribution.png", output_dir)
 
 
 class Progress:
@@ -593,6 +662,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disk-type", choices=MIN_HUGE_RECORD_IN_BYTES_BY_MEDIA.keys(), default=DEFAULT_BS_MEDIA)
     parser.add_argument("--erasure", choices=ERASURE_BY_NAME.keys(), default=DEFAULT_ERASURE_NAME)
     parser.add_argument("--allow-non-zero-part-id", action="store_true", help="Allow part_id to be non-zero")
+    parser.add_argument("--output-dir", default=".", help="Output directory for plots")
     args = parser.parse_args()
     args.erasure = ERASURE_BY_NAME[args.erasure]
     return args
@@ -600,6 +670,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     input_path = Path(args.input_path)
     total_bytes = input_path.stat().st_size
 
@@ -620,9 +692,10 @@ def main() -> None:
 
     progress.print_completed()
     report.print()
+    report.draw_plots(output_dir)
     if args.leaked_blobs_log_file:
         leaked_blob_ids = parse_leaked_blob_ids(Path(args.leaked_blobs_log_file))
-        print_leaked_blobs_stats(report, leaked_blob_ids)
+        print_leaked_blobs_stats(report, leaked_blob_ids, output_dir)
 
 
 if __name__ == "__main__":

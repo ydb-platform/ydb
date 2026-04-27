@@ -11,6 +11,48 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+void TrackIncrementalRestoreShardReply(
+        const TOperationId& operationId,
+        TEvDataShard::TEvSchemaChanged::TPtr& ev,
+        TOperationContext& context,
+        TStringBuf debugHint)
+{
+    const auto& record = ev->Get()->Record;
+    bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
+    if (failed) {
+        context.SS->FailedIncrementalRestoreOperations.insert(operationId);
+        LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            debugHint << " Shard reported failure: " << record.GetOpResult().GetExplain());
+    }
+
+    auto tabletId = TTabletId(record.GetOrigin());
+    auto* shardIdx = context.SS->TabletIdToShardIdx.FindPtr(tabletId);
+    if (!shardIdx) {
+        return;
+    }
+    auto stateIt = context.SS->IncrementalRestoreOperationToState.find(operationId);
+    if (stateIt == context.SS->IncrementalRestoreOperationToState.end()) {
+        return;
+    }
+    auto restoreIt = context.SS->IncrementalRestoreStates.find(stateIt->second);
+    if (restoreIt == context.SS->IncrementalRestoreStates.end()) {
+        return;
+    }
+    auto opIt = restoreIt->second.TableOperations.find(operationId);
+    if (opIt == restoreIt->second.TableOperations.end()) {
+        return;
+    }
+    if (failed) {
+        opIt->second.FailedShards.insert(*shardIdx);
+    } else {
+        opIt->second.CompletedShards.insert(*shardIdx);
+    }
+}
+
+} // anonymous namespace
+
 namespace NIncrRestore {
 
 class TConfigurePartsAtTable : public TSubOperationState {
@@ -179,33 +221,7 @@ public:
                                << " triggers early, save it"
                                << ", at schemeshard: " << context.SS->TabletID());
 
-        const auto& record = ev->Get()->Record;
-        bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
-        if (failed) {
-            context.SS->FailedIncrementalRestoreOperations.insert(OperationId);
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " Shard reported failure: " << record.GetOpResult().GetExplain());
-        }
-
-        // Update per-shard progress tracking
-        auto tabletId = TTabletId(record.GetOrigin());
-        auto* shardIdx = context.SS->TabletIdToShardIdx.FindPtr(tabletId);
-        if (shardIdx) {
-            auto stateIt = context.SS->IncrementalRestoreOperationToState.find(OperationId);
-            if (stateIt != context.SS->IncrementalRestoreOperationToState.end()) {
-                auto restoreIt = context.SS->IncrementalRestoreStates.find(stateIt->second);
-                if (restoreIt != context.SS->IncrementalRestoreStates.end()) {
-                    auto opIt = restoreIt->second.TableOperations.find(OperationId);
-                    if (opIt != restoreIt->second.TableOperations.end()) {
-                        if (failed) {
-                            opIt->second.FailedShards.insert(*shardIdx);
-                        } else {
-                            opIt->second.CompletedShards.insert(*shardIdx);
-                        }
-                    }
-                }
-            }
-        }
+        TrackIncrementalRestoreShardReply(OperationId, ev, context, DebugHint());
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -317,33 +333,7 @@ public:
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         // Check for shard failure BEFORE delegating to parent
-        const auto& record = ev->Get()->Record;
-        bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
-        if (failed) {
-            context.SS->FailedIncrementalRestoreOperations.insert(MyOperationId);
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " Shard reported failure: " << record.GetOpResult().GetExplain());
-        }
-
-        // Update per-shard progress tracking
-        auto tabletId = TTabletId(record.GetOrigin());
-        auto* shardIdx = context.SS->TabletIdToShardIdx.FindPtr(tabletId);
-        if (shardIdx) {
-            auto stateIt = context.SS->IncrementalRestoreOperationToState.find(MyOperationId);
-            if (stateIt != context.SS->IncrementalRestoreOperationToState.end()) {
-                auto restoreIt = context.SS->IncrementalRestoreStates.find(stateIt->second);
-                if (restoreIt != context.SS->IncrementalRestoreStates.end()) {
-                    auto opIt = restoreIt->second.TableOperations.find(MyOperationId);
-                    if (opIt != restoreIt->second.TableOperations.end()) {
-                        if (failed) {
-                            opIt->second.FailedShards.insert(*shardIdx);
-                        } else {
-                            opIt->second.CompletedShards.insert(*shardIdx);
-                        }
-                    }
-                }
-            }
-        }
+        TrackIncrementalRestoreShardReply(MyOperationId, ev, context, DebugHint());
 
         // Delegate to parent — handles CollectSchemaChanged, ReadyForNotifications,
         // logging, and all edge cases

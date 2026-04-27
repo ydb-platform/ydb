@@ -31,6 +31,11 @@ public:
                 restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
                 restore.SetProgressPercent(100);
                 break;
+            case TIncrementalRestoreState::EState::Failed:
+                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+                restore.SetProgressPercent(100);
+                restore.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
+                break;
             case TIncrementalRestoreState::EState::Finalizing:
                 restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
                 restore.SetProgressPercent(99);
@@ -116,10 +121,14 @@ public:
             );
         }
 
-        Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         Fill(*Response->Record.MutableBackupCollectionRestore(), incrementalRestore);
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
+        if (incrementalRestore.State == TIncrementalRestoreState::EState::Failed) {
+            Response->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
+            return Reply(Ydb::StatusIds::GENERIC_ERROR, "Incremental restore failed after exhausting retry budget");
+        }
+        Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         return Reply();
     }
 

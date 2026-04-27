@@ -43,9 +43,10 @@ public:
 
         auto& state = stateIt->second;
 
-        // Early exit if already finalizing or completed - no need to do more progress checks
+        // Early exit if already finalizing, completed, or failed - no need to do more progress checks
         if (state.State == TIncrementalRestoreState::EState::Finalizing ||
-            state.State == TIncrementalRestoreState::EState::Completed) {
+            state.State == TIncrementalRestoreState::EState::Completed ||
+            state.State == TIncrementalRestoreState::EState::Failed) {
             LOG_I("Incremental restore already in state " << static_cast<ui32>(state.State)
                   << ", skipping progress check for operation: " << OperationId);
             return true;
@@ -77,8 +78,23 @@ public:
               
         if (state.AreAllCurrentOperationsComplete()) {
             if (state.RetryNeeded) {
+                if (state.CurrentIncrementalRetryCount >= TIncrementalRestoreState::MaxRetriesPerIncremental) {
+                    LOG_E("Incremental #" << state.CurrentIncrementalIdx
+                          << " exceeded retry budget (" << TIncrementalRestoreState::MaxRetriesPerIncremental
+                          << "), marking restore as Failed");
+                    state.State = TIncrementalRestoreState::EState::Failed;
+                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                    );
+                    // State is persisted as Failed — callers polling via GetRestore/ListRestores
+                    // will see PROGRESS_DONE + GENERIC_ERROR. No finalization needed.
+                    return true;
+                }
+
+                state.CurrentIncrementalRetryCount++;
                 LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
-                      << ", retrying current incremental");
+                      << ", retry attempt " << state.CurrentIncrementalRetryCount
+                      << "/" << TIncrementalRestoreState::MaxRetriesPerIncremental);
 
                 // Reset operation tracking for retry (don't advance index)
                 state.InProgressOperations.clear();
@@ -218,7 +234,7 @@ private:
         }
 
         state.InProgressOperations = std::move(stillInProgress);
-        state.RetryNeeded = hasFailedOperations;
+        state.RetryNeeded |= hasFailedOperations;
 
         // If operations were completed, update the persisted state
         if (operationsCompleted) {

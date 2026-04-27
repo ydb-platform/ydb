@@ -3647,6 +3647,7 @@ struct TIncrementalRestoreState {
         Running = 1,
         Finalizing = 2,
         Completed = 3,
+        Failed = 4,
     };
 
     EState State = EState::Running;
@@ -3696,6 +3697,14 @@ struct TIncrementalRestoreState {
     // Transient flag — set by CheckForCompletedOperations when any operation failed
     // Not persisted to DB. After reboot, operations restart fresh.
     bool RetryNeeded = false;
+
+    // Transient retry counter for current incremental — reset on advance to next incremental.
+    // Not persisted to DB. After reboot, retry budget restarts (this is intentional — reboots are
+    // not "wasted" attempts).
+    ui32 CurrentIncrementalRetryCount = 0;
+
+    // Maximum retry attempts per incremental before giving up
+    static constexpr ui32 MaxRetriesPerIncremental = 5;
 
     // Operation completion tracking for current incremental backup
     THashSet<TOperationId> InProgressOperations;
@@ -3757,6 +3766,9 @@ struct TIncrementalRestoreState {
             CompletedOperations.clear();
             TableOperations.clear();
             // Note: We don't clear InvolvedShards as it accumulates across all incrementals
+
+            // Reset retry budget for the new incremental
+            CurrentIncrementalRetryCount = 0;
         }
     }
 

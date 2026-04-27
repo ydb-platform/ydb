@@ -212,6 +212,7 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
+<<<<<<< HEAD
 
 - JavaScript
 
@@ -248,6 +249,8 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       System.out.println("Vector table created: " + tableName);
   }
   ```
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
 - C++
 
@@ -936,8 +939,12 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
+<<<<<<< HEAD
             clusters={clusters},
             overlap_clusters=3
+=======
+            clusters={clusters}
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
         );
         """
 
@@ -1193,6 +1200,63 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% cut "asyncio" %}
 
+<<<<<<< HEAD
+=======
+    ```python
+    import ydb
+
+    async def search_items_vector_as_bytes(
+        pool: ydb.aio.QuerySessionPool,
+        table_name: str,
+        embedding: list[float],
+        strategy: str = "CosineSimilarity",
+        limit: int = 1,
+        index_name: str | None = None,
+    ) -> list[dict]:
+        view_index = f"VIEW {index_name}" if index_name else ""
+
+        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+        query = f"""
+        DECLARE $embedding as String;
+
+        SELECT
+            id,
+            document,
+            Knn::{strategy}(embedding, $embedding) as score
+        FROM {table_name} {view_index}
+        ORDER BY score {sort_order}
+        LIMIT {limit};
+        """
+
+        result = await pool.execute_with_retries(
+            query,
+            {
+                "$embedding": (
+                    convert_vector_to_bytes(embedding),
+                    ydb.PrimitiveType.String,
+                ),
+            },
+        )
+
+        items = []
+
+        for result_set in result:
+            for row in result_set.rows:
+                items.append(
+                    {
+                        "id": row["id"],
+                        "document": row["document"],
+                        "score": row["score"],
+                    }
+                )
+
+        return items
+    ```
+
+    {% endcut %}
+
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
     ```python
     import ydb
 
@@ -1510,6 +1574,63 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% cut "asyncio" %}
 
+<<<<<<< HEAD
+=======
+    ```python
+    import ydb
+
+    async def search_items_vector_as_float_list(
+        pool: ydb.aio.QuerySessionPool,
+        table_name: str,
+        embedding: list[float],
+        strategy: str = "CosineSimilarity",
+        limit: int = 1,
+        index_name: str | None = None,
+    ) -> list[dict]:
+        view_index = f"VIEW {index_name}" if index_name else ""
+
+        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+        query = f"""
+        DECLARE $embedding as List<Float>;
+
+        $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+        SELECT
+            id,
+            document,
+            Knn::{strategy}(embedding, $target_embedding) as score
+        FROM {table_name} {view_index}
+        ORDER BY score
+        {sort_order}
+        LIMIT {limit};
+        """
+
+        result = await pool.execute_with_retries(
+            query,
+            {
+                "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+            },
+        )
+
+        items = []
+
+        for result_set in result:
+            for row in result_set.rows:
+                items.append(
+                    {
+                        "id": row["id"],
+                        "document": row["document"],
+                        "score": row["score"],
+                    }
+                )
+
+        return items
+    ```
+
+    {% endcut %}
+
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
     ```python
     import ydb
 

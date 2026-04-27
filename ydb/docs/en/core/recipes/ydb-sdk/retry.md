@@ -673,4 +673,91 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   })
   ```
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    In the {{ ydb-short-name }} Python SDK, retries are implemented in `QuerySessionPool` using the `RetrySettings` class. `RetrySettings` supports:
+
+    * `max_retries` — maximum number of retries (default 10)
+    * `idempotent` — whether the operation is idempotent; idempotent operations are retried for a broader set of errors (default False)
+    * `backoff_ceiling`, `backoff_slot_duration` — parameters for exponential backoff
+    * `fast_backoff_settings`, `slow_backoff_settings` — fast and slow retry tuning
+
+    For queries with retries, `QuerySessionPool` provides `retry_operation_sync` and `execute_with_retries`. Use `execute_with_retries` for one-off queries in implicit transaction mode. For explicit transactions or multiple operations in one transaction, use `retry_operation_sync`.
+
+    Example using `execute_with_retries`:
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        result_sets = pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
+
+    Example using `retry_operation_sync`:
+
+    ```python
+    import ydb
+
+    def execute_query(pool: ydb.QuerySessionPool):
+        def callee(session: ydb.QuerySession):
+              with session.transaction().execute(
+                  "SELECT 1",
+                  commit_tx=True,
+              ) as result_sets:
+                  pass
+
+        result = pool.retry_operation_sync(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    Example using `execute_with_retries`:
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        result_sets = await pool.execute_with_retries(
+            "SELECT series_id, title FROM series WHERE series_id = 1;",
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+        # ...
+    ```
+
+    Example using `retry_operation_sync`:
+
+    ```python
+    import ydb
+
+    async def execute_query(pool: ydb.aio.QuerySessionPool):
+        async def callee(session):
+            async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+                async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                    pass
+
+        await pool.retry_operation_async(
+            callee,
+            retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+        )
+        # ...
+    ```
+
+  - SQLAlchemy
+
+    When using {{ ydb-short-name }} through SQLAlchemy, retries happen internally and are not configured from the outside.
+
+  {% endlist %}
+
 {% endlist %}

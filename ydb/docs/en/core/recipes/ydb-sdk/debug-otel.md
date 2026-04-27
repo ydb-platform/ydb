@@ -16,14 +16,31 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
      import (
          "context"
 
+<<<<<<< HEAD
          "github.com/ydb-platform/ydb-go-sdk/v3"
          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+=======
+   func main() {
+       ...
+       tracerProvider := otelTrace.NewTracerProvider(
+           // WithBatcher registers the exporter with the TracerProvider.
+           // The exporter must implement the SpanExporter interface.
+           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
+           otelTrace.WithBatcher(exp),
+           // WithResource attaches metadata (like service name and environment) to all spans
+           // created by this TracerProvider. Use resource.NewWithAttributes with standard
+           // semantic keys such as semconv.ServiceNameKey.
+           otelTrace.WithResource(resource.NewWithAttributes(res)),
+       )
+       defer tracerProvider.Shutdown(ctx)
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
          ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
          ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
          otelTrace "go.opentelemetry.io/otel/sdk/trace"
      )
 
+<<<<<<< HEAD
      func main() {
          ...
          tracerProvider := otelTrace.NewTracerProvider(
@@ -37,6 +54,26 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
              otelTrace.WithResource(resource.NewWithAttributes(res)),
          )
          defer tracerProvider.Shutdown(ctx)
+=======
+       // Create a root span.
+       ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
+       defer span.End()
+
+       // If you want to see otel-trace-id in the logs,
+       // it’s important to connect the adapters in a specific order — first otel, then logger.
+       db, err := ydb.Open(ctx,
+           os.Getenv("YDB_CONNECTION_STRING"),
+           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
+           ydbZap.WithTraces(logger, trace.DetailsAll),
+       )
+       if err != nil {
+           panic(err)
+       }
+       defer db.Close(ctx)
+       ...
+   }
+   ```
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
          // Set global tracer of this application.
          otel.SetTracerProvider(tracerProvider)
@@ -65,13 +102,30 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
      ```go
      package main
 
+<<<<<<< HEAD
      import (
          "context"
          "database/sql"
+=======
+   func main() {
+       ...
+       tracerProvider := otelTrace.NewTracerProvider(
+           // WithBatcher registers the exporter with the TracerProvider.
+           // The exporter must implement the SpanExporter interface.
+           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
+           otelTrace.WithBatcher(exp),
+           // WithResource attaches metadata (like service name and environment) to all spans
+           // created by this TracerProvider. Use resource.NewWithAttributes with standard
+           // semantic keys such as semconv.ServiceNameKey.
+           otelTrace.WithResource(resource.NewWithAttributes(res)),
+       )
+       defer tracerProvider.Shutdown(ctx)
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
          "github.com/ydb-platform/ydb-go-sdk/v3"
          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
+<<<<<<< HEAD
          ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
          ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
          otelTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -126,12 +180,43 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
 
   This functionality is not currently supported.
 
+=======
+       // Create a root span.
+       ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
+       defer span.End()
+
+       // If you want to see otel-trace-id in the logs,
+       // it’s important to connect the adapters in a specific order — first otel, then logger.
+       nativeDriver, err := ydb.Open(ctx,
+           os.Getenv("YDB_CONNECTION_STRING"),
+           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
+           ydbZap.WithTraces(logger, trace.DetailsAll),
+       )
+       if err != nil {
+           panic(err)
+       }
+       defer nativeDriver.Close(ctx)
+
+       connector, err := ydb.Connector(nativeDriver)
+       if err != nil {
+           panic(err)
+       }
+       db := sql.OpenDB(connector)
+       defer db.Close()
+       ...
+   }
+   ```
+
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

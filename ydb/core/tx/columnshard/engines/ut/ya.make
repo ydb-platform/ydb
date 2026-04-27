@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/predicate
+    ydb/core/tx/datashard
     yql/essentials/sql/pg_dummy
     yql/essentials/core/arrow_kernels/request
     ydb/core/testlib/default

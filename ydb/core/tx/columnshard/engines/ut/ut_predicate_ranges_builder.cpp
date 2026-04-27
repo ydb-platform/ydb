@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>

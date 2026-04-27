@@ -1,4 +1,0 @@
-use plato;
-
-insert into Output
-select key IN ("020", "075") as key_filtered from Input

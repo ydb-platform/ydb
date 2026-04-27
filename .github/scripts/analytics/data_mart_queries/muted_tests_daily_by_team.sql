@@ -2,7 +2,7 @@
 -- Filters: is_test_chunk = 0, is_muted = 1 (as required for BI).
 -- effective_area / effective_owner_team are computed in tests_monitor.py (single source of truth).
 -- Per-test previous effective owner and change date: tests_monitor.previous_effective_owner_team,
--- effective_owner_team_changed_date (also in muted_tests_with_issue_and_area / test_muted_monitor_mart).
+-- effective_owner_team_changed_date (also in muted_tests_with_issue_and_area).
 -- This mart only aggregates; grid still uses timeline + mapping for empty cells.
 $window_days = 365;
 $muted_sla_days = 30;
@@ -60,7 +60,7 @@ $tm = (
         Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
     FROM `test_results/analytics/tests_monitor` AS t
     WHERE t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
-      AND t.build_type = 'relwithdebinfo'
+      --AND t.build_type = 'relwithdebinfo'
       AND t.is_test_chunk = 0
       AND t.state != 'Skipped'
 );

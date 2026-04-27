@@ -1185,23 +1185,17 @@ void TestAbortDuringStreaming() {
 
     Cerr << "AbortDuringStreaming: batches received before abort=" << batchesBeforeAbort << Endl;
 
-    // Abort the scan mid-stream if it hasn't finished yet
+    // Abort the scan mid-stream if it hasn't finished yet. Abort() transitions
+    // the reader into the finished/error state internally, so we just need to
+    // drain pending events so the abort is actually processed by the actor
+    // system before the test inspects controller counters below.
     if (!reader.IsFinished()) {
         reader.Abort("test abort during streaming");
 
-        // After TEvAbortExecution the scan actor calls Finish(ExternalAbort) →
-        // PassAway() WITHOUT sending TEvScanError to the compute actor (edge
-        // actor).  Therefore Receive() would block forever.  Instead we use
-        // DispatchEvents() with a short timeout to let the actor system process
-        // the abort message and then mark the reader as aborted manually.
         TDispatchOptions drainOptions;
         drainOptions.FinalEvents.push_back(
             TDispatchOptions::TFinalEventCondition(NColumnShard::TEvPrivate::TEvReadFinished::EventType));
         runtime.DispatchEvents(drainOptions, TDuration::Seconds(5));
-
-        if (!reader.IsFinished()) {
-            reader.MarkAborted();
-        }
     }
 
     const ui64 totalCreated = csControllerGuard->GetTotalPagesCreated();

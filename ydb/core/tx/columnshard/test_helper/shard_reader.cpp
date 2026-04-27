@@ -78,10 +78,11 @@ void TShardReader::Abort(const TString &reason) {
     Runtime.Send(*ScanActorId, *ScanActorId,
                  new NKqp::TEvKqp::TEvAbortExecution(
                      NYql::NDqProto::StatusIds::CANCELLED, reason));
-}
-
-void TShardReader::MarkAborted() {
-    AFL_VERIFY(!Finished);
+    // The scan actor processes TEvAbortExecution by calling Finish(ExternalAbort)
+    // and PassAway() WITHOUT sending TEvScanError to the edge actor. Therefore
+    // a subsequent Receive() would block forever in GrabEdgeEvents. Mark the
+    // reader as aborted immediately so any further Receive()/Ack() trips the
+    // AFL_VERIFY(!Finished) assertion instead of hanging the test.
     Finished = -1;
 }
 

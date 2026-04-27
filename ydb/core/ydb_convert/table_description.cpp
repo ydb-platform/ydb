@@ -200,7 +200,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
             if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(colName));
             } else {
-                return fail(TStringBuilder() << "Unknown index column: " << colName);            
+                return fail(TStringBuilder() << "Unknown index column: " << colName);
             }
         }
 

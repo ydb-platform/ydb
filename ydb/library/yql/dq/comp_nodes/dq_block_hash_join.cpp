@@ -190,6 +190,20 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         }
     }
 
+    TSides<TPackResult> ExtractRawOutput() {
+        TSides<TPackResult> result;
+        result.Build = std::move(Output_.Build);
+        result.Probe = std::move(Output_.Probe);
+        Output_.Build = TPackResult{};
+        Output_.Probe = TPackResult{};
+        return result;
+    }
+
+    void ImportRawOutput(TSides<TPackResult> data) {
+        MKQL_ENSURE(SizeTuples() == 0, "importing into non-empty output");
+        Output_ = std::move(data);
+    }
+
   private:
     TSides<TVector<arrow::Datum>> Flush() {
         TSides<TVector<arrow::Datum>> out;
@@ -249,6 +263,29 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         using TBase = TComputationValue<TStreamValue>;
         using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Kind>;
 
+        enum class EPhase {
+            Collecting,
+            SpillingOutput,
+            SpillingLastBatch,
+            Yielding,
+            ExtractingOutput,
+        };
+
+        struct OutputSpillKey {
+            ISpiller::TKey ProbeKey;
+            std::optional<ISpiller::TKey> BuildKey;
+        };
+
+        struct PendingOutputSpill {
+            NThreading::TFuture<ISpiller::TKey> ProbeFuture;
+            std::optional<NThreading::TFuture<ISpiller::TKey>> BuildFuture;
+        };
+
+        struct PendingOutputExtract {
+            TFuturePage ProbeFuture;
+            std::optional<TFuturePage> BuildFuture;
+        };
+
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
                      TSides<std::unique_ptr<IBlockLayoutConverter>> converters, const TDqBlockJoinContext* meta,
@@ -264,6 +301,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
+            , OutputSpiller_(meta->Settings.SpillJoinResults && ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         {}
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
@@ -280,10 +318,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         }
 
       private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
-            size_t expectedSize = Meta_->Renames.size() + 1;
-            MKQL_ENSURE(width == expectedSize,
-                        Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
+        NUdf::EFetchStatus WideFetchDirect(NUdf::TUnboxedValue* output) {
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
@@ -309,6 +344,138 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             return FlushTo(output);
         }
 
+        void StartOutputSpill() {
+            TotalOutputTuples_ += Output_.SizeTuples();
+            auto raw = Output_.ExtractRawOutput();
+            PendingOutputSpill pending;
+            pending.ProbeFuture = SpillPage(*OutputSpiller_, std::move(raw.Probe));
+            if (!raw.Build.Empty()) {
+                pending.BuildFuture = SpillPage(*OutputSpiller_, std::move(raw.Build));
+            }
+            PendingSpill_ = std::move(pending);
+        }
+
+        bool IsSpillComplete() const {
+            if (!PendingSpill_->ProbeFuture.IsReady()) return false;
+            if (PendingSpill_->BuildFuture && !PendingSpill_->BuildFuture->IsReady()) return false;
+            return true;
+        }
+
+        void FinalizeSpill() {
+            OutputSpillKey key;
+            key.ProbeKey = PendingSpill_->ProbeFuture.ExtractValueSync();
+            if (PendingSpill_->BuildFuture) {
+                key.BuildKey = PendingSpill_->BuildFuture->ExtractValueSync();
+            }
+            SpilledOutput_.push_back(std::move(key));
+            PendingSpill_ = std::nullopt;
+        }
+
+        void StartExtract() {
+            auto& key = SpilledOutput_[YieldIndex_];
+            PendingOutputExtract pending;
+            pending.ProbeFuture = OutputSpiller_->Extract(key.ProbeKey);
+            if (key.BuildKey) {
+                pending.BuildFuture = OutputSpiller_->Extract(*key.BuildKey);
+            }
+            PendingExtract_ = std::move(pending);
+        }
+
+        bool IsExtractComplete() const {
+            if (!PendingExtract_->ProbeFuture.IsReady()) return false;
+            if (PendingExtract_->BuildFuture && !PendingExtract_->BuildFuture->IsReady()) return false;
+            return true;
+        }
+
+        void FinalizeExtract() {
+            TSides<TPackResult> raw;
+            auto probeBuf = ExtractReadyFuture(std::move(PendingExtract_->ProbeFuture));
+            MKQL_ENSURE(probeBuf.has_value(), "corrupted spilled output probe page");
+            raw.Probe = Parse(std::move(*probeBuf), Converters_.Probe->GetTupleLayout());
+            if (PendingExtract_->BuildFuture) {
+                auto buildBuf = ExtractReadyFuture(std::move(*PendingExtract_->BuildFuture));
+                MKQL_ENSURE(buildBuf.has_value(), "corrupted spilled output build page");
+                raw.Build = Parse(std::move(*buildBuf), Converters_.Build->GetTupleLayout());
+            }
+            PendingExtract_ = std::nullopt;
+            Output_.ImportRawOutput(std::move(raw));
+        }
+
+        NUdf::EFetchStatus WideFetchWithSpilling(NUdf::TUnboxedValue* output) {
+            for (;;) {
+                switch (Phase_) {
+                case EPhase::Collecting: {
+                    bool phaseChanged = false;
+                    while (!phaseChanged && Output_.SizeTuples() < Threshold_) {
+                        auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
+                        if (res == EFetchResult::Yield) {
+                            return NYql::NUdf::EFetchStatus::Yield;
+                        }
+                        if (res == EFetchResult::Finish) {
+                            if (Output_.SizeTuples() > 0) {
+                                StartOutputSpill();
+                                Phase_ = EPhase::SpillingLastBatch;
+                            } else if (!SpilledOutput_.empty()) {
+                                Phase_ = EPhase::Yielding;
+                            } else {
+                                return NYql::NUdf::EFetchStatus::Finish;
+                            }
+                            phaseChanged = true;
+                        }
+                    }
+                    if (!phaseChanged && Output_.SizeTuples() >= Threshold_) {
+                        StartOutputSpill();
+                        Phase_ = EPhase::SpillingOutput;
+                    }
+                    continue;
+                }
+                case EPhase::SpillingOutput: {
+                    if (!IsSpillComplete()) {
+                        return NYql::NUdf::EFetchStatus::Yield;
+                    }
+                    FinalizeSpill();
+                    Phase_ = EPhase::Collecting;
+                    continue;
+                }
+                case EPhase::SpillingLastBatch: {
+                    if (!IsSpillComplete()) {
+                        return NYql::NUdf::EFetchStatus::Yield;
+                    }
+                    FinalizeSpill();
+                    Phase_ = EPhase::Yielding;
+                    continue;
+                }
+                case EPhase::Yielding: {
+                    if (YieldIndex_ >= SpilledOutput_.size()) {
+                        return NYql::NUdf::EFetchStatus::Finish;
+                    }
+                    StartExtract();
+                    Phase_ = EPhase::ExtractingOutput;
+                    continue;
+                }
+                case EPhase::ExtractingOutput: {
+                    if (!IsExtractComplete()) {
+                        return NYql::NUdf::EFetchStatus::Yield;
+                    }
+                    FinalizeExtract();
+                    YieldIndex_++;
+                    Phase_ = EPhase::Yielding;
+                    return FlushTo(output);
+                }
+                }
+            }
+        }
+
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+            size_t expectedSize = Meta_->Renames.size() + 1;
+            MKQL_ENSURE(width == expectedSize,
+                        Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
+            if (OutputSpiller_) {
+                return WideFetchWithSpilling(output);
+            }
+            return WideFetchDirect(output);
+        }
+
       private:
         const TDqBlockJoinContext* Meta_;
         TSides<std::unique_ptr<IBlockLayoutConverter>> Converters_;
@@ -317,6 +484,14 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TRenamesPackedTupleOutput<Kind> Output_;
         static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
+
+        ISpiller::TPtr OutputSpiller_;
+        EPhase Phase_ = EPhase::Collecting;
+        TMKQLVector<OutputSpillKey> SpilledOutput_;
+        std::optional<PendingOutputSpill> PendingSpill_;
+        std::optional<PendingOutputExtract> PendingExtract_;
+        i64 TotalOutputTuples_ = 0;
+        size_t YieldIndex_ = 0;
     };
 
     void RegisterDependencies() const final {
@@ -420,6 +595,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
         if (settingsTuple->GetValuesCount() >= 1) {
             meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
+        }
+        if (settingsTuple->GetValuesCount() >= 2) {
+            meta.Settings.SpillJoinResults = AS_VALUE(TDataLiteral, settingsTuple->GetValue(1))->AsValue().Get<ui32>() != 0;
         }
     }
     if (meta.Settings.LeftIsBuild()) {

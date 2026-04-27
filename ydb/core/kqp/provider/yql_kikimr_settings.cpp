@@ -97,6 +97,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
+    REGISTER_SETTING(*this, BlockHashJoinSpillResults);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);

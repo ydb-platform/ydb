@@ -2973,7 +2973,8 @@ TExprBase DqBuildJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool blockHashJoinSpillResults
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -3016,7 +3017,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft, blockHashJoinSpillResults);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

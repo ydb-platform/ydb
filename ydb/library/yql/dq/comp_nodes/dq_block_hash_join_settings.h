@@ -12,6 +12,7 @@ enum class EBuildSide : ui32 {
 
 struct TBlockHashJoinSettings {
     EBuildSide BuildSide = EBuildSide::Right;
+    bool SpillJoinResults = false;
 
     bool LeftIsBuild() const { return BuildSide == EBuildSide::Left; }
 };

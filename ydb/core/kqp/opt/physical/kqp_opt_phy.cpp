@@ -582,7 +582,8 @@ protected:
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
             pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
-            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
+            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false),
+            KqpCtx.Config->BlockHashJoinSpillResults.Get().GetOrElse(false)
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

@@ -61,6 +61,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
+    NCommon::TConfSetting<bool, Static> BlockHashJoinSpillResults;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;

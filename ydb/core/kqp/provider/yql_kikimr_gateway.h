@@ -146,6 +146,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -186,6 +187,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;

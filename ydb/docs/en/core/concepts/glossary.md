@@ -371,11 +371,12 @@ An **access control list** or **ACL** is a list of all [rights](#access-right) g
 
 An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
 
-{{ ydb-short-name }} uses three access levels:
+{{ ydb-short-name }} uses hierarchical access levels:
 
-- viewer
-- operator
-- administrator
+- Database;
+- Viewer;
+- Monitoring;
+- Administration.
 
 An access level is granted by adding an access subject to an [access level list](#access-level-list).
 
@@ -384,6 +385,8 @@ An access level is granted by adding an access subject to an [access level list]
 An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
 
 {{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
+For detailed information about access level lists, their hierarchy, and how they work, see [Access level lists](../security/authorization.md#access-level-lists) in the Authorization documentation.
 
 ### Owner {#access-owner}
 

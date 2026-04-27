@@ -76,6 +76,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 38686:Federated queries reading from s3 with RuntimeListing are no longer crashing after 3h of execution [#38686](https://github.com/ydb-platform/ydb/pull/38686) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 38213:Improving the logic of building columnar statistics. [#38213](https://github.com/ydb-platform/ydb/pull/38213) ([Yesdaulet Izenov](https://github.com/yizenov))
+* 37626:Introduce Persistent mode for PhantomFlagStorage. When enabled it will store PhantomFlags in PDisk chunks and will be able to recover its state after restart [#37626](https://github.com/ydb-platform/ydb/pull/37626) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### Bug fixes
 
@@ -146,12 +149,12 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 38544:Fixed issue: https://github.com/ydb-platform/ydb/issues/38435
+https://st.yandex-team.ru/YDB-3312
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+HashJoinMode is set to 'grace' on YQ clusters and kqp_run, and it doesn't work correctly with SE when CBO didn't run [#38544](https://github.com/ydb-platform/ydb/pull/38544) ([Pavel Velikhov](https://github.com/pavelvelikhov))
+* 38490:Fix #38448 Segfault during update. [#38490](https://github.com/ydb-platform/ydb/pull/38490) ([Nikita Vasilev](https://github.com/nikvas0))
 
 ### YDB UI
 

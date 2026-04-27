@@ -1,5 +1,7 @@
 #include "http_dump.h"
 
+#include <library/cpp/monlib/service/mon_service_http_request.h>
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NCms {
@@ -15,7 +17,7 @@ TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
     result << "{";
 
     result << " Method: " << request.GetMethod()
-            << " Uri: " << request.GetUri();
+           << " Uri: " << request.GetUri();
 
     result << " Headers {";
     for (const auto& header : request.GetHeaders()) {

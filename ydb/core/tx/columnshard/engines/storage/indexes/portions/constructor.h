@@ -66,6 +66,8 @@ protected:
     }
 
 public:
+    static bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId);
+
     const TReadDataExtractorContainer& GetDataExtractor() const {
         AFL_VERIFY(!!DataExtractor);
         return DataExtractor;

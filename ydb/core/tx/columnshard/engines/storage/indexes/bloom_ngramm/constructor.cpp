@@ -10,25 +10,11 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 namespace {
 
-bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
-    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
-        return false;
-    }
-
-    switch (typeId) {
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        default:
-            return true;
-    }
-}
-
 bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, const TReadDataExtractorContainer& dataExtractor) {
     const auto extractorProto = dataExtractor.SerializeToProto();
     const auto typeId = columnInfo.GetType().GetTypeId();
-    return IsSupportedTypeForEquals(typeId) || (typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn());
+    return ::NKikimr::NOlap::NIndexes::TColumnIndexConstructor::IsSupportedTypeForEquals(typeId) ||
+        (typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn());
 }
 
 } // namespace

@@ -167,6 +167,7 @@ public:
                     if (array->IsNull(row)) {
                         continue;
                     }
+
                     if constexpr (arrow::has_string_view<T>()) {
                         auto value = typedArray.GetView(row);
                         BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
@@ -174,8 +175,10 @@ public:
                         AFL_VERIFY(false);
                     }
                 }
+
                 return true;
             });
+
             return;
         }
 

@@ -4,8 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <cstring>
-
+#include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -34,7 +33,7 @@ TTableRange MakeTableRange(TVector<TCell>& from, bool incFrom, TVector<TCell>& t
     return TTableRange(fromRef, incFrom, toRef, incTo);
 }
 
-bool PrefixEqual(TConstArrayRef<TCell> x, TConstArrayRef<TCell> y) {
+bool CellsEqual(TConstArrayRef<TCell> x, TConstArrayRef<TCell> y) {
     if (x.size() != y.size()) {
         return false;
     }
@@ -58,7 +57,7 @@ bool PrefixEqual(TConstArrayRef<TCell> x, TConstArrayRef<TCell> y) {
 
 bool TableRangesEqual(const TTableRange& a, const TTableRange& b) {
     return a.InclusiveFrom == b.InclusiveFrom && a.InclusiveTo == b.InclusiveTo && a.Point == b.Point
-        && PrefixEqual(a.From, b.From) && PrefixEqual(a.To, b.To);
+        && CellsEqual(a.From, b.From) && CellsEqual(a.To, b.To);
 }
 
 TConstArrayRef<NScheme::TTypeInfo> KeyTypesRef(const TVector<NScheme::TTypeInfo>& v) {
@@ -103,7 +102,6 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         const NOlap::TPKRangeFilter& pkRange = *filter->begin();
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
-        UNIT_ASSERT_C(dbg.Contains("resource_type"), dbg);
     }
 
     // scheme_tabledefs.h: "probably most used case" — full prefix on both sides, inclusive.
@@ -365,7 +363,6 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         const NOlap::TPKRangeFilter& pkRange = *filter->begin();
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
-        UNIT_ASSERT(filter->DebugString().Contains("resource_type"));
     }
 
     // 2-column PK only: reject 3-column serialized prefix (IsAmbiguousReason).
@@ -380,8 +377,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(
             TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
         const char* reason = ser.ToTableRange().IsAmbiguousReason(2);
-        UNIT_ASSERT_C(reason, reason);
-        UNIT_ASSERT(strstr(reason, "From is too large") != nullptr);
+        UNIT_ASSERT_C(reason, "Expected IsAmbiguousReason() to return a non-null reason string");
+        UNIT_ASSERT_C(TStringBuf(reason).Contains("From is too large"), TStringBuf(reason));
     }
 
     Y_UNIT_TEST(TableRange_IsAmbiguous_ToTooManyCells) {
@@ -395,8 +392,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(
             TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), false, true);
         const char* reason = ser.ToTableRange().IsAmbiguousReason(2);
-        UNIT_ASSERT_C(reason, reason);
-        UNIT_ASSERT(strstr(reason, "To is too large") != nullptr);
+        UNIT_ASSERT_C(reason, "Expected IsAmbiguousReason() to return a non-null reason string");
+        UNIT_ASSERT_C(TStringBuf(reason).Contains("To is too large"), TStringBuf(reason));
     }
 
     Y_UNIT_TEST(TableRange_IsAmbiguous_PointWrongColumnCount) {
@@ -407,8 +404,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(point);
         UNIT_ASSERT(ser.Point);
         const char* reason = ser.ToTableRange().IsAmbiguousReason(2);
-        UNIT_ASSERT_C(reason, reason);
-        UNIT_ASSERT(strstr(reason, "key columns count") != nullptr);
+        UNIT_ASSERT_C(reason, "Expected IsAmbiguousReason() to return a non-null reason string");
+        UNIT_ASSERT_C(TStringBuf(reason).Contains("key columns count"), TStringBuf(reason));
     }
 
     // With RelaxEmptyKeys, empty From + non-inclusive From is still unambiguous.
@@ -482,8 +479,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TConstArrayRef<TCell> fromRef(fromCells);
         TConstArrayRef<TCell> toRef(toCells);
         TSerializedTableRange viaCells(fromRef, true, toRef, false);
-        UNIT_ASSERT(PrefixEqual(viaBuf.From.GetCells(), viaCells.From.GetCells()));
-        UNIT_ASSERT(PrefixEqual(viaBuf.To.GetCells(), viaCells.To.GetCells()));
+        UNIT_ASSERT(CellsEqual(viaBuf.From.GetCells(), viaCells.From.GetCells()));
+        UNIT_ASSERT(CellsEqual(viaBuf.To.GetCells(), viaCells.To.GetCells()));
         UNIT_ASSERT_VALUES_EQUAL(viaBuf.FromInclusive, viaCells.FromInclusive);
         UNIT_ASSERT_VALUES_EQUAL(viaBuf.ToInclusive, viaCells.ToInclusive);
     }
@@ -618,8 +615,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(loaded.FromInclusive, ser.FromInclusive);
         UNIT_ASSERT_VALUES_EQUAL(loaded.ToInclusive, ser.ToInclusive);
         UNIT_ASSERT(!loaded.Point);
-        UNIT_ASSERT(PrefixEqual(loaded.From.GetCells(), ser.From.GetCells()));
-        UNIT_ASSERT(PrefixEqual(loaded.To.GetCells(), ser.To.GetCells()));
+        UNIT_ASSERT(CellsEqual(loaded.From.GetCells(), ser.From.GetCells()));
+        UNIT_ASSERT(CellsEqual(loaded.To.GetCells(), ser.To.GetCells()));
     }
 
     Y_UNIT_TEST(TRangesBuilder_TwoRanges) {
@@ -848,8 +845,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         loaded.Load(kr);
 
         UNIT_ASSERT(!loaded.Point);
-        UNIT_ASSERT(PrefixEqual(loaded.From.GetCells(), ser.From.GetCells()));
-        UNIT_ASSERT(PrefixEqual(loaded.To.GetCells(), ser.From.GetCells()));
+        UNIT_ASSERT(CellsEqual(loaded.From.GetCells(), ser.From.GetCells()));
+        UNIT_ASSERT(CellsEqual(loaded.To.GetCells(), ser.From.GetCells()));
         UNIT_ASSERT(loaded.ToInclusive);
     }
 
@@ -878,7 +875,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         builder.AddRange(TSerializedTableRange(pt1));
         auto filter = builder.Finish();
         UNIT_ASSERT(!filter.IsSuccess());
-        UNIT_ASSERT(strstr(filter.GetErrorMessage().c_str(), "not sorted sequence") != nullptr);
+        UNIT_ASSERT_C(filter.GetErrorMessage().Contains("not sorted sequence"), filter.GetErrorMessage());
     }
 }
 

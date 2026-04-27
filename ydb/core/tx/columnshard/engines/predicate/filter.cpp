@@ -32,17 +32,22 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
     ui64 pos = 0;
-    const ui64 recordsCount = NArrow::NMerger::TRWSortableBatchPosition(data, 0, false).GetRecordsCount();
+    const ui64 recordsCount = data->num_rows();
     for (const auto& range : SortedRanges) {
         const ui64 initialIdx = pos;
 
-        const auto fromCols = range.GetPredicateFrom().GetColumnNames();
-        NArrow::NMerger::TRWSortableBatchPosition itFrom = fromCols.empty()
-            ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
-            : NArrow::NMerger::TRWSortableBatchPosition(data, pos, fromCols, {}, false);
-
-        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(itFrom);
-        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : recordsCount;
+        const ui64 beginIdx = [&]() -> ui64 {
+            const auto& predFrom = range.GetPredicateFrom();
+            if (predFrom.IsAll()) {
+                return pos;
+            }
+            const auto fromCols = predFrom.GetColumnNames();
+            NArrow::NMerger::TRWSortableBatchPosition itFrom = fromCols.empty()
+                ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
+                : NArrow::NMerger::TRWSortableBatchPosition(data, pos, fromCols, {}, false);
+            const auto findBegin = predFrom.FindFirstIncluded(itFrom);
+            return findBegin ? findBegin->GetPosition() : recordsCount;
+        }();
         AFL_VERIFY(beginIdx >= initialIdx);
         result.Add(false, beginIdx - initialIdx);
         pos = beginIdx;
@@ -50,13 +55,18 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             break;
         }
 
-        const auto toCols = range.GetPredicateTo().GetColumnNames();
-        NArrow::NMerger::TRWSortableBatchPosition itTo = toCols.empty()
-            ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
-            : NArrow::NMerger::TRWSortableBatchPosition(data, pos, toCols, {}, false);
-
-        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(itTo);
-        const ui64 endIdx = findEnd ? findEnd->GetPosition() : recordsCount;
+        const ui64 endIdx = [&]() -> ui64 {
+            const auto& predTo = range.GetPredicateTo();
+            if (predTo.IsAll()) {
+                return recordsCount;
+            }
+            const auto toCols = predTo.GetColumnNames();
+            NArrow::NMerger::TRWSortableBatchPosition itTo = toCols.empty()
+                ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
+                : NArrow::NMerger::TRWSortableBatchPosition(data, pos, toCols, {}, false);
+            const auto findEnd = predTo.FindFirstExcluded(itTo);
+            return findEnd ? findEnd->GetPosition() : recordsCount;
+        }();
         AFL_VERIFY(endIdx >= pos);
         result.Add(true, endIdx - pos);
         pos = endIdx;

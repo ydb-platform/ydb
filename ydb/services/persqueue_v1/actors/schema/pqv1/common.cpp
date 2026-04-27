@@ -112,12 +112,28 @@ TResult AddConsumerImpl(
         consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
         consumer->SetKeepMessageOrder(rr.shared_read_rule_type().keep_messages_order());
-        consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_read_rule_type().default_processing_timeout().seconds());
+        auto defaultProcessingTimeout = rr.shared_read_rule_type().default_processing_timeout();
+        if (defaultProcessingTimeout.seconds() < 0 || defaultProcessingTimeout.nanos() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "default_processing_timeout in shared_read_rule_type can't be negative, provided "
+                << defaultProcessingTimeout.seconds() << " seconds and " << defaultProcessingTimeout.nanos() << " nanos"};
+        }
+        consumer->SetDefaultProcessingTimeoutSeconds(defaultProcessingTimeout.seconds());
 
         consumer->SetDeadLetterPolicyEnabled(rr.shared_read_rule_type().dead_letter_policy().enabled());
         consumer->SetMaxProcessingAttempts(rr.shared_read_rule_type().dead_letter_policy().condition().max_processing_attempts());
 
+        auto delayMessageTime = rr.shared_read_rule_type().receive_message_delay();
+        if (delayMessageTime.seconds() < 0 || delayMessageTime.nanos() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "receive_message_delay in shared_read_rule_type can't be negative, provided "
+                << delayMessageTime.seconds() << " seconds and " << delayMessageTime.nanos() << " nanos"};
+        }
         consumer->SetDefaultDelayMessageTimeMs(rr.shared_read_rule_type().receive_message_delay().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_delay().nanos() / 1'000'000);
+
+        auto receiveMessageWaitTime = rr.shared_read_rule_type().receive_message_wait_time();
+        if (receiveMessageWaitTime.seconds() < 0 || receiveMessageWaitTime.nanos() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "receive_message_wait_time in shared_read_rule_type can't be negative, provided "
+                << receiveMessageWaitTime.seconds() << " seconds and " << receiveMessageWaitTime.nanos() << " nanos"};
+        }
         consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_read_rule_type().receive_message_wait_time().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_wait_time().nanos() / 1'000'000);
 
         if (rr.shared_read_rule_type().dead_letter_policy().has_move_action()) {

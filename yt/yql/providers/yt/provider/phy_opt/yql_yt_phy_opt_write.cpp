@@ -44,8 +44,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqWrite(TExprBase node,
         return node;
     }
 
-    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
-    TYtOutTableInfo outTable(outItemType, nativeTypeFlags);
+    TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(write.DataSink().Cluster().StringValue(), *State_->Configuration));
 
     const auto dqUnion = write.Content().Cast<TDqCnUnionAll>();
 
@@ -216,8 +215,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::DqMaterialize(TExprBase
         .Build()
         .Done();
 
-    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
-    TYtOutTableInfo outTable(outItemType, nativeTypeFlags);
+    TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(materialize.DataSink().Cluster().StringValue(), *State_->Configuration));
 
     if (auto sorted = materialize.Input().Ref().GetConstraint<TSortedConstraintNode>()) {
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
@@ -373,7 +371,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     auto maybeReadSettings = write.Content().Maybe<TCoRight>().Input().Maybe<TYtReadTable>().Input().Item(0).Settings();
 
     const TYtTableDescription& nextDescription = State_->TablesData->GetTable(cluster, outTableInfo->Name, outTableInfo->CommitEpoch);
-    const ui64 nativeTypeFlags = nextDescription.RowSpec->GetNativeYtTypeFlags();
 
     TMaybe<NYT::TNode> firstNativeType;
     ui64 firstNativeTypeFlags = 0;
@@ -382,7 +379,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
         firstNativeTypeFlags = inputPaths.front()->GetNativeYtTypeFlags();
     }
 
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *State_->Configuration);
+    const ui64 outNativeTypeFlags = GetNativeYtTypeFlags(*outItemType) & nativeTypeCompatibility;
+
     bool requiresMap = (maybeReadSettings && NYql::HasSetting(maybeReadSettings.Ref(), EYtSettingType::SysColumns))
+        || firstNativeTypeFlags != outNativeTypeFlags
         || AnyOf(inputPaths, [firstNativeType] (const TYtPathInfo::TPtr& path) {
             return path->RequiresRemap() || firstNativeType != path->GetNativeYtType();
         });
@@ -415,8 +416,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 .Done().Ptr();
         }
 
-        // For YtMerge passthrough native flags as is. AlignPublishTypes optimizer will add additional remapping
-        TYtOutTableInfo outTable(outItemType, requiresMerge ? firstNativeTypeFlags : nativeTypeFlags);
+        TYtOutTableInfo outTable(outItemType, nativeTypeCompatibility);
         if (firstNativeType) {
             outTable.RowSpec->CopyTypeOrders(*firstNativeType, useNativeYtDefaultColumnOrder);
         }
@@ -631,15 +631,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
             return {};
         }
 
-        TYtOutTableInfo outTable {outItemType->Cast<TStructExprType>(),
-            State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE};
-        outTable.RowSpec->SetConstraints(input.Ref().GetConstraintSet());
-        outTable.SetUnique(input.Ref().GetConstraint<TDistinctConstraintNode>(), input.Pos(), ctx);
-
         if (!cluster) {
             cluster = State_->Configuration->DefaultCluster
                 .Get().GetOrElse(State_->Gateway->GetDefaultClusterName());
         }
+
+        TYtOutTableInfo outTable(outItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
+        outTable.RowSpec->SetConstraints(input.Ref().GetConstraintSet());
+        outTable.SetUnique(input.Ref().GetConstraint<TDistinctConstraintNode>(), input.Pos(), ctx);
 
         input = Build<TYtOutput>(ctx, write.Pos())
             .Operation<TYtFill>()
@@ -773,7 +772,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
     } else {
         return {};
     }
-    TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
 
     {
         auto path = write.Table().Name().StringValue();
@@ -907,7 +906,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
     } else {
         return {};
     }
-    TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
 
     if (auto sorted = content.Ref().GetConstraint<TSortedConstraintNode>()) {
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);

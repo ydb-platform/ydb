@@ -308,6 +308,11 @@ TTransactionId THttpRawClient::StartTransaction(
 
 void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
 {
+    auto traceContext = Context_.Config->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent("ping_tx")
+        : nullptr;
+    NTracing::TCurrentTraceContextGuard traceContextGuard(traceContext);
+
     std::call_once(PingClientInitOnceFlag_, [this] () {
         InitPingClient();
     });
@@ -331,6 +336,11 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     headers->Add("X-YT-Header-Format", "<format=text>yson");
     headers->Add("Content-Encoding", "identity");
     headers->Add("Accept-Encoding", "identity");
+
+    if (traceContext) {
+        auto traceparent = FormatTraceParentHeader(traceContext->GetTraceId(), traceContext->GetSpanId());
+        headers->Add("traceparent", traceparent);
+    }
 
     TNode node;
     node["transaction_id"] = GetGuidAsString(transactionId);

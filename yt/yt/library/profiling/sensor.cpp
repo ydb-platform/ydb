@@ -251,7 +251,7 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
 {
     return Sparse == other.Sparse &&
         Global == other.Global &&
-        DisableSensorsRename == other.DisableSensorsRename &&
+        DisableSensorsRename.value_or(false) == other.DisableSensorsRename.value_or(false) &&
         DisableDefault == other.DisableDefault &&
         DisableProjections == other.DisableProjections &&
         SummaryPolicy == other.SummaryPolicy;

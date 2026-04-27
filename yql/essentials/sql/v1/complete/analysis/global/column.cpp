@@ -16,7 +16,7 @@ namespace {
 
 class TInferenceVisitor: public TSQLv1BaseVisitor {
 public:
-    explicit TInferenceVisitor(const TNamedNodes* nodes)
+    explicit TInferenceVisitor(const INamedNodes* nodes)
         : Nodes_(nodes)
     {
     }
@@ -151,23 +151,23 @@ public:
     }
 
     std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
-        TMaybe<TString> name = NSQLComplete::GetName(ctx);
-        if (!name) {
+        TMaybe<TNamedNodeRef> ref = GetNamedNodeRef(ctx);
+        if (!ref) {
             return {};
         }
 
-        const TNamedNode* node = Nodes_->FindPtr(*name);
+        const TNamedNode* node = Nodes_->Resolve(*ref);
         if (!node) {
             return {};
         }
 
-        if (Resolving_.contains(*name)) {
+        if (Resolving_.contains(ref->Name)) {
             return {};
         }
 
-        Resolving_.emplace(*name);
+        Resolving_.emplace(ref->Name);
         Y_DEFER {
-            Resolving_.erase(*name);
+            Resolving_.erase(ref->Name);
         };
 
         auto* rule = std::visit([](auto&& arg) -> antlr4::ParserRuleContext* {
@@ -292,7 +292,7 @@ private:
     }
 
     THashSet<TString> Resolving_;
-    const TNamedNodes* Nodes_;
+    const INamedNodes* Nodes_;
 };
 
 class TEnclosingSelectVisitor: public TSQLv1NarrowingVisitor {
@@ -321,7 +321,7 @@ private:
 
 class TVisitor: public TSQLv1NarrowingVisitor {
 public:
-    TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
+    TVisitor(const TParsedInput& input, const INamedNodes* nodes)
         : TSQLv1NarrowingVisitor(input)
         , Nodes_(nodes)
     {
@@ -364,7 +364,7 @@ private:
         return ctx != nullptr && IsEnclosing(ctx);
     }
 
-    const TNamedNodes* Nodes_;
+    const INamedNodes* Nodes_;
 };
 
 antlr4::ParserRuleContext* Enclosing(const TParsedInput& input) {
@@ -381,7 +381,7 @@ antlr4::ParserRuleContext* Enclosing(const TParsedInput& input) {
 
 } // namespace
 
-TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const TNamedNodes& nodes) {
+TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const INamedNodes& nodes) {
     // TODO: add utility `auto ToMaybe<T>(std::any any) -> TMaybe<T>`
     std::any result = TVisitor(input, &nodes).visit(Enclosing(input));
     if (!result.has_value()) {

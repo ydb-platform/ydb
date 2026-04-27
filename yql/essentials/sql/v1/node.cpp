@@ -667,6 +667,26 @@ bool IProxyNode::DoInit(TContext& ctx, ISource* src) {
     return Inner_->Init(ctx, src);
 }
 
+bool TLangVerProxyNode::DoInit(TContext& ctx, ISource* src) {
+    if (ctx.Settings.Flags.contains("CheckBuiltinLangVer")) {
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(GetPos(), Feature_, MinLangVer_)) {
+            return false;
+        }
+        if (!ctx.EnsureFeatureNotExpired(GetPos(), Feature_, MaxLangVer_)) {
+            return false;
+        }
+    }
+    return IProxyNode::DoInit(ctx, src);
+}
+
+TAstNode* TLangVerProxyNode::Translate(TContext& ctx) const {
+    return Inner_->Translate(ctx);
+}
+
+TNodePtr TLangVerProxyNode::DoClone() const {
+    return new TLangVerProxyNode(GetPos(), Inner_, Feature_, MinLangVer_, MaxLangVer_);
+}
+
 void IProxyNode::DoAdd(TPtr node) {
     Inner_->Add(node);
 }

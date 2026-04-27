@@ -136,22 +136,45 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             except Exception:
                 pass
 
-    def _on_execute_stream_error(self, e: Exception) -> None:
-        if isinstance(e, issues.DeadlineExceed):
+    def _on_execute_stream_error(self, e: BaseException) -> None:
+        # The execute stream is a single gRPC call that carries all of a
+        # query's response parts. If any of these errors surface while reading
+        # it, the server-side stream is either known-dead (BadSession,
+        # ConnectionError, DeadlineExceed) or undrained and un-resumable
+        # (SessionBusy: server thinks this session still has the previous
+        # query running; Cancelled: the call has been torn down mid-flight),
+        # which means a subsequent query on the same session can race the
+        # stragglers and get a spurious SessionBusy back. Drop the session so
+        # the pool creates a fresh one on the next acquire.
+        #
+        # Accepts BaseException so that asyncio.CancelledError (not an
+        # issues.Error subclass) — the case documented in the bug report —
+        # also invalidates here.
+        if isinstance(e, issues.Error):
+            if isinstance(
+                e,
+                (
+                    issues.DeadlineExceed,
+                    issues.SessionBusy,
+                    issues.BadSession,
+                    issues.ConnectionError,
+                    issues.Cancelled,
+                ),
+            ):
+                self._invalidate()
+        else:
             self._invalidate()
 
     # Overloads for _create_call
     @overload
     def _create_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _create_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _create_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -170,14 +193,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _delete_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _delete_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _delete_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -197,14 +218,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _attach_call(
         self: "BaseQuerySession[SyncDriver]",
-    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]:
-        ...
+    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]: ...
 
     @overload
     def _attach_call(
         self: "BaseQuerySession[AsyncDriver]",
-    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]:
-        ...
+    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]: ...
 
     def _attach_call(
         self,
@@ -233,8 +252,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
-        ...
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
     def _execute_call(
@@ -250,8 +268,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
-        ...
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
         self,

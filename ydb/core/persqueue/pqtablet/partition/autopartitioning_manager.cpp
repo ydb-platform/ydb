@@ -468,7 +468,7 @@ public:
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         }
 
-        if (scaleStatusMessages == NKikimrPQ::EScaleStatus::NEED_MERGE || scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_MERGE) {
+        if (scaleStatusMessages == NKikimrPQ::EScaleStatus::NEED_MERGE && scaleStatusBytes == NKikimrPQ::EScaleStatus::NEED_MERGE) {
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
 
@@ -499,9 +499,9 @@ public:
                 ? std::move(bytesSnap.PerSourceMetrics[i])
                 : std::move(messagesSnap.PerSourceMetrics[i]);
             if (bytesSnap.KeysManagers[i]) {
-                merged.KeysManagers[i] = std::make_unique<NPQ::TPartitioningKeysManager>(*bytesSnap.KeysManagers[i]);
+                merged.KeysManagers[i] = std::move(bytesSnap.KeysManagers[i]);
             } else if (messagesSnap.KeysManagers[i]) {
-                merged.KeysManagers[i] = std::make_unique<NPQ::TPartitioningKeysManager>(*messagesSnap.KeysManagers[i]);
+                merged.KeysManagers[i] = std::move(messagesSnap.KeysManagers[i]);
             }
         }
         return merged;

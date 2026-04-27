@@ -25,10 +25,11 @@ struct TAutopartitioningManagerSnapshot {
 
 enum class ETag : ui8 {
     BYTES = 0,
-    MESSAGES = 1,
+    MESSAGES,
+    Count,
 };
 
-inline constexpr size_t AutoscaleMetricTagCount = static_cast<size_t>(ETag::MESSAGES) + 1;
+inline constexpr size_t AutoscaleMetricTagCount = static_cast<size_t>(ETag::Count);
 
 class IAutopartitioningManager {
 public:

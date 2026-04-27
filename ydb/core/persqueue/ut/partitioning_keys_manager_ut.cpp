@@ -146,6 +146,25 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
                              << Uint128ToDiagString(keys[loIdx]) << ", " << Uint128ToDiagString(keys[hiIdx]) << "]");
     }
 
+
+    Y_UNIT_TEST(MergeKeepsNeighborBucketsSeparated) {
+        const TInstant base = TInstant::Seconds(1'000);
+        const TDuration window = TDuration::Seconds(4);
+
+        TPartitioningKeysManager lhs(2, window);
+        TPartitioningKeysManager rhs(2, window);
+
+        lhs.Add(10, kMsgSize, base);
+        rhs.Add(20, kMsgSize, base);
+        rhs.Add(100, kMsgSize, base + TDuration::Seconds(2));
+
+        lhs.Merge(rhs);
+
+        const TUint128 median = lhs.GetMedianKey();
+        UNIT_ASSERT_C(median == 20,
+            TStringBuilder() << "median " << Uint128ToDiagString(median) << " expected 0:20");
+    }
+
 } // Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest)
 
 } // namespace NKikimr::NPQ

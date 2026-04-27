@@ -34,10 +34,10 @@ void TPartitioningKeysManager::Merge(const TPartitioningKeysManager& other) {
     KeysCounter.Merge(other.KeysCounter);
     auto currentSketch = Sketches.begin();
     for (const auto& sketch : other.Sketches) {
-        while (currentSketch != Sketches.end() && currentSketch->StartTime + WindowSize < sketch.StartTime) {
+        while (currentSketch != Sketches.end() && currentSketch->StartTime + SketchWindowSize <= sketch.StartTime) {
             ++currentSketch;
         }
-        
+
         if (currentSketch == Sketches.end()) {
             EnsureSketch(sketch.StartTime);
             currentSketch = std::prev(Sketches.end());

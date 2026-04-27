@@ -21,9 +21,8 @@
 #include <util/generic/scope.h>
 #include <util/string/strip.h>
 
-#include <csignal>
-
 #if defined(_unix_)
+#include <csignal>
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -137,10 +136,15 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     // process before "Bye!" is printed — even though replxx has already consumed the
     // logical Ctrl+C event. SIG_IGN simply discards these stragglers; user-visible Ctrl+C
     // behaviour is unchanged.
+    //
+    // The race is Unix-specific (it depends on tty-driver translation in canonical mode),
+    // so we only touch SIGINT on Unix builds.
+#if defined(_unix_)
     const auto prevSigintHandler = std::signal(SIGINT, SIG_IGN);
     Y_DEFER {
         std::signal(SIGINT, prevSigintHandler);
     };
+#endif
 
     const TDriver driver(config.CreateDriverConfig());
     const auto configManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, !config.EnableAiInteractive);

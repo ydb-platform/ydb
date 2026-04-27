@@ -153,9 +153,9 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             child.sendcontrol("c")
             self._wait_for_prompt(child)
-            # Sleep past the double-Ctrl+C window (5s in line_reader.cpp) so the next
+            # Sleep past the double-Ctrl+C window (3s in line_reader.cpp) so the next
             # Ctrl+C is treated as a cancel rather than an exit signal.
-            time.sleep(5)
+            time.sleep(4)
             child.sendcontrol("c")
             self._wait_for_prompt(child)
             self._send_query(child, "exit")
@@ -178,7 +178,7 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
         finally:
             child.close()
 
-    def test_consequence_ctrl_c_without_prompt(self):
+    def test_consecutive_ctrl_c_without_prompt(self):
         """A burst of Ctrl+Cs sent without waiting for prompt redraw must terminate the session cleanly."""
         child = self.spawn_interactive()
         try:

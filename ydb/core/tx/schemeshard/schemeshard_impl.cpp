@@ -10,6 +10,7 @@
 #include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -1926,7 +1927,6 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
     TTableIndexInfo::TPtr alterData = index->AlterData;
     Y_ABORT_UNLESS(alterData);
-    // Relaxed to <= to allow convergence when multiple operations use CoordinatedSchemaVersion
     Y_ABORT_UNLESS(index->AlterVersion <= alterData->AlterVersion);
 
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
@@ -4838,7 +4838,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
                 Y_ABORT_UNLESS(Indexes.contains(pathId));
-                result.SetTableIndexVersion(Indexes.at(pathId)->AlterVersion);
+                result.SetTableIndexVersion(DeriveIndexSchemaVersion(pathId));
                 generalVersion += result.GetTableIndexVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:

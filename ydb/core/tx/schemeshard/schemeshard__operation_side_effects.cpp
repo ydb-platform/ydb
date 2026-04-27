@@ -4,6 +4,7 @@
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr {
@@ -157,6 +158,96 @@ void TSideEffects::PublishToSchemeBoard(TOperationId opId, TPathId pathId) {
 
 void TSideEffects::RePublishToSchemeBoard(TOperationId opId, TPathId pathId) {
     RePublishPaths[opId.GetTxId()].push_back(pathId);
+}
+
+void TSideEffects::PublishToSchemeBoardWithAncestors(TOperationId opId, TPathId pathId, TSchemeShard* ss, NIceDb::TNiceDb& db) {
+    // Always publish the path itself.
+    PublishPaths[opId.GetTxId()].push_back(pathId);
+
+    const bool cascadeEnabled = AppData()->FeatureFlags.GetEnableCascadePublication();
+
+    // Walk up to the domain root.  On the way up we apply effects:
+    //   1. If an ancestor is a TableIndex, align its AlterVersion to the
+    //      maximum impl-table child AlterVersion and persist the column for
+    //      rollback safety.  This must run even when cascade publication is
+    //      disabled so that the persisted TableIndex.AlterVersion never lags
+    //      behind the impl table's schema version.
+    //   2. For non-TableIndex ancestors (e.g. the main table), bump
+    //      DirAlterVersion so the ancestor's GeneralVersion changes and the
+    //      scheme-board accepts the publish (cascade only).
+    //   3. Republish each ancestor to the scheme-board so downstream caches
+    //      pick up the updated embedded child versions (cascade only).
+    TPathId cur = pathId;
+    THashSet<TPathId> seen;
+    seen.insert(cur);
+    while (ss && ss->PathsById.contains(cur)) {
+        auto path = ss->PathsById.at(cur);
+        if (path->IsDomainRoot() || path->IsRoot()) {
+            break;
+        }
+        TPathId parent = path->ParentPathId;
+        if (!parent || !seen.insert(parent).second) {
+            break;
+        }
+        if (!ss->PathsById.contains(parent)) {
+            break;
+        }
+        auto parentPath = ss->PathsById.at(parent);
+
+        if (parentPath->IsTableIndex() && ss->Indexes.contains(parent)) {
+            // Effect 1 (always): align index AlterVersion to the maximum
+            // AlterVersion across its non-build, non-dropped impl-table children,
+            // then persist the column for rollback safety.
+            auto index = ss->Indexes.at(parent);
+            ui64 maxChildAv = 0;
+            for (const auto& [childName, childId] : parentPath->GetChildren()) {
+                if (NTableIndex::IsBuildImplTable(childName)) {
+                    continue;
+                }
+                auto cit = ss->PathsById.find(childId);
+                if (cit == ss->PathsById.end() || cit->second->Dropped()) {
+                    continue;
+                }
+                auto tit = ss->Tables.find(childId);
+                if (tit == ss->Tables.end()) {
+                    continue;
+                }
+                maxChildAv = Max(maxChildAv, tit->second->AlterVersion);
+            }
+            if (index->AlterVersion < maxChildAv) {
+                index->AlterVersion = maxChildAv;
+                if (index->AlterData && index->AlterData->AlterVersion < maxChildAv) {
+                    index->AlterData->AlterVersion = maxChildAv;
+                    ss->PersistTableIndexAlterData(db, parent);
+                }
+                ss->PersistTableIndexAlterVersion(db, parent, index);
+            }
+        } else if (cascadeEnabled) {
+            // Effect 2 (cascade only): bump DirAlterVersion on non-TableIndex
+            // ancestors so their GeneralVersion changes and scheme-board
+            // accepts the publish.
+            ++parentPath->DirAlterVersion;
+            ss->PersistPathDirAlterVersion(db, parentPath);
+        }
+
+        if (cascadeEnabled) {
+            // Effect 3 (cascade only): republish the ancestor.
+            ss->ClearDescribePathCaches(parentPath);
+            PublishPaths[opId.GetTxId()].push_back(parent);
+        }
+
+        // When cascade is disabled, we still need to walk up one level to
+        // persist Effect 1 on the direct TableIndex parent, but we stop
+        // republishing after that.  A non-TableIndex parent has no Effect 1
+        // to apply, so we can stop immediately.
+        if (!cascadeEnabled) {
+            // If the direct parent was a TableIndex, its Effect 1 was just
+            // applied above.  Nothing more to do in non-cascade mode.
+            break;
+        }
+
+        cur = parent;
+    }
 }
 
 void TSideEffects::ReadyToNotify(TOperationId opId) {

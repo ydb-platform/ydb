@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -19,7 +20,7 @@ void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSch
     out.MutableStorageRooms()->Clear();
 }
 
-}
+} // anonymous namespace
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1452,7 +1453,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 
     entry.SetType(indexInfo->Type);
     entry.SetState(indexInfo->State);
-    entry.SetSchemaVersion(indexInfo->AlterVersion);
+    entry.SetSchemaVersion(DeriveIndexSchemaVersion(pathId));
 
     for (const auto& keyName: indexInfo->IndexKeys) {
         *entry.MutableKeyColumnNames()->Add() = keyName;
@@ -1641,6 +1642,49 @@ void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name,
     pathId.ToProto(desc.MutablePathId());
     desc.SetVersion(it->second->AlterVersion);
     desc.SetTabletId(static_cast<ui64>(it->second->BlobDepotTabletId));
+}
+
+ui64 TSchemeShard::DeriveIndexSchemaVersion(const TPathId& indexPathId) const {
+    const auto pathIt = PathsById.find(indexPathId);
+    if (pathIt == PathsById.end()) {
+        return 0;
+    }
+    const auto& indexPath = *pathIt->second;
+
+    const auto indexIt = Indexes.find(indexPathId);
+    const ui64 mirrorVersion = (indexIt != Indexes.end()) ? indexIt->second->AlterVersion : 0;
+
+    // Derivation only applies once the index is in its steady state.
+    // During build/alter (EIndexStateWriteOnly, etc.) the impl table's
+    // AlterVersion can race ahead of the index proper as build sub-operations
+    // commit. Consumers (KQP compile cache, scheme cache) expect the
+    // index's version to advance only when the index becomes visibly
+    // updated — i.e. at finalize. Falling back to the mirror in transient
+    // states preserves that contract.
+    if (indexIt == Indexes.end() ||
+        indexIt->second->State != NKikimrSchemeOp::EIndexState::EIndexStateReady)
+    {
+        return mirrorVersion;
+    }
+
+    ui64 v = 0;
+    for (const auto& [childName, childPathId] : indexPath.GetChildren()) {
+        // Skip transient build-impl tables.
+        if (NTableIndex::IsBuildImplTable(childName)) {
+            continue;
+        }
+        const auto childIt = PathsById.find(childPathId);
+        if (childIt == PathsById.end()) continue;
+        if (childIt->second->Dropped()) continue;
+
+        const auto tIt = Tables.find(childPathId);
+        if (tIt == Tables.end()) continue;
+        v = Max(v, tIt->second->AlterVersion);
+    }
+
+    // Floor at the mirror so derivation never regresses below a
+    // previously-published version (transient empty-children windows).
+    return Max(v, mirrorVersion);
 }
 
 } // NSchemeShard

@@ -231,12 +231,7 @@ protected:
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-
-        table->InitAlterData(OperationId);
-        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+        notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         // Collect all streams planned for drop on this table
         TVector<TPathId> streamPathIds;

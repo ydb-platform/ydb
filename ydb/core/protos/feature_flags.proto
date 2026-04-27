@@ -292,4 +292,7 @@ message TFeatureFlags {
     optional bool EnableSnapshotsLocking = 254 [default = true];
     optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
+    // When true, PublishToSchemeBoardWithAncestors publishes a path together with all its ancestors up to the domain root,
+    // so that parent describes (which embed child versions, e.g. TableIndex.SchemaVersion) always reflect the current child state.
+    optional bool EnableCascadePublication = 257 [default = true];
 }

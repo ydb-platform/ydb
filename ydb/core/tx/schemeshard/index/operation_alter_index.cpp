@@ -49,13 +49,13 @@ public:
         context.SS->Indexes[path->PathId] = indexData->AlterData;
 
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, path->PathId, context.SS, db);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
         context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+        context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, parentDir->PathId, context.SS, db);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;

@@ -101,8 +101,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 auto table = context.SS->Tables.at(tablePathId);
 
-                // InitAlterData() sets AlterVersion = CurrentVersion + 1 and also sets CoordinatedSchemaVersion
-                table->InitAlterData(OperationId);
+                // InitAlterData() sets AlterVersion = CurrentVersion + 1
+                table->InitAlterData();
 
                 context.SS->PersistAddAlterTable(db, tablePathId, table->AlterData);
 
@@ -267,7 +267,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
             
             NIceDb::TNiceDb db(context.GetDB());
-            THashSet<TPathId> publishedMainTables;
 
             // Iterate through all target table paths and finalize their alters
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
@@ -299,64 +298,20 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                // Store coordinated version BEFORE calling FinishAlter (which resets AlterData)
-                ui64 coordVersion = table->AlterData->CoordinatedSchemaVersion.GetOrElse(table->AlterVersion + 1);
-
                 // Finalize the alter - this commits AlterData to the main table state
                 LOG_I("SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 
-                // Release AlterData tracking before FinishAlter resets it
-                if (table->ReleaseAlterData(OperationId)) {
-                    context.SS->PersistClearAlterTableFull(db, implTablePathId);
-                }
-
                 table->FinishAlter();
                 context.SS->PersistTableAltered(db, implTablePathId, table);
 
-                // Clear describe path caches and publish to scheme board
+                // Cascade publication walks impl table -> parent index -> main table,
+                // bumping DirAlterVersion and persisting TableIndex.AlterVersion along
+                // the way. PublishPaths deduplicates via AddPublishingPath, so multiple
+                // impl tables under different indexes of the same main table are safe.
                 context.SS->ClearDescribePathCaches(path.Base());
-                context.OnComplete.PublishToSchemeBoard(OperationId, implTablePathId);
-
-                LOG_I("SyncIndexSchemaVersions: Finalized schema version for: " << tablePath);
-
-                // Also update the parent index version
-                TPath indexPath = path.Parent();
-                if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
-                    TPathId indexPathId = indexPath.Base()->PathId;
-                    if (context.SS->Indexes.contains(indexPathId)) {
-                        auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
-
-                        // Use the coordinated version stored before FinishAlter
-                        ui64 targetVersion = coordVersion;
-
-                        if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
-                            auto index = context.SS->Indexes[indexPathId];
-                            index->AlterVersion = targetVersion;
-                            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                                index->AlterData->AlterVersion = targetVersion;
-                                context.SS->PersistTableIndexAlterData(db, indexPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
-
-                            LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
-                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
-
-                            context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
-
-                            TPath mainTablePath = indexPath.Parent();
-                            if (mainTablePath.IsResolved() && mainTablePath.Base()->PathType == NKikimrSchemeOp::EPathTypeTable) {
-                                TPathId mainTablePathId = mainTablePath.Base()->PathId;
-                                if (!publishedMainTables.contains(mainTablePathId)) {
-                                    publishedMainTables.insert(mainTablePathId);
-                                    context.SS->ClearDescribePathCaches(mainTablePath.Base());
-                                    context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
-                                    LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
-                                }
-                            }
-                        }
-                    }
-                }
+                context.OnComplete.PublishToSchemeBoardWithAncestors(OperationId, implTablePathId, context.SS, db);
+                LOG_I("SyncIndexSchemaVersions: cascade-published impl table: " << implTablePathId);
             }
 
             LOG_I("SyncIndexSchemaVersions: Finished schema version sync");

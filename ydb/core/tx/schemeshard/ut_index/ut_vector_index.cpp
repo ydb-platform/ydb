@@ -384,4 +384,98 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
             }
         )", {NKikimrScheme::StatusInvalidParameter});
     }
+
+    // Verify that DeriveIndexSchemaVersion returns Max(impl-table AlterVersions)
+    // rather than merely mirroring the index's own AlterVersion.
+    //
+    // Setup: create a vector index (EIndexTypeGlobalVectorKmeansTree) which has
+    // two impl tables — indexImplLevelTable and indexImplPostingTable.
+    //
+    // Step 1: both impl tables start at AlterVersion=1; parent SchemaVersion must be 1.
+    // Step 2: alter ONLY indexImplPostingTable's PartitionConfig (bump its AlterVersion
+    //         to 2 while indexImplLevelTable stays at 1).
+    // Step 3: parent SchemaVersion must now be 2 (max(1,2)=2).
+    //
+    // On a hypothetical pre-Phase-2 codebase that just mirrors the index's own
+    // AlterVersion, step 3 would still report 1 (the index AlterVersion did not
+    // change), so this assertion discriminates the two behaviors.
+    Y_UNIT_TEST(VectorIndexSchemaVersionDerivedFromMaxImplTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+              Name: "idx_vector"
+              KeyColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 4 }, clusters: 4, levels: 2 } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Helper: read the SchemaVersion reported by the parent table for "idx_vector".
+        // This is the value DeriveIndexSchemaVersion() fills into
+        // TIndexDescription::SchemaVersion (field 6 of the proto).
+        auto readParentIndexSchemaVersion = [&]() -> ui64 {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/vectors");
+            const auto& table = desc.GetPathDescription().GetTable();
+            for (int i = 0, n = table.TableIndexesSize(); i < n; ++i) {
+                if (table.GetTableIndexes(i).GetName() == "idx_vector") {
+                    return table.GetTableIndexes(i).GetSchemaVersion();
+                }
+            }
+            return 0;
+        };
+
+        // Helper: read the impl table's own TableSchemaVersion from its private describe.
+        auto readImplTableSchemaVersion = [&](const TString& implPath) -> ui64 {
+            auto desc = DescribePrivatePath(runtime, implPath);
+            return desc.GetPathDescription().GetTable().GetTableSchemaVersion();
+        };
+
+        // Step 1: initial state — both impl tables at AlterVersion=1.
+        const ui64 levelV0 = readImplTableSchemaVersion("/MyRoot/vectors/idx_vector/indexImplLevelTable");
+        const ui64 postingV0 = readImplTableSchemaVersion("/MyRoot/vectors/idx_vector/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL_C(levelV0, 1, "expected initial indexImplLevelTable.TableSchemaVersion=1");
+        UNIT_ASSERT_VALUES_EQUAL_C(postingV0, 1, "expected initial indexImplPostingTable.TableSchemaVersion=1");
+
+        const ui64 parentV0 = readParentIndexSchemaVersion();
+        UNIT_ASSERT_VALUES_EQUAL_C(parentV0, 1, "expected initial parent.Indexes[idx_vector].SchemaVersion=1");
+
+        // Step 2: alter ONLY indexImplPostingTable (bump its AlterVersion to 2).
+        // Changing PartitioningPolicy on the default column family is the one
+        // alter that schemeshard accepts on an index impl table (see ut_base.cpp
+        // around line 11224).  The parent index's own AlterVersion is untouched.
+        TestAlterTable(runtime, ++txId, "/MyRoot/vectors/idx_vector", R"(
+            Name: "indexImplPostingTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 2000000000
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify only the posting table's version advanced.
+        const ui64 levelV1 = readImplTableSchemaVersion("/MyRoot/vectors/idx_vector/indexImplLevelTable");
+        const ui64 postingV1 = readImplTableSchemaVersion("/MyRoot/vectors/idx_vector/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL_C(levelV1, 1, "indexImplLevelTable should still be at version 1 after altering only posting table");
+        UNIT_ASSERT_VALUES_EQUAL_C(postingV1, 2, "indexImplPostingTable should be at version 2 after alter");
+
+        // Step 3: parent SchemaVersion must now equal max(Level=1, Posting=2) = 2.
+        // On a pre-Phase-2 mirror-only codebase this would still be 1, because
+        // the index's own AlterVersion was never bumped.
+        const ui64 parentV1 = readParentIndexSchemaVersion();
+        UNIT_ASSERT_VALUES_EQUAL_C(parentV1, 2,
+            "parent.Indexes[idx_vector].SchemaVersion must equal max(level.AV=1, posting.AV=2)=2 "
+            "after altering only the posting impl table");
+    }
 }

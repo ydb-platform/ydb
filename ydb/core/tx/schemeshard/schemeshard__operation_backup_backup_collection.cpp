@@ -192,6 +192,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             
             if (incrBackupEnabled && !omitIndexes) {
                 // Also invalidate cache for index impl tables
+                NIceDb::TNiceDb db(context.GetDB());
                 for (const auto& [childName, childPathId] : sPath.Base()->GetChildren()) {
                     auto childPath = context.SS->PathsById.at(childPathId);
                     if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()
@@ -202,7 +203,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                             auto implTablePath = context.SS->PathsById.at(implTablePathId);
                             if (implTablePath->IsTable()) {
                                 context.SS->ClearDescribePathCaches(implTablePath);
-                                context.OnComplete.PublishToSchemeBoard(opId, implTablePathId);
+                                context.OnComplete.PublishToSchemeBoardWithAncestors(opId, implTablePathId, context.SS, db);
                             }
                         }
                     }

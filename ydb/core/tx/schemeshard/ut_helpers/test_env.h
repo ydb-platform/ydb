@@ -89,6 +89,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableDataShardSplitHistogramSorting, false);
         OPTION(bool, EnableDataShardSplitKeySelection, false);
         OPTION(bool, EnableDataShardSplitHistogramOmission, false);
+        OPTION(std::optional<bool>, EnableCascadePublication, std::nullopt);
 
         #undef OPTION
     };

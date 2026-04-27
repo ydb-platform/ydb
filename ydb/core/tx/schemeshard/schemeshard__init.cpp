@@ -1888,11 +1888,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
-                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
-                    if (tableDesc.HasCoordinatedSchemaVersion()) {
-                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
-                    }
-
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {

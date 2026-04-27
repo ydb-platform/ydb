@@ -9,6 +9,8 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <util/random/random.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -194,6 +196,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     auto startAt = TMonotonic::Now();
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
+    OnRequest(hostIndex, EOperation::ReadFromDDisk);
     auto future = StorageTransport->ReadFromDDisk(
         DDiskConnections[hostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -276,6 +279,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
 
     auto promise = NewPromise<TDBGReadBlocksResponse>();
     auto result = promise.GetFuture();
+    OnRequest(hostIndex, EOperation::ReadFromPBuffer);
     auto future = StorageTransport->ReadFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -358,6 +362,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
+    OnRequest(hostIndex, EOperation::WriteToDDisk);
     auto future = StorageTransport->WriteToDDisk(
         DDiskConnections[hostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -440,6 +445,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
+    OnRequest(hostIndex, EOperation::WriteToPBuffer);
     auto future = StorageTransport->WriteToPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -514,7 +520,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     const auto startAt = TMonotonic::Now();
 
-    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds(hostIndexes.size());
+    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
+    disksIds.reserve(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
@@ -536,8 +543,14 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
+    const ui8 coordinatorHostIndex = SelectBestPBufferHostByOperation(
+        hostIndexes,
+        EOperation::WriteToManyPBuffers);
+
+    OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
+
     auto future = StorageTransport->WriteToManyPBuffers(
-        PBufferConnections[hostIndexes[0]].HostConnection,
+        PBufferConnections[coordinatorHostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             range.Start * DefaultBlockSize,
@@ -553,6 +566,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         [promise = std::move(promise),
          childSpan = std::move(childSpan),
          startAt,
+         coordinatorHostIndex,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          weakSelf = weak_from_this()](
@@ -564,6 +578,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                 [promise = std::move(promise),
                  childSpan = std::move(childSpan),
                  startAt,
+                 coordinatorHostIndex,
                  threadChecker,
                  f,
                  weakSelf = std::move(weakSelf)]() mutable
@@ -572,6 +587,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                     if (auto self = weakSelf.lock()) {
                         self->OnWriteBlocksToManyPBuffersResponse(
                             f.GetValue(),
+                            coordinatorHostIndex,
                             std::move(promise),
                             TMonotonic::Now() - startAt);
                     } else {
@@ -589,6 +605,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
 void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
+    ui8 coordinatorHostIndex,
     TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
     TDuration executionTime)
 {
@@ -625,6 +642,14 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             EOperation::WriteToPBuffer,
             error);
 
+        if (coordinatorHostIndex == *hostIndex) {
+            OnResponse(
+                coordinatorHostIndex,
+                executionTime,
+                EOperation::WriteToManyPBuffers,
+                error);
+        }
+
         dbgResponse.Responses.push_back(
             {.HostIndex = *hostIndex, .Error = std::move(error)});
     }
@@ -656,6 +681,11 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     }
 
     auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
+
+    const auto flushOp = pbufferHostIndex == ddiskHostIndex
+                             ? EOperation::Flush
+                             : EOperation::FlushCrossNode;
+    OnRequest(ddiskHostIndex, flushOp);
 
     auto future = StorageTransport->SyncWithPBuffer(
         PBufferConnections[pbufferHostIndex].HostConnection,
@@ -758,6 +788,8 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
     }
 
     auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+
+    OnRequest(hostIndex, EOperation::Erase);
 
     auto future = StorageTransport->EraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
@@ -1023,6 +1055,58 @@ void TDirectBlockGroup::DoRestore(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     promise.SetValue(std::move(RestoredPBuffers[vChunkIndex]));
+}
+
+ui8 TDirectBlockGroup::SelectBestPBufferHost(
+    const std::vector<ui8>& hostIndexes,
+    const std::function<size_t(ui8)>& getInflight)
+{
+    Y_ABORT_UNLESS(!hostIndexes.empty());
+
+    // Pick the host with the lowest number of currently inflight requests of
+    // the given operation type. Ties (multiple hosts with the same minimum
+    // value) are broken uniformly at random via reservoir sampling, so the
+    // load isn't always biased towards the first host in `hostIndexes`.
+    ui8 bestHostIndex = hostIndexes[0];
+    size_t bestInflight = getInflight(bestHostIndex);
+    size_t tieCount = 1;
+    for (size_t i = 1; i < hostIndexes.size(); ++i) {
+        const ui8 hostIndex = hostIndexes[i];
+        const size_t inflight = getInflight(hostIndex);
+        if (inflight < bestInflight) {
+            bestInflight = inflight;
+            bestHostIndex = hostIndex;
+            tieCount = 1;
+        } else if (inflight == bestInflight) {
+            ++tieCount;
+            // Reservoir sampling: replace current best with probability
+            // 1/tieCount so that, after the loop, every tied host has equal
+            // probability of being chosen.
+            if (RandomNumber<size_t>(tieCount) == 0) {
+                bestHostIndex = hostIndex;
+            }
+        }
+    }
+    return bestHostIndex;
+}
+
+ui8 TDirectBlockGroup::SelectBestPBufferHostByOperation(
+    const std::vector<ui8>& hostIndexes,
+    EOperation operation) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return SelectBestPBufferHost(
+        hostIndexes,
+        [this, operation](ui8 hostIndex)
+        { return HostStatistics[hostIndex].InflightCount(operation); });
+}
+
+void TDirectBlockGroup::OnRequest(ui8 hostIndex, EOperation operation)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    HostStatistics[hostIndex].OnRequest(operation);
 }
 
 void TDirectBlockGroup::OnResponse(

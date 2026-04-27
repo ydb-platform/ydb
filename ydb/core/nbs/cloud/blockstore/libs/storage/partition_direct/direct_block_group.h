@@ -15,6 +15,8 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <functional>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -273,6 +275,13 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         ui8 hostIndex) override;
 
+    // Picks the best host (by lowest inflight count) out of the provided set
+    // of hosts. Ties are broken uniformly at random. Exposed as a static
+    // helper to enable direct unit testing of the selection logic.
+    [[nodiscard]] static ui8 SelectBestPBufferHost(
+        const std::vector<ui8>& hostIndexes,
+        const std::function<size_t(ui8)>& getInflight);
+
 private:
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
@@ -305,12 +314,23 @@ private:
     void OnWriteBlocksToManyPBuffersResponse(
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
+        ui8 coordinatorHostIndex,
         NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
         TDuration executionTime);
+
+    // Instance helper that delegates to the static SelectBestPBufferHost,
+    // looking up the inflight counts from HostStatistics.
+    [[nodiscard]] ui8 SelectBestPBufferHostByOperation(
+        const std::vector<ui8>& hostIndexes,
+        EOperation operation) const;
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
+
+    // Called right before a request is sent to the given host. Updates the
+    // per-host inflight counter for the given operation type.
+    void OnRequest(ui8 hostIndex, EOperation operation);
 
     void OnResponse(
         ui8 hostIndex,

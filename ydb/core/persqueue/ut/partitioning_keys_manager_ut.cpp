@@ -148,7 +148,9 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
 
 
     Y_UNIT_TEST(MergeKeepsNeighborBucketsSeparated) {
-        const TInstant base = TInstant::Seconds(1'000);
+        // Add() uses explicit instants, but GetMedianKey() evicts via Now(); base must be near Now()
+        // or sketches are removed as expired and the median becomes zero.
+        const TInstant base = Now();
         const TDuration window = TDuration::Seconds(4);
 
         TPartitioningKeysManager lhs(2, window);

@@ -665,7 +665,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         childSpan.get());
 
     auto promise = NewPromise<TDBGFlushResponse>();
-    auto result = promise.GetFuture();
+    auto flushFuture = promise.GetFuture();
 
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -681,28 +681,56 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         {
             // ActorSystem thread
 
-            const TEvSyncWithPersistentBufferResult& response = f.GetValue();
-            TDBGFlushResponse result;
-            if (response.GetStatus() ==
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
-                response.GetSegmentResults().size() ==
-                    static_cast<int>(segmentCount))
-            {
-                for (size_t i = 0; i < segmentCount; ++i) {
-                    const auto& segmentResult = response.GetSegmentResults(i);
-                    const bool ok =
-                        segmentResult.GetStatus() ==
-                            NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
-                        segmentResult.GetStatus() ==
-                            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
-                    result.Errors.push_back(MakeError(
-                        ok ? S_OK : E_FAIL,
-                        ok ? "" : segmentResult.GetErrorReason()));
-                }
-            } else {
-                for (size_t i = 0; i < segmentCount; ++i) {
-                    result.Errors.push_back(
-                        MakeError(E_FAIL, response.GetErrorReason()));
+            TDBGFlushResponse flushResponse;
+
+            if (auto self = weakSelf.lock()) {
+                const TEvSyncWithPersistentBufferResult& response =
+                    f.GetValue();
+                if (response.GetStatus() ==
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
+                    response.GetSegmentResults().size() ==
+                        static_cast<int>(segmentCount))
+                {
+                    for (size_t i = 0; i < segmentCount; ++i) {
+                        const auto& segmentResult =
+                            response.GetSegmentResults(i);
+                        const bool ok =
+                            segmentResult.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
+                            segmentResult.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::
+                                    OUTDATED;
+                        flushResponse.Errors.push_back(MakeError(
+                            ok ? S_OK : E_FAIL,
+                            ok ? "" : segmentResult.GetErrorReason()));
+                    }
+                } else {
+                    LOG_ERROR(
+                        *self->ActorSystem,
+                        NKikimrServices::NBS_PARTITION,
+                        "SyncWithPBufferResult: %s, status: %d, error reason: "
+                        "%s",
+                        response.ShortUtf8DebugString().c_str(),
+                        response.GetStatus(),
+                        response.GetErrorReason().c_str());
+
+                    for (size_t i = 0; i < segmentCount; ++i) {
+                        LOG_ERROR(
+                            *self->ActorSystem,
+                            NKikimrServices::NBS_PARTITION,
+                            "SyncWithPBufferSegmentResult: %s, status: %d, "
+                            "error reason: %s",
+                            response.GetSegmentResults(i)
+                                .ShortUtf8DebugString()
+                                .c_str(),
+                            response.GetSegmentResults(i).GetStatus(),
+                            response.GetSegmentResults(i)
+                                .GetErrorReason()
+                                .c_str());
+
+                        flushResponse.Errors.push_back(
+                            MakeError(E_FAIL, response.GetErrorReason()));
+                    }
                 }
             }
 
@@ -713,7 +741,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
                  pbufferHostIndex,
                  ddiskHostIndex,
                  startAt,
-                 result = std::move(result),
+                 flushResponse = std::move(flushResponse),
                  threadChecker]   //
                 () mutable
                 {
@@ -724,14 +752,14 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
                             pbufferHostIndex,
                             ddiskHostIndex,
                             TMonotonic::Now() - startAt,
-                            result.Errors);
+                            flushResponse.Errors);
                     }
 
-                    promise.SetValue(std::move(result));
+                    promise.SetValue(std::move(flushResponse));
                 });
         });
 
-    return result;
+    return flushFuture;
 }
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(

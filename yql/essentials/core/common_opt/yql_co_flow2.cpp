@@ -257,10 +257,6 @@ bool HaveFieldsSubsetLMap(const TExprNode::TPtr& start, const TExprNode& arg, TS
 }
 
 TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    static const char OptName[] = "LMapSubsetFields";
-    if (IsOptimizerDisabled<OptName>(*optCtx.Types)) {
-        return node.Ptr();
-    }
     auto itemArg = node.Lambda().Args().Arg(0);
     auto itemType = itemArg.Ref().GetTypeAnn();
     if (itemType->GetKind() != ETypeAnnotationKind::Stream || GetSeqItemType(itemType)->GetKind() != ETypeAnnotationKind::Struct) {

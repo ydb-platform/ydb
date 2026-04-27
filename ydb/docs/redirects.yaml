@@ -510,20 +510,20 @@ ru:
     to: /concepts/query_execution/federated_query/$1
 
 en:
-  - from: /concepts/query_execution/index.md
-    to: /concepts/query_execution.md
-  - from: /concepts/query_execution/mvcc.md
-    to: /concepts/mvcc.md
-  - from: /concepts/query_execution/optimizer.md
-    to: /concepts/optimizer.md
-  - from: /concepts/query_execution/spilling.md
-    to: /concepts/spilling.md
-  - from: /concepts/query_execution/vector_search.md
-    to: /concepts/vector_search.md
-  - from: /concepts/query_execution/secondary_indexes.md
-    to: /concepts/secondary_indexes.md
-  - from: /concepts/query_execution/federated_query/(.*)$
-    to: /concepts/federated_query/$1
+  - from: /concepts/query_execution.md
+    to: /concepts/query_execution/index.md
+  - from: /concepts/mvcc.md
+    to: /concepts/query_execution/mvcc.md
+  - from: /concepts/optimizer.md
+    to: /concepts/query_execution/optimizer.md
+  - from: /concepts/spilling.md
+    to: /concepts/query_execution/spilling.md
+  - from: /concepts/vector_search.md
+    to: /concepts/query_execution/vector_search.md
+  - from: /concepts/secondary_indexes.md
+    to: /concepts/query_execution/secondary_indexes.md
+  - from: /concepts/federated_query/(.*)$
+    to: /concepts/query_execution/federated_query/$1
 
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md

@@ -132,10 +132,11 @@ def create_tables(ydb_wrapper, table_path):
             `run_timestamp_last` Timestamp NOT NULL,
             `owners` Utf8,
             `branch` Utf8 NOT NULL,
+            `build_type` Utf8 NOT NULL,
             `is_muted` Uint32 ,
-            PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
+            PRIMARY KEY (`date`,branch,build_type, `test_name`, `suite_folder`, `full_name`)
         )
-            PARTITION BY HASH(date,branch)
+            PARTITION BY HASH(date,branch,build_type)
             WITH (STORE = COLUMN)
         """
     
@@ -176,6 +177,7 @@ def upload_muted_tests(tests):
             .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
             .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
@@ -226,6 +228,7 @@ def mute_applier(args):
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = args.branch
+            test['build_type'] = args.build_type
             is_muted = int(mute_check(testsuite, testcase))
             test['is_muted'] = is_muted
             

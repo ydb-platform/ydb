@@ -6,12 +6,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 void THostStat::OnRequest(EOperation operation)
 {
-    ++InflightByOperation[operation];
+    ++InflightByOperation[static_cast<size_t>(operation)];
 }
 
 void THostStat::OnError(TInstant now, EOperation operation)
 {
-    auto& inflight = InflightByOperation[operation];
+    auto& inflight = InflightByOperation[static_cast<size_t>(operation)];
     // Clamp to 0 to be defensive against unbalanced OnRequest/OnError pairs.
     if (inflight > 0) {
         --inflight;
@@ -30,7 +30,7 @@ void THostStat::OnSuccess(
 {
     Y_UNUSED(executionTime);
 
-    auto& inflight = InflightByOperation[operation];
+    auto& inflight = InflightByOperation[static_cast<size_t>(operation)];
     if (inflight > 0) {
         --inflight;
     }
@@ -53,10 +53,7 @@ TDuration THostStat::ErrorsDuration(TInstant now, size_t* errorCount) const
 
 size_t THostStat::InflightCount(EOperation operation) const
 {
-    if (const auto* inflight = InflightByOperation.FindPtr(operation)) {
-        return *inflight;
-    }
-    return 0;
+    return InflightByOperation[static_cast<size_t>(operation)];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

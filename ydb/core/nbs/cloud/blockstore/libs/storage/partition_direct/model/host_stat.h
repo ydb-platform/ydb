@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -18,7 +18,13 @@ enum class EOperation
     Flush,
     FlushCrossNode,
     Erase,
+
+    // Must remain the last entry. Used to size per-operation containers.
+    Count_,
 };
+
+inline constexpr size_t OperationCount =
+    static_cast<size_t>(EOperation::Count_);
 
 class THostStat
 {
@@ -47,7 +53,7 @@ private:
     TInstant LastError;
     size_t ErrorCount = 0;
 
-    THashMap<EOperation, size_t> InflightByOperation;
+    TVector<size_t> InflightByOperation = TVector<size_t>(OperationCount, 0);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

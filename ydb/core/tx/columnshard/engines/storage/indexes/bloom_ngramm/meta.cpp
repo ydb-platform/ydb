@@ -309,6 +309,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
 
     TNGrammBuilder builder(hashesCount, caseSensitive);
     AFL_VERIFY(!caseSensitive || op.GetCaseSensitive());
+
     NRequest::TLikePart::EOperation opLike;
     switch (op.GetOperation()) {
         case TSkipIndex::EOperation::Equals:

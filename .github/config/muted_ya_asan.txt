@@ -55,7 +55,9 @@ ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsToken
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestEmptyHttpBody
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithMaxResults
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.BillingRecordsForJsonApi_TableImplementation
@@ -86,6 +88,8 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthWithEnforceUserTokenDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthWithEnforceUserTokenReceiveMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageGroup
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRedrivePolicy
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
@@ -185,6 +189,7 @@ ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cPriorKnowledge
 ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithBody
 ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithLargeResponseBody
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
+ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotApplied
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
@@ -5456,7 +5461,9 @@ ydb/library/yql/tests/sql/hybrid_file/part9 test.py.test[window-win_func_into_ud
 ydb/library/yql/tests/sql/hybrid_file/part9 test.py.test[window-win_func_over_group_by_compl--Results]
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.AutoPartitioning_Producer_SmallMessages
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_BasicWrite
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_ComplexLambdaInsideUsingReplace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath

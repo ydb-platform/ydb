@@ -2352,6 +2352,46 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST(JsonValueLargeIntegerPrecisionLoss) {
+        // Int64/Uint64 values outside [-2^53, 2^53] lose precision when cast to double
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            constexpr double rounded = 9007199254740992.0;
+
+            // Positive side: supported 2^53 - 1 / 2^53 and rounded 2^53 + 1
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 9007199254740991l)",
+                {"\3k1" + numSuffix(rounded - 1.0)});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 9007199254740991ul)",
+                {"\3k1" + numSuffix(rounded - 1.0)});
+
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 9007199254740992l)",
+                {"\3k1" + numSuffix(rounded)});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 9007199254740992ul)",
+                {"\3k1" + numSuffix(rounded)});
+
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == 9007199254740993l)",
+                {"\3k1"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) == 9007199254740993ul)",
+                {"\3k1"});
+
+            // Negative side: supported -(2^53 - 1) / -2^53 and rounded -(2^53 + 1)
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == -9007199254740991l)",
+                {"\3k1" + numSuffix(-rounded + 1.0)});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == -9007199254740992l)",
+                {"\3k1" + numSuffix(-rounded)});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) == -9007199254740993l)",
+                {"\3k1"});
+        });
+    }
+
     Y_UNIT_TEST(JsonCombinationsTokens) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // No JSON_* in the filter - "no JSON_* functions found"

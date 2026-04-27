@@ -185,6 +185,7 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
 }
 
 std::optional<TString> EncodeValueToJsonPath(const TExprBase& node) {
+    static constexpr i64 maxSupportedInt = 9007199254740992;
     TString value;
 
     if (node.Maybe<TCoNull>()) {
@@ -243,7 +244,12 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node) {
     }
 
     if (node.Maybe<TCoInt64>()) {
-        double literalValue = static_cast<double>(FromString<i64>(node.Cast<TCoInt64>().Literal().Value()));
+        auto intValue = FromString<i64>(node.Cast<TCoInt64>().Literal().Value());
+        if (intValue > maxSupportedInt || intValue < -maxSupportedInt) {
+            return std::nullopt;
+        }
+
+        double literalValue = static_cast<double>(intValue);
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
@@ -267,7 +273,12 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node) {
     }
 
     if (node.Maybe<TCoUint64>()) {
-        double literalValue = static_cast<double>(FromString<ui64>(node.Cast<TCoUint64>().Literal().Value()));
+        auto uintValue = FromString<ui64>(node.Cast<TCoUint64>().Literal().Value());
+        if (uintValue > static_cast<ui64>(maxSupportedInt)) {
+            return std::nullopt;
+        }
+
+        double literalValue = static_cast<double>(uintValue);
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
@@ -349,6 +360,14 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
         auto rightParams = VisitJsonNode(otherSide.Cast<TCoJsonValue>());
         if (!rightParams.has_value()) {
             return MakeCollectError(ctx, otherSide.Pos(), rightParams.error());
+        }
+
+        if (IsJsonValueReturningNonIndexable(rightParams->ReturningType)) {
+            return MakeCollectError(ctx, jsonSide.Pos(), "Date/time types in RETURNING clause are not supported");
+        }
+
+        if (rightParams->ReturningType.has_value() && *rightParams->ReturningType == EDataSlot::Bool) {
+            return MakeCollectError(ctx, jsonSide.Pos(), "Comparison JSON_VALUE with RETURNING Bool is not supported");
         }
 
         auto rightResult = ParseAndCollectJson(rightParams->ColumnName, rightParams->JsonPath,

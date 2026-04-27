@@ -692,11 +692,43 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
-                    if (idx++ < state.ResumeIndex) {
-                        continue;
+                static constexpr i64 kPrefetchDirAhead = 24;
+                static constexpr i64 kPrefetchBufAhead = 8;
+
+                const i64 totalRows = state.FetchedPack->NTuples;
+                const i64 rowWidth = totalRows > 0
+                    ? static_cast<i64>(state.FetchedPack->PackedTuples.size()) / totalRows
+                    : 0;
+                const ui8* packedBase = state.FetchedPack->PackedTuples.data();
+                const ui8* overflowBase = state.FetchedPack->Overflow.data();
+
+                auto getRow = [&](i64 i) -> TSingleTuple {
+                    return {.PackedData = packedBase + rowWidth * i,
+                            .OverflowBegin = overflowBase};
+                };
+
+                auto prefetchRow = [&](i64 i, bool bufferLevel) {
+                    TSingleTuple row = getRow(i);
+                    int bi = Settings.BucketIndex(row);
+                    if (state.Spiller.IsBucketSpilled(bi)) return;
+                    TTable* t = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bi]);
+                    if (!t || t->Empty()) return;
+                    if (bufferLevel) {
+                        t->PrefetchLookupBuffer(row);
+                    } else {
+                        t->PrefetchLookupDirectory(row);
                     }
+                };
+
+                for (i64 idx = static_cast<i64>(state.ResumeIndex); idx < totalRows; ++idx) {
+                    if (idx + kPrefetchDirAhead < totalRows) {
+                        prefetchRow(idx + kPrefetchDirAhead, false);
+                    }
+                    if (idx + kPrefetchBufAhead < totalRows) {
+                        prefetchRow(idx + kPrefetchBufAhead, true);
+                    }
+
+                    TSingleTuple tuple = getRow(idx);
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
@@ -707,7 +739,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         lookupToTable(*thisTable, tuple);
                     }
                     if (isFull()) {
-                        state.ResumeIndex = idx;
+                        state.ResumeIndex = static_cast<ui32>(idx + 1);
                         return EFetchResult::One;
                     }
                 }
@@ -767,14 +799,32 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        ui32 idx = 0;
-                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
-                            if (idx++ < table->ProbeResumeIndex) {
-                                continue;
+                        static constexpr i64 kPrefetchDirAhead = 24;
+                        static constexpr i64 kPrefetchBufAhead = 8;
+
+                        const i64 totalRows = table->CurrentProbePack->NTuples;
+                        const i64 rowWidth = totalRows > 0
+                            ? static_cast<i64>(table->CurrentProbePack->PackedTuples.size()) / totalRows
+                            : 0;
+                        const ui8* packedBase = table->CurrentProbePack->PackedTuples.data();
+                        const ui8* overflowBase = table->CurrentProbePack->Overflow.data();
+
+                        auto getRow = [&](i64 i) -> TSingleTuple {
+                            return {.PackedData = packedBase + rowWidth * i,
+                                    .OverflowBegin = overflowBase};
+                        };
+
+                        for (i64 idx = static_cast<i64>(table->ProbeResumeIndex); idx < totalRows; ++idx) {
+                            if (idx + kPrefetchDirAhead < totalRows) {
+                                table->Table.PrefetchLookupDirectory(getRow(idx + kPrefetchDirAhead));
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            if (idx + kPrefetchBufAhead < totalRows) {
+                                table->Table.PrefetchLookupBuffer(getRow(idx + kPrefetchBufAhead));
+                            }
+
+                            lookupToTable(table->Table, getRow(idx));
                             if (isFull()) {
-                                table->ProbeResumeIndex = idx;
+                                table->ProbeResumeIndex = static_cast<ui32>(idx + 1);
                                 return EFetchResult::One;
                             }
                         }

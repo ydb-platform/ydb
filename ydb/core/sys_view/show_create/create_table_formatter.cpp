@@ -1905,7 +1905,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
             auto columnIdFieldName= minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name();
             if (!minMaxIndex.HasColumnId()) {
-                ythrow TFormatFail(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
             }
             auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
             if (columnNameIt == columns.end()) {

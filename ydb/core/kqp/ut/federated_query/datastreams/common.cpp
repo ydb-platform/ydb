@@ -99,12 +99,14 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
+            .DynamicNodeCount = DynamicNodeCount,
             .CredentialsFactory = CreateCredentialsFactory(),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .StoragePoolTypes = StoragePoolTypes,
         });
 
         Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

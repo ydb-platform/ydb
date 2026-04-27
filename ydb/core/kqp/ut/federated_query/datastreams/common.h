@@ -205,9 +205,11 @@ private:
 
 protected:
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
+    TVector<TString> StoragePoolTypes;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 

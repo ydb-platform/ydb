@@ -1138,13 +1138,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        ++DynamicNodeCount;
+        auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
-        constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
+        constexpr char cloudId[] =  "testcloud4";
 
-        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
-        CreateTopic(inputTopicName);
+        constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
+        CreateTopic(topicName);
         constexpr char secretPath[] = "eds_iam_token";
+        auto [location, databasePath] = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
         ExecQuery(fmt::format(R"(
             CREATE SECRET {secret} WITH (value = "{token}");
             )",
@@ -1152,7 +1155,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
             ));
 
-        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
+        constexpr char serviceAccountId[] = "foobar"; // not verified
         constexpr char pqSourceName[] = "sourceNameCloud";
         ExecQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
@@ -1164,8 +1167,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SERVICE_ACCOUNT_ID = "{service_account_id}"
             );)",
             "pq_source"_a = pqSourceName,
-            "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE,
+            "pq_location"_a = location,
+            "pq_database_name"_a = databasePath,
             "secret"_a = secretPath,
             "service_account_id"_a = serviceAccountId
         ));
@@ -1186,6 +1189,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
         // cannot verify use without some kind of "mock IAM"
+        {
+            auto& runtime = GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableExternalDataSourceAuthMethodIam(false);
+            appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(false);
+
+            UpdateConfig(appConfig);
+            Sleep(TDuration::Seconds(1));
+        }
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
+            )",
+            "pq_source"_a = pqSourceName,
+            "topic_name"_a = topicName
+        ), EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
     }
 }
 

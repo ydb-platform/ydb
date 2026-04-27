@@ -164,7 +164,8 @@ private:
 
     static bool IsHiddenHeader(const TString& headerName) {
         return stricmp(headerName.data(), "Authorization") == 0
-            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0;
+            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0
+            || stricmp(headerName.data(), "Session_id") == 0;
     }
 
     static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {

@@ -1437,7 +1437,7 @@ private:
                             NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
-
+                    break;
                 }
             }
 

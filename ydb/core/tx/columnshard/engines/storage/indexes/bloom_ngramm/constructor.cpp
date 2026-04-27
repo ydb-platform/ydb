@@ -13,8 +13,9 @@ namespace {
 bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, const TReadDataExtractorContainer& dataExtractor) {
     const auto extractorProto = dataExtractor.SerializeToProto();
     const auto typeId = columnInfo.GetType().GetTypeId();
-    return ::NKikimr::NOlap::NIndexes::TColumnIndexConstructor::IsSupportedTypeForEquals(typeId) ||
-        (typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn());
+    const bool isUtf8Column = typeId == NScheme::NTypeIds::Utf8;
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
+    return isUtf8Column || isJsonSubColumn;
 }
 
 } // namespace

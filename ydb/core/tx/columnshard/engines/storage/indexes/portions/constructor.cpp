@@ -1,7 +1,6 @@
 #include "constructor.h"
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -38,21 +37,6 @@ TConclusion<TString> TColumnIndexConstructor::ResolveColumnNameForAlterIndex(
     }
 
     return col->GetName();
-}
-
-bool TColumnIndexConstructor::IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
-    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
-        return false;
-    }
-
-    switch (typeId) {
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        default:
-            return true;
-    }
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

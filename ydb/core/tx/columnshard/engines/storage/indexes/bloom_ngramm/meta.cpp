@@ -156,37 +156,26 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        if (arrow::is_base_binary_like(array->type_id())) {
-            NArrow::SwitchType(array->type_id(), [&](const auto& type) {
-                using TWrap = std::decay_t<decltype(type)>;
-                using T = typename TWrap::T;
-                using TArray = typename arrow::TypeTraits<T>::ArrayType;
-                auto& typedArray = static_cast<const TArray&>(*array);
+        AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using T = typename TWrap::T;
+            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+            auto& typedArray = static_cast<const TArray&>(*array);
 
-                for (ui32 row = 0; row < array->length(); ++row) {
-                    if (array->IsNull(row)) {
-                        continue;
-                    }
-
-                    if constexpr (arrow::has_string_view<T>()) {
-                        auto value = typedArray.GetView(row);
-                        BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
-                    } else {
-                        AFL_VERIFY(false);
-                    }
+            for (ui32 row = 0; row < array->length(); ++row) {
+                if (array->IsNull(row)) {
+                    continue;
                 }
-
-                return true;
-            });
-
-            return;
-        }
-
-        for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::TXX64::CalcForAll(array, i, [&](const ui64 hash, const ui32 /*idx*/) {
-                fillData(hash);
-            });
-        }
+                if constexpr (arrow::has_string_view<T>()) {
+                    auto value = typedArray.GetView(row);
+                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
+                } else {
+                    AFL_VERIFY(false);
+                }
+            }
+            return true;
+        });
     }
 
     template <class TFiller>
@@ -309,6 +298,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const ui32 ngramSize = Request.ResolvedNGrammSize();
     AFL_VERIFY(!category);
+    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
     const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {
@@ -319,20 +309,6 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
 
     TNGrammBuilder builder(hashesCount, caseSensitive);
     AFL_VERIFY(!caseSensitive || op.GetCaseSensitive());
-
-    if (op.GetOperation() == TSkipIndex::EOperation::Equals && !arrow::is_base_binary_like(value->type->id())) {
-        for (ui64 hashSeed = 0; hashSeed < hashesCount; ++hashSeed) {
-            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-            predSet(hash);
-            if (!result) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    AFL_VERIFY(arrow::is_base_binary_like(value->type->id()))("id", value->type->ToString());
     NRequest::TLikePart::EOperation opLike;
     switch (op.GetOperation()) {
         case TSkipIndex::EOperation::Equals:

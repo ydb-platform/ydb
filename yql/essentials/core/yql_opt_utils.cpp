@@ -92,8 +92,6 @@ const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNod
     ythrow yexception() << "Member '" << member.Content() << "' not found in literal struct.";
 }
 
-const char ForbidConstantDependsOnFuseOptName[] = "ForbidConstantDependsOnFuse";
-
 }
 
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
@@ -2819,15 +2817,7 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
-bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
-    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
-}
-
-bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
-    if (!IsForbidConstantDependsEnabled(types)) {
-        return true;
-    }
-
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner) {
     if (outer.ChildrenSize() == 1) {
         return true;
     }

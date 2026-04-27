@@ -1903,12 +1903,13 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
             const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+            auto columnIdFieldName= minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name();
             if (!minMaxIndex.HasColumnId()) {
-                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "ColumnId must be in MIN_MAX index description");
+                ythrow TFormatFail(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
             }
             auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
             if (columnNameIt == columns.end()) {
-                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "columnId from index desciption is not present in table description");
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "column id(" << minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name() << ") is not present in table description ");
             }
             Stream << "ALTER TABLE ";
             EscapeName(fullPath, Stream);

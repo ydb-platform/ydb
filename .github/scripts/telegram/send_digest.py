@@ -57,6 +57,7 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_and_send_team_issues import (
+    _sql_escape_literal,
     get_all_team_data,
     load_team_channels,
     send_team_messages,
@@ -123,7 +124,7 @@ def _fetch_closed_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         INNER JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
+        WHERE q.profile_id = '{_sql_escape_literal(profile_id)}'
           AND q.sent_at IS NULL
           AND i.state = 'CLOSED'
         """,
@@ -158,7 +159,7 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         LEFT JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
+        WHERE q.profile_id = '{_sql_escape_literal(profile_id)}'
           AND q.sent_at IS NULL
           AND (i.state IS NULL OR i.state != 'CLOSED')
         ORDER BY q.owner_team, q.github_issue_number

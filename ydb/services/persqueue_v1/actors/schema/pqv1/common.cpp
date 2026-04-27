@@ -105,56 +105,8 @@ TResult AddConsumerImpl(
         consumer->SetServiceType(defaultCientServiceType);
     }
 
-    if (rr.has_shared_read_rule_type()) {
-        if (!AppData()->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "shared consumers are disabled"};
-        }
-        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-
-        const auto& type = rr.shared_read_rule_type();
-        const auto& deadLetterPolicy = type.dead_letter_policy();
-
-        consumer->SetKeepMessageOrder(type.keep_messages_order());
-
-        if (type.has_default_processing_timeout()) {
-            auto defaultProcessingTimeout = type.default_processing_timeout();
-            if (auto r = ValidateDuration(defaultProcessingTimeout, "default_processing_timeout"); !r) {
-                return r;
-            }
-            consumer->SetDefaultProcessingTimeoutSeconds(defaultProcessingTimeout.seconds());
-        }
-
-        consumer->SetDeadLetterPolicyEnabled(deadLetterPolicy.enabled());
-        if (deadLetterPolicy.has_condition()) {
-            consumer->SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
-        }
-
-        if (type.has_receive_message_delay()) {
-            auto delayMessageTime = type.receive_message_delay();
-            if (auto r = ValidateDuration(delayMessageTime, "receive_message_delay"); !r) {
-                return r;
-            }
-            consumer->SetDefaultDelayMessageTimeMs(ConvertDurationToMs32(delayMessageTime));
-        }
-
-        if (type.has_receive_message_wait_time()) {
-            auto receiveMessageWaitTime = type.receive_message_wait_time();
-            if (auto r = ValidateDuration(receiveMessageWaitTime, "receive_message_wait_time"); !r) {
-                return r;
-            }
-            consumer->SetDefaultReceiveMessageWaitTimeMs(ConvertDurationToMs32(receiveMessageWaitTime));
-        }
-
-        if (deadLetterPolicy.has_move_action()) {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-            consumer->SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
-        } else if (deadLetterPolicy.has_delete_action()) {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-        } else {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
-        }
-    } else {
-        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+    if (auto r = ProcessConsumerType(consumer, rr); !r) {
+        return r;
     }
 
     if (consumersAdvancedMonitoringSettings) {

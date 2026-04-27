@@ -1161,10 +1161,10 @@ message TopicSettings {
         string dead_letter_queue = 1;
     }
 
-    message StreamingReadRuleType {
+    message StreamingConsumerType {
     }
 
-    message SharedReadRuleType {
+    message SharedConsumerType {
         // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
         // For streaming consumers, the order of messages is always preserved.
         bool keep_messages_order = 10;
@@ -1205,9 +1205,9 @@ message TopicSettings {
         // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
         optional google.protobuf.Duration availability_period = 8;
 
-        oneof read_rule_type {
-            StreamingReadRuleType streaming_read_rule_type = 9;
-            SharedReadRuleType shared_read_rule_type = 10;
+        oneof consumer_type {
+            StreamingConsumerType streaming_consumer_type = 9;
+            SharedConsumerType shared_consumer_type = 10;
         }
     }
 

@@ -3,7 +3,6 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
-#include <util/string/vector.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
@@ -171,53 +170,38 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
 
     ui32 nextIndexId = 1;
     for (const auto& index : in.indexes()) {
-        if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
-            if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
-                return fail(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
-            }
-
-            if (index.name().empty()) {
-                return fail("Local min_max index must have a name");
-            }
-            
-            if (index.index_columns_size() != 1) {
-                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
-            }
-            
-            if (!index.data_columns().empty()) {
-                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns()));
-            }
-            
-            auto columnIdIt = nameToId.find(index.index_columns(0));
-            if (columnIdIt == nameToId.end()) {
-                return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
-            }
-            
-            auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
-            olapIndex->SetId(nextIndexId++);
-            olapIndex->SetName(index.name());
-            olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
-            auto* min_max = olapIndex->MutableMinMaxIndex();
-            min_max->SetColumnId(columnIdIt->second);
-            continue;
-        }
-
         if (index.name().empty()) {
-            return fail("Index must have a name");
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                return fail("Local min_max index must have a name");
+            } else {
+                return fail("Index must have a name");
+            }
         }
 
         if (index.index_columns_size() != 1) {
-            return fail("Only one index column is supported for local bloom indexes");
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
+            } else {
+                return fail("Only one index column is supported for local bloom indexes");
+            }
         }
 
         if (!index.data_columns().empty()) {
-            return fail("Data columns are not supported for local bloom indexes");
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns()));
+            } else {
+                return fail("Data columns are not supported for local bloom indexes");
+            }
         }
 
         const TString& colName = index.index_columns(0);
         auto idIt = nameToId.find(colName);
         if (idIt == nameToId.end()) {
-            return fail(TStringBuilder() << "Unknown index column: " << colName);
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(colName));
+            } else {
+                return fail(TStringBuilder() << "Unknown index column: " << colName);            
+            }
         }
 
         const ui32 columnId = idIt->second;
@@ -227,9 +211,6 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         olapIndex->SetName(index.name());
 
         switch (index.type_case()) {
-            case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
-                Y_ABORT("min_max index was handled before");
-            }
             case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     return fail("Local bloom filter index support is disabled");
@@ -254,6 +235,15 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 ngram->SetColumnId(columnId);
                 break;
             }
+            case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                    return fail(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
+                }
+                olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                olapIndex->MutableMinMaxIndex()->SetColumnId(columnId);
+                break;
+            }
+
             default:
                 return fail("Unsupported index type for column table import");
         }
@@ -1419,45 +1409,23 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
-        if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
-            if (index.index_columns_size() != 1) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
-                return false;
-            }
-            
-            if (!index.data_columns().empty()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns());
-                return false;
-            }
-            
-            if (!AppData()->FeatureFlags.GetEnableCsMinMaxIndex()) {
-                status = Ydb::StatusIds::UNSUPPORTED;
-                error = NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage;
-                return false;
-            }
-            
-            auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
-            alterColumnTable->SetName(name);
-            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
-            auto* upsertIndex = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
-            upsertIndex->SetName(index.name());
-            upsertIndex->SetClassName(NOlap::NIndexes::NMinMax::kMinMaxClassName);
-            auto min_max_proto = upsertIndex->MutableMinMaxIndex();
-            min_max_proto->SetColumnName(index.index_columns()[0]);
-            return true;
-        }
-
-        if (index.index_columns_size() > 1) {
+        if (index.index_columns_size() != 1) {
             status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Only one index column is supported for local bloom indexes";
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
+            } else {
+                error = "Only one index column is supported for local bloom indexes";
+            }
             return false;
         }
 
         if (!index.data_columns().empty()) {
             status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Data columns are not supported for local bloom indexes";
+            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.data_columns());
+            } else {
+                error = "Data columns are not supported for local bloom indexes";
+            }
             return false;
         }
 
@@ -1468,8 +1436,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         upsert->SetName(index.name());
 
         switch (index.type_case()) {
-            case Ydb::Table::TableIndex::kLocalMinMaxIndex:
-                Y_ABORT("Local min_max index is already handled");
             case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
@@ -1526,7 +1492,16 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = TStringBuilder() << "Got empty index in modify scheme operation";
                 return false;
             }
-
+            case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage;
+                    return false;
+                }
+                upsert->SetClassName(NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                upsert->MutableMinMaxIndex()->SetColumnName(index.index_columns()[0]);
+                return true;
+            }
             default:
                 status = Ydb::StatusIds::BAD_REQUEST;
                 const google::protobuf::Reflection* reflection = index.GetReflection();
@@ -1920,7 +1895,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
         case Ydb::Table::TableIndex::kLocalMinMaxIndex:
-            Y_ABORT("unimplemented");
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local min_max index is not supported in indexed table creation config");
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
             // so it's not possible to return an invalid index type error here for now

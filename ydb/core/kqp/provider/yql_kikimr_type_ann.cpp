@@ -1,7 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
-#include <util/string/vector.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
@@ -1240,7 +1239,7 @@ private:
 
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else if (type == "localMinMax") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                     return TStatus::Error;
                 }

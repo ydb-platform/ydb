@@ -2389,7 +2389,7 @@ public:
 
                                 add_index->mutable_local_bloom_ngram_filter_index();
                             } else if (type == "localMinMax") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableCsMinMaxIndex()) {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
                                     return SyncError();
@@ -2486,9 +2486,9 @@ public:
                                                 localBloomNgramFilterDesc,
                                                 name, value.StringValue(), error);
                                             break;
+                                        }
                                         case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                                             break;
-                                        }
                                         }
                                         default:
                                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()

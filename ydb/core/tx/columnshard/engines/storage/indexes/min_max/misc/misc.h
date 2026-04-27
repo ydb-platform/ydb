@@ -1,6 +1,7 @@
 #pragma once
 #include <util/string/builder.h>
-
+#include <util/string/vector.h>
+ 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
     inline const TString kMinMaxClassName = "MIN_MAX";
 
@@ -25,7 +26,7 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
         return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'";
     }
 
-    inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableCsMinMaxIndex feature flag";
+    inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";
 
 
 }

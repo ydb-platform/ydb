@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 

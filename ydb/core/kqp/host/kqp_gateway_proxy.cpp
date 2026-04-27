@@ -1,6 +1,5 @@
 #include "kqp_host_impl.h"
 
-#include <util/string/vector.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
@@ -652,7 +651,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-
+                break;
             }
             default:
                 break;

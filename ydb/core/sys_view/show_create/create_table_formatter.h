@@ -21,8 +21,8 @@ namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    explicit TCreateTableFormatter(const NKikimr::TFeatureFlags& featureFlags)
-        : Alloc(__LOCATION__), FeatureFlags(featureFlags)
+    explicit TCreateTableFormatter()
+        : Alloc(__LOCATION__)
     {
         Alloc.Release();
     }
@@ -71,7 +71,6 @@ private:
 
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;
-    const NKikimr::TFeatureFlags& FeatureFlags;
 };
 
 } // NSysView

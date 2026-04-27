@@ -1,6 +1,5 @@
 #include "constructor.h"
 #include "meta.h"
-#include "ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h"
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
@@ -60,4 +59,4 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }
 
-}   // namespace NKikimr::NOlap::NIndexes::NMinMax
+} // namespace NKikimr::NOlap::NIndexes::NMinMax

@@ -309,7 +309,7 @@ private:
                             return;
                         }
 
-                        TCreateTableFormatter formatter(AppData()->FeatureFlags);
+                        TCreateTableFormatter formatter;
                         auto formatterResult = formatter.Format(tablePath, Path, tableDesc, temporary, {}, {});
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
@@ -333,7 +333,7 @@ private:
                             temporary = true;
                         }
 
-                        TCreateTableFormatter formatter(AppData()->FeatureFlags);
+                        TCreateTableFormatter formatter;
                         auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary);
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
@@ -429,7 +429,7 @@ private:
                             return;
                         }
 
-                        TCreateTableFormatter formatter{AppData()->FeatureFlags};
+                        TCreateTableFormatter formatter;
                         auto formatterResult = formatter.Format(
                             CollectTableSettingsState->TablePath,
                             Path,
@@ -505,7 +505,7 @@ private:
             return;
         }
 
-        TCreateTableFormatter formatter(AppData()->FeatureFlags);
+        TCreateTableFormatter formatter;
         auto formatterResult = formatter.Format(
             CollectTableSettingsState->TablePath,
             Path,

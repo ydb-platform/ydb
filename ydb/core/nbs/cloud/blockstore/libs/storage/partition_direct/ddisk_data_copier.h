@@ -4,7 +4,7 @@
 #include "read_request.h"
 #include "vchunk_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/host_status.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -37,7 +37,7 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
-        ELocation destination);
+        THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
     // dirtyMap.
@@ -63,7 +63,7 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IPartitionDirectServicePtr PartitionDirectService;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const ELocation Destination;
+    const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;
 
     EState State = EState::Stopped;

@@ -40,9 +40,9 @@ void TWriteWithDirectReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    SendWriteRequest(ELocation::PBuffer0);
-    SendWriteRequest(ELocation::PBuffer1);
-    SendWriteRequest(ELocation::PBuffer2);
+    for (auto h: VChunkConfig.PBufferHosts.Primary()) {
+        SendWriteRequest(h);
+    }
 }
 
 void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
@@ -71,23 +71,23 @@ void TWriteWithDirectReplicationRequestExecutor::
         return;
     }
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
+    const auto availableHandOffHosts = GetAvailableHandOffHosts();
     const size_t neededHedgingRequestsCount = std::min(
         QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
-        availableHandOffLocations.size());
+        availableHandOffHosts.size());
 
     for (size_t i = 0; i < neededHedgingRequestsCount; ++i) {
-        const auto& location = availableHandOffLocations[i];
+        const auto h = availableHandOffHosts[i];
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "handoff buffer %lu since we "
+            "handoff host %u since we "
             "have %lu completed writes",
-            GetLocationIndex(location),
+            static_cast<unsigned>(h),
             CompletedWrites.Count());
 
-        SendWriteRequest(location);
+        SendWriteRequest(h);
     }
 }
 

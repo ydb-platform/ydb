@@ -1,12 +1,11 @@
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(dirty_map.h)
-GENERATE_ENUM_SERIALIZATION(location.h)
 
 SRCS(
     dirty_map.cpp
+    host_status.cpp
     inflight_info.cpp
-    location.cpp
     range_locker.cpp
 )
 

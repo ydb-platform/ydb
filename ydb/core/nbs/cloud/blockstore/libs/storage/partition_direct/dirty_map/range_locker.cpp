@@ -63,7 +63,7 @@ TRangeLock::TRangeLock(ILockableRanges* lockableRanges, ui64 lsn)
 TRangeLock::TRangeLock(
     ILockableRanges* lockableRanges,
     TBlockRange64 range,
-    TLocationMask mask)
+    THostMask mask)
     : LockableRanges(lockableRanges)
     , Range(range)
     , Mask(mask)

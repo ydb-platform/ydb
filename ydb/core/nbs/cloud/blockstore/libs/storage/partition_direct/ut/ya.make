@@ -5,6 +5,7 @@ SRCS(
     ddisk_data_copier_ut.cpp
     direct_block_group_impl_ut.cpp
     read_request_ut.cpp
+    vchunk_config_ut.cpp
     write_request_ut.cpp
 )
 

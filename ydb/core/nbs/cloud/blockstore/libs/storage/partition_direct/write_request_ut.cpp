@@ -30,6 +30,15 @@ TRequestHeaders MakeWriteTestRequestHeaders(
         .Range = range};
 }
 
+THostMask MakeHostMask(std::initializer_list<THostIndex> hosts)
+{
+    THostMask result;
+    for (auto h: hosts) {
+        result.Set(h);
+    }
+    return result;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,10 +61,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -128,10 +138,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -209,10 +220,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -266,26 +278,24 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         UNIT_ASSERT_VALUES_EQUAL(5, writePBufferPromises.size());
 
-        writePBufferPromises[VChunkConfig.HandOffHost0].SetValue(
+        writePBufferPromises[3].SetValue(   // HandOff0
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        writePBufferPromises[VChunkConfig.HandOffHost1].SetValue(
+        writePBufferPromises[4].SetValue(   // HandOff1
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        writePBufferPromises[VChunkConfig.PrimaryHost2].SetValue(
+        writePBufferPromises[2].SetValue(   // Primary2
             {.Error = MakeError(S_OK)});
 
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeHostMask({0, 1, 2, 3, 4}),
             response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(false, false, true, true, true),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({2, 3, 4}), response.CompletedWrites);
     }
 
     Y_UNIT_TEST_F(ShouldNotSendWriteRequestAfterQuorumIsReached, TBaseFixture)
@@ -304,10 +314,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             scheduled.emplace_back(delay, std::move(callback));
         };
 
-        TMap<ui8, TPromise<TDBGWriteBlocksResponse>> writePBufferPromises;
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>>
+            writePBufferPromises;
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
-             ui8 hostIndex,
+             THostIndex hostIndex,
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
@@ -355,34 +366,30 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
 
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
-        writePBufferPromises[VChunkConfig.PrimaryHost0].SetValue(
+        writePBufferPromises[0].SetValue(   // Primary0
             {.Error = MakeError(S_OK)});
-        writePBufferPromises[VChunkConfig.PrimaryHost1].SetValue(
+        writePBufferPromises[1].SetValue(   // Primary1
             {.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
         scheduled[1].second();
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
-        UNIT_ASSERT(!writePBufferPromises.contains(VChunkConfig.HandOffHost1));
+        UNIT_ASSERT(!writePBufferPromises.contains(4));   // HandOff1
 
-        writePBufferPromises[VChunkConfig.PrimaryHost2].SetValue(
+        writePBufferPromises[2].SetValue(   // Primary2
             {.Error = MakeError(S_OK)});
 
-        writePBufferPromises[VChunkConfig.HandOffHost0].SetValue(
+        writePBufferPromises[3].SetValue(   // HandOff0
             {.Error = MakeError(E_FAIL, "hedged handoff failed")});
 
         UNIT_ASSERT_VALUES_EQUAL(4, writePBufferPromises.size());
-        UNIT_ASSERT(!writePBufferPromises.contains(VChunkConfig.HandOffHost1));
+        UNIT_ASSERT(!writePBufferPromises.contains(4));   // HandOff1
 
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, false),
-            response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, false, false),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2, 3}), response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
     }
 
     Y_UNIT_TEST_F(
@@ -409,7 +416,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
             [&](ui32 vChunkIndex,
-                std::vector<ui8> hostIndexes,
+                TVector<THostIndex> hostIndexes,
                 ui64 lsn,
                 TBlockRange64 range,
                 TDuration replyTimeout,
@@ -427,26 +434,14 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
             if (manyPBufferBatchPromises.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost0,
-                    hostIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost1,
-                    hostIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost2,
-                    hostIndexes[2]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndexes[0]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{1}, hostIndexes[1]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{2}, hostIndexes[2]);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.PrimaryHost2,
-                    hostIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.HandOffHost0,
-                    hostIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    VChunkConfig.HandOffHost1,
-                    hostIndexes[2]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{2}, hostIndexes[0]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{3}, hostIndexes[1]);
+                UNIT_ASSERT_VALUES_EQUAL(THostIndex{4}, hostIndexes[2]);
             }
 
             auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
@@ -491,11 +486,11 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         TDBGWriteBlocksToManyPBuffersResponse hedgeOk;
         hedgeOk.OverallError = MakeError(S_OK);
         hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.HandOffHost0, .Error = MakeError(S_OK)});
+            {.HostIndex = 3, .Error = MakeError(S_OK)});   // HandOff0
         hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.HandOffHost1, .Error = MakeError(S_OK)});
+            {.HostIndex = 4, .Error = MakeError(S_OK)});   // HandOff1
         hedgeOk.Responses.push_back(
-            {.HostIndex = VChunkConfig.PrimaryHost2, .Error = MakeError(S_OK)});
+            {.HostIndex = 2, .Error = MakeError(S_OK)});   // Primary2
 
         manyPBufferBatchPromises[1].SetValue(std::move(hedgeOk));
 
@@ -503,11 +498,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(true, true, true, true, true),
+            MakeHostMask({0, 1, 2, 3, 4}),
             response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            TLocationMask::MakePBuffer(false, false, true, true, true),
-            response.CompletedWrites);
+        UNIT_ASSERT_EQUAL(MakeHostMask({2, 3, 4}), response.CompletedWrites);
     }
 }
 

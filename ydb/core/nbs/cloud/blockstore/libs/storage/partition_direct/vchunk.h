@@ -97,7 +97,7 @@ private:
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
-    const TVChunkConfig VChunkConfig;
+    const ui32 VChunkIndex;
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;

@@ -45,12 +45,23 @@ void TBaseFixture::Init()
         65536,
         1024,
         DefaultVChunkSize);
-    DirtyMap.UpdateConfig(DDiskMask.Include(PBuffersMask), {});
+    auto ddiskHosts = THostStatusList::MakeRotating(
+        FixtureHostCount,
+        FixtureVChunkIndex,
+        FixturePrimaryCount);
+    ddiskHosts.Set(4, EHostStatus::Disabled);   // matches old "HO1 absent"
+
+    DirtyMap.UpdateHostStatuses(
+        THostStatusList::MakeRotating(
+            FixtureHostCount,
+            FixtureVChunkIndex,
+            FixturePrimaryCount),
+        std::move(ddiskHosts));
 
     DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
         (ui32 vChunkIndex,
-         ui8 hostIndex,
+         THostIndex hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
@@ -58,7 +69,7 @@ void TBaseFixture::Init()
         Y_UNUSED(traceId);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         RangeData = GenerateRandomString(CopyRangeSize);
@@ -71,7 +82,7 @@ void TBaseFixture::Init()
 
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
         (ui32 vChunkIndex,
-         ui8 hostIndex,
+         THostIndex hostIndex,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
@@ -79,7 +90,7 @@ void TBaseFixture::Init()
         Y_UNUSED(traceId);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost1, hostIndex);
+        UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         TString copiedData;

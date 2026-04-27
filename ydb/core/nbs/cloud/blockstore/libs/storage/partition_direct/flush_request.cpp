@@ -13,7 +13,7 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TRoute route,
+    THostRoute route,
     TFlushHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
@@ -23,8 +23,8 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     , Route(route)
     , Hint(std::move(hint))
 {
-    Y_ABORT_UNLESS(IsPBuffer(Route.Source));
-    Y_ABORT_UNLESS(IsDDisk(Route.Destination));
+    Y_ABORT_UNLESS(Route.SourceHostIndex != InvalidHostIndex);
+    Y_ABORT_UNLESS(Route.DestinationHostIndex != InvalidHostIndex);
 }
 
 TFlushRequestExecutor::~TFlushRequestExecutor()
@@ -43,8 +43,8 @@ void TFlushRequestExecutor::Run()
 {
     auto future = DirectBlockGroup->SyncWithPBuffer(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Route.Source),
-        VChunkConfig.GetHostIndex(Route.Destination),
+        Route.SourceHostIndex,
+        Route.DestinationHostIndex,
         Hint.Segments,
         Span.GetTraceId());
     future.Subscribe(

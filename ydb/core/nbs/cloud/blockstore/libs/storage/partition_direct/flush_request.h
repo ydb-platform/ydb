@@ -17,7 +17,7 @@ class TFlushRequestExecutor
 public:
     struct TResponse
     {
-        TRoute Route;
+        THostRoute Route;
         TVector<ui64> FlushOk;
         TVector<ui64> FlushFailed;
     };
@@ -26,7 +26,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TRoute route,
+        THostRoute route,
         TFlushHint hint,
         NWilson::TSpan span);
 
@@ -37,7 +37,7 @@ public:
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
-    void SendFlushRequest(ELocation location);
+    void SendFlushRequest(THostIndex host);
     void OnFlushResponse(const TDBGFlushResponse& response);
     void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
 
@@ -45,7 +45,7 @@ private:
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const NWilson::TSpan Span;
-    const TRoute Route;
+    const THostRoute Route;
     const TFlushHint Hint;
 
     NThreading::TPromise<TResponse> Promise =

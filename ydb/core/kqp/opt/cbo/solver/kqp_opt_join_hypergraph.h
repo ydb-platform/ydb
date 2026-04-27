@@ -328,113 +328,166 @@ public:
                 continue;
             }
 
-            auto labels = ApplyHintsToSubgraph(hint.Tree);
-            auto nodes = Graph_.GetNodesByRelNames(labels);
-
-            for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
-                TNodeSet newLeft = Graph_.GetEdge(i).Left;
-                if (IsSubset(Graph_.GetEdge(i).Left, nodes) && !Overlaps(Graph_.GetEdge(i).Right, nodes)) {
-                    newLeft |= nodes;
-                }
-
-                TNodeSet newRight = Graph_.GetEdge(i).Right;
-                if (IsSubset(Graph_.GetEdge(i).Right, nodes) && !Overlaps(Graph_.GetEdge(i).Left, nodes)) {
-                    newRight |= nodes;
-                }
-
-                Graph_.UpdateEdgeSides(i, newLeft, newRight);
-            }
+            ApplyHintsToSubgraph(hint.Tree);
 
             hint.Applied = true;
         }
     }
 
 private:
+    static TVector<TString> MergeLabels(TVector<TString> lhs, TVector<TString> rhs) {
+        lhs.insert(lhs.end(),
+            std::make_move_iterator(rhs.begin()),
+            std::make_move_iterator(rhs.end()));
+        return lhs;
+    }
+
+    // Widen edges so that all nodes in the set are always on the same side.
+    void GroupNodes(const TNodeSet& nodes) {
+        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+            TNodeSet newLeft = Graph_.GetEdge(i).Left;
+            if (IsSubset(Graph_.GetEdge(i).Left, nodes) && !Overlaps(Graph_.GetEdge(i).Right, nodes)) {
+                newLeft |= nodes;
+            }
+
+            TNodeSet newRight = Graph_.GetEdge(i).Right;
+            if (IsSubset(Graph_.GetEdge(i).Right, nodes) && !Overlaps(Graph_.GetEdge(i).Left, nodes)) {
+                newRight |= nodes;
+            }
+
+            Graph_.UpdateEdgeSides(i, newLeft, newRight);
+        }
+    }
+
+    TVector<TString> ApplyPartialHint(const std::shared_ptr<TJoinOrderHints::TJoinNode>& join) {
+        TVector<TString> lhsLabels = join->Lhs->IsPartial()
+            ? join->Lhs->Labels()
+            : ApplyHintsToSubgraph(join->Lhs);
+        TVector<TString> rhsLabels = join->Rhs->IsPartial()
+            ? join->Rhs->Labels()
+            : ApplyHintsToSubgraph(join->Rhs);
+
+        auto lhsNodes = Graph_.GetNodesByRelNames(lhsLabels);
+        auto rhsNodes = Graph_.GetNodesByRelNames(rhsLabels);
+
+        if (join->Lhs->IsPartial()) {
+            GroupNodes(lhsNodes);
+        }
+        if (join->Rhs->IsPartial()) {
+            GroupNodes(rhsNodes);
+        }
+
+        // Ordering constraint: whenever a rhs node appears on the Right of an
+        // edge (and no rhs node is on the Left — i.e. the edge is not internal
+        // to the rhs group), require all lhs nodes on the Left too.
+        // Also skip edges where lhsNodes already appear on the Right — adding
+        // them to the Left would put nodes on both sides, making the edge
+        // unsatisfiable.
+        for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
+            if (!Overlaps(Graph_.GetEdge(i).Right, rhsNodes) ||
+                 Overlaps(Graph_.GetEdge(i).Left,  rhsNodes) ||
+                 Overlaps(Graph_.GetEdge(i).Right, lhsNodes)) {
+                continue;
+            }
+
+            // Capture values before mutating the edge at index i.
+            TNodeSet newLeft   = Graph_.GetEdge(i).Left | lhsNodes;
+            TNodeSet origRight = Graph_.GetEdge(i).Right;
+            size_t   revIdx    = Graph_.GetEdge(i).ReversedEdgeId;
+
+            Graph_.UpdateEdgeSides(i, newLeft, origRight);
+
+            TNodeSet revLeft     = Graph_.GetEdge(revIdx).Left;
+            TNodeSet revNewRight = Graph_.GetEdge(revIdx).Right | lhsNodes;
+            Graph_.UpdateEdgeSides(revIdx, revLeft, revNewRight);
+        }
+
+        return MergeLabels(std::move(lhsLabels), std::move(rhsLabels));
+    }
+
+    TVector<TString> ApplyExactOrCommutativeHint(const std::shared_ptr<TJoinOrderHints::TJoinNode>& join) {
+        TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
+        TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
+
+        // Construct hint name for error messages, e.g. ({A B C} {D E}).
+        //
+        // Possible reasons for failure:
+        // 1. No edge bridges the two sides (would require a cross join)
+        // 2. A non-commutative edge exists in the opposite direction
+        auto describeHintedPart = [&]() {
+            return Sprintf(
+                "({{%s}} {{%s}})",
+                JoinSeq(", ", lhsLabels).c_str(),
+                JoinSeq(", ", rhsLabels).c_str()
+            );
+        };
+
+        auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
+        auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
+
+        TVector<size_t> bridgingEdgeIdxs;
+        const auto& edges = Graph_.GetEdges();
+        for (size_t i = 0; i < edges.size(); ++i) {
+            if (!edges[i].Bridges(lhs, rhs)) {
+                continue;
+            }
+
+            // A non-commutative reversed edge bridges (lhs, rhs) but its canonical
+            // direction is (rhs, lhs). For an exact hint this is a contradiction;
+            // for a commutative hint ([...]) either direction is acceptable so we
+            // include the edge (widening still enforces the grouping constraint).
+            if (!edges[i].IsCommutative && edges[i].IsReversed && !join->IsCommutativeHint) {
+                Y_ENSURE(false,
+                    Sprintf("Hinted join %s breaks semantics by contradicting"
+                            " non-commutative join of the opposite direction"
+                            " - hint will be ignored", describeHintedPart().c_str())
+                );
+                continue;
+            }
+
+            bridgingEdgeIdxs.push_back(i);
+        }
+
+        if (bridgingEdgeIdxs.empty()) {
+            Y_ENSURE(false,
+                Sprintf("Hinted join %s does not exist - hint will be ignored",
+                        describeHintedPart().c_str())
+            );
+        }
+
+        for (size_t edgeIdx : bridgingEdgeIdxs) {
+            auto& edge = Graph_.GetEdge(edgeIdx);
+            size_t revEdgeIdx = edge.ReversedEdgeId;
+            auto& revEdge = Graph_.GetEdge(revEdgeIdx);
+
+            if (!join->IsCommutativeHint) {
+                edge.IsReversed = false;
+                revEdge.IsReversed = true;
+                edge.IsCommutative = revEdge.IsCommutative = false;
+            }
+
+            Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
+            Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
+        }
+
+        auto allLabels = MergeLabels(std::move(lhsLabels), std::move(rhsLabels));
+        GroupNodes(Graph_.GetNodesByRelNames(allLabels));
+        return allLabels;
+    }
+
     TVector<TString> ApplyHintsToSubgraph(const std::shared_ptr<TJoinOrderHints::ITreeNode>& node) {
         if (node->IsJoin()) {
             auto join = std::static_pointer_cast<TJoinOrderHints::TJoinNode>(node);
-            TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
-            TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
-
-            // Construct hint name for error name, e.g. ({A B C} {D E}), i.e.
-            // this particular "level" of this particular hint implies that
-            // subtree containing {A B C} and subtree containing {D E} should
-            // be joined together, which is not satisfiable.
-
-            // Possible reasons include:
-            // 1. The edge that represents this join is absent, creating
-            //    it requires inserting a cross join, which is usually not desirable
-            // 2. There exits an edge that is the reverse of what is hinted
-            //    and it's not commutative -> hint contradicts semantics
-            auto describeHintedPart = [&]() {
-                return Sprintf(
-                    "({{%s}} {{%s}})",
-                    JoinSeq(", ", lhsLabels).c_str(),
-                    JoinSeq(", ", rhsLabels).c_str()
-                );
-            };
-
-            auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
-            auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
-
-            TVector<size_t> bridgingEdgeIdxs;
-            const auto& edges = Graph_.GetEdges();
-            for (size_t i = 0; i < edges.size(); ++i) {
-                if (!edges[i].Bridges(lhs, rhs)) {
-                    continue;
-                }
-
-                // A non-commutative reversed edge bridges (lhs, rhs) but its canonical
-                // direction is (rhs, lhs) — the hint contradicts a mandatory edge.
-                if (!edges[i].IsCommutative && edges[i].IsReversed) {
-                    Y_ENSURE(false,
-                        Sprintf("Hinted join %s breaks semantics by contradicting"
-                                " non-commutative join of the opposite direction"
-                                " - hint will be ignored", describeHintedPart().c_str())
-                    );
-                    continue;
-                }
-
-                bridgingEdgeIdxs.push_back(i);
+            if (join->Lhs->IsPartial() || join->Rhs->IsPartial()) {
+                return ApplyPartialHint(join);
             }
-
-            if (bridgingEdgeIdxs.empty()) {
-                Y_ENSURE(false,
-                    Sprintf("Hinted join %s does not exist - hint will be ignored",
-                            describeHintedPart().c_str())
-                );
-            }
-
-            for (size_t edgeIdx : bridgingEdgeIdxs) {
-                auto& edge = Graph_.GetEdge(edgeIdx);
-                size_t revEdgeIdx = edge.ReversedEdgeId;
-                auto& revEdge = Graph_.GetEdge(revEdgeIdx);
-
-                edge.IsReversed = false;
-                revEdge.IsReversed = true;
-
-                // Hint selects a certain direction, therefore
-                // now edge is no longer commutative
-                edge.IsCommutative = revEdge.IsCommutative = false;
-
-                Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);
-                Graph_.UpdateEdgeSides(revEdgeIdx, rhs, lhs);
-            }
-
-            TVector<TString> joinLabels = std::move(lhsLabels);
-            joinLabels.insert(
-                joinLabels.end(),
-                std::make_move_iterator(rhsLabels.begin()),
-                std::make_move_iterator(rhsLabels.end())
-            );
-            return joinLabels;
+            return ApplyExactOrCommutativeHint(join);
         }
 
         auto relation = std::static_pointer_cast<TJoinOrderHints::TRelationNode>(node);
         return {relation->Label};
     }
 
-private:
     TJoinHypergraph<TNodeSet>& Graph_;
 };
 

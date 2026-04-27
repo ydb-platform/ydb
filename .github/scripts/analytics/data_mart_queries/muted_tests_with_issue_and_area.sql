@@ -3,7 +3,7 @@ $mart_history_days = 365;
 
 -- Mart filter: branch/build_type slice for this dashboard (not necessarily all CI matrix branches).
 $mart_branch = 'main';
-$stable_branches = 'stable-26%';
+$stable_branches_ge_26_re = '^stable-(2[6-9]|[3-9][0-9])(-.+)?$';
 
 -- Must match ``manual_unmute_ttl_calendar_days`` in ``.github/config/mute_config.json`` (fast-unmute deadline).
 $manual_unmute_ttl_calendar_days = 3;
@@ -120,8 +120,10 @@ LEFT JOIN $mfu AS mfu
     AND tm.branch = mfu.branch
     AND tm.build_type = mfu.build_type
 WHERE tm.date_window >= CurrentUtcDate() - $mart_history_days * Interval("P1D")
-    AND ( tm.branch = $mart_branch or tm.branch LIKE $stable_branches)
- --   AND tm.build_type = $mart_build_type
+    AND (
+        tm.branch = $mart_branch
+        OR Re2::Match($stable_branches_ge_26_re)(CAST(tm.branch AS String))
+    )
     AND tm.is_test_chunk = 0
     AND tm.is_muted = 1
     AND tm.state != 'Skipped';

@@ -6,6 +6,8 @@
 -- This mart only aggregates; grid still uses timeline + mapping for empty cells.
 $window_days = 365;
 $muted_sla_days = 30;
+$mart_branch = 'main';
+$stable_branches_ge_26_re = '^stable-(2[6-9]|[3-9][0-9])(-.+)?$';
 
 $normalize = ($raw_area) -> {
     $parts = String::SplitToList(Cast($raw_area AS String), '/');
@@ -60,7 +62,10 @@ $tm = (
         Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
     FROM `test_results/analytics/tests_monitor` AS t
     WHERE t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
-      --AND t.build_type = 'relwithdebinfo'
+      AND (
+          t.branch = $mart_branch
+          OR Re2::Match($stable_branches_ge_26_re)(CAST(t.branch AS String))
+      )
       AND t.is_test_chunk = 0
       AND t.state != 'Skipped'
 );

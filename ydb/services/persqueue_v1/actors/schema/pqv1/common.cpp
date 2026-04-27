@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -102,6 +103,33 @@ TResult AddConsumerImpl(
         }
         const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
         consumer->SetServiceType(defaultCientServiceType);
+    }
+
+    if (rr.has_shared_read_rule_type()) {
+        if (!AppData()->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "shared consumers is disabled"};
+        }
+        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+
+        consumer->SetKeepMessageOrder(rr.shared_read_rule_type().keep_messages_order());
+        consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_read_rule_type().default_processing_timeout().seconds());
+
+        consumer->SetDeadLetterPolicyEnabled(rr.shared_read_rule_type().dead_letter_policy().enabled());
+        consumer->SetMaxProcessingAttempts(rr.shared_read_rule_type().dead_letter_policy().condition().max_processing_attempts());
+
+        consumer->SetDefaultDelayMessageTimeMs(rr.shared_read_rule_type().receive_message_delay().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_delay().nanos() / 1'000'000);
+        consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_read_rule_type().receive_message_wait_time().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_wait_time().nanos() / 1'000'000);
+
+        if (rr.shared_read_rule_type().dead_letter_policy().has_move_action()) {
+            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+            consumer->SetDeadLetterQueue(rr.shared_read_rule_type().dead_letter_policy().move_action().dead_letter_queue());
+        } else if (rr.shared_read_rule_type().dead_letter_policy().has_delete_action()) {
+            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+        } else {
+            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+        }
+    } else {
+        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
     }
 
     if (consumersAdvancedMonitoringSettings) {

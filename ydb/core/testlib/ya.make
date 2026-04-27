@@ -138,5 +138,6 @@ RECURSE(
     actors
     basics
     default
+    grpc_request
     pg
 )

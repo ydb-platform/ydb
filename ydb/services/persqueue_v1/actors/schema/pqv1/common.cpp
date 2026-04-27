@@ -107,7 +107,7 @@ TResult AddConsumerImpl(
 
     if (rr.has_shared_read_rule_type()) {
         if (!AppData()->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "shared consumers is disabled"};
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "shared consumers are disabled"};
         }
         consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 

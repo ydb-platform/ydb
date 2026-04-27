@@ -107,7 +107,7 @@ Y_UNIT_TEST(SharedConsumer) {
 
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);
-    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issue.GetMessage());
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
 
     runtime.Register(NPQ::NDescriber::CreateDescriberActor(runtime.AllocateEdgeActor(), "/Root/test_db", {"/Root/test_db/topic1"}));
     auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));

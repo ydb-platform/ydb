@@ -13,9 +13,16 @@ namespace NKikimr::Tests::NGrpc {
 template<typename TRes>
 struct TResultHolder {
     std::optional<Ydb::StatusIds::StatusCode> ResultStatus;
-    NYql::TIssue Issue;
+    NYql::TIssues Issues;
 
-    TRes Result;
+    std::unique_ptr<const NProtoBuf::Message> Response;
+
+    TRes AsResult() const {
+        auto r = dynamic_cast<const TRes*>(Response);
+        UNIT_ASSERT(r);
+
+        return *r;
+    }
 };
 
 template<typename TReq, typename TRes>
@@ -98,6 +105,8 @@ public:
         Y_UNUSED(code);
         Y_UNUSED(msg);
         Y_UNUSED(details);
+
+        Y_UNREACHABLE();
     }
 
     TString GetPeerName() const override {
@@ -121,11 +130,11 @@ public:
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
-        ResultHolder->Issue = issue;
+        ResultHolder->Issues.AddIssue(issue);
     }
 
     void RaiseIssues(const NYql::TIssues& issues) override {
-        Y_UNUSED(issues);
+        ResultHolder->Issues = issues;
     };
 
     const TString& GetRequestName() const override {
@@ -170,11 +179,13 @@ public:
         Y_UNUSED(flag);
         Y_UNUSED(in);
         Y_UNUSED(status);
+
+        Y_UNREACHABLE();
     };
 
     void Reply(NProtoBuf::Message* resp, ui32 status = 0) override {
-        Y_UNUSED(resp);
-        Y_UNUSED(status);
+        ResultHolder->ResultStatus = Ydb::StatusIds::StatusCode(status);
+        ResultHolder->Response.reset(resp);
     };
 
     void SendOperation(const Ydb::Operations::Operation& operation) override {
@@ -224,15 +235,9 @@ private:
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status, const google::protobuf::Message& result) {
         ResultHolder->ResultStatus = status;
 
-        if (status == Ydb::StatusIds::SUCCESS) {
-            Cerr << (TStringBuilder() << "RESULT:" << result.DebugString() << Endl);
-            auto r = dynamic_cast<const TRes*>(&result);
-            UNIT_ASSERT(r);
-
-            ResultHolder->Result = *r;
-        } else {
-            Cerr << (TStringBuilder() << "RESULT:" << status << " " << ResultHolder->Issue.GetMessage() << Endl);
-        }
+        auto* c = result.New();
+        c->CopyFrom(result);
+        ResultHolder->Response.reset(c);
     }
 };
     

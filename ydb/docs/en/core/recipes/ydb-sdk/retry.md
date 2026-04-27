@@ -673,4 +673,64 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   })
   ```
 
+- Rust
+
+  For Table API, retries are done by `TableClient::retry_transaction`: the callback receives a transaction object, which you use to `query` and, if needed, `commit`.
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, Query, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let row = client
+          .table_client()
+          .retry_transaction(|mut tx| async move {
+              let res = tx
+                  .query(Query::new(
+                      "SELECT series_id, title FROM series WHERE series_id = 1",
+                  ))
+                  .await?;
+              Ok(res.into_only_row()?.remove_field_by_name("title")?)
+          })
+          .await?;
+
+      let _title: String = row.try_into()?;
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  In the {{ ydb-short-name }} PHP SDK, retries for Table API can be configured via `Table::retryTransaction()` (transaction + commit + retries on supported errors) or `Table::retrySession()` (a single session without wrapping the whole operation into a transaction). The second argument of `retryTransaction` is the idempotency flag (`true` enables retries for a wider set of errors).
+
+  Example using `retryTransaction`:
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $result = $ydb->table()->retryTransaction(
+      function (Session $session) {
+          return $session->query(
+              'SELECT series_id, title FROM series WHERE series_id = 1;'
+          );
+      },
+      true
+  );
+
+  // $result->rows(), $result->rowCount(), ...
+  ```
+
 {% endlist %}

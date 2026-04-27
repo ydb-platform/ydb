@@ -32,10 +32,6 @@ The build process using the source code is described in the source code reposito
 
   Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
 
-- PHP
-
-  {% include [install/cmd_php.md](install/cmd_php.md) %}
-
 - JavaScript
 
   {% include [install/cmd_npm.md](install/cmd_npm.md) %}
@@ -45,6 +41,10 @@ The build process using the source code is described in the source code reposito
 - Rust
 
   {% include [install/cmd_rust.md](install/cmd_rust.md) %}
+
+- PHP
+
+  {% include [install/cmd_php.md](install/cmd_php.md) %}
 
 {% endlist %}
 

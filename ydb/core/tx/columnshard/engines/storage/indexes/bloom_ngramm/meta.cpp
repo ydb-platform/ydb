@@ -328,6 +328,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
                 return false;
             }
         }
+
         return true;
     }
 

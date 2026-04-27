@@ -2,11 +2,11 @@
 
 Data enrichment means augmenting stream events with extra fields from a lookup dataset. For example, an event may contain only an identifier, and the lookup adds a human-readable name or other attributes. The lookup can be a [local table](#enrichment-local-table) or [object storage (S3)](#enrichment-s3).
 
-In [streaming queries](../../concepts/streaming-query.md), the lookup is attached with a `JOIN`. The stream must be on the left side of the join, the lookup on the right.
+In streaming queries, the lookup is attached with a `JOIN`. The stream must be on the left side of the join, the lookup on the right.
 
 {% note warning %}
 
-The lookup is fully loaded into memory when the query starts. If the lookup data changes, restart the query to pick up the new version: drop it with [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) and create it again with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+The lookup is fully loaded into memory when the query starts. If the lookup data changes, restart the query to pick up the new version: drop it with DROP STREAMING QUERY and create it again with CREATE STREAMING QUERY.
 
 {% endnote %}
 
@@ -49,7 +49,7 @@ Functions used in the queries:
 
 In this example the lookup is stored in a [table](../../concepts/datamodel/table.md) `services_dict` in the current database.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a streaming query that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -110,7 +110,7 @@ Where:
 
 - `<s3_endpoint>` is the S3 endpoint URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a streaming query that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS
@@ -165,4 +165,4 @@ FROM
 END DO
 ```
 
-For supported data formats (`json_each_row`, `csv_with_names`, and others), see [{#T}](streaming-query-formats.md).
+For supported data formats (`json_each_row`, `csv_with_names`, and others), see streaming-query-formats.

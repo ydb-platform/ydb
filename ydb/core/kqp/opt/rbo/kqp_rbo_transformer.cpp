@@ -297,7 +297,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
-                TMaybe<TString> htmlTracePath = TryGetEnv("YDB_KQP_NEW_RBO_HTML_TRACE");
+                TMaybe<TString> htmlTracePath = TryGetEnv("NEW_RBO_LOG");
                 std::optional<OptimizerTraceHTML> htmlTrace;
                 if (htmlTracePath.Defined() && !htmlTracePath->empty()) {
                     htmlTrace.emplace();
@@ -305,7 +305,14 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 }
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
                 if (htmlTrace && htmlTracePath.Defined()) {
-                    if (!htmlTrace->generateHTML(std::string(htmlTracePath->c_str()))) {
+                    std::random_device rd;
+                    std::mt19937 gen(rd());
+                    std::uniform_int_distribution<> distr(1, 100);
+                    int randomNum = distr(gen);
+
+                    std::string htmlTracePathFull = std::string(htmlTracePath->c_str()) + "-" + std::to_string(randomNum) + ".html";
+
+                    if (!htmlTrace->generateHTML(htmlTracePathFull)) {
                         YQL_CLOG(WARN, CoreDq) << "Failed to write new RBO HTML trace to " << *htmlTracePath;
                     }
                 }

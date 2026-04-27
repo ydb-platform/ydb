@@ -1,3 +1,4 @@
+// optimizer_trace_html.h
 #ifndef OPTIMIZER_TRACE_HTML_H
 #define OPTIMIZER_TRACE_HTML_H
 
@@ -6,6 +7,8 @@
 #include <fstream>
 #include <sstream>
 #include <cassert>
+#include <cstddef>
+#include <utility>
 
 namespace NKikimr {
 namespace NKqp {
@@ -150,11 +153,539 @@ public:
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100vh; overflow: hidden; }
 
+/* ═══════════════════════════
+   Theme palettes
+
+   To make a new theme, copy one block and change only these variables.
+   The rest of the logger uses semantic tokens, not hard-coded colors.
+   ═══════════════════════════ */
+
+:root,
+body.theme-stone-light {
+    color-scheme: light;
+    --bg-page: #f0eee9;
+    --bg-page-top: #fbfaf7;
+    --text-strong: #1f1c18;
+    --text-main: #2a251f;
+    --text-muted: #4a453d;
+    --text-soft: #6f6659;
+    --text-disabled: #8a8073;
+    --text-on-accent: #fffefb;
+    --surface-rule: #fffefb;
+    --surface-rule-collapsed: #e8e3da;
+    --surface-panel: #faf8f3;
+    --surface-control: #e8e3da;
+    --surface-control-hover: #ddd6ca;
+    --surface-stage: #bdb5a7;
+    --surface-stage-hover: #b2a999;
+    --surface-stage-empty: #d9d3c8;
+    --surface-empty-card: #ede8de;
+    --text-empty-title: #3a342d;
+    --text-empty-muted: #6f6659;
+    --empty-dot: #8a642a;
+    --surface-group: #b1a898;
+    --surface-group-hover: #a69c8b;
+    --surface-group-bar: #aba291;
+    --surface-group-rules: #a69c8b;
+    --surface-row: #c8c1b6;
+    --border-strong: #8f8576;
+    --border-main: #9e9485;
+    --border-soft: #d8d1c7;
+    --border-subtle: #e7e1d8;
+    --connector: #776f63;
+    --leaf-dot: #6b6257;
+    --hover-row: rgba(42, 37, 31, 0.07);
+    --focus: #8a642a;
+    --focus-ring: rgba(138, 100, 42, 0.22);
+    --accent-blue: #2f7d72;
+    --accent-blue-border: #24675d;
+    --accent-red: #c5475a;
+    --accent-red-border: #a93647;
+    --select-a: #3a7d72;
+    --select-a-border: #2f665d;
+    --select-b: #c55365;
+    --select-b-border: #a94052;
+    --diff-add-bg: #dcefd9;
+    --diff-add-text: #2f6f35;
+    --diff-rem-bg: #f4d9dc;
+    --diff-rem-text: #a9343f;
+    --mark-bg: #f4d35e;
+    --mark-text: #1f1c18;
+}
+
+body.theme-stone-dark {
+    color-scheme: dark;
+    --bg-page: #11100d;
+    --bg-page-top: #171511;
+    --text-strong: #f7f2e9;
+    --text-main: #e2d9ca;
+    --text-muted: #b9ad9b;
+    --text-soft: #968a78;
+    --text-disabled: #71685b;
+    --text-on-accent: #11100d;
+    --surface-rule: #1b1915;
+    --surface-rule-collapsed: #26231d;
+    --surface-panel: #28241e;
+    --surface-control: #2d2921;
+    --surface-control-hover: #393328;
+    --surface-stage: #242017;
+    --surface-stage-hover: #2f2a1f;
+    --surface-stage-empty: #191713;
+    --surface-empty-card: #222018;
+    --text-empty-title: #e6dccb;
+    --text-empty-muted: #a99b87;
+    --empty-dot: #d0a35b;
+    --surface-group: #2c271e;
+    --surface-group-hover: #383126;
+    --surface-group-bar: #342e23;
+    --surface-group-rules: #15130f;
+    --surface-row: #15130f;
+    --border-strong: #554b3b;
+    --border-main: #6d614f;
+    --border-soft: #41382d;
+    --border-subtle: #363026;
+    --connector: #817563;
+    --leaf-dot: #a99b87;
+    --hover-row: rgba(242, 233, 218, 0.075);
+    --focus: #d0a35b;
+    --focus-ring: rgba(208, 163, 91, 0.22);
+    --accent-blue: #55a394;
+    --accent-blue-border: #438a7d;
+    --accent-red: #d56670;
+    --accent-red-border: #b84c56;
+    --select-a: #4d9b8d;
+    --select-a-border: #3d8175;
+    --select-b: #c95a73;
+    --select-b-border: #ad465e;
+    --diff-add-bg: #183c2c;
+    --diff-add-text: #7be199;
+    --diff-rem-bg: #4a2228;
+    --diff-rem-text: #ff8588;
+    --mark-bg: #796323;
+    --mark-text: #fff0a3;
+}
+
+body.theme-slate-light {
+    color-scheme: light;
+    --bg-page: #edf1f7;
+    --bg-page-top: #f8fafc;
+    --text-strong: #111827;
+    --text-main: #1f2937;
+    --text-muted: #4b5565;
+    --text-soft: #647084;
+    --text-disabled: #7d8797;
+    --text-on-accent: #ffffff;
+    --surface-rule: #ffffff;
+    --surface-rule-collapsed: #e2e7f0;
+    --surface-panel: #f8fafc;
+    --surface-control: #e7ebf2;
+    --surface-control-hover: #d9e0ea;
+    --surface-stage: #b6c0cf;
+    --surface-stage-hover: #abb6c7;
+    --surface-stage-empty: #d4dbe5;
+    --surface-empty-card: #e8edf5;
+    --text-empty-title: #273244;
+    --text-empty-muted: #647084;
+    --empty-dot: #2f6fe4;
+    --surface-group: #adbacb;
+    --surface-group-hover: #a2afc2;
+    --surface-group-bar: #a8b4c6;
+    --surface-group-rules: #a2afc2;
+    --surface-row: #c0cad8;
+    --border-strong: #8794a8;
+    --border-main: #9aa6b6;
+    --border-soft: #d2d9e3;
+    --border-subtle: #e5e9f0;
+    --connector: #748198;
+    --leaf-dot: #647084;
+    --hover-row: rgba(31, 41, 55, 0.06);
+    --focus: #2f6fe4;
+    --focus-ring: rgba(47, 111, 228, 0.20);
+    --accent-blue: #2563eb;
+    --accent-blue-border: #1d4ed8;
+    --accent-red: #d63d57;
+    --accent-red-border: #b72f46;
+    --select-a: #2f74d0;
+    --select-a-border: #1f5fb6;
+    --select-b: #d13f68;
+    --select-b-border: #b82f56;
+    --diff-add-bg: #d8f3df;
+    --diff-add-text: #176f36;
+    --diff-rem-bg: #fde0e4;
+    --diff-rem-text: #b4232d;
+    --mark-bg: #ffe66d;
+    --mark-text: #111827;
+}
+
+body.theme-slate-dark {
+    color-scheme: dark;
+    --bg-page: #0e131b;
+    --bg-page-top: #121824;
+    --text-strong: #f3f7fb;
+    --text-main: #d9e2ee;
+    --text-muted: #aeb9c9;
+    --text-soft: #8b98ac;
+    --text-disabled: #667287;
+    --text-on-accent: #0e131b;
+    --surface-rule: #18202c;
+    --surface-rule-collapsed: #202b3b;
+    --surface-panel: #222d3e;
+    --surface-control: #263246;
+    --surface-control-hover: #303d52;
+    --surface-stage: #1d2738;
+    --surface-stage-hover: #27344a;
+    --surface-stage-empty: #151c28;
+    --surface-empty-card: #1a2433;
+    --text-empty-title: #e4edf8;
+    --text-empty-muted: #9aa8bd;
+    --empty-dot: #6da3ff;
+    --surface-group: #223044;
+    --surface-group-hover: #2b3a51;
+    --surface-group-bar: #28364b;
+    --surface-group-rules: #111926;
+    --surface-row: #111926;
+    --border-strong: #40506a;
+    --border-main: #53647e;
+    --border-soft: #39485f;
+    --border-subtle: #303d51;
+    --connector: #5f708c;
+    --leaf-dot: #8b9bb6;
+    --hover-row: rgba(222, 233, 247, 0.075);
+    --focus: #6da3ff;
+    --focus-ring: rgba(109, 163, 255, 0.22);
+    --accent-blue: #4d8cff;
+    --accent-blue-border: #3473e5;
+    --accent-red: #d64d62;
+    --accent-red-border: #b53a4e;
+    --select-a: #3f7fdd;
+    --select-a-border: #2d68be;
+    --select-b: #d0527a;
+    --select-b-border: #b94868;
+    --diff-add-bg: #143e2b;
+    --diff-add-text: #75e58f;
+    --diff-rem-bg: #4b2029;
+    --diff-rem-text: #ff7a7a;
+    --mark-bg: #6f6425;
+    --mark-text: #fff3a6;
+}
+
+body.theme-yandex-light {
+    color-scheme: light;
+    --bg-page: #f5f5f5;
+    --bg-page-top: #ffffff;
+    --text-strong: #000000;
+    --text-main: #1f1f1f;
+    --text-muted: #4d4d4d;
+    --text-soft: #707070;
+    --text-disabled: #9d9d9d;
+    --text-on-accent: #1a1a1a;
+    --surface-rule: #ffffff;
+    --surface-rule-collapsed: #eeeeee;
+    --surface-panel: #fafafa;
+    --surface-control: #eeeeee;
+    --surface-control-hover: #e3e3e3;
+    --surface-stage: #d0d0d0;
+    --surface-stage-hover: #c6c6c6;
+    --surface-stage-empty: #e2e2e2;
+    --surface-empty-card: #eeeeee;
+    --text-empty-title: #1f1f1f;
+    --text-empty-muted: #707070;
+    --empty-dot: #ffcc00;
+    --surface-group: #c7c7c7;
+    --surface-group-hover: #bdbdbd;
+    --surface-group-bar: #c1c1c1;
+    --surface-group-rules: #bdbdbd;
+    --surface-row: #d8d8d8;
+    --border-strong: #8c8c8c;
+    --border-main: #a8a8a8;
+    --border-soft: #d6d6d6;
+    --border-subtle: #e6e6e6;
+    --connector: #6e6e6e;
+    --leaf-dot: #5c5c5c;
+    --hover-row: rgba(0, 0, 0, 0.06);
+    --focus: #ffcc00;
+    --focus-ring: rgba(255, 204, 0, 0.35);
+    --accent-blue: #ffcc00;
+    --accent-blue-border: #e5b800;
+    --accent-red: #ff7070;
+    --accent-red-border: #e45f5f;
+    --select-a: #ffcc00;
+    --select-a-border: #e5b800;
+    --select-b: #ff7070;
+    --select-b-border: #e45f5f;
+    --diff-add-bg: #ddf3dc;
+    --diff-add-text: #236b2b;
+    --diff-rem-bg: #ffe0e0;
+    --diff-rem-text: #a72828;
+    --mark-bg: #ffdc4d;
+    --mark-text: #1a1a1a;
+}
+
+body.theme-yandex-dark {
+    color-scheme: dark;
+    --bg-page: #111111;
+    --bg-page-top: #171717;
+    --text-strong: #f5f5f5;
+    --text-main: #e0e0e0;
+    --text-muted: #b8b8b8;
+    --text-soft: #909090;
+    --text-disabled: #6f6f6f;
+    --text-on-accent: #1a1a1a;
+    --surface-rule: #1d1d1d;
+    --surface-rule-collapsed: #282828;
+    --surface-panel: #252525;
+    --surface-control: #2b2b2b;
+    --surface-control-hover: #373737;
+    --surface-stage: #242424;
+    --surface-stage-hover: #303030;
+    --surface-stage-empty: #191919;
+    --surface-empty-card: #202020;
+    --text-empty-title: #f0f0f0;
+    --text-empty-muted: #a8a8a8;
+    --empty-dot: #ffcc00;
+    --surface-group: #2b2b2b;
+    --surface-group-hover: #363636;
+    --surface-group-bar: #323232;
+    --surface-group-rules: #151515;
+    --surface-row: #151515;
+    --border-strong: #555555;
+    --border-main: #6b6b6b;
+    --border-soft: #444444;
+    --border-subtle: #343434;
+    --connector: #777777;
+    --leaf-dot: #a0a0a0;
+    --hover-row: rgba(255, 255, 255, 0.075);
+    --focus: #ffcc00;
+    --focus-ring: rgba(255, 204, 0, 0.26);
+    --accent-blue: #ffcc00;
+    --accent-blue-border: #d8ad00;
+    --accent-red: #ff7070;
+    --accent-red-border: #df5c5c;
+    --select-a: #ffcc00;
+    --select-a-border: #d8ad00;
+    --select-b: #ff7070;
+    --select-b-border: #df5c5c;
+    --diff-add-bg: #1f3a2a;
+    --diff-add-text: #7edc91;
+    --diff-rem-bg: #492729;
+    --diff-rem-text: #ff8585;
+    --mark-bg: #806a16;
+    --mark-text: #fff0a3;
+}
+
+body.theme-monokai-pro {
+    color-scheme: dark;
+    --bg-page: #221f22;
+    --bg-page-top: #2d2a2e;
+    --text-strong: #fcfcfa;
+    --text-main: #f0ede8;
+    --text-muted: #c8c3bd;
+    --text-soft: #9c969e;
+    --text-disabled: #6f6973;
+    --text-on-accent: #2d2a2e;
+    --surface-rule: #2d2a2e;
+    --surface-rule-collapsed: #3a363d;
+    --surface-panel: #343136;
+    --surface-control: #3b383e;
+    --surface-control-hover: #47434a;
+    --surface-stage: #39353c;
+    --surface-stage-hover: #45404a;
+    --surface-stage-empty: #28252a;
+    --surface-empty-card: #302d33;
+    --text-empty-title: #f0ede8;
+    --text-empty-muted: #aaa2ad;
+    --empty-dot: #ffd866;
+    --surface-group: #453d45;
+    --surface-group-hover: #514850;
+    --surface-group-bar: #4a424a;
+    --surface-group-rules: #242126;
+    --surface-row: #242126;
+    --border-strong: #5e5763;
+    --border-main: #726a78;
+    --border-soft: #4c4650;
+    --border-subtle: #3e3942;
+    --connector: #8b858e;
+    --leaf-dot: #b2abb6;
+    --hover-row: rgba(252, 252, 250, 0.075);
+    --focus: #ffd866;
+    --focus-ring: rgba(255, 216, 102, 0.24);
+    --accent-blue: #78dce8;
+    --accent-blue-border: #5bc7d4;
+    --accent-red: #ff6188;
+    --accent-red-border: #e85278;
+    --select-a: #78dce8;
+    --select-a-border: #5bc7d4;
+    --select-b: #ff6188;
+    --select-b-border: #e85278;
+    --diff-add-bg: #344936;
+    --diff-add-text: #a9dc76;
+    --diff-rem-bg: #4a2732;
+    --diff-rem-text: #ff8ba7;
+    --mark-bg: #ffd866;
+    --mark-text: #2d2a2e;
+}
+
+body.theme-doom-old-hope {
+    color-scheme: dark;
+    --bg-page: #1c1d21;
+    --bg-page-top: #22242b;
+    --text-strong: #f4f1de;
+    --text-main: #d6d6d6;
+    --text-muted: #b7bcc9;
+    --text-soft: #8b92a5;
+    --text-disabled: #626878;
+    --text-on-accent: #1c1d21;
+    --surface-rule: #24262d;
+    --surface-rule-collapsed: #30333d;
+    --surface-panel: #2b2d35;
+    --surface-control: #30333c;
+    --surface-control-hover: #3a3d49;
+    --surface-stage: #303241;
+    --surface-stage-hover: #3a3d4e;
+    --surface-stage-empty: #202229;
+    --surface-empty-card: #292b34;
+    --text-empty-title: #f4f1de;
+    --text-empty-muted: #aab0bf;
+    --empty-dot: #f3c969;
+    --surface-group: #36384a;
+    --surface-group-hover: #414458;
+    --surface-group-bar: #3b3e51;
+    --surface-group-rules: #191b21;
+    --surface-row: #191b21;
+    --border-strong: #54596d;
+    --border-main: #666c82;
+    --border-soft: #3f4352;
+    --border-subtle: #343744;
+    --connector: #8f96a8;
+    --leaf-dot: #aab0bf;
+    --hover-row: rgba(244, 241, 222, 0.075);
+    --focus: #f3c969;
+    --focus-ring: rgba(243, 201, 105, 0.24);
+    --accent-blue: #4fd6be;
+    --accent-blue-border: #39bfa8;
+    --accent-red: #ff6077;
+    --accent-red-border: #e24f64;
+    --select-a: #4fd6be;
+    --select-a-border: #39bfa8;
+    --select-b: #ff6077;
+    --select-b-border: #e24f64;
+    --diff-add-bg: #2d442b;
+    --diff-add-text: #a1d655;
+    --diff-rem-bg: #472631;
+    --diff-rem-text: #ff8496;
+    --mark-bg: #f3c969;
+    --mark-text: #1c1d21;
+}
+
+body.theme-modus-operandi {
+    color-scheme: light;
+    --bg-page: #ffffff;
+    --bg-page-top: #ffffff;
+    --text-strong: #000000;
+    --text-main: #000000;
+    --text-muted: #404040;
+    --text-soft: #606060;
+    --text-disabled: #8a8a8a;
+    --text-on-accent: #ffffff;
+    --surface-rule: #ffffff;
+    --surface-rule-collapsed: #eeeeee;
+    --surface-panel: #f7f7f7;
+    --surface-control: #eeeeee;
+    --surface-control-hover: #e0e0e0;
+    --surface-stage: #d0d0d0;
+    --surface-stage-hover: #c4c4c4;
+    --surface-stage-empty: #e5e5e5;
+    --surface-empty-card: #f0f0f0;
+    --text-empty-title: #000000;
+    --text-empty-muted: #505050;
+    --empty-dot: #0031a9;
+    --surface-group: #c2c2c2;
+    --surface-group-hover: #b7b7b7;
+    --surface-group-bar: #bbbbbb;
+    --surface-group-rules: #b7b7b7;
+    --surface-row: #dadada;
+    --border-strong: #777777;
+    --border-main: #999999;
+    --border-soft: #d0d0d0;
+    --border-subtle: #e4e4e4;
+    --connector: #666666;
+    --leaf-dot: #555555;
+    --hover-row: rgba(0, 0, 0, 0.06);
+    --focus: #0031a9;
+    --focus-ring: rgba(0, 49, 169, 0.18);
+    --accent-blue: #0031a9;
+    --accent-blue-border: #002580;
+    --accent-red: #a60000;
+    --accent-red-border: #7f0000;
+    --select-a: #0031a9;
+    --select-a-border: #002580;
+    --select-b: #a60000;
+    --select-b-border: #7f0000;
+    --diff-add-bg: #d7f5dc;
+    --diff-add-text: #005e00;
+    --diff-rem-bg: #ffd7d7;
+    --diff-rem-text: #a60000;
+    --mark-bg: #f2e900;
+    --mark-text: #000000;
+}
+
+body.theme-modus-vivendi {
+    color-scheme: dark;
+    --bg-page: #000000;
+    --bg-page-top: #0a0a0a;
+    --text-strong: #ffffff;
+    --text-main: #ffffff;
+    --text-muted: #c6c6c6;
+    --text-soft: #9f9f9f;
+    --text-disabled: #707070;
+    --text-on-accent: #000000;
+    --surface-rule: #000000;
+    --surface-rule-collapsed: #1a1a1a;
+    --surface-panel: #1e1e1e;
+    --surface-control: #222222;
+    --surface-control-hover: #303030;
+    --surface-stage: #222222;
+    --surface-stage-hover: #303030;
+    --surface-stage-empty: #111111;
+    --surface-empty-card: #181818;
+    --text-empty-title: #ffffff;
+    --text-empty-muted: #bcbcbc;
+    --empty-dot: #2fafff;
+    --surface-group: #2a2a2a;
+    --surface-group-hover: #383838;
+    --surface-group-bar: #333333;
+    --surface-group-rules: #101010;
+    --surface-row: #101010;
+    --border-strong: #5f5f5f;
+    --border-main: #7a7a7a;
+    --border-soft: #3a3a3a;
+    --border-subtle: #2c2c2c;
+    --connector: #9a9a9a;
+    --leaf-dot: #bcbcbc;
+    --hover-row: rgba(255, 255, 255, 0.08);
+    --focus: #2fafff;
+    --focus-ring: rgba(47, 175, 255, 0.26);
+    --accent-blue: #2fafff;
+    --accent-blue-border: #1b95dc;
+    --accent-red: #ff5f59;
+    --accent-red-border: #d94a45;
+    --select-a: #2fafff;
+    --select-a-border: #1b95dc;
+    --select-b: #ff5f59;
+    --select-b-border: #d94a45;
+    --diff-add-bg: #173b17;
+    --diff-add-text: #44bc44;
+    --diff-rem-bg: #4a1f1f;
+    --diff-rem-text: #ff7f86;
+    --mark-bg: #d0bc00;
+    --mark-text: #000000;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
     font-size: 14px;
-    background: #e8eaef;
-    color: #1c1e24;
+    background: var(--bg-page);
+    color: var(--text-main);
     display: flex;
     flex-direction: column;
 }
@@ -163,7 +694,7 @@ body {
 .top-bar {
     flex-shrink: 0;
     padding: 10px 16px 8px 16px;
-    background: #e8eaef;
+    background: var(--bg-page-top);
 }
 
 h1 {
@@ -182,7 +713,7 @@ h1 {
 
 .controls label {
     font-size: 12px;
-    color: #555;
+    color: var(--text-muted);
     cursor: pointer;
     white-space: nowrap;
 }
@@ -190,44 +721,59 @@ h1 {
 .ctrl-btn {
     font-size: 11px;
     padding: 3px 8px;
-    border: 1px solid #b0b4bc;
+    border: 1px solid var(--border-main);
     border-radius: 3px;
-    background: #d6d9e0;
-    color: #3a3d44;
+    background: var(--surface-control);
+    color: var(--text-main);
     cursor: pointer;
     transition: background 0.1s;
     white-space: nowrap;
     text-align: center;
 }
-.ctrl-btn:hover { background: #cbcfd7; }
+.ctrl-btn:hover { background: var(--surface-control-hover); }
 .ctrl-btn.inactive { opacity: 0.35; pointer-events: none; }
 .ctrl-btn.diff-active {
-    background: #d05060;
-    border-color: #b44050;
-    color: #fff;
+    background: var(--accent-red);
+    border-color: var(--accent-red-border);
+    color: var(--text-on-accent);
 }
-.ctrl-btn.diff-active:hover { background: #c04858; }
+.ctrl-btn.diff-active:hover { filter: brightness(0.96); }
 
 .search-box {
     font-size: 12px;
     padding: 3px 8px;
-    border: 1px solid #b0b4bc;
+    border: 1px solid var(--border-main);
     border-radius: 3px;
     width: 220px;
     min-width: 220px;
     outline: none;
-    background: #fff;
-    color: #1c1e24;
+    background: var(--surface-rule);
+    color: var(--text-main);
 }
 .search-box:focus {
-    border-color: #5a8eee;
-    box-shadow: 0 0 0 2px rgba(90, 142, 238, 0.18);
+    border-color: var(--focus);
+    box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .search-info {
     font-size: 11px;
-    color: #888;
+    color: var(--text-soft);
     white-space: nowrap;
+}
+
+.theme-select {
+    font-size: 12px;
+    padding: 3px 22px 3px 8px;
+    border: 1px solid var(--border-main);
+    border-radius: 3px;
+    outline: none;
+    background: var(--surface-rule);
+    color: var(--text-main);
+    cursor: pointer;
+}
+.theme-select:focus {
+    border-color: var(--border-main);
+    box-shadow: none;
 }
 
 /* ─── Trace container ─── */
@@ -253,8 +799,8 @@ h1 {
 .stage-col {
     width: 28px;
     min-width: 28px;
-    background: #b8bcc6;
-    border: 1px solid #a0a4ae;
+    background: var(--surface-stage);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
@@ -265,11 +811,11 @@ h1 {
     transition: background 0.1s;
     flex-shrink: 0;
 }
-.stage-col:hover { background: #aeb2bc; }
+.stage-col:hover { background: var(--surface-stage-hover); }
 
 .stage-col-arrow {
     font-size: 9px;
-    color: #6a6e78;
+    color: var(--text-muted);
     margin-bottom: 4px;
     flex-shrink: 0;
 }
@@ -279,7 +825,7 @@ h1 {
     transform: rotate(180deg);
     font-size: 12px;
     font-weight: 600;
-    color: #444850;
+    color: var(--text-main);
     white-space: nowrap;
     padding: 4px 0;
 }
@@ -288,7 +834,7 @@ h1 {
     writing-mode: vertical-lr;
     transform: rotate(180deg);
     font-size: 10px;
-    color: #7a7e88;
+    color: var(--text-muted);
     white-space: nowrap;
     padding: 2px 0;
     margin-top: 2px;
@@ -296,16 +842,16 @@ h1 {
 
 /* Empty stage styling */
 .stage-wrap.stage-empty .stage-col {
-    background: #d0d3da;
-    border-color: #bbbec6;
+    background: var(--surface-stage-empty);
+    border-color: var(--border-main);
 }
-.stage-wrap.stage-empty .stage-col:hover { background: #c6c9d0; }
-.stage-wrap.stage-empty .stage-col-text { color: #999; }
-.stage-wrap.stage-empty .stage-col-arrow { color: #aaa; }
+.stage-wrap.stage-empty .stage-col:hover { background: var(--surface-control-hover); }
+.stage-wrap.stage-empty .stage-col-text { color: var(--text-muted); }
+.stage-wrap.stage-empty .stage-col-arrow { color: var(--text-soft); }
 .stage-wrap.stage-empty .stage-hdr {
-    background: #d0d3da;
-    border-color: #bbbec6;
-    color: #999;
+    background: var(--surface-stage-empty);
+    border-color: var(--border-main);
+    color: var(--text-muted);
 }
 
 /* Stage expanded column */
@@ -324,13 +870,13 @@ h1 {
     display: flex;
     align-items: center;
     padding: 0 10px;
-    background: #b8bcc6;
-    border: 1px solid #a0a4ae;
+    background: var(--surface-stage);
+    border: 1px solid var(--border-strong);
     border-bottom: none;
     border-radius: 3px 3px 0 0;
     font-size: 12px;
     font-weight: 600;
-    color: #2c2f36;
+    color: var(--text-main);
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
@@ -338,17 +884,17 @@ h1 {
     transition: background 0.1s;
     flex-shrink: 0;
 }
-.stage-hdr:hover { background: #aeb2bc; }
+.stage-hdr:hover { background: var(--surface-stage-hover); }
 
 .stage-hdr-arrow {
     margin-right: 6px;
     font-size: 8px;
-    color: #6a6e78;
+    color: var(--text-muted);
 }
 
 .stage-hdr-count {
     font-weight: 400;
-    color: #6a6e78;
+    color: var(--text-muted);
     margin-left: 6px;
     font-size: 11px;
 }
@@ -356,10 +902,10 @@ h1 {
 .stage-toggle-btn {
     font-size: 10px;
     padding: 1px 5px;
-    border: 1px solid #a0a4ae;
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
-    background: #a8acb6;
-    color: #444;
+    background: var(--surface-group-hover);
+    color: var(--text-main);
     cursor: pointer;
     transition: background 0.1s;
     margin-right: 6px;
@@ -367,8 +913,8 @@ h1 {
     line-height: 1.3;
 }
 .stage-toggle-btn:hover {
-    background: #9ea2ac;
-    color: #222;
+    background: var(--surface-stage-hover);
+    color: var(--text-strong);
 }
 
 /* Rules row container */
@@ -378,11 +924,60 @@ h1 {
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    border: 1px solid #a0a4ae;
+    border: 1px solid var(--border-strong);
     border-top: none;
     border-radius: 0 0 3px 3px;
-    background: #cdd0d8;
+    background: var(--surface-row);
     gap: 1px;
+}
+
+.empty-rules-row {
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 14px;
+    background: var(--surface-stage-empty);
+}
+
+.empty-stage-card {
+    width: 360px;
+    min-width: 360px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 18px;
+    border-radius: 6px;
+    background: var(--surface-empty-card);
+    cursor: default;
+    user-select: none;
+}
+
+.empty-stage-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--empty-dot);
+    flex-shrink: 0;
+}
+
+.empty-stage-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.empty-stage-title {
+    color: var(--text-empty-title);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.empty-stage-subtitle {
+    color: var(--text-empty-muted);
+    font-size: 11px;
+    line-height: 1.25;
 }
 
 /* ─── Unified small button ─── */
@@ -393,10 +988,10 @@ h1 {
     height: 18px;
     min-height: 18px;
     max-height: 18px;
-    border: 1px solid #c0c4cc;
+    border: 1px solid var(--border-main);
     border-radius: 3px;
-    background: #e6e8ec;
-    color: #666;
+    background: var(--surface-control);
+    color: var(--text-muted);
     cursor: pointer;
     transition: background 0.1s;
     line-height: 1;
@@ -404,15 +999,15 @@ h1 {
     padding: 0;
     vertical-align: middle;
 }
-.tbtn:hover { background: #d8dade; color: #222; }
+.tbtn:hover { background: var(--surface-control-hover); color: var(--text-strong); }
 .tbtn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
 .tbtn.nav { width: 22px; font-size: 13px; }
 .tbtn.icon { min-width: 22px; font-size: 11px; padding: 0 4px; }
-.tbtn.icon.active { background: #5a8eee; border-color: #4a78d8; color: #fff; }
-.tbtn.ab { width: 18px; font-size: 10px; font-weight: 700; color: #888; }
-.tbtn.ab:hover { background: #d4d6dc; color: #555; }
-.tbtn.ab.selected-a { background: #4a8ad4; border-color: #3a78c0; color: #fff; }
-.tbtn.ab.selected-b { background: #d04a70; border-color: #b83a60; color: #fff; }
+.tbtn.icon.active { background: var(--accent-blue); border-color: var(--accent-blue-border); color: var(--text-on-accent); }
+.tbtn.ab { width: 18px; font-size: 10px; font-weight: 700; color: var(--text-soft); }
+.tbtn.ab:hover { background: var(--surface-control-hover); color: var(--text-main); }
+.tbtn.ab.selected-a { background: var(--select-a); border-color: var(--select-a-border); color: var(--text-on-accent); }
+.tbtn.ab.selected-b { background: var(--select-b); border-color: var(--select-b-border); color: var(--text-on-accent); }
 
 /* ─── Rule cell ─── */
 .rule-cell {
@@ -427,7 +1022,7 @@ h1 {
     width: 520px;
     min-width: 520px;
     max-width: 520px;
-    background: #fff;
+    background: var(--surface-rule);
 }
 .rule-cell.expanded .rule-col-wrap { display: none; }
 .rule-cell.expanded .rule-exp-wrap {
@@ -441,10 +1036,10 @@ h1 {
     width: 16px;
     min-width: 16px;
     max-width: 16px;
-    background: #e4e6ec;
+    background: var(--surface-rule-collapsed);
     cursor: pointer;
 }
-.rule-cell.collapsed:hover { background: #dcdee4; }
+.rule-cell.collapsed:hover { background: var(--surface-control-hover); }
 .rule-cell.collapsed .rule-col-wrap {
     display: flex;
     flex-direction: column;
@@ -460,19 +1055,19 @@ h1 {
     height: 32px;
     min-height: 32px;
     max-height: 32px;
-    border-bottom: 1px solid #e0e2e8;
-    background: #f0f2f5;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-panel);
     flex-shrink: 0;
     padding: 0 6px 0 0;
+    cursor: pointer;
+    user-select: none;
 }
 
 .rule-title {
     padding: 0 6px;
     font-size: 12px;
     font-weight: 400;
-    color: #1c1e24;
-    cursor: pointer;
-    user-select: none;
+    color: var(--text-strong);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -481,7 +1076,7 @@ h1 {
 
 .rule-num {
     font-weight: 400;
-    color: #a0a4ae;
+    color: var(--text-soft);
     font-size: 10px;
     margin-right: 3px;
 }
@@ -507,7 +1102,7 @@ h1 {
 
 .rule-col-num {
     font-size: 8px;
-    color: #bbb;
+    color: var(--text-soft);
     flex-shrink: 0;
     text-align: center;
     width: 100%;
@@ -519,7 +1114,7 @@ h1 {
     transform: rotate(180deg);
     font-size: 12px;
     font-weight: 400;
-    color: #555;
+    color: var(--text-muted);
     white-space: nowrap;
     padding: 4px 1px;
 }
@@ -543,11 +1138,11 @@ h1 {
 /* ─── Info panel ─── */
 .rule-info-panel {
     display: none;
-    border-top: 2px solid #d0d2d8;
+    border-top: 2px solid var(--border-soft);
     overflow: auto;
     max-height: 45%;
     flex-shrink: 0;
-    background: #f8f9fb;
+    background: var(--surface-panel);
     padding: 8px 12px;
 }
 .rule-info-panel.visible { display: block; }
@@ -557,10 +1152,10 @@ h1 {
 .info-section-title {
     font-size: 11px;
     font-weight: 600;
-    color: #555;
+    color: var(--text-muted);
     margin-bottom: 4px;
     padding-bottom: 2px;
-    border-bottom: 1px solid #e4e6ea;
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .info-table {
@@ -571,11 +1166,11 @@ h1 {
 .info-table td {
     padding: 2px 8px 2px 0;
     vertical-align: top;
-    border-bottom: 1px solid #eef0f3;
+    border-bottom: 1px solid var(--border-subtle);
 }
 .info-table td:first-child {
     font-weight: 500;
-    color: #555;
+    color: var(--text-muted);
     white-space: nowrap;
     width: 1%;
 }
@@ -585,7 +1180,7 @@ h1 {
     font-size: 11px;
     white-space: pre-wrap;
     line-height: 1.5;
-    color: #333;
+    color: var(--text-main);
 }
 
 .info-html {
@@ -604,7 +1199,7 @@ h1 {
     display: none;
     padding: 0 0 4px 0;
     margin-bottom: 4px;
-    border-bottom: 1px solid #e4e6ea;
+    border-bottom: 1px solid var(--border-subtle);
 }
 .tree-stats-header.visible { display: flex; }
 
@@ -612,7 +1207,7 @@ h1 {
     font-family: "JetBrains Mono", Menlo, Consolas, monospace;
     font-size: 10px;
     font-weight: 600;
-    color: #888;
+    color: var(--text-soft);
     width: 72px;
     min-width: 72px;
     text-align: right;
@@ -628,12 +1223,12 @@ h1 {
     padding: 0;
     border-radius: 2px;
 }
-.tree-node-row:hover { background: rgba(0, 0, 0, 0.025); }
+.tree-node-row:hover { background: var(--hover-row); }
 
 .stat-val-cell {
     font-family: "JetBrains Mono", Menlo, Consolas, monospace;
     font-size: 11px;
-    color: #888;
+    color: var(--text-soft);
     width: 72px;
     min-width: 72px;
     text-align: right;
@@ -664,7 +1259,7 @@ h1 {
     left: 9px;
     top: 0;
     bottom: 0;
-    border-left: 1px solid #cdd0d6;
+    border-left: 1px solid var(--connector);
 }
 
 /* Vertical line: top to center only (L-shape) */
@@ -674,7 +1269,7 @@ h1 {
     left: 9px;
     top: 0;
     height: 11px;
-    border-left: 1px solid #cdd0d6;
+    border-left: 1px solid var(--connector);
 }
 
 /* Horizontal branch */
@@ -685,7 +1280,7 @@ h1 {
     left: 9px;
     top: 11px;
     width: 11px;
-    border-top: 1px solid #cdd0d6;
+    border-top: 1px solid var(--connector);
 }
 
 /* Connector cells in metadata rows (shorter height) */
@@ -704,7 +1299,7 @@ h1 {
     left: 9px;
     top: 0;
     bottom: 0;
-    border-left: 1px solid #cdd0d6;
+    border-left: 1px solid var(--connector);
 }
 
 .tree-toggle {
@@ -715,28 +1310,32 @@ h1 {
     min-width: 16px;
     height: 16px;
     font-size: 8px;
-    color: #999;
+    color: var(--text-soft);
     cursor: pointer;
     flex-shrink: 0;
     border-radius: 2px;
     transition: color 0.1s;
     user-select: none;
 }
-.tree-toggle:hover { color: #444; background: rgba(0, 0, 0, 0.06); }
-.tree-toggle.leaf { cursor: default; color: transparent; pointer-events: none; }
+.tree-toggle:hover { color: var(--text-strong); background: var(--hover-row); }
+.tree-toggle.leaf {
+    cursor: default;
+    color: var(--leaf-dot);
+    pointer-events: none;
+}
 
 .tree-label {
     font-family: "JetBrains Mono", Menlo, Consolas, monospace;
     font-size: 12px;
     line-height: 22px;
-    color: #1c1e24;
+    color: var(--text-strong);
     padding-left: 2px;
     white-space: nowrap;
 }
 .tree-label.clickable { cursor: pointer; }
 .tree-label.clickable:hover {
     text-decoration: underline;
-    text-decoration-color: #ccc;
+    text-decoration-color: var(--connector);
 }
 
 /* Per-node metadata row */
@@ -755,21 +1354,21 @@ h1 {
     flex-shrink: 0;
 }
 
-.tree-meta-key { color: #888; font-weight: 500; white-space: nowrap; }
-.tree-meta-val { color: #555; white-space: nowrap; }
+.tree-meta-key { color: var(--text-soft); font-weight: 500; white-space: nowrap; }
+.tree-meta-val { color: var(--text-muted); white-space: nowrap; }
 
 .tree-meta-block { }
 .tree-meta-block.collapsed { display: none; }
 .tree-children-block { }
 
 /* ─── Diff coloring — flat, no nesting accumulation ─── */
-.diff-mark-add > .tree-node-row { background: #d4edda; }
-.diff-mark-add > .tree-node-row .tree-label { color: #1a7f37; }
-.diff-mark-rem > .tree-node-row { background: #f8d7da; }
+.diff-mark-add > .tree-node-row { background: var(--diff-add-bg); }
+.diff-mark-add > .tree-node-row .tree-label { color: var(--diff-add-text); }
+.diff-mark-rem > .tree-node-row { background: var(--diff-rem-bg); }
 .diff-mark-rem > .tree-node-row .tree-label {
-    color: #c62828;
+    color: var(--diff-rem-text);
     text-decoration: line-through;
-    text-decoration-color: #c62828;
+    text-decoration-color: var(--diff-rem-text);
 }
 
 /* ─── Group cell ─── */
@@ -786,10 +1385,10 @@ h1 {
     width: 24px;
     min-width: 24px;
     max-width: 24px;
-    background: #c8ccd4;
+    background: var(--surface-group);
     cursor: pointer;
 }
-.group-cell.g-collapsed:hover { background: #bec2ca; }
+.group-cell.g-collapsed:hover { background: var(--surface-group-hover); }
 .group-cell.g-collapsed .group-col-wrap {
     display: flex;
     flex-direction: column;
@@ -801,7 +1400,7 @@ h1 {
 
 .group-col-count {
     font-size: 8px;
-    color: #6a6e78;
+    color: var(--text-muted);
     flex-shrink: 0;
     font-weight: 600;
     text-align: center;
@@ -814,7 +1413,7 @@ h1 {
     transform: rotate(180deg);
     font-size: 11px;
     font-weight: 600;
-    color: #4a4e58;
+    color: var(--text-main);
     white-space: nowrap;
     padding: 4px 2px;
 }
@@ -836,7 +1435,7 @@ h1 {
     min-height: 16px;
     max-height: 16px;
     padding: 0 4px;
-    background: #c2c6ce;
+    background: var(--surface-group-bar);
     flex-shrink: 0;
 }
 
@@ -850,19 +1449,19 @@ h1 {
     padding: 0;
     border: none;
     background: none;
-    color: #5a5e68;
+    color: var(--text-muted);
     cursor: pointer;
     transition: color 0.1s;
     flex-shrink: 0;
     line-height: 14px;
 }
-.group-toggle-btn:hover { color: #222; }
+.group-toggle-btn:hover { color: var(--text-strong); }
 
 .group-title {
     flex: 1;
     font-size: 11px;
     font-weight: 600;
-    color: #3a3e46;
+    color: var(--text-main);
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
@@ -885,17 +1484,17 @@ h1 {
     width: 18px;
     height: 12px;
     font-size: 10px;
-    border: 1px solid #a8acb4;
+    border: 1px solid var(--border-main);
     border-radius: 2px;
-    background: #b4b8c0;
-    color: #4a4e58;
+    background: var(--surface-group-hover);
+    color: var(--text-main);
     cursor: pointer;
     transition: background 0.1s;
     line-height: 1;
     padding: 0;
     flex-shrink: 0;
 }
-.group-nav-btn:hover { background: #a8acb6; color: #222; }
+.group-nav-btn:hover { background: var(--surface-stage-hover); color: var(--text-strong); }
 .group-nav-btn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
 
 .group-rules-area {
@@ -904,7 +1503,7 @@ h1 {
     min-height: 0;
     align-items: stretch;
     overflow: hidden;
-    background: #cdd0d8;
+    background: var(--surface-group-rules);
     gap: 1px;
 }
 
@@ -950,192 +1549,27 @@ h1 {
 .flash-cell { animation: cellFlash 0.2s ease-out; }
 
 mark {
-    background: #fff176;
-    color: #1c1e24;
+    background: var(--mark-bg);
+    color: var(--mark-text);
     border-radius: 2px;
     padding: 0 1px;
 }
 
-
-/* ═══════════════════════════
-   Dark mode
-   ═══════════════════════════ */
-
-body.darkmode {
-    background: #16181e;
-    color: #cdd0d8;
-}
-body.darkmode .top-bar { background: #16181e; }
-
-body.darkmode .ctrl-btn {
-    background: #2a2d36;
-    border-color: #3e424c;
-    color: #b0b4bc;
-}
-body.darkmode .ctrl-btn:hover { background: #34383e; }
-body.darkmode .ctrl-btn.diff-active {
-    background: #a83848;
-    border-color: #8c2e3c;
-    color: #fff;
-}
-body.darkmode .ctrl-btn.diff-active:hover { background: #983040; }
-body.darkmode .controls label { color: #888; }
-
-body.darkmode .search-box {
-    background: #22252c;
-    border-color: #3e424c;
-    color: #cdd0d8;
-}
-body.darkmode .search-box:focus {
-    border-color: #5a8eee;
-    box-shadow: 0 0 0 2px rgba(90, 142, 238, 0.12);
+.tree-plan-label {
+    font-size: 10px;
+    color: var(--text-soft);
+    font-weight: 600;
+    padding-left: 2px;
 }
 
-/* Stage — darkest level in dark mode */
-body.darkmode .stage-col {
-    background: #1e2028;
-    border-color: #2e3038;
-}
-body.darkmode .stage-col:hover { background: #262830; }
-body.darkmode .stage-col-text { color: #8a8e98; }
-body.darkmode .stage-col-arrow { color: #5a5e68; }
-body.darkmode .stage-col-count { color: #5a5e68; }
-
-body.darkmode .stage-wrap.stage-empty .stage-col {
-    background: #1a1c22;
-    border-color: #2a2c34;
-}
-body.darkmode .stage-wrap.stage-empty .stage-col:hover { background: #1e2028; }
-body.darkmode .stage-wrap.stage-empty .stage-col-text { color: #4a4e56; }
-body.darkmode .stage-wrap.stage-empty .stage-hdr {
-    background: #1a1c22;
-    border-color: #2a2c34;
-    color: #4a4e56;
+.empty-note,
+.info-empty {
+    color: var(--text-soft);
+    font-size: 11px;
+    font-style: italic;
 }
 
-body.darkmode .stage-hdr {
-    background: #1e2028;
-    border-color: #2e3038;
-    color: #a0a4ae;
-}
-body.darkmode .stage-hdr:hover { background: #262830; }
-body.darkmode .stage-hdr-count { color: #5a5e68; }
-body.darkmode .stage-hdr-arrow { color: #5a5e68; }
-
-body.darkmode .stage-toggle-btn {
-    background: #262830;
-    border-color: #3a3e48;
-    color: #8a8e98;
-}
-body.darkmode .stage-toggle-btn:hover {
-    background: #303440;
-    color: #ccc;
-}
-
-body.darkmode .rules-row {
-    border-color: #2e3038;
-    background: #1a1c22;
-}
-
-/* Group — medium level in dark mode */
-body.darkmode .group-cell.g-collapsed {
-    background: #252830;
-}
-body.darkmode .group-cell.g-collapsed:hover { background: #2c2f38; }
-body.darkmode .group-col-text { color: #8a8e98; }
-body.darkmode .group-col-count { color: #6a6e78; }
-body.darkmode .group-title-bar { background: #252830; }
-body.darkmode .group-title { color: #9a9ea8; }
-body.darkmode .group-toggle-btn { color: #7a7e88; }
-body.darkmode .group-toggle-btn:hover { color: #ccc; }
-body.darkmode .group-nav-btn {
-    background: #2a2d36;
-    border-color: #3a3e48;
-    color: #8a8e98;
-}
-body.darkmode .group-nav-btn:hover {
-    background: #343840;
-    color: #ccc;
-}
-body.darkmode .group-rules-area { background: #1a1c22; }
-
-/* Rule — lightest level in dark mode */
-body.darkmode .rule-cell.expanded { background: #1c1e26; }
-body.darkmode .rule-cell.collapsed { background: #22252e; }
-body.darkmode .rule-cell.collapsed:hover { background: #282b34; }
-body.darkmode .rule-col-text { color: #9a9ea8; }
-body.darkmode .rule-col-num { color: #4a4e56; }
-
-body.darkmode .rule-title-bar {
-    background: #2a2d36;
-    border-bottom-color: #34383e;
-}
-body.darkmode .rule-title { color: #b8bcc6; }
-body.darkmode .rule-num { color: #5a5e68; }
-
-body.darkmode .tbtn {
-    background: #2a2d36;
-    border-color: #3e424c;
-    color: #7a7e88;
-}
-body.darkmode .tbtn:hover { background: #34383e; color: #ccc; }
-body.darkmode .tbtn.icon.active {
-    background: #3a70c8;
-    border-color: #2e60b0;
-    color: #fff;
-}
-body.darkmode .tbtn.ab { color: #6a6e78; }
-body.darkmode .tbtn.ab:hover { background: #34383e; color: #a0a4ae; }
-body.darkmode .tbtn.ab.selected-a {
-    background: #3068b8;
-    border-color: #2858a0;
-    color: #fff;
-}
-body.darkmode .tbtn.ab.selected-b {
-    background: #b03858;
-    border-color: #982e48;
-    color: #fff;
-}
-
-body.darkmode .rule-info-panel {
-    background: #1a1c22;
-    border-top-color: #3a3e48;
-}
-body.darkmode .info-section-title {
-    color: #888;
-    border-bottom-color: #2e3038;
-}
-body.darkmode .info-table td { border-bottom-color: #262830; }
-body.darkmode .info-table td:first-child { color: #7a7e88; }
-body.darkmode .info-text { color: #b0b4bc; }
-
-body.darkmode .tree-node-row:hover { background: rgba(255, 255, 255, 0.02); }
-
-body.darkmode .tree-c.pipe::before,
-body.darkmode .tree-c.branch::before,
-body.darkmode .tree-c.elbow::before { border-left-color: #34383e; }
-body.darkmode .tree-c.branch::after,
-body.darkmode .tree-c.elbow::after { border-top-color: #34383e; }
-body.darkmode .tree-cm.pipe::before { border-left-color: #34383e; }
-
-body.darkmode .tree-toggle { color: #5a5e68; }
-body.darkmode .tree-toggle:hover {
-    color: #bbb;
-    background: rgba(255, 255, 255, 0.05);
-}
-body.darkmode .tree-label { color: #cdd0d8; }
-body.darkmode .tree-label.clickable:hover { text-decoration-color: #444; }
-body.darkmode .tree-meta-key { color: #6a6e78; }
-body.darkmode .tree-meta-val { color: #9a9ea8; }
-body.darkmode .stat-val-cell { color: #6a6e78; }
-body.darkmode .stat-header-cell { color: #5a5e68; }
-body.darkmode .tree-stats-header { border-bottom-color: #2e3038; }
-body.darkmode mark { background: #5a5520; color: #eee8a0; }
-
-body.darkmode .diff-mark-add > .tree-node-row { background: #1a3328; }
-body.darkmode .diff-mark-add > .tree-node-row .tree-label { color: #4ad864; }
-body.darkmode .diff-mark-rem > .tree-node-row { background: #3d1f24; }
-body.darkmode .diff-mark-rem > .tree-node-row .tree-label { color: #f04848; }
+.empty-note { font-size: 12px; }
 
 </style>
 <script>
@@ -1301,6 +1735,7 @@ var ruleOpen = [];
 var ruleMetaAll = [];
 var ruleStats = [];
 var ruleInfoOpen = [];
+var renderedTreeState = [];
 var searchActive = false;
 
 for (var si = 0; si < stageCount; si++) {
@@ -1310,6 +1745,7 @@ for (var si = 0; si < stageCount; si++) {
     ruleMetaAll.push([]);
     ruleStats.push([]);
     ruleInfoOpen.push([]);
+    renderedTreeState.push([]);
 
     for (var gi = 0; gi < groups[si].length; gi++) {
         var count = groups[si][gi].ri.length;
@@ -1320,12 +1756,14 @@ for (var si = 0; si < stageCount; si++) {
         ruleMetaAll[si].push([]);
         ruleStats[si].push([]);
         ruleInfoOpen[si].push([]);
+        renderedTreeState[si].push([]);
 
         for (var ri = 0; ri < count; ri++) {
             ruleOpen[si][gi].push(isMulti ? (ri === count - 1) : true);
             ruleMetaAll[si][gi].push(false);
             ruleStats[si][gi].push(false);
             ruleInfoOpen[si][gi].push(false);
+            renderedTreeState[si][gi].push(null);
         }
     }
 }
@@ -1386,7 +1824,7 @@ function renderTree(container, tree, ruleKey, showMeta, showStats, query) {
                           htmlEscape(statColumns[col]) + '</span>';
         }
         headerHtml += '<span style="width:16px;flex-shrink:0;display:inline-block"></span>';
-        headerHtml += '<span style="font-size:10px;color:#aaa;font-weight:600;padding-left:2px">Plan</span>';
+        headerHtml += '<span class="tree-plan-label">Plan</span>';
         headerHtml += '</div>';
     }
 
@@ -1596,14 +2034,37 @@ function treeMetaToggle(event, nodeId) {
    Rule-level actions (metadata, stats, info toggles)
    ══════════════════════════════════════════════════════════════ */
 
-function rerenderRuleTree(si, gi, ri, query) {
+function rerenderRuleTree(si, gi, ri, query, force) {
     var rawIdx = groups[si][gi].ri[ri];
     var ruleKey = si + '-' + gi + '-' + ri;
     var container = document.getElementById('tree-' + ruleKey);
     if (!container) return;
 
+    query = query || '';
+    var showMeta = ruleMetaAll[si][gi][ri];
+    var showStats = ruleStats[si][gi][ri];
+    var prev = renderedTreeState[si][gi][ri];
+    if (!force && prev &&
+        prev.query === query &&
+        prev.showMeta === showMeta &&
+        prev.showStats === showStats) {
+        return;
+    }
+
     renderTree(container, planTrees[si][rawIdx], ruleKey,
-               ruleMetaAll[si][gi][ri], ruleStats[si][gi][ri], query || '');
+               showMeta, showStats, query);
+    renderedTreeState[si][gi][ri] = {
+        query: query,
+        showMeta: showMeta,
+        showStats: showStats
+    };
+}
+
+function invalidateRuleTree(si, gi, ri) {
+    if (renderedTreeState[si] &&
+        renderedTreeState[si][gi]) {
+        renderedTreeState[si][gi][ri] = null;
+    }
 }
 
 function toggleRuleMeta(si, gi, ri, ev) {
@@ -1633,7 +2094,7 @@ function toggleRuleInfo(si, gi, ri, ev) {
 
 function renderInfoPanel(container, sections) {
     if (!sections || !sections.length) {
-        container.innerHTML = '<div style="color:#999;font-size:11px;font-style:italic">No info</div>';
+        container.innerHTML = '<div class="info-empty">No info</div>';
         return;
     }
     var html = '';
@@ -1911,7 +2372,10 @@ function cycleGlobalState() {
     globalCycleState = (globalCycleState + 1) % 4;
 
     for (var si = 0; si < stageCount; si++) {
-        if (!stageRuleCounts[si]) continue;
+        if (!stageRuleCounts[si]) {
+            if (globalCycleState === 0) stageOpen[si] = false;
+            continue;
+        }
 
         switch (globalCycleState) {
         case 0: /* All collapsed */
@@ -1961,8 +2425,49 @@ function cycleGlobalState() {
     document.getElementById('cycle-button').textContent = cycleLabels[globalCycleState];
 }
 
-function toggleDarkMode() {
-    document.body.classList.toggle('darkmode');
+var themeNames = [
+    'stone-dark', 'stone-light',
+    'slate-dark', 'slate-light',
+    'yandex-light', 'yandex-dark',
+    'monokai-pro',
+    'doom-old-hope',
+    'modus-operandi', 'modus-vivendi'
+];
+var defaultTheme = 'stone-dark';
+
+function applyTheme(theme, persist) {
+    if (themeNames.indexOf(theme) === -1) theme = defaultTheme;
+
+    for (var i = 0; i < themeNames.length; i++) {
+        document.body.classList.remove('theme-' + themeNames[i]);
+    }
+    document.body.classList.add('theme-' + theme);
+
+    var select = document.getElementById('theme-select');
+    if (select) select.value = theme;
+
+    if (persist !== false) {
+        try { window.localStorage.setItem('optimizerTraceTheme', theme); } catch (e) {}
+    }
+}
+
+function initTheme() {
+    var savedTheme = null;
+    try { savedTheme = window.localStorage.getItem('optimizerTraceTheme'); } catch (e) {}
+
+    var currentTheme = defaultTheme;
+    for (var i = 0; i < themeNames.length; i++) {
+        if (document.body.classList.contains('theme-' + themeNames[i])) {
+            currentTheme = themeNames[i];
+            break;
+        }
+    }
+
+    applyTheme(savedTheme || currentTheme, false);
+}
+
+function setTheme(theme) {
+    applyTheme(theme, true);
 }
 
 
@@ -1997,6 +2502,75 @@ function currentSearchQuery() {
    ══════════════════════════════════════════════════════════════ */
 
 var savedSearchState = null;
+var searchFrame = null;
+var ruleSearchText = null;
+var ruleTreeSearchText = null;
+
+function scheduleSearch() {
+    if (searchFrame !== null) return;
+
+    var schedule = window.requestAnimationFrame || function(fn) {
+        return setTimeout(fn, 0);
+    };
+    searchFrame = schedule(function() {
+        searchFrame = null;
+        doSearch();
+    });
+}
+
+function warmSearchIndex() {
+    if (ruleSearchText && ruleTreeSearchText) return;
+
+    if (window.requestIdleCallback) {
+        window.requestIdleCallback(function() { ensureSearchIndex(); });
+    } else {
+        setTimeout(function() { ensureSearchIndex(); }, 0);
+    }
+}
+
+function ensureSearchIndex() {
+    if (ruleSearchText && ruleTreeSearchText) return;
+
+    ruleSearchText = [];
+    ruleTreeSearchText = [];
+
+    for (var si = 0; si < stageCount; si++) {
+        ruleSearchText[si] = [];
+        ruleTreeSearchText[si] = [];
+
+        for (var ri = 0; ri < planTrees[si].length; ri++) {
+            var treeText = buildTreeSearchText(planTrees[si][ri]);
+            ruleTreeSearchText[si][ri] = treeText;
+            ruleSearchText[si][ri] = (
+                String(ruleNames[si][ri] || '') + '\n' + treeText
+            ).toLowerCase();
+        }
+    }
+}
+
+function buildTreeSearchText(node) {
+    var parts = [];
+    collectTreeSearchText(node, parts);
+    return parts.join('\n').toLowerCase();
+}
+
+function collectTreeSearchText(node, parts) {
+    if (!node || !node.l) return;
+    parts.push(String(node.l));
+
+    if (node.m) {
+        for (var i = 0; i < node.m.length; i++) {
+            parts.push(String(node.m[i][0] || ''));
+            parts.push(String(node.m[i][1] || ''));
+        }
+    }
+
+    if (node.c) {
+        for (var j = 0; j < node.c.length; j++) {
+            collectTreeSearchText(node.c[j], parts);
+        }
+    }
+}
 
 function doSearch() {
     var query = document.getElementById('search-box').value.trim();
@@ -2013,6 +2587,8 @@ function doSearch() {
         infoEl.textContent = '';
         return;
     }
+
+    ensureSearchIndex();
 
     if (!searchActive) {
         savedSearchState = saveLayoutState();
@@ -2038,10 +2614,10 @@ function doSearch() {
         for (var gi = 0; gi < groups[si].length; gi++) {
             for (var ri = 0; ri < groups[si][gi].ri.length; ri++) {
                 var rawIdx = groups[si][gi].ri[ri];
-                var nameMatch = ruleNames[si][rawIdx].toLowerCase().indexOf(lowerQuery) !== -1;
-                var treeMatch = treeContainsText(planTrees[si][rawIdx], lowerQuery);
+                var treeMatch = ruleTreeSearchText[si][rawIdx].indexOf(lowerQuery) !== -1;
+                var ruleMatch = ruleSearchText[si][rawIdx].indexOf(lowerQuery) !== -1;
 
-                if (nameMatch || treeMatch) {
+                if (ruleMatch) {
                     stageOpen[si] = true;
                     if (groups[si][gi].ri.length > 1) groupOpen[si][gi] = true;
                     ruleOpen[si][gi][ri] = true;
@@ -2061,28 +2637,11 @@ function doSearch() {
     updateAllDisplays();
 }
 
-function treeContainsText(node, lowerQuery) {
-    if (!node || !node.l) return false;
-    if (node.l.toLowerCase().indexOf(lowerQuery) !== -1) return true;
-    if (node.m) {
-        for (var i = 0; i < node.m.length; i++) {
-            if (node.m[i][0].toLowerCase().indexOf(lowerQuery) !== -1) return true;
-            if (node.m[i][1].toLowerCase().indexOf(lowerQuery) !== -1) return true;
-        }
-    }
-    if (node.c) {
-        for (var i = 0; i < node.c.length; i++) {
-            if (treeContainsText(node.c[i], lowerQuery)) return true;
-        }
-    }
-    return false;
-}
-
-function rerenderAllTrees(query) {
+function rerenderAllTrees(query, force) {
     for (var si = 0; si < stageCount; si++) {
         for (var gi = 0; gi < groups[si].length; gi++) {
             for (var ri = 0; ri < groups[si][gi].ri.length; ri++) {
-                rerenderRuleTree(si, gi, ri, query);
+                rerenderRuleTree(si, gi, ri, query, force);
             }
         }
     }
@@ -2195,7 +2754,7 @@ function closeDiffFull() {
     clearDiffSelection('both');
     diffA = null;
     diffB = null;
-    rerenderAllTrees(currentSearchQuery());
+    rerenderAllTrees(currentSearchQuery(), true);
     updateAllDisplays();
     updateDiffButton();
 }
@@ -2213,7 +2772,7 @@ function exitDiffKeepOther(keepWhich) {
         clearDiffSelection('a');
         diffA = null;
     }
-    rerenderAllTrees(currentSearchQuery());
+    rerenderAllTrees(currentSearchQuery(), true);
     updateAllDisplays();
 }
 
@@ -2254,6 +2813,7 @@ function showDiffInline() {
         containerA.innerHTML = '<div class="tree-root">' +
             DiffRenderer.renderSide(diffResult, keyA, '0', 'a', [], true) +
             '</div>';
+        invalidateRuleTree(diffA.si, diffA.gi, diffA.ri);
     }
 
     /* Render side B */
@@ -2263,6 +2823,7 @@ function showDiffInline() {
         containerB.innerHTML = '<div class="tree-root">' +
             DiffRenderer.renderSide(diffResult, keyB, '0', 'b', [], true) +
             '</div>';
+        invalidateRuleTree(diffB.si, diffB.gi, diffB.ri);
     }
 
     updateDiffButton();
@@ -2277,98 +2838,340 @@ function showDiffInline() {
    between two plan trees.
 
    Input:  two plan tree nodes (format: {l: string, c: [{...}], ...})
-   Output: array of DiffNode objects:
+   Output: side-specific arrays of DiffNode objects:
        {
            status:   'same' | 'added' | 'removed',
            label:    string,
-           original: reference to source plan node (for added/removed),
            children: [DiffNode, ...]
        }
 
    The algorithm:
-   1. Basic structural diff using LCS matching on child labels.
-   2. Move detection pass: finds removed subtrees that match
-      added subtrees (by label + structural similarity), then
-      re-diffs their children so only the moved node itself is
-      highlighted, not its entire subtree.
+   1. Render side-specific diff trees, so each side keeps its
+      real physical tree shape.
+   2. Match ordinary siblings by LCS on child labels.
+   3. Detect moved unary wrapper operators. If removing a wrapper
+      from one side makes it structurally equal to the other side,
+      only the wrapper row is marked removed/added.
    ══════════════════════════════════════════════════════════════ */
 
 var TreeDiff = (function() {
 
+    var movableUnaryOperators = {
+        Aggregate: true,
+        Distinct: true,
+        Filter: true,
+        Limit: true,
+        Map: true,
+        Project: true,
+        Sort: true,
+        Window: true
+    };
+
     /**
-     * Main entry point. Diffs two plan trees and returns an
-     * array of diff nodes with move detection applied.
+     * Main entry point. Returns side-specific diff trees:
+     *   { sideSpecific: true, a: [DiffNode], b: [DiffNode] }
      */
     function diff(nodeA, nodeB) {
-        var result = basicDiff(nodeA, nodeB);
-        detectMoves(result);
-        return result;
+        return sideDiff(nodeA, nodeB);
     }
 
     /**
-     * Basic structural diff using LCS on child labels.
-     * Returns an array of diff nodes (typically length 1 if
-     * root labels match, or 2 if they differ).
+     * Diff two nodes while preserving each side's real tree shape.
      */
-    function basicDiff(nodeA, nodeB) {
-        if (!nodeA && !nodeB) return [];
-        if (!nodeA) return [markEntireSubtree(nodeB, 'added')];
-        if (!nodeB) return [markEntireSubtree(nodeA, 'removed')];
+    function sideDiff(nodeA, nodeB) {
+        if (!nodeA && !nodeB) return makeSideResult([], []);
+        if (!nodeA) return makeSideResult([], [markEntireSubtree(nodeB, 'added')]);
+        if (!nodeB) return makeSideResult([markEntireSubtree(nodeA, 'removed')], []);
 
-        /* Root labels differ: both trees are fully changed */
-        if (nodeA.l !== nodeB.l) {
-            return [
-                markEntireSubtree(nodeA, 'removed'),
-                markEntireSubtree(nodeB, 'added')
-            ];
+        if (nodeA.l === nodeB.l) {
+            var childDiff = diffChildren(nodeA.c || [], nodeB.c || []);
+            return makeSideResult(
+                [makeDiffNode(nodeA.l, 'same', childDiff.a)],
+                [makeDiffNode(nodeB.l, 'same', childDiff.b)]
+            );
         }
 
-        /* Root labels match: diff the children */
-        var resultNode = {
-            status: 'same',
-            label: nodeA.l,
-            original: null,
-            children: []
-        };
+        var wrapperMove = tryMovedWrapperDiff(nodeA, nodeB);
+        if (wrapperMove) return wrapperMove;
 
-        var childrenA = nodeA.c || [];
-        var childrenB = nodeB.c || [];
+        return makeSideResult(
+            [markEntireSubtree(nodeA, 'removed')],
+            [markEntireSubtree(nodeB, 'added')]
+        );
+    }
+
+    function makeSideResult(nodesA, nodesB) {
+        return { sideSpecific: true, a: nodesA, b: nodesB };
+    }
+
+    function makeDiffNode(label, status, children) {
+        return {
+            status: status,
+            label: label,
+            original: null,
+            children: children || []
+        };
+    }
+
+    /**
+     * Diff sibling lists. Matched labels recurse normally; unmatched
+     * remove/add runs get a second pass for moved wrappers.
+     */
+    function diffChildren(childrenA, childrenB) {
         var editOps = computeLCSEditOps(childrenA, childrenB);
+        var resultA = [];
+        var resultB = [];
 
         for (var i = 0; i < editOps.length; i++) {
             var op = editOps[i];
             if (op.type === 'match') {
-                var subDiff = basicDiff(childrenA[op.idxA], childrenB[op.idxB]);
-                for (var s = 0; s < subDiff.length; s++) {
-                    resultNode.children.push(subDiff[s]);
+                var matchedDiff = sideDiff(childrenA[op.idxA], childrenB[op.idxB]);
+                appendAll(resultA, matchedDiff.a);
+                appendAll(resultB, matchedDiff.b);
+                continue;
+            }
+
+            var removed = [];
+            var added = [];
+            while (i < editOps.length && editOps[i].type !== 'match') {
+                if (editOps[i].type === 'remove') {
+                    removed.push(childrenA[editOps[i].idxA]);
+                } else {
+                    added.push(childrenB[editOps[i].idxB]);
                 }
-            } else if (op.type === 'remove') {
-                resultNode.children.push(markEntireSubtree(childrenA[op.idxA], 'removed'));
-            } else if (op.type === 'add') {
-                resultNode.children.push(markEntireSubtree(childrenB[op.idxB], 'added'));
+                i++;
+            }
+            i--;
+
+            var runDiff = diffUnmatchedRun(removed, added);
+            appendAll(resultA, runDiff.a);
+            appendAll(resultB, runDiff.b);
+        }
+
+        return makeSideResult(resultA, resultB);
+    }
+
+    function appendAll(target, items) {
+        for (var i = 0; i < items.length; i++) target.push(items[i]);
+    }
+
+    /**
+     * Pair unmatched remove/add nodes when they are probably the same
+     * logical subtree in a new position. This keeps moved operators
+     * readable as one removed row and one added row.
+     */
+    function diffUnmatchedRun(removed, added) {
+        var resultA = [];
+        var resultB = [];
+        var pairForRemoved = {};
+        var pairForAdded = {};
+
+        for (var ri = 0; ri < removed.length; ri++) {
+            var bestPair = null;
+            var bestAddedIdx = -1;
+            for (var ai = 0; ai < added.length; ai++) {
+                if (pairForAdded[ai]) continue;
+
+                var candidate = tryUnmatchedPairDiff(removed[ri], added[ai]);
+                if (candidate) {
+                    bestPair = candidate;
+                    bestAddedIdx = ai;
+                    break;
+                }
+            }
+            if (bestPair) {
+                pairForRemoved[ri] = bestPair;
+                pairForAdded[bestAddedIdx] = bestPair;
             }
         }
 
-        return [resultNode];
+        for (var r = 0; r < removed.length; r++) {
+            if (pairForRemoved[r]) {
+                appendAll(resultA, pairForRemoved[r].a);
+            } else {
+                resultA.push(markEntireSubtree(removed[r], 'removed'));
+            }
+        }
+
+        for (var a = 0; a < added.length; a++) {
+            if (pairForAdded[a]) {
+                appendAll(resultB, pairForAdded[a].b);
+            } else {
+                resultB.push(markEntireSubtree(added[a], 'added'));
+            }
+        }
+
+        return makeSideResult(resultA, resultB);
+    }
+
+    function tryUnmatchedPairDiff(nodeA, nodeB) {
+        if (nodeA && nodeB && nodeA.l === nodeB.l) {
+            var childDiff = diffChildren(nodeA.c || [], nodeB.c || []);
+            return makeSideResult(
+                [makeDiffNode(nodeA.l, 'removed', childDiff.a)],
+                [makeDiffNode(nodeB.l, 'added', childDiff.b)]
+            );
+        }
+
+        var wrapperMove = tryMovedWrapperDiff(nodeA, nodeB);
+        if (wrapperMove) return wrapperMove;
+
+        return null;
     }
 
     /**
      * Mark an entire subtree as added or removed.
-     * Stores a reference to the original plan node for move detection.
      */
     function markEntireSubtree(planNode, status) {
-        var diffNode = {
-            status: status,
-            label: planNode.l,
-            original: planNode,
-            children: []
-        };
+        var diffNode = makeDiffNode(planNode.l, status, []);
         if (planNode.c) {
             for (var i = 0; i < planNode.c.length; i++) {
                 diffNode.children.push(markEntireSubtree(planNode.c[i], status));
             }
         }
         return diffNode;
+    }
+
+    function cloneAsSame(planNode) {
+        var diffNode = makeDiffNode(planNode.l, 'same', []);
+        var children = planNode.c || [];
+        for (var i = 0; i < children.length; i++) {
+            diffNode.children.push(cloneAsSame(children[i]));
+        }
+        return diffNode;
+    }
+
+    /**
+     * Detect a unary wrapper move:
+     *   X(W(Y))  <->  W(X(Y))
+     * and the multi-child equivalent:
+     *   W(Join(A,B))  <->  Join(W(A),B)
+     */
+    function tryMovedWrapperDiff(nodeA, nodeB) {
+        if (!nodeA || !nodeB) return null;
+
+        if (isMovableUnaryWrapper(nodeB)) {
+            var movedUp = tryTopWrapperAgainstNested(nodeA, nodeB, 'removed', 'added');
+            if (movedUp) return movedUp;
+        }
+
+        if (isMovableUnaryWrapper(nodeA)) {
+            var movedDown = tryTopWrapperAgainstNested(nodeB, nodeA, 'added', 'removed');
+            if (movedDown) {
+                return makeSideResult(movedDown.b, movedDown.a);
+            }
+        }
+
+        return null;
+    }
+
+    function tryTopWrapperAgainstNested(treeWithNestedWrapper, topWrapper,
+                                        nestedStatus, topStatus) {
+        var paths = findWrapperPaths(treeWithNestedWrapper, topWrapper.l);
+        var topPayload = (topWrapper.c || [])[0];
+        if (!topPayload) return null;
+
+        for (var i = 0; i < paths.length; i++) {
+            var normalized = removeWrapperAtPath(treeWithNestedWrapper, paths[i]);
+            if (sameStructure(normalized, topPayload)) {
+                return makeSideResult(
+                    [cloneWithWrapperStatus(treeWithNestedWrapper, paths[i], nestedStatus)],
+                    [makeDiffNode(topWrapper.l, topStatus, [cloneAsSame(topPayload)])]
+                );
+            }
+        }
+        return null;
+    }
+
+    function findWrapperPaths(node, label) {
+        var paths = [];
+        collectWrapperPaths(node, label, [], paths);
+        return paths;
+    }
+
+    function collectWrapperPaths(node, label, path, paths) {
+        if (!node) return;
+        if (node.l === label && isMovableUnaryWrapper(node)) {
+            paths.push(path.slice());
+        }
+
+        var children = node.c || [];
+        for (var i = 0; i < children.length; i++) {
+            path.push(i);
+            collectWrapperPaths(children[i], label, path, paths);
+            path.pop();
+        }
+    }
+
+    function cloneWithWrapperStatus(node, path, status) {
+        if (path.length === 0) {
+            return makeDiffNode(node.l, status, (node.c || []).map(cloneAsSame));
+        }
+
+        var children = [];
+        var childIndex = path[0];
+        var rest = path.slice(1);
+        var sourceChildren = node.c || [];
+        for (var i = 0; i < sourceChildren.length; i++) {
+            if (i === childIndex) {
+                children.push(cloneWithWrapperStatus(sourceChildren[i], rest, status));
+            } else {
+                children.push(cloneAsSame(sourceChildren[i]));
+            }
+        }
+        return makeDiffNode(node.l, 'same', children);
+    }
+
+    function removeWrapperAtPath(node, path) {
+        if (path.length === 0) {
+            return clonePlanNode((node.c || [])[0]);
+        }
+
+        var clone = { l: node.l, c: [] };
+        var childIndex = path[0];
+        var rest = path.slice(1);
+        var children = node.c || [];
+        for (var i = 0; i < children.length; i++) {
+            if (i === childIndex) {
+                clone.c.push(removeWrapperAtPath(children[i], rest));
+            } else {
+                clone.c.push(clonePlanNode(children[i]));
+            }
+        }
+        return clone;
+    }
+
+    function clonePlanNode(node) {
+        var clone = { l: node.l, c: [] };
+        var children = node.c || [];
+        for (var i = 0; i < children.length; i++) {
+            clone.c.push(clonePlanNode(children[i]));
+        }
+        return clone;
+    }
+
+    function sameStructure(nodeA, nodeB) {
+        if (!nodeA || !nodeB) return false;
+        if (nodeA.l !== nodeB.l) return false;
+
+        var childrenA = nodeA.c || [];
+        var childrenB = nodeB.c || [];
+        if (childrenA.length !== childrenB.length) return false;
+
+        for (var i = 0; i < childrenA.length; i++) {
+            if (!sameStructure(childrenA[i], childrenB[i])) return false;
+        }
+        return true;
+    }
+
+    function isMovableUnaryWrapper(node) {
+        var children = node.c || [];
+        return children.length === 1 && !!movableUnaryOperators[operatorName(node.l)];
+    }
+
+    function operatorName(label) {
+        var match = String(label || '').match(/^[^\s\[]+/);
+        return match ? match[0] : '';
     }
 
     /**
@@ -2442,178 +3245,6 @@ var TreeDiff = (function() {
     }
 
 
-    /* ── Move detection ──────────────────────────────────────
-       After the basic diff, some removed subtrees may match
-       added subtrees elsewhere (i.e. a node was moved, not
-       deleted and recreated). We detect these by:
-
-       1. Collecting all fully-marked "removed" and "added"
-          subtrees from the diff tree.
-       2. Matching them by label + structural similarity.
-       3. For each matched pair, re-diffing their children
-          so only actual structural changes are highlighted,
-          not the entire moved subtree.
-
-       The top-level node keeps its 'removed'/'added' status
-       to show where the move happened.
-       ────────────────────────────────────────────────────── */
-
-    /**
-     * Top-level move detection. Modifies diffNodes in place.
-     */
-    function detectMoves(diffNodes) {
-        var removedList = [];
-        var addedList = [];
-        collectFullyMarkedSubtrees(diffNodes, removedList, addedList);
-
-        if (removedList.length === 0 || addedList.length === 0) return;
-
-        /* Greedy matching: for each removed node, find the best
-           matching added node by label + similarity score */
-        var usedAddedIndices = {};
-
-        for (var ri = 0; ri < removedList.length; ri++) {
-            var removedNode = removedList[ri];
-            var bestAddedIdx = -1;
-            var bestScore = 0;
-
-            for (var ai = 0; ai < addedList.length; ai++) {
-                if (usedAddedIndices[ai]) continue;
-                var addedNode = addedList[ai];
-
-                if (removedNode.label !== addedNode.label) continue;
-
-                var score = computeSubtreeSimilarity(
-                    removedNode.original, addedNode.original
-                );
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestAddedIdx = ai;
-                }
-            }
-
-            /* Require at least the root label matches (score >= 1) */
-            if (bestAddedIdx >= 0 && bestScore >= 1) {
-                var addedNode = addedList[bestAddedIdx];
-                usedAddedIndices[bestAddedIdx] = true;
-
-                /* Re-diff the subtrees properly.
-                   Since labels match, basicDiff returns a single
-                   node with status 'same' and diffed children. */
-                var subDiff = basicDiff(removedNode.original, addedNode.original);
-
-                if (subDiff.length === 1 && subDiff[0].status === 'same') {
-                    /* Replace uniformly-marked children with
-                       properly diffed children */
-                    removedNode.children = subDiff[0].children;
-                    addedNode.children = subDiff[0].children;
-                }
-                /* The top-level status stays 'removed'/'added'
-                   to visually indicate the insertion/deletion point */
-            }
-        }
-
-        /* Recurse: the re-diffed children may themselves contain
-           new removed/added pairs that are moves */
-        for (var i = 0; i < diffNodes.length; i++) {
-            if (diffNodes[i].children && diffNodes[i].children.length > 0) {
-                detectMoves(diffNodes[i].children);
-            }
-        }
-    }
-
-    /**
-     * Collect all top-level fully-marked subtrees (where every
-     * descendant has the same status). These are candidates for
-     * move detection.
-     *
-     * A node is "fully marked" if:
-     *   - Its status is 'added' or 'removed', AND
-     *   - All its descendants have the same status
-     *     (which is true by construction from markEntireSubtree,
-     *      unless a previous move-detection pass has modified it)
-     */
-    function collectFullyMarkedSubtrees(diffNodes, removedList, addedList) {
-        for (var i = 0; i < diffNodes.length; i++) {
-            var node = diffNodes[i];
-            if (node.status === 'removed' && isFullyMarked(node, 'removed')) {
-                removedList.push(node);
-            } else if (node.status === 'added' && isFullyMarked(node, 'added')) {
-                addedList.push(node);
-            } else if (node.status === 'same' && node.children) {
-                /* Only recurse into 'same' nodes — we want top-level
-                   marked subtrees, not nested ones */
-                collectFullyMarkedSubtrees(node.children, removedList, addedList);
-            }
-        }
-    }
-
-    /**
-     * Check whether every node in the subtree has the given status.
-     */
-    function isFullyMarked(diffNode, status) {
-        if (diffNode.status !== status) return false;
-        if (diffNode.children) {
-            for (var i = 0; i < diffNode.children.length; i++) {
-                if (!isFullyMarked(diffNode.children[i], status)) return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Compute a similarity score between two plan tree nodes.
-     * Returns the count of label matches in the overlapping structure.
-     * Used for ranking move candidates.
-     */
-    function computeSubtreeSimilarity(planA, planB) {
-        if (!planA || !planB) return 0;
-        if (planA.l !== planB.l) return 0;
-
-        var score = 1; /* Root labels match */
-
-        var childrenA = planA.c || [];
-        var childrenB = planB.c || [];
-
-        if (childrenA.length === 0 && childrenB.length === 0) return score;
-
-        /* Use LCS to find matching children and sum their similarity */
-        var n = childrenA.length;
-        var m = childrenB.length;
-        var dp = [];
-        for (var i = 0; i <= n; i++) {
-            dp[i] = [];
-            for (var j = 0; j <= m; j++) {
-                dp[i][j] = 0;
-            }
-        }
-        for (var i = 1; i <= n; i++) {
-            for (var j = 1; j <= m; j++) {
-                if (childrenA[i - 1].l === childrenB[j - 1].l) {
-                    dp[i][j] = dp[i - 1][j - 1] + 1;
-                } else {
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-                }
-            }
-        }
-
-        /* Backtrack to find matched children */
-        var i = n, j = m;
-        while (i > 0 && j > 0) {
-            if (childrenA[i - 1].l === childrenB[j - 1].l) {
-                score += computeSubtreeSimilarity(childrenA[i - 1], childrenB[j - 1]);
-                i--;
-                j--;
-            } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-                i--;
-            } else {
-                j--;
-            }
-        }
-
-        return score;
-    }
-
     /* Public API */
     return {
         diff: diff
@@ -2670,6 +3301,10 @@ var DiffRenderer = (function() {
      * @param {boolean} isRoot       - true for the top level
      */
     function renderSide(nodes, ruleKey, basePid, side, parentPrefix, isRoot) {
+        if (nodes && nodes.sideSpecific) {
+            nodes = nodes[side] || [];
+        }
+
         var visible = filterVisible(nodes, side);
         var html = '';
 
@@ -2796,12 +3431,13 @@ function initWheelScroll() {
    ══════════════════════════════════════════════════════════════ */
 
 window.addEventListener('DOMContentLoaded', function() {
+    initTheme();
     initWheelScroll();
 
     for (var si = 0; si < stageCount; si++) {
         for (var gi = 0; gi < groups[si].length; gi++) {
             for (var ri = 0; ri < groups[si][gi].ri.length; ri++) {
-                rerenderRuleTree(si, gi, ri, '');
+                rerenderRuleTree(si, gi, ri, '', true);
 
                 var rawIdx = groups[si][gi].ri[ri];
                 var infoContainer = document.getElementById(
@@ -2814,16 +3450,12 @@ window.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    var darkCheckbox = document.querySelector('.controls input[type="checkbox"]');
-    if (darkCheckbox && !darkCheckbox.checked) {
-        document.body.classList.remove('darkmode');
-    }
-
     updateDiffButton();
+    warmSearchIndex();
 });
 
 </script>
-</head><body class="darkmode">
+</head><body class="theme-stone-dark">
 )RAWJS";
 
         /* ═══════════ Controls ═══════════ */
@@ -2835,10 +3467,22 @@ window.addEventListener('DOMContentLoaded', function() {
         out << "  <button class=\"ctrl-btn\" id=\"cycle-button\" "
             << "onclick=\"cycleGlobalState()\" style=\"min-width:120px\">"
             << "Collapse All</button>\n";
-        out << "  <label><input type=\"checkbox\" checked onclick=\"toggleDarkMode()\" "
-            << "style=\"cursor:pointer\"> Dark Theme</label>\n";
+        out << "  <label for=\"theme-select\">Theme</label>\n";
+        out << "  <select class=\"theme-select\" id=\"theme-select\" "
+            << "onchange=\"setTheme(this.value)\">\n";
+        out << "    <option value=\"stone-dark\" selected>Stone Dark</option>\n";
+        out << "    <option value=\"stone-light\">Stone Light</option>\n";
+        out << "    <option value=\"slate-dark\">Slate Dark</option>\n";
+        out << "    <option value=\"slate-light\">Slate Light</option>\n";
+        out << "    <option value=\"yandex-light\">Yandex Light</option>\n";
+        out << "    <option value=\"yandex-dark\">Yandex Dark</option>\n";
+        out << "    <option value=\"monokai-pro\">Monokai Pro</option>\n";
+        out << "    <option value=\"doom-old-hope\">Doom Old Hope</option>\n";
+        out << "    <option value=\"modus-operandi\">Modus Operandi</option>\n";
+        out << "    <option value=\"modus-vivendi\">Modus Vivendi</option>\n";
+        out << "  </select>\n";
         out << "  <input class=\"search-box\" id=\"search-box\" type=\"text\" "
-            << "placeholder=\"Search plans\xe2\x80\xa6\" oninput=\"doSearch()\">\n";
+            << "placeholder=\"Search plans\xe2\x80\xa6\" oninput=\"scheduleSearch()\">\n";
         out << "  <span class=\"search-info\" id=\"search-info\"></span>\n";
         out << "</div></div>\n\n";
 
@@ -2881,19 +3525,16 @@ window.addEventListener('DOMContentLoaded', function() {
                 << "</div>\n";
 
             /* Rules row */
-            out << "    <div class=\"rules-row\">\n";
+            out << "    <div class=\"rules-row"
+                << (empty ? " empty-rules-row" : "") << "\">\n";
 
             if (empty) {
-                out << "      <div class=\"rule-cell expanded\" "
-                    << "style=\"color:#666;font-style:italic;\">"
-                    << "<div class=\"rule-exp-wrap\">"
-                    << "<div class=\"rule-title-bar\" style=\"cursor:default;\">"
-                    << "<div class=\"title-left\">"
-                    << "<div class=\"rule-title\" style=\"cursor:default;color:#888;\">"
-                    << "no rules</div></div></div>"
-                    << "<div class=\"rule-content\"><div class=\"rule-tree-wrap\">"
-                    << "<span style=\"color:#999;font-size:12px;\">no rules applied</span>"
-                    << "</div></div></div></div>\n";
+                out << "      <div class=\"empty-stage-card\">"
+                    << "<span class=\"empty-stage-dot\" aria-hidden=\"true\"></span>"
+                    << "<div class=\"empty-stage-copy\">"
+                    << "<div class=\"empty-stage-title\">No rules in this stage</div>"
+                    << "<div class=\"empty-stage-subtitle\">Optimizer did not apply rules here</div>"
+                    << "</div></div>\n";
             }
 
             size_t flatBase = 0;
@@ -3148,11 +3789,11 @@ private:
                       size_t ruleNum, const std::string& name,
                       bool hasMeta, bool hasStats, bool hasInfo,
                       bool isFirst, bool isLast) const {
-        out << "<div class=\"rule-title-bar\">\n";
+        out << "<div class=\"rule-title-bar\" onclick=\"toggleRule("
+            << si << "," << gi << "," << ri << ",event)\">\n";
         out << "  <div class=\"title-left\">";
 
-        out << "<div class=\"rule-title\" onclick=\"toggleRule("
-            << si << "," << gi << "," << ri << ",event)\">"
+        out << "<div class=\"rule-title\">"
             << "<span class=\"rule-num\">" << ruleNum << ".</span>"
             << esc(name) << "</div>";
 
@@ -3207,4 +3848,3 @@ private:
 } // namespace NKikimr
 
 #endif // OPTIMIZER_TRACE_HTML_H
-

@@ -57,9 +57,9 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_and_send_team_issues import (
+    get_all_team_data,
     load_team_channels,
     send_team_messages,
-    get_all_team_data,
 )
 
 
@@ -266,7 +266,10 @@ def run_digest(
         muted_stats   = None
         all_team_data = None
         try:
-            all_team_data = get_all_team_data(build_type=profile["build_type"], branch=profile["branch"])
+            all_team_data = get_all_team_data(
+                build_type=profile["build_type"],
+                branch=profile["branch"],
+            )
             if all_team_data:
                 muted_stats = {t: d["stats"] for t, d in all_team_data.items()}
         except Exception as exc:
@@ -279,11 +282,16 @@ def run_digest(
             muted_stats=muted_stats,
             include_plots=include_plots,
             ydb_config=(
-                {"use_yesterday": False, "build_type": profile["build_type"]}
+                {
+                    "use_yesterday": False,
+                    "build_type": profile["build_type"],
+                    "branch": profile["branch"],
+                }
                 if include_plots
                 else None
             ),
             all_team_data=all_team_data,
+            show_diff=True,
         )
 
         now = datetime.now(tz=timezone.utc)

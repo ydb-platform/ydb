@@ -34,6 +34,8 @@ SRCS(
     error_info.h
     http.cpp
     http.h
+    http_dump.cpp
+    http_dump.h
     info_collector.cpp
     info_collector.h
     json_proxy.h

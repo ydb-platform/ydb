@@ -395,7 +395,7 @@ public:
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
                  const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos);
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
-                 const EOpPhase aggPhase, bool distinctAll, const std::optional<i64>& memoryLimit, const TPhysicalOpProps& props, TPositionHandle pos);
+                 const EOpPhase aggPhase, bool distinctAll, const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
@@ -418,13 +418,11 @@ public:
     TVector<TInfoUnit> GetKeyColumns() const { return KeyColumns; }
     TVector<TInfoUnit>& GetKeyColumns() { return KeyColumns; }
     bool IsDistinctAll() const { return DistinctAll; }
-    std::optional<i64> GetMemoryLimit() const { return MemoryLimit; }
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
     EOpPhase AggregationPhase;
     bool DistinctAll;
-    std::optional<i64> MemoryLimit;
 };
 
 class TOpFilter: public IUnaryOperator {

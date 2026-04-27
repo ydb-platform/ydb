@@ -35,21 +35,17 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
            !aggregate->GetKeyColumns().empty();
 }
 
-TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusivePtr<TOpAggregate>& aggregate, TRBOContext& ctx) {
+TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusivePtr<TOpAggregate>& aggregate) {
     const auto pos = aggregate->Pos;
     const auto props = aggregate->Props;
     const auto& aggregationTraitsList = aggregate->GetAggregationTraits();
     const auto& aggKeys = aggregate->GetKeyColumns();
     const auto distinctAll = aggregate->IsDistinctAll();
-    std::optional<i64> memLimit;
-    if (auto memLimitSetting = ctx.KqpCtx.Config->_KqpYqlCombinerMemoryLimit.Get()) {
-        memLimit = -i64(*memLimitSetting);
-    }
 
     TVector<TOpAggregationTraits> intermediateTraits;
     TVector<TOpAggregationTraits> finalTraits;
     // Here we want to split aggregate to final and intermediate.
-    for (const auto& originalTraits: aggregationTraitsList) {
+    for (const auto& originalTraits : aggregationTraitsList) {
         const auto& originalColName = originalTraits.OriginalColName;
         const auto& aggFunc = originalTraits.AggFunction;
         const auto& resultColName = originalTraits.ResultColName;
@@ -58,9 +54,8 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
         finalTraits.emplace_back(newIntermediateName, aggFunc, resultColName);
     }
 
-    const auto intermediate =
-        MakeIntrusive<TOpAggregate>(aggregate->GetInput(), intermediateTraits, aggKeys, EOpPhase::Intermediate, distinctAll, memLimit, props, pos);
-    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, aggKeys, EOpPhase::Final, distinctAll, std::nullopt, props, pos);
+    const auto intermediate = MakeIntrusive<TOpAggregate>(aggregate->GetInput(), intermediateTraits, aggKeys, EOpPhase::Intermediate, distinctAll, props, pos);
+    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, aggKeys, EOpPhase::Final, distinctAll, props, pos);
 }
 
 } // namespace
@@ -75,7 +70,7 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
     if (aggregate->GetAggregationPhase() == EOpPhase::Undefined) {
-        return EmitFinalAndIntermediateAggregates(aggregate, ctx);
+        return EmitFinalAndIntermediateAggregates(aggregate);
     }
 
     const auto aggInput = aggregate->GetInput();
@@ -83,7 +78,7 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         auto props = aggregate->Props;
         props.StageId = aggInput->Props.StageId;
         return MakeIntrusive<TOpAggregate>(aggInput, aggregate->GetAggregationTraits(), aggregate->GetKeyColumns(), EOpPhase::Intermediate,
-                                           aggregate->IsDistinctAll(), aggregate->GetMemoryLimit(), props, aggregate->Pos);
+                                           aggregate->IsDistinctAll(), props, aggregate->Pos);
     }
 
     return input;

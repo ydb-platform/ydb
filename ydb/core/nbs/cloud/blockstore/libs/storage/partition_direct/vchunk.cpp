@@ -16,7 +16,6 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

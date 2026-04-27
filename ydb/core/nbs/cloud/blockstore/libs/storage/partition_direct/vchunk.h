@@ -17,6 +17,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {

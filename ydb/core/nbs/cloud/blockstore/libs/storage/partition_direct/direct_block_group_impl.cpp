@@ -9,6 +9,9 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -490,7 +493,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     const auto startAt = TMonotonic::Now();
 
-    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds(hostIndexes.size());
+    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
+    disksIds.reserve(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
@@ -961,8 +965,8 @@ void TDirectBlockGroup::OnConnectionEstablished(
             result.GetDDiskInstanceGuid();
     } else {
         Y_ABORT(
-            "TDirectBlockGroup::HandlePersistentBufferConnected: connection "
-            "failed - unhandled error");
+            "TDirectBlockGroup::OnConnectionEstablished: connection failed - "
+            "unhandled error");
     }
     connection.ConnectPromise.SetValue(error);
 

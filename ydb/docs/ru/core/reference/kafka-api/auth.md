@@ -59,46 +59,54 @@
 
 Для каждого шага ниже представлены примеры команд. Замените \*\*\* на ваши значения.
 
-1. Создаем Certificate Authority (CA)
+1. Создайте Certificate Authority (CA)
 
-`openssl genrsa -out ca-key.pem 4096`
-
-`openssl req -new -x509 -days 3650 -key ca-key.pem -out ca-cert.pem -subj "/C=***/ST=***/L=***/O=***/CN=MyKafkaRootCA"`
-
-2. Создаем сертификат для сервера
-
+```bash
+openssl genrsa -out ca-key.pem 4096
 ```
+
+```bash
+openssl req -new -x509 -days 3650 -key ca-key.pem -out ca-cert.pem -subj "/C=***/ST=***/L=***/O=***/CN=MyKafkaRootCA"
+```
+
+2. Создайте сертификат для сервера
+
+```bash
 openssl genrsa -out server-key.pem 4096
 ```
 
 В следующей команде вместо `serverhost.com` также укажите название вашего хоста.
 
-```
+```bash
 openssl req -new -key server-key.pem -out server-cert.csr -subj "/C=***/ST=***/L=***/O=***/CN=serverhost.com"
 ```
 
-```
- cat > server-ext.cnf << EOF
+```bash
+cat > server-ext.cnf << EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
-subjectAltName = serverhost.com
+subjectAltName = DNS:serverhost.com
 EOF
 ```
 
-```
+```bash
 openssl x509 -req -in server-cert.csr -CA ca-cert.pem -CAkey ca-key.pem -CAcreateserial -out server-cert.pem -days 365 -extfile server-ext.cnf
 ```
 
-3. Создание клиентского сертификата
+3. Создайте клиентский сертификат
 
-`openssl genrsa -out client-key.pem 4096`
+```bash
+openssl genrsa -out client-key.pem 4096
+```
 
 Замените `clienthost.com` на hostname вашего клиента.
 
-`openssl req -new -key client-key.pem -out client-cert.csr -subj "/C=***/ST=***/L=***/O=***/CN=clienthost.com"`
-
+```bash
+openssl req -new -key client-key.pem -out client-cert.csr -subj "/C=***/ST=***/L=***/O=***/CN=clienthost.com"
 ```
+
+```bash
 cat > client-ext.cnf << EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
@@ -107,14 +115,16 @@ subjectAltName = DNS:clienthost.com
 EOF
 ```
 
-`openssl x509 -req -in client-cert.csr -CA ca-cert.pem -CAkey ca-key.pem -CAcreateserial -out client-cert.pem -days 365 -extfile client-ext.cnf`
+```bash
+openssl x509 -req -in client-cert.csr -CA ca-cert.pem -CAkey ca-key.pem -CAcreateserial -out client-cert.pem -days 365 -extfile client-ext.cnf
+```
 
 
-4. Добавляем их в keystore и truststore
+4. Добавьте сертификаты в keystore и truststore
 
 Для сервера:
 
-```
+```bash
 openssl pkcs12 -export -in server-cert.pem -inkey server-key.pem -out server.p12 -name kafka-server -CAfile ca-cert.pem -caname root -password pass:changeit
 
 keytool -importkeystore -deststorepass changeit -destkeystore server.keystore.jks -srckeystore server.p12 -srcstoretype PKCS12 -srcstorepass changeit -alias kafka-server 
@@ -124,7 +134,7 @@ keytool -import -trustcacerts -alias ca -file ca-cert.pem -keystore server.trust
 
 Для клиента:
 
-```
+```bash
 openssl pkcs12 -export -in client-cert.pem -inkey client-key.pem -out client.p12 -name kafka-client -CAfile ca-cert.pem -caname root -password pass:changeit
 
 keytool -importkeystore -deststorepass changeit -destkeystore client.keystore.jks -srckeystore client.p12 -srcstoretype PKCS12 -srcstorepass changeit -alias kafka-client  
@@ -136,14 +146,14 @@ keytool -import -trustcacerts -alias ca -file ca-cert.pem -keystore client.trust
 
 #### Конфигурация клиента
 ##### Пример для Java SDK
-```
-propers.put("security.protocol", "SSL");
-propers.put("ssl.truststore.password", "changeit");
-propers.put("ssl.truststore.location", "/full/path/to/client.truststore.jks");
-propers.put("ssl.keystore.location", "/full/path/to/client.keystore.jks");
-propers.put("ssl.keystore.password", "changeit");
-propers.put("ssl.key.password", "changeit");
-propers.put("ssl.endpoint.identification.algorithm", "");
+```java
+props.put("security.protocol", "SSL");
+props.put("ssl.truststore.password", "changeit");
+props.put("ssl.truststore.location", "/full/path/to/client.truststore.jks");
+props.put("ssl.keystore.location", "/full/path/to/client.keystore.jks");
+props.put("ssl.keystore.password", "changeit");
+props.put("ssl.key.password", "changeit");
+props.put("ssl.endpoint.identification.algorithm", "");
 ```
 
 ##### Пример для kafka cli
@@ -162,7 +172,7 @@ ssl.endpoint.identification.algorithm=
 
 Во-первых, нужно указать нужные поля в конфигурации kafka\_proxy
 
-```
+```yaml
 kafka_proxy_config:
   enable_kafka_proxy: true
   listening_port: your_port
@@ -171,12 +181,12 @@ kafka_proxy_config:
   key: "server-key.pem" # укажите правильные пути до файлов
   cert: "server-cert.pem"
   ca: "ca-cert.pem"
-  allow_self_signed_certs: true # разрешаете ли вы самоподписанные сертификаты
+  enable_self_signed_certs: true # разрешаете ли вы самоподписанные сертификаты
 ```
 
 Также укажите в конфигурации client\_certificate\_authorization правила, по которым будет проходить аутентификация:
 
-```
+```yaml
 client_certificate_authorization:
   client_certificate_definitions:
     - require_same_issuer: true
@@ -191,7 +201,7 @@ client_certificate_authorization:
 Подробнее про client_certificate_authorization конфигурацию: [{#T}](../configuration/client_certificate_authorization.md)
 
 Еще для корректной работы нужно указать путь до этого же серверного сертификата конфигурации grpc:
-```
+```yaml
 grpc_config:
   cert: "/path/to/server-cert.pem"
 ```

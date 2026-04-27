@@ -500,6 +500,36 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT(!result.IsSuccess());
     }
+    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWongParametersOnAlter, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableViewMinMaxIndex`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            "ALTER TABLE `/Root/olapTableViewMinMaxIndex` ALTER INDEX idx_bloom SET (foo = bar);",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        result = session.ExecuteQuery(
+            "ALTER TABLE `/Root/olapTableViewMinMaxIndex` ALTER INDEX idx_bloom SET (ngram_size = 42);",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
 
     Y_UNIT_TEST(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);

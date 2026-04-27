@@ -727,6 +727,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
 
+    TVector<NKikimrSchemeOp::TOlapIndexDescription> OlapIndexes;
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
@@ -860,12 +861,16 @@ struct TKikimrTableMetadata : public TThrRefBase {
                 implTable = implTable->Next;
             } while (implTable);
         }
+
+        for(auto& index: OlapIndexes) {
+            *message->AddOlapIndexes() = index;
+        }
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {

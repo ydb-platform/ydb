@@ -263,11 +263,15 @@ void TestMemoryReservationPerPage() {
 
     // The NSSA path (DoStartReserveMemory) is only triggered when the program uses
     // the NSSA graph. If no reservations were recorded, the legacy path was used
-    // instead and this test is a no-op for the current configuration.
-    if (reservations.size() < 2) {
-        Cerr << "MemoryReservationPerPage: NSSA path not triggered, skipping assertions." << Endl;
-        return;
-    }
+    // instead and the regression assertions below would not run. Fail loudly in
+    // that case so missing coverage is visible in CI rather than being silently
+    // skipped (which would let real regressions in DoStartReserveMemory go
+    // undetected).
+    UNIT_ASSERT_GE_C(reservations.size(), 2u,
+        "TestMemoryReservationPerPage: NSSA path (DoStartReserveMemory) was not exercised "
+        "(reservations.size()=" << reservations.size() << "). The regression guard for the "
+        "page-range filter cannot run under the current configuration. Adjust the test setup "
+        "to force the NSSA graph path, otherwise this test is a no-op and hides regressions.");
 
     // Streaming must have produced multiple pages for this test to be meaningful.
     UNIT_ASSERT_GT(totalPagesCreated, 3u);

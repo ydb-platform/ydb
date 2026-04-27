@@ -149,7 +149,7 @@ public:
             if (Clusters->IsFatalFormatError(row.Get(0).AsRef())) {
                 InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
             }
-            return EScan::Feed;
+            return EScan::Final;
         }
 
         if (SkipForeign) {

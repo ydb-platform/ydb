@@ -415,7 +415,7 @@ public:
             return false;
         }
         if (IsBitQuantized()) {
-            return !(data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2]);
+            return !(data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]));
         }
         return data.size() != 1 + sizeof(TCoord) * Dimensions;
     }
@@ -425,11 +425,14 @@ public:
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
         }
         if (FormatByte != data.back()) {
-            return TStringBuilder() << "Invalid vector format byte, got " << (int)(ui8)data.back()
-                << " expected " << (int)FormatByte;
+            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
+                << " expected " << static_cast<ui8>(FormatByte);
         }
         if (IsBitQuantized()) {
-            auto actualDim = (data.size() - 2) * 8 - data[data.size() - 2];
+            auto actualDim = 0;
+            if (data.size() >= 2) {
+                actualDim = (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]);
+            }
             return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
                 << " expected " << Dimensions;
         }

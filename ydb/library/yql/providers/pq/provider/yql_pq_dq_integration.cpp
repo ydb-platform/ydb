@@ -1079,7 +1079,6 @@ public:
                 offsets.insert(offset);
             }
             if (!offsets.empty()) {
-
                 TProto proto; 
                 proto.SetBegin(*offsets.begin());
                 proto.SetEnd(*offsets.rbegin() + 1);

@@ -1139,11 +1139,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(TableModeWithPartitionPredicate, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
-
         constexpr char topic[] = "tableMode";
 
         ui32 partitionCount = 4;
@@ -1192,11 +1190,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(TableModeWithOffsetPredicate, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
-
         constexpr char topic[] = "tableMode";
 
         ui32 partitionCount = 1;
@@ -1242,13 +1238,55 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             });
     }
 
-    Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
 
+        ui32 partitionCount = 1;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+
+        auto received = ReadTopicMessagesWithWriteTime(topic, 4, TInstant{}, true);
+        UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
+        for (auto& [message, writeTime] : received) {
+            Cerr << "message " << message << " writeTime " << writeTime << Endl;
+        }
+
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("write_time") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
+        
+    }
+
+    Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         constexpr char topic[] = "tableMode";
 
         ui32 partitionCount = 3;

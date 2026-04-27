@@ -293,6 +293,47 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
     }
 }
 
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessagesWithWriteTime(const std::string& topicName, size_t messageCount, TInstant disposition, bool local) {
+    NYdb::NTopic::TReadSessionSettings readSettings;
+    readSettings
+        .WithoutConsumer()
+        .AppendTopics(
+            NYdb::NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(disposition)
+                .AppendPartitionIds(0)
+        );
+
+    readSettings.EventHandlers_.StartPartitionSessionHandler(
+        [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+            event.Confirm(0);
+        }
+    );
+
+    auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
+    std::vector<std::pair<std::string, TInstant>> received;
+    WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
+        if (!readSession->WaitEvent().HasValue()) {
+            error = TStringBuilder() << "no event set, received #" << received.size() << " / " << messageCount << " messages";
+            return false;
+        }
+
+        auto event = readSession->GetEvent(/* block */ true);
+        if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            for (const auto& message : dataEvent->GetMessages()) {
+                received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
+            }
+
+            if (received.size() == messageCount) {
+                return true;
+            }
+        }
+
+        error = TStringBuilder() << "got new event, received #" << received.size() << " / " << messageCount << " messages";
+        return false;
+    });
+    return received;
+}
+
+
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;

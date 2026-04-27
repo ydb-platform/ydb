@@ -15,13 +15,20 @@ protected:
     struct TPartitionInfo {
         std::optional<ui64> Offset;             // offset of next event.
         std::optional<ui64> EndOffset;          // end offset in topic on start.
+        TMaybe<TInstant> EndWriteTime;          // from predicate.
+        TInstant LastMessageWriteTime;
 
         bool IsFinishedInTableMode() {
-            if (!EndOffset) {                   // Not connected yet.
+            if (!EndOffset                      // Not connected yet.
+                && !EndWriteTime) {                         
                 return false;
             }
-            return *EndOffset == 0              // No data in partition on start.
+            bool endByOffset = *EndOffset == 0              // No data in partition on start.
                 || (Offset && *EndOffset <= *Offset);
+            if (endByOffset) {
+                return true;
+            }
+            return EndWriteTime && *EndWriteTime <= LastMessageWriteTime;
         }
     };
 

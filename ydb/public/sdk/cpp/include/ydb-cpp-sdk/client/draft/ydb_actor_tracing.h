@@ -4,15 +4,26 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace NYdb::inline Dev::NActorTracing {
 
-struct TTraceStartSettings : public TOperationRequestSettings<TTraceStartSettings> {};
-struct TTraceStopSettings : public TOperationRequestSettings<TTraceStopSettings> {};
-struct TTraceFetchSettings : public TOperationRequestSettings<TTraceFetchSettings> {};
+struct TTraceStartSettings : public TOperationRequestSettings<TTraceStartSettings> {
+    FLUENT_SETTING_VECTOR(uint32_t, NodeIds);
+};
+
+struct TTraceStopSettings : public TOperationRequestSettings<TTraceStopSettings> {
+    FLUENT_SETTING_VECTOR(uint32_t, NodeIds);
+};
+
+struct TTraceFetchSettings : public TOperationRequestSettings<TTraceFetchSettings> {
+    FLUENT_SETTING_VECTOR(uint32_t, NodeIds);
+};
 
 class TTraceFetchResult : public TStatus {
 public:

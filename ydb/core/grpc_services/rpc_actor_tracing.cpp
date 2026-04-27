@@ -34,27 +34,31 @@ static TVector<ui32> CollectNodeIds(const TEvInterconnect::TEvNodesInfo& info) {
     return ids;
 }
 
+template <typename TActor>
+bool TryDispatchExplicitNodeIds(TActor* self, const TActorContext& ctx) {
+    const auto* req = self->GetProtoRequest();
+    if (req->node_ids_size() == 0) {
+        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        return false;
+    }
+    TVector<ui32> nodeIds(req->node_ids().begin(), req->node_ids().end());
+    self->OnNodesResolved(std::move(nodeIds), ctx);
+    return true;
+}
+
 class TActorTracingStartRPC : public TRpcOperationRequestActor<TActorTracingStartRPC, TEvTraceStartRequest> {
     using TBase = TRpcOperationRequestActor<TActorTracingStartRPC, TEvTraceStartRequest>;
 public:
     using TBase::TBase;
+    using TBase::GetProtoRequest;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         Become(&TThis::StateWork);
+        TryDispatchExplicitNodeIds(this, ctx);
     }
 
-private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
-        }
-    }
-
-    void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        auto nodeIds = CollectNodeIds(*ev->Get());
-
+    void OnNodesResolved(TVector<ui32> nodeIds, const TActorContext& ctx) {
         for (auto& [nodeId, subtree] : NActorTracing::GetDirectChildren(nodeIds)) {
             auto msg = MakeHolder<NActorTracing::TEvTracing::TEvTraceStart>();
             for (ui32 id : subtree) {
@@ -66,18 +70,6 @@ private:
         Ydb::ActorTracing::TraceStartResult result;
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
-};
-
-class TActorTracingStopRPC : public TRpcOperationRequestActor<TActorTracingStopRPC, TEvTraceStopRequest> {
-    using TBase = TRpcOperationRequestActor<TActorTracingStopRPC, TEvTraceStopRequest>;
-public:
-    using TBase::TBase;
-
-    void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
-        Become(&TThis::StateWork);
-    }
 
 private:
     STFUNC(StateWork) {
@@ -87,8 +79,23 @@ private:
     }
 
     void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        auto nodeIds = CollectNodeIds(*ev->Get());
+        OnNodesResolved(CollectNodeIds(*ev->Get()), ctx);
+    }
+};
 
+class TActorTracingStopRPC : public TRpcOperationRequestActor<TActorTracingStopRPC, TEvTraceStopRequest> {
+    using TBase = TRpcOperationRequestActor<TActorTracingStopRPC, TEvTraceStopRequest>;
+public:
+    using TBase::TBase;
+    using TBase::GetProtoRequest;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        Become(&TThis::StateWork);
+        TryDispatchExplicitNodeIds(this, ctx);
+    }
+
+    void OnNodesResolved(TVector<ui32> nodeIds, const TActorContext& ctx) {
         for (auto& [nodeId, subtree] : NActorTracing::GetDirectChildren(nodeIds)) {
             auto msg = MakeHolder<NActorTracing::TEvTracing::TEvTraceStop>();
             for (ui32 id : subtree) {
@@ -100,31 +107,32 @@ private:
         Ydb::ActorTracing::TraceStopResult result;
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
+        }
+    }
+
+    void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+        OnNodesResolved(CollectNodeIds(*ev->Get()), ctx);
+    }
 };
 
 class TActorTracingFetchRPC : public TRpcOperationRequestActor<TActorTracingFetchRPC, TEvTraceFetchRequest> {
     using TBase = TRpcOperationRequestActor<TActorTracingFetchRPC, TEvTraceFetchRequest>;
 public:
     using TBase::TBase;
+    using TBase::GetProtoRequest;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         Become(&TThis::StateWork);
+        TryDispatchExplicitNodeIds(this, ctx);
     }
 
-private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
-            HFunc(NActorTracing::TEvTracing::TEvTraceFetchResult, HandleResult);
-            HFunc(TEvents::TEvUndelivered, HandleUndelivered);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
-    }
-
-    void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
-        auto nodeIds = CollectNodeIds(*ev->Get());
+    void OnNodesResolved(TVector<ui32> nodeIds, const TActorContext& ctx) {
         auto rootChildren = NActorTracing::GetDirectChildren(nodeIds);
 
         PendingCount = rootChildren.size();
@@ -142,6 +150,20 @@ private:
         }
 
         ctx.Schedule(FetchRpcTimeout, new TEvents::TEvWakeup());
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvInterconnect::TEvNodesInfo, HandleNodes);
+            HFunc(NActorTracing::TEvTracing::TEvTraceFetchResult, HandleResult);
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+        }
+    }
+
+    void HandleNodes(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+        OnNodesResolved(CollectNodeIds(*ev->Get()), ctx);
     }
 
     void HandleResult(NActorTracing::TEvTracing::TEvTraceFetchResult::TPtr& ev, const TActorContext& ctx) {

@@ -8,7 +8,8 @@ import "ydb/public/api/protos/ydb_operation.proto";
 
 message TraceStartRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    uint32 buffer_size_per_thread = 2;
+    uint32 buffer_size_per_thread = 2; 
+    repeated uint32 node_ids = 3;
 }
 
 message TraceStartResult {
@@ -20,6 +21,7 @@ message TraceStartResponse {
 
 message TraceStopRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    repeated uint32 node_ids = 2;
 }
 
 message TraceStopResult {
@@ -31,6 +33,7 @@ message TraceStopResponse {
 
 message TraceFetchRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    repeated uint32 node_ids = 2;
 }
 
 message TraceFetchResult {

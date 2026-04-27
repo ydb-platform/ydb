@@ -16,6 +16,9 @@ public:
 
     TAsyncStatus TraceStart(const TTraceStartSettings& settings) {
         auto request = MakeOperationRequest<Ydb::ActorTracing::TraceStartRequest>(settings);
+        for (uint32_t id : settings.NodeIds_) {
+            request.add_node_ids(id);
+        }
         return RunSimple<
             Ydb::ActorTracing::V1::ActorTracingService,
             Ydb::ActorTracing::TraceStartRequest,
@@ -27,6 +30,9 @@ public:
 
     TAsyncStatus TraceStop(const TTraceStopSettings& settings) {
         auto request = MakeOperationRequest<Ydb::ActorTracing::TraceStopRequest>(settings);
+        for (uint32_t id : settings.NodeIds_) {
+            request.add_node_ids(id);
+        }
         return RunSimple<
             Ydb::ActorTracing::V1::ActorTracingService,
             Ydb::ActorTracing::TraceStopRequest,
@@ -38,6 +44,9 @@ public:
 
     TAsyncTraceFetchResult TraceFetch(const TTraceFetchSettings& settings) {
         auto request = MakeOperationRequest<Ydb::ActorTracing::TraceFetchRequest>(settings);
+        for (uint32_t id : settings.NodeIds_) {
+            request.add_node_ids(id);
+        }
         auto promise = NThreading::NewPromise<TTraceFetchResult>();
 
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {

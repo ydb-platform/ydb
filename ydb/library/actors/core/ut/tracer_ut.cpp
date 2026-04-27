@@ -29,41 +29,41 @@ Y_UNIT_TEST_SUITE(TracerTest) {
 
         TTraceEvent ev1{};
         ev1.DeltaUs = 1000000;
-        ev1.Actor1 = 42;
+        ev1.Sender = 42;
         ev1.Type = static_cast<ui8>(ETraceEventType::New);
         chunk.Events.push_back(ev1);
 
         TTraceEvent ev2{};
         ev2.DeltaUs = 1000010;
-        ev2.Actor1 = 1;
-        ev2.Actor2 = 42;
-        ev2.Aux = 100;
+        ev2.Sender = 1;
+        ev2.Recipient = 42;
+        ev2.MessageType = 100;
         ev2.Type = static_cast<ui8>(ETraceEventType::SendLocal);
         ev2.HandleHash = 0x11111111;
         chunk.Events.push_back(ev2);
 
         TTraceEvent ev3{};
         ev3.DeltaUs = 1000020;
-        ev3.Actor1 = 1;
-        ev3.Actor2 = 42;
-        ev3.Aux = 100;
-        ev3.Extra = 3;
+        ev3.Sender = 1;
+        ev3.Recipient = 42;
+        ev3.MessageType = 100;
+        ev3.ActivityIndex = 3;
         ev3.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
         ev3.HandleHash = 0x11111111;
         chunk.Events.push_back(ev3);
 
         TTraceEvent ev4{};
         ev4.DeltaUs = 1000030;
-        ev4.Actor1 = 42;
+        ev4.Sender = 42;
         ev4.Type = static_cast<ui8>(ETraceEventType::Die);
         chunk.Events.push_back(ev4);
 
         TTraceEvent ev5{};
         ev5.DeltaUs = 1000040;
-        ev5.Actor1 = 0x22222222;
-        ev5.Actor2 = 42;
-        ev5.Aux = 100;
-        ev5.Extra = 3;
+        ev5.Sender = 0x22222222;
+        ev5.Recipient = 42;
+        ev5.MessageType = 100;
+        ev5.ActivityIndex = 3;
         ev5.Type = static_cast<ui8>(ETraceEventType::ForwardLocal);
         ev5.HandleHash = 0x11111111;
         chunk.Events.push_back(ev5);
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].DeltaUs, 1000040u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].HandleHash, 0x11111111u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].HandleHash, 0x11111111u);
-        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Actor1, 0x22222222ull);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Sender, 0x22222222ull);
     }
 
     Y_UNIT_TEST(DeserializeRejectsBadMagic) {
@@ -243,24 +243,24 @@ Y_UNIT_TEST_SUITE(TracerTest) {
             switch (type) {
                 case ETraceEventType::SendLocal:
                     sendCount++;
-                    UNIT_ASSERT(ev.Actor2 != 0);
+                    UNIT_ASSERT(ev.Recipient != 0);
                     UNIT_ASSERT(ev.HandleHash != 0);
                     break;
                 case ETraceEventType::ReceiveLocal:
                     receiveCount++;
-                    UNIT_ASSERT(ev.Actor2 != 0);
+                    UNIT_ASSERT(ev.Recipient != 0);
                     UNIT_ASSERT(ev.HandleHash != 0);
                     break;
                 case ETraceEventType::New:
                     newCount++;
-                    UNIT_ASSERT(ev.Actor1 != 0);
+                    UNIT_ASSERT(ev.Sender != 0);
                     break;
                 case ETraceEventType::Die:
-                    UNIT_ASSERT(ev.Actor1 != 0);
+                    UNIT_ASSERT(ev.Sender != 0);
                     break;
                 case ETraceEventType::ForwardLocal:
                     UNIT_ASSERT(ev.HandleHash != 0);
-                    UNIT_ASSERT(ev.Actor1 != 0);
+                    UNIT_ASSERT(ev.Sender != 0);
                     break;
             }
         }
@@ -276,19 +276,19 @@ Y_UNIT_TEST_SUITE(TracerTest) {
 
         THashSet<ui8> threadIdxSet;
         for (const auto& ev : chunk.Events) {
-            threadIdxSet.insert(ev.Flags);
+            threadIdxSet.insert(ev.ThreadIdx);
         }
         UNIT_ASSERT_C(threadIdxSet.size() >= 2,
             "Expected events from at least 2 threads, got " << threadIdxSet.size());
 
         size_t sendsWithActivityType = 0;
         for (const auto& ev : chunk.Events) {
-            if (static_cast<ETraceEventType>(ev.Type) == ETraceEventType::SendLocal && ev.Extra != 0) {
+            if (static_cast<ETraceEventType>(ev.Type) == ETraceEventType::SendLocal && ev.ActivityIndex != 0) {
                 sendsWithActivityType++;
             }
         }
         UNIT_ASSERT_C(sendsWithActivityType > 0,
-            "Expected at least some Send events with non-zero Extra (sender ActivityType)");
+            "Expected at least some Send events with non-zero ActivityIndex (sender ActivityType)");
 
         auto buf = SerializeTrace(chunk, 1);
         TTraceChunk restored;
@@ -300,8 +300,8 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         for (const auto& ev : chunk.Events) {
             auto type = static_cast<ETraceEventType>(ev.Type);
             if (type == ETraceEventType::SendLocal || type == ETraceEventType::ReceiveLocal) {
-                if (ev.Aux != 0) {
-                    eventTypesInTrace.insert(ev.Aux);
+                if (ev.MessageType != 0) {
+                    eventTypesInTrace.insert(ev.MessageType);
                 }
             }
         }
@@ -367,9 +367,9 @@ Y_UNIT_TEST_SUITE(TracerTest) {
 
         bool foundMatchedRemap = false;
         for (const auto& ev : forwardEvents) {
-            UNIT_ASSERT_VALUES_EQUAL(ev.Aux, TEvPing::EventType);
-            UNIT_ASSERT_VALUES_EQUAL(ev.Actor2, pongActorId.LocalId());
-            const ui32 newHandleHash = static_cast<ui32>(ev.Actor1);
+            UNIT_ASSERT_VALUES_EQUAL(ev.MessageType, TEvPing::EventType);
+            UNIT_ASSERT_VALUES_EQUAL(ev.Recipient, pongActorId.LocalId());
+            const ui32 newHandleHash = static_cast<ui32>(ev.Sender);
             if (receiveHandles.contains(ev.HandleHash) && sendHandles.contains(newHandleHash)) {
                 foundMatchedRemap = true;
             }

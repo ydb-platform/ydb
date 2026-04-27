@@ -15,6 +15,9 @@ public:
     TCommandActorTracingStart();
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
+
+private:
+    TString NodeIdsRaw;
 };
 
 class TCommandActorTracingStop : public TYdbCommand {
@@ -22,6 +25,9 @@ public:
     TCommandActorTracingStop();
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
+
+private:
+    TString NodeIdsRaw;
 };
 
 class TCommandActorTracingFetch : public TYdbCommand {
@@ -32,6 +38,7 @@ public:
 
 private:
     TString OutputPath;
+    TString NodeIdsRaw;
 };
 
 } // namespace NYdb::NConsoleClient

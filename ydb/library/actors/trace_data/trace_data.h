@@ -16,14 +16,14 @@ namespace NActors::NTracing {
     };
 
     struct TTraceEvent {
-        ui64 Actor1;       // Sender LocalId (Send/Receive), ActorId (New/Die), NewHandleHash in lower 32 bits (ForwardLocal)
-        ui64 Actor2;       // Recipient LocalId (Send/Receive), 0 (New/Die), Recipient LocalId (ForwardLocal)
-        ui32 HandleHash;   // XOR-fold of IEventHandle* (Send/Receive), old HandleHash (ForwardLocal), 0 (New/Die)
-        ui32 DeltaUs;      // microseconds since TTraceFileHeader::StartTimestampUs; saturates at UINT32_MAX (~71 min)
-        ui32 Aux;          // MessageType index (Send/Receive), 0 (New/Die), Original message type (ForwardLocal)
-        ui16 Extra;        // ActivityIndex (Send/Receive), 0 (New/Die), Forwarder ActivityIndex (ForwardLocal)
-        ui8  Type;         // ETraceEventType
-        ui8  Flags;        // Thread buffer index (0-127)
+        ui64 Sender;         // Send/Receive: sender LocalId; New/Die: actor's own LocalId; Forward: lower 32 bits hold new HandleHash, upper 32 bits are 0
+        ui64 Recipient;      // Send/Receive/Forward: recipient LocalId; New/Die: 0
+        ui32 HandleHash;     // Send/Receive: XOR-fold of IEventHandle*; Forward: hash of old handle; New/Die: 0
+        ui32 DeltaUs;        // microseconds since TTraceFileHeader::StartTimestampUs; saturates at UINT32_MAX (~71 min)
+        ui32 MessageType;    // Send/Receive: event type id; Forward: original event type id; New/Die: 0
+        ui16 ActivityIndex;  // Send/Receive: ActivityType index; Forward: forwarder's ActivityIndex; New/Die: 0
+        ui8  Type;           // ETraceEventType
+        ui8  ThreadIdx;      // thread buffer index (0..127)
     };
 
     static_assert(sizeof(TTraceEvent) == 32);

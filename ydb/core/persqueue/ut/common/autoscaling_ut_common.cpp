@@ -18,6 +18,7 @@ public:
     }
 
     NKikimr::NPQ::NSchema::TResult ApplyChanges(
+        const TString& /*localCluster*/,
         const NKikimr::NPQ::NDescriber::TTopicInfo& /*topicInfo*/,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,

@@ -39,7 +39,7 @@ except ImportError:
     print("⚠️ Matplotlib not available. Install with: pip install matplotlib")
 
 # Configuration constants
-MUTE_UPDATE_SHOW_DIFF = False  # Set to True to show +/- statistics in mute update messages
+MUTE_UPDATE_SHOW_DIFF = True  # Set to True to show +/- statistics in mute update messages
 
 # Teams blacklisted from weekly/monthly updates
 PERIOD_UPDATE_BLACKLIST = {
@@ -107,7 +107,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
 
     Args:
         use_yesterday: If True, use yesterday's data for development convenience.
-        build_type: ``test_muted_monitor_mart.build_type`` filter; ``"all"`` = no filter.
+        build_type: ``muted_tests_with_issue_and_area.build_type`` filter; ``"all"`` = no filter.
 
     Returns:
         dict: Keys are canonical team slugs from mart ``owner_team`` (effective owner,
@@ -136,25 +136,27 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
     
     # Get table path from config
     with YDBWrapper() as ydb_wrapper:
-        test_muted_monitor_mart_table = ydb_wrapper.get_table_path("test_muted_monitor_mart")
+        muted_tests_with_issue_and_area_table = ydb_wrapper.get_table_path("muted_tests_with_issue_and_area")
 
     bt_clause = _sql_build_type_clause(build_type)
 
-    # Single optimized query for all data (aggregate by owner_team = effective team + area_override,
-    # same as ``test_muted_monitor_mart_with_issue.sql`` / dashboard — not raw ``owner``).
+    # Single optimized query for all data from muted tests mart with issue/area enrichment.
+    # Keep +today semantics event-like: tests whose mute_state_change_date is target date.
     all_data_query = f"""
     SELECT 
         owner_team,
         date_window,
-        COUNT(*) as daily_count,
-        SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
-    FROM `{test_muted_monitor_mart_table}`
+        COUNT(DISTINCT full_name) as daily_count,
+        SUM(
+            CASE
+                WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1
+                ELSE 0
+            END
+        ) as today_count
+    FROM `{muted_tests_with_issue_and_area_table}`
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
-    AND is_muted = 1
     AND branch = '{branch}'{bt_clause}
-    AND is_test_chunk = 0
-    AND resolution != 'Skipped'
     GROUP BY owner_team, date_window
     ORDER BY owner_team, date_window
     """
@@ -223,8 +225,6 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
             yesterday_total = trend[yesterday_str]
             today_total = data['stats']['total']
             today_new = data['stats']['today']
-            
-            # minus_today = yesterday_total - (today_total - today_new)
             data['stats']['minus_today'] = max(0, yesterday_total - (today_total - today_new))
     
     print(f"📊 Processed data for {len(team_data)} teams")
@@ -550,7 +550,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         # Format statistics with color coding and emojis
         if show_diff:
             if today > 0 and minus_today > 0:
-                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted /🟢-{minus_today} unmuted*"
+                message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🟢-{minus_today} unmuted /🔴+{today} muted*"
             elif today > 0:
                 message += f"\n📊 *[Total muted tests: {total}]({dashboard_url}) 🔴+{today} muted*"
             elif minus_today > 0:
@@ -1196,7 +1196,7 @@ def main():
         '--build-type',
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',
-        help='test_muted_monitor_mart filter; use "all" to include every build_type (default: relwithdebinfo)',
+        help='muted_tests_with_issue_and_area filter; use "all" to include every build_type (default: relwithdebinfo)',
     )
     parser.add_argument(
         '--branch',

@@ -181,7 +181,10 @@ client_certificate_authorization:
 
 Learn more about the client_certificate_authorization configuration: [{#T}](../configuration/client_certificate_authorization.md)
 
-Additionally, for proper operation, you need to specify the path to the same server certificate for the grpc configuration:
+Additionally, for proper operation, you need to use the same certificate as in the gRPC settings, so you need to specify the path to this server certificate in the grpc configuration.
+
+Currently, it is not possible to configure Kafka and gRPC with different server certificates or to specify a server certificate only in the kafka_proxy_config settings when using mTLS.
+
 ```yaml
 grpc_config:
   cert: "/path/to/server-cert.pem"

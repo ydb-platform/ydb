@@ -200,7 +200,9 @@ client_certificate_authorization:
 ```
 Подробнее про client_certificate_authorization конфигурацию: [{#T}](../configuration/client_certificate_authorization.md)
 
-Еще для корректной работы нужно указать путь до этого же серверного сертификата конфигурации grpc:
+Для корректной работы нужно использовать тот же сертификат, что и в настройках grpc, поэтому нужно указать путь до этого же серверного сертификата в конфигурации grpc.
+
+Сейчас настроить конфигурации kafka и grpc с разными серверными сертификатами или указать серверный сертификат только в настройках kafka_proxy_config при использовании mtls нельзя.
 ```yaml
 grpc_config:
   cert: "/path/to/server-cert.pem"

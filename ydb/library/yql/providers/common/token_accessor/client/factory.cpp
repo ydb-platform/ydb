@@ -94,7 +94,7 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
     if (parser.HasIamAuth()) {
         NYdb::TIamServiceParams iamParams;
         if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-            ythrow yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
+            throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
         }
         const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
 

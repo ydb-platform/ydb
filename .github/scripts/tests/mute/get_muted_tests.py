@@ -99,7 +99,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             FROM `{test_runs_table}`
             WHERE branch = '{branch}'
             AND build_type = '{build_type}'
-            and run_timestamp >= CurrentUtcDate() - 90*Interval("P1D")
+            and run_timestamp >= CurrentUtcDate() - 365*Interval("P1D")
             and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
             GROUP BY suite_folder, test_name
         ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name

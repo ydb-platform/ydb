@@ -204,6 +204,8 @@ def _load_latest_github_issue_mapping_index(ydb_wrapper, mapping_table: str) -> 
                 ORDER BY github_issue_created_at DESC, github_issue_number DESC
             ) AS rn
         FROM `{mapping_table}`
+        WHERE github_issue_state IS NOT NULL
+          AND Unicode::ToLower(CAST(github_issue_state AS Utf8)) = 'open'
     ) AS ranked
     WHERE rn = 1
     """
@@ -526,7 +528,7 @@ def main():
         }
 
         thirty_days_ago_ts = (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
         ).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         print(f'Getting aggregated history for {len(date_list)} day(s): {date_list[0]} .. {date_list[-1]}')

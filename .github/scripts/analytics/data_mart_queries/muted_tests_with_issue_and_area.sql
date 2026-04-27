@@ -48,6 +48,8 @@ $gim_latest = (
                 ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
             ) AS rn
         FROM `test_results/analytics/github_issue_mapping` AS g
+        WHERE g.github_issue_state IS NOT NULL
+          AND Unicode::ToLower(CAST(g.github_issue_state AS Utf8)) = 'open'
     ) AS g_rnk
     WHERE g_rnk.rn = 1
 );

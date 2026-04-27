@@ -18,6 +18,9 @@ Edge cases:
   * Area resolves to the same team as the default owner → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
+  * One upsert row per GitHub issue number linked to a test (PK includes ``github_issue_number``),
+    so closing an issue updates ``github_issue_state`` instead of leaving a stale row when a newer
+    issue exists for the same preset.
 
 ``area_override_since`` (Date)
 -------------------------------
@@ -252,33 +255,31 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
 
 
 def convert_mapping_to_table_data(test_to_issue_mapping):
-    """Convert the test-to-issue mapping to table data format"""
+    """Convert the test-to-issue mapping to table data format.
+
+    Emits one row per (test, branch, build_type, github_issue_number). Previously we kept only the
+    newest issue per build_type; older issue rows were never upserted again, so ``github_issue_state``
+    stayed stale after closing an issue when a newer issue existed for the same test/preset.
+    """
     table_data = []
 
     for test_name, issues in test_to_issue_mapping.items():
         if not issues:
             continue
 
-        # Group issues by build_type, then pick the latest per group
-        by_build_type = {}
         for issue in issues:
             bt = issue.get('build_type', DEFAULT_BUILD_TYPE)
-            existing = by_build_type.get(bt)
-            if existing is None or issue.get('created_at', 0) > existing.get('created_at', 0):
-                by_build_type[bt] = issue
-
-        for bt, latest_issue in by_build_type.items():
-            for branch in latest_issue['branches']:
+            for branch in issue['branches']:
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
                     'build_type': bt,
-                    'github_issue_url': latest_issue['url'],
-                    'github_issue_title': latest_issue['title'],
-                    'github_issue_number': latest_issue['issue_number'],
-                    'github_issue_state': latest_issue['state'],
-                    'github_issue_created_at': latest_issue.get('created_at'),
-                    'area_override': latest_issue.get('area_override'),
+                    'github_issue_url': issue['url'],
+                    'github_issue_title': issue['title'],
+                    'github_issue_number': issue['issue_number'],
+                    'github_issue_state': issue['state'],
+                    'github_issue_created_at': issue.get('created_at'),
+                    'area_override': issue.get('area_override'),
                 })
 
     return table_data

@@ -18,7 +18,7 @@ using namespace NActors::NTracing;
 Y_UNIT_TEST_SUITE(TracerTest) {
 
     Y_UNIT_TEST(EventSize) {
-        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 36u);
+        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 32u);
     }
 
     Y_UNIT_TEST(SerializeDeserializeRoundTrip) {
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev2.Actor2 = 42;
         ev2.Aux = 100;
         ev2.Type = static_cast<ui8>(ETraceEventType::SendLocal);
-        ev2.HandlePtr = 0x11111111;
+        ev2.HandleHash = 0x11111111;
         chunk.Events.push_back(ev2);
 
         TTraceEvent ev3{};
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev3.Aux = 100;
         ev3.Extra = 3;
         ev3.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
-        ev3.HandlePtr = 0x11111111;
+        ev3.HandleHash = 0x11111111;
         chunk.Events.push_back(ev3);
 
         TTraceEvent ev4{};
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev5.Aux = 100;
         ev5.Extra = 3;
         ev5.Type = static_cast<ui8>(ETraceEventType::ForwardLocal);
-        ev5.HandlePtr = 0x11111111;
+        ev5.HandleHash = 0x11111111;
         chunk.Events.push_back(ev5);
 
         auto buf = SerializeTrace(chunk, 1);
@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Type, static_cast<ui8>(ETraceEventType::ForwardLocal));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[0].DeltaUs, 1000000u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].DeltaUs, 1000040u);
-        UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].HandlePtr, 0x11111111ull);
-        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].HandlePtr, 0x11111111ull);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].HandleHash, 0x11111111u);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].HandleHash, 0x11111111u);
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Actor1, 0x22222222ull);
     }
 
@@ -244,12 +244,12 @@ Y_UNIT_TEST_SUITE(TracerTest) {
                 case ETraceEventType::SendLocal:
                     sendCount++;
                     UNIT_ASSERT(ev.Actor2 != 0);
-                    UNIT_ASSERT(ev.HandlePtr != 0);
+                    UNIT_ASSERT(ev.HandleHash != 0);
                     break;
                 case ETraceEventType::ReceiveLocal:
                     receiveCount++;
                     UNIT_ASSERT(ev.Actor2 != 0);
-                    UNIT_ASSERT(ev.HandlePtr != 0);
+                    UNIT_ASSERT(ev.HandleHash != 0);
                     break;
                 case ETraceEventType::New:
                     newCount++;
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
                     UNIT_ASSERT(ev.Actor1 != 0);
                     break;
                 case ETraceEventType::ForwardLocal:
-                    UNIT_ASSERT(ev.HandlePtr != 0);
+                    UNIT_ASSERT(ev.HandleHash != 0);
                     UNIT_ASSERT(ev.Actor1 != 0);
                     break;
             }
@@ -348,16 +348,16 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         actorSystem.Stop();
         actorSystem.Cleanup();
 
-        THashSet<ui64> sendHandles;
-        THashSet<ui64> receiveHandles;
+        THashSet<ui32> sendHandles;
+        THashSet<ui32> receiveHandles;
         TVector<TTraceEvent> forwardEvents;
 
         for (const auto& ev : chunk.Events) {
             const auto type = static_cast<ETraceEventType>(ev.Type);
             if (type == ETraceEventType::SendLocal) {
-                sendHandles.insert(ev.HandlePtr);
+                sendHandles.insert(ev.HandleHash);
             } else if (type == ETraceEventType::ReceiveLocal) {
-                receiveHandles.insert(ev.HandlePtr);
+                receiveHandles.insert(ev.HandleHash);
             } else if (type == ETraceEventType::ForwardLocal) {
                 forwardEvents.push_back(ev);
             }
@@ -369,7 +369,8 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         for (const auto& ev : forwardEvents) {
             UNIT_ASSERT_VALUES_EQUAL(ev.Aux, TEvPing::EventType);
             UNIT_ASSERT_VALUES_EQUAL(ev.Actor2, pongActorId.LocalId());
-            if (receiveHandles.contains(ev.HandlePtr) && sendHandles.contains(ev.Actor1)) {
+            const ui32 newHandleHash = static_cast<ui32>(ev.Actor1);
+            if (receiveHandles.contains(ev.HandleHash) && sendHandles.contains(newHandleHash)) {
                 foundMatchedRemap = true;
             }
         }

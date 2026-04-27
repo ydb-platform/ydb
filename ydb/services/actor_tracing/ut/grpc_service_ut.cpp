@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(ActorTracingGRpcService) {
                         hasSend = true;
                         UNIT_ASSERT(ev.Actor1 != 0 || ev.Actor2 != 0);
                         break;
-                    case NActors::NTracing::ETraceEventType::ReceiveLocal:
+                case NActors::NTracing::ETraceEventType::ReceiveLocal:
                         hasReceive = true;
                         UNIT_ASSERT(ev.Actor2 != 0);
                         UNIT_ASSERT(ev.Aux != 0);
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(ActorTracingGRpcService) {
                         UNIT_ASSERT(ev.Actor1 != 0);
                         break;
                     case NActors::NTracing::ETraceEventType::ForwardLocal:
-                        UNIT_ASSERT(ev.HandlePtr != 0);
+                        UNIT_ASSERT(ev.HandleHash != 0);
                         UNIT_ASSERT(ev.Actor1 != 0);
                         break;
                 }

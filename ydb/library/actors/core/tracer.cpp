@@ -196,7 +196,7 @@ namespace NActors::NTracing {
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.Type;
             ev.Extra = ts.CurrentActivityIndex;
-            ev.HandlePtr = reinterpret_cast<ui64>(&event);
+            ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
         }
@@ -215,7 +215,7 @@ namespace NActors::NTracing {
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.Type;
             ev.Extra = activityIndex;
-            ev.HandlePtr = reinterpret_cast<ui64>(&event);
+            ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
         }
@@ -228,11 +228,11 @@ namespace NActors::NTracing {
             if (!ts.Buffer) return;
             TTraceEvent ev{};
             ev.Type = static_cast<ui8>(ETraceEventType::ForwardLocal);
-            ev.Actor1 = reinterpret_cast<ui64>(&event);
+            ev.Actor1 = HashHandlePointer(reinterpret_cast<ui64>(&event));
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = originalType;
             ev.Extra = ts.CurrentActivityIndex;
-            ev.HandlePtr = oldHandlePtr;
+            ev.HandleHash = HashHandlePointer(oldHandlePtr);
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(ts.Buffer, originalType, event.GetTypeName());
         }

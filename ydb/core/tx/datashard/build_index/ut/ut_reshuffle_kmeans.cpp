@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto posting = DoReshuffleKMeans(server, sender, 40, level,
             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
             VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
-        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOut);
+        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOutReshuffle);
     }
 
     Y_UNIT_TEST(MainToPostingWithKeyRange) {

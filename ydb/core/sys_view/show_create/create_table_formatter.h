@@ -15,13 +15,11 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
-class TFeatureFlags;
-
 namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    explicit TCreateTableFormatter()
+    TCreateTableFormatter()
         : Alloc(__LOCATION__)
     {
         Alloc.Release();

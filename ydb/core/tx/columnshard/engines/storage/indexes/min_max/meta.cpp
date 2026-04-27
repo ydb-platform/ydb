@@ -11,7 +11,6 @@
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
-
 bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:

@@ -1451,13 +1451,13 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 } else if (index.index_columns_size() == 1) {
                     bloom->SetFalsePositiveProbability(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
                 }
+
                 if (index.index_columns_size() == 1) {
                     bloom->AddColumnNames(index.index_columns(0));
                 }
 
                 break;
             }
-
             case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;
@@ -1486,7 +1486,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 break;
             }
-
             case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Got empty index in modify scheme operation";

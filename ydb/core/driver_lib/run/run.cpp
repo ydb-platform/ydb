@@ -67,7 +67,6 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
-#include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -1453,7 +1452,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
-<<<<<<< HEAD
+    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
+        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
+    }
+
     if (runConfig.AppConfig.HasQueryServiceConfig()) {
         AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
@@ -1473,10 +1475,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasSystemTabletBackupConfig()) {
         AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
-=======
-    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
-        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
->>>>>>> 7f5cc8af780 (KIKIMR-24190 SQL query tracing fix v2)
     }
 
     // setup resource profiles

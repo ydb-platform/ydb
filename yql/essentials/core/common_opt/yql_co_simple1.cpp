@@ -707,19 +707,7 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
     return node;
 }
 
-bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
-    static const char OptName[] = "PullJustFromLogicalOps";
-    YQL_ENSURE(optCtx.Types);
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
-TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
-    if (!IsPullJustFromLogicalOpsEnabled(optCtx)) {
-        return node;
-    }
-    if (AllOf(node->ChildrenList(), [](const auto& child) { return !child->IsCallable("Just"); })) {
-        return node;
-    }
+TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
     bool haveOptional = false;
     TExprNodeList newChildren;
     newChildren.reserve(node->ChildrenSize());
@@ -743,7 +731,6 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
     ui32 justs = 0U;
     ui32 negations = 0U;
     ui32 literals = 0U;
-    ui32 bools = 0U;
     node->ForEachChild([&](const TExprNode& child) {
         if (child.IsCallable(node->Content()))
             ++same;
@@ -755,8 +742,6 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
             ++justs;
         if (child.IsCallable("Bool"))
             ++literals;
-        if (IsBoolType(child))
-            ++bools;
     });
 
     if (size == nothings) {
@@ -792,19 +777,8 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
-    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
-        return opt;
-    }
-
-    if (justs && size == justs + bools) {
-        // TODO: remove after enabling PullJustFromLogicalOps
-        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
-        TExprNode::TListType children;
-        children.reserve(size);
-        node->ForEachChild([&](TExprNode& child) {
-            children.emplace_back(child.IsCallable("Just") ? &child.Head() : &child);
-        });
-        return ctx.NewCallable(node->Pos(), "Just", {ctx.ChangeChildren(*node, std::move(children))});
+    if (justs) {
+        return PullJustFromLogicalOps(node, ctx);
     }
 
     if (literals) {
@@ -850,7 +824,6 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
     ui32 justs = 0U;
     ui32 negations = 0U;
     ui32 literals = 0U;
-    ui32 bools = 0U;
     for (ui32 i = 0U; i < size; ++i) {
         const auto child = node->Child(i);
         if (child->IsCallable("Nothing")) {
@@ -865,8 +838,6 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
             ++justs;
         if (child->IsCallable("Bool"))
             ++literals;
-        if (IsBoolType(*child))
-            ++bools;
     };
 
     if (same) {
@@ -885,19 +856,8 @@ TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ct
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
-    if (auto opt = PullJustFromLogicalOps(node, ctx, optCtx); opt != node) {
-        return opt;
-    }
-
-    if (justs && size == justs + bools) {
-        // TODO: remove after enabling PullJustFromLogicalOps
-        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Just";
-        TExprNode::TListType children;
-        children.reserve(size);
-        node->ForEachChild([&](TExprNode& child) {
-            children.emplace_back(child.IsCallable("Just") ? child.HeadPtr() : &child);
-        });
-        return ctx.NewCallable(node->Pos(), "Just", {ctx.ChangeChildren(*node, std::move(children))});
+    if (justs) {
+        return PullJustFromLogicalOps(node, ctx);
     }
 
     if (literals || negations) {

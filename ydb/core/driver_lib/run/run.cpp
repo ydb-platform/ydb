@@ -1458,7 +1458,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
-<<<<<<< HEAD
+    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
+        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
+    }    
+
     if (runConfig.AppConfig.HasQueryServiceConfig()) {
         AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
@@ -1482,10 +1485,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasRecoveryShardConfig()) {
         AppData->RecoveryShardConfig = runConfig.AppConfig.GetRecoveryShardConfig();
-=======
-    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
-        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
->>>>>>> 7f5cc8af780 (KIKIMR-24190 SQL query tracing fix v2)
     }
 
     // setup resource profiles

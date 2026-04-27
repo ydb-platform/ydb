@@ -10,10 +10,6 @@
 
 #include <locale>
 
-namespace NKikimr::NSchemeShard {
-// defined in ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
-}  // namespace NKikimr::NSchemeShard
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -10484,351 +10480,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             AlterUserAttrs({{"__document_api_version", "1"}}));
     }
 
-    class TSchemaHelper {
-    private:
-        NScheme::TTypeRegistry TypeRegistry;
-        const TVector<NKikimr::NScheme::TTypeInfo> KeyColumnTypes;
-
-    public:
-        explicit TSchemaHelper(const TArrayRef<NKikimr::NScheme::TTypeInfo>& keyColumnTypes)
-            : KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
-        {}
-
-        TString FindSplitKey(const TVector<TVector<TString>>& histogramKeys, TVector<ui64> histogramValues = {}, ui64 total = 0) const {
-            if (histogramValues.empty() && !histogramKeys.empty()) {
-                for (size_t i = 0; i < histogramKeys.size(); i++) {
-                    histogramValues.push_back(i + 1);
-                }
-                total = histogramKeys.size() + 1;
-            }
-
-            NKikimrTableStats::THistogram histogram = FillHistogram(histogramKeys, histogramValues);
-            TSerializedCellVec splitKey = ChooseSplitKeyByHistogram(histogram, total, KeyColumnTypes);
-            return PrintKey(splitKey);
-        }
-
-    private:
-        NKikimr::TSerializedCellVec MakeCells(const TVector<TString>& tuple) const {
-            UNIT_ASSERT(tuple.size() <= KeyColumnTypes.size());
-            TSmallVec<NKikimr::TCell> cells;
-
-            for (size_t i = 0; i < tuple.size(); ++i) {
-                if (tuple[i] == "NULL") {
-                    cells.push_back(NKikimr::TCell());
-                } else {
-                    switch (KeyColumnTypes[i].GetTypeId()) {
-#define ADD_CELL_FROM_STRING(ydbType, cppType) \
-                    case NKikimr::NScheme::NTypeIds::ydbType: { \
-                        cppType val = FromString<cppType>(tuple[i]); \
-                        cells.push_back(NKikimr::TCell((const char*)&val, sizeof(val))); \
-                        break; \
-                    }
-
-                    ADD_CELL_FROM_STRING(Bool, bool);
-
-                    ADD_CELL_FROM_STRING(Uint8, ui8);
-                    ADD_CELL_FROM_STRING(Int8, i8);
-                    ADD_CELL_FROM_STRING(Uint16, ui16);
-                    ADD_CELL_FROM_STRING(Int16, i16);
-                    ADD_CELL_FROM_STRING(Uint32, ui32);
-                    ADD_CELL_FROM_STRING(Int32, i32);
-                    ADD_CELL_FROM_STRING(Uint64, ui64);
-                    ADD_CELL_FROM_STRING(Int64, i64);
-
-                    ADD_CELL_FROM_STRING(Double, double);
-                    ADD_CELL_FROM_STRING(Float, float);
-
-                    case NKikimr::NScheme::NTypeIds::String:
-                    case NKikimr::NScheme::NTypeIds::Utf8: {
-                        cells.push_back(NKikimr::TCell(tuple[i].data(), tuple[i].size()));
-                        break;
-                    }
-#undef ADD_CELL_FROM_STRING
-                    default:
-                        UNIT_ASSERT_C(false, "Unexpected type");
-                    }
-                }
-            }
-
-            return NKikimr::TSerializedCellVec(cells);
-        }
-
-        NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys, const TVector<ui64>& values) const {
-            NKikimrTableStats::THistogram histogram;
-            for (auto i : xrange(keys.size())) {
-                TSerializedCellVec sk(MakeCells(keys[i]));
-                auto bucket = histogram.AddBuckets();
-                bucket->SetKey(sk.GetBuffer());
-                bucket->SetValue(values[i]);
-            }
-            return histogram;
-        }
-
-        TString PrintKey(const TSerializedCellVec& key) const {
-            return PrintKey(key.GetCells());
-        }
-
-        TString PrintKey(const TConstArrayRef<TCell>& cells) const {
-            return DbgPrintTuple(TDbTupleRef(KeyColumnTypes.data(), cells.data(), cells.size()), TypeRegistry);
-        }
-    };
-
-    Y_UNIT_TEST(SplitKey) {
-        TSmallVec<NScheme::TTypeInfo> keyColumnTypes = {
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32)
-        };
-
-        TSchemaHelper schemaHelper(keyColumnTypes);
-
-        {
-            TString splitKey = schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "3", "bbbbbbbb", "42" },
-                                                  { "5", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 3, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bbbbbbbb", "42" },
-                                                  { "1", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : bbbbbbbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "2", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "2", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "1", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "1", "bb", "42" },
-                                                  { "1", "cc", "42" },
-                                                  { "1", "cd", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "3", "e", "42" },
-                                                  { "3", "f", "42" },
-                                                  { "3", "g", "42" }
-                                              });
-            //TODO: FIX this case
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "1", "aaaaaaaaaaaaaaaaaaaaaa", "42" },
-                                                  { "2", "a", "42" },
-                                                  { "2", "b", "42" },
-                                                  { "2", "c", "42" },
-                                                  { "2", "d", "42" },
-                                                  { "2", "e", "42" },
-                                                  { "2", "f", "42" },
-                                                  { "3", "cccccccccccccccccccccccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : c, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "2", "aaa", "1" },
-                                                  { "2", "aaa", "2" },
-                                                  { "2", "aaa", "3" },
-                                                  { "2", "aaa", "4" },
-                                                  { "2", "aaa", "5" },
-                                                  { "2", "bbb", "1" },
-                                                  { "2", "bbb", "2" },
-                                                  { "3", "ccc", "42" }
-                                              });
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 2, Utf8 : bbb, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({});
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  53,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  25,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  75,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 0, Utf8 : a, Uint32 : 1)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  24,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                              }, {
-                                                  76,
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "()");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  7,
-                                                  8,
-                                                  9
-                                              }, 10);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 4, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  1,
-                                                  2,
-                                                  3,
-                                                  4,
-                                                  5,
-                                                  6,
-                                                  30,
-                                                  40,
-                                                  70
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 7, Utf8 : NULL, Uint32 : NULL)");
-        }
-
-        {
-            TString splitKey =
-                    schemaHelper.FindSplitKey({
-                                                  { "0", "a", "1" },
-                                                  { "1", "a", "1" },
-                                                  { "2", "a", "2" },
-                                                  { "3", "a", "3" },
-                                                  { "4", "a", "4" },
-                                                  { "5", "a", "5" },
-                                                  { "6", "a", "1" },
-                                                  { "7", "a", "2" },
-                                                  { "8", "a", "42" },
-                                              }, {
-                                                  30,
-                                                  40,
-                                                  70,
-                                                  90,
-                                                  91,
-                                                  92,
-                                                  93,
-                                                  94,
-                                                  95
-                                              }, 100);
-            UNIT_ASSERT_VALUES_EQUAL(splitKey, "(Uint64 : 1, Utf8 : NULL, Uint32 : NULL)");
-        }
-    }
-
     Y_UNIT_TEST(ListNotCreatedDirCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -11336,6 +10987,71 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory
                                 );
                             }});
+    }
+
+    Y_UNIT_TEST(AlterMigratedIndexTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant/Table/Index/", R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+              PartitioningPolicy {
+                MinPartitionsCount: 1
+                SizeToSplit: 100502
+                FastSplitSettings {
+                  SizeThreshold: 100502
+                  RowCountThreshold: 100502
+                }
+              }
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
+            NLs::PathExist,
+        });
     }
 
     template <typename TCreateFn, typename TDropFn>

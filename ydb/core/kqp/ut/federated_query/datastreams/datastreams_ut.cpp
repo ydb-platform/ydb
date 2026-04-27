@@ -2194,6 +2194,57 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 ])";
         UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
+
+    Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
+        constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
+
+        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
+        CreateTopic(inputTopicName);
+        constexpr char secretPath[] = "eds_iam_token";
+        ExecQuery(fmt::format(R"(
+            CREATE SECRET {secret} WITH (value = "{token}");
+            )",
+            "secret"_a = secretPath,
+            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
+            ));
+
+        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
+        constexpr char pqSourceName[] = "sourceNameCloud";
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{pq_location}",
+                DATABASE_NAME = "{pq_database_name}",
+                AUTH_METHOD = "IAM",
+                INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                SERVICE_ACCOUNT_ID = "{service_account_id}"
+            );)",
+            "pq_source"_a = pqSourceName,
+            "pq_location"_a = YDB_ENDPOINT,
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret"_a = secretPath,
+            "service_account_id"_a = serviceAccountId
+        ));
+        {
+            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/" + std::string(pqSourceName), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+            UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+            UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+            auto& info = *externalDataSource.ExternalDataSourceInfo;
+            auto& description = info.Description;
+            UNIT_ASSERT_VALUES_EQUAL(description.GetSourceType(), "Ydb");
+            auto& auth = description.GetAuth();
+            UNIT_ASSERT(auth.HasIam());
+            auto& iam = auth.GetIam();
+            UNIT_ASSERT(iam.HasServiceAccountId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetServiceAccountId(), serviceAccountId);
+            UNIT_ASSERT(iam.HasResourceId());
+            UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
+        }
+        // cannot verify use without some kind of "mock IAM"
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
@@ -5115,6 +5166,34 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ReadTopicMessage(outputTopicName1, "B-k1-2025-08-25T00:00:00.000000Z-1", disposition);
         ReadTopicMessage(outputTopicName2, "Y-k2-2025-08-25T00:00:00.000000Z-1", disposition);
+    }
+
+    Y_UNIT_TEST_F(TableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 4;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        for (ui32 i = 0; i < partitionCount; ++i) {
+            WriteTopicMessage(topic, "data", i, /* local */ true);
+        }
+        Sleep(TDuration::Seconds(1));
+
+        const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)","topic"_a = topic));
+        CheckScriptResult(result1[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
+
+        const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))","topic"_a = topic));
+        CheckScriptResult(result2[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
     }
 }
 

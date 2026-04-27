@@ -17,7 +17,8 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod,
     TDuration lateArrivalDelay,
-    bool idlePartitionsEnabled)
+    bool idlePartitionsEnabled,
+    bool streamingMode)
 {
     NYql::NPq::NProto::TDqPqTopicSource settings;
     settings.SetTopicPath(topic);
@@ -36,10 +37,16 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     }
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
+    settings.SetStopAtCurrentEndOffsets(!streamingMode);
 
-    auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
-    disposition->set_seconds(0);
-    disposition->set_nanos(0);
+    if (streamingMode) {
+        auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
+        disposition->set_seconds(0);
+        disposition->set_nanos(0);
+    } else {
+        settings.mutable_disposition()->mutable_oldest();
+    }
+
 
     return settings;
 }
@@ -209,6 +216,21 @@ void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
                 })
             .EndAddConsumer();
     auto result = client.AlterTopic(streamName, alterTopicSettings).ExtractValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+}
+
+void ChangePartitionCount(const TString& streamName, ui32 partitionCount) {
+    NYdb::TDriverConfig cfg;
+    cfg.SetEndpoint(GetDefaultPqEndpoint());
+    cfg.SetDatabase(GetDefaultPqDatabase());
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
+    NYdb::TDriver driver(cfg);
+    NYdb::NTopic::TTopicClient client(driver);
+
+    auto result = client.AlterTopic(streamName, NYdb::NTopic::TAlterTopicSettings()
+        .AlterPartitioningSettings(partitionCount, partitionCount)).ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);

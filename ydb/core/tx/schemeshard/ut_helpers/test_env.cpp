@@ -674,6 +674,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    app.FeatureFlags.SetEnableDataShardSplitHistogramSorting(opts.EnableDataShardSplitHistogramSorting_);
+    app.FeatureFlags.SetEnableDataShardSplitKeySelection(opts.EnableDataShardSplitKeySelection_);
+    app.FeatureFlags.SetEnableDataShardSplitHistogramOmission(opts.EnableDataShardSplitHistogramOmission_);
+
     app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
     if (opts.CondEraseResponseBatchSize_) {
         app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);

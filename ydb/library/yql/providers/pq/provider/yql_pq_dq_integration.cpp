@@ -31,12 +31,14 @@ using namespace NNodes;
 namespace {
 
 class TPqDqIntegration : public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 10000;
+
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions) {
+    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -45,6 +47,12 @@ public:
             }
         }
         YQL_ENSURE(topicPartitionsCount > 0);
+        if (!streamingTopicRead && !maxPartitions) {
+            maxPartitions = 1;      // Reading in table mode - 1 task by default.
+        }
+        if (!maxPartitions) {
+            maxPartitions = DefaultMaxPartitions;
+        }
 
         const size_t tasks = Min(maxPartitions, topicPartitionsCount);
         partitions.reserve(tasks);
@@ -65,12 +73,24 @@ public:
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto srcSettings = maybeDqSource.Cast().Settings();
-            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
-                return PartitionTopicRead(topicSource.Cast().Topic(), settings.MaxPartitions, partitions);
+            if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
+                TDqPqTopicSource topicSource = maybeTopicSource.Cast();
+                bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
+                size_t const settingsCount = topicSource.Settings().Size();
+                for (size_t i = 0; i < settingsCount; ++i) {
+                    TCoNameValueTuple setting = topicSource.Settings().Item(i);
+                    const TStringBuf name = Name(setting);
+                    if (name != StreamingTopicRead) {
+                        continue;
+                    }
+                    streamingTopicRead = FromString<bool>(Value(setting));
+                    break;
+                }
+                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
             }
         }
         return 0;
@@ -299,7 +319,7 @@ public:
                     }
                 }
 
-                YQL_ENSURE(streamingTopicRead, "Finite topic reading is not supported");
+                srcDesc.SetStopAtCurrentEndOffsets(!streamingTopicRead);
 
                 for (auto prop : topic.Props()) {
                     const TStringBuf name = Name(prop);
@@ -349,7 +369,11 @@ public:
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
 
-                *srcDesc.MutableDisposition() = State_->Disposition;
+                if (!streamingTopicRead) {
+                    srcDesc.MutableDisposition()->mutable_oldest();
+                } else {
+                    *srcDesc.MutableDisposition() = State_->Disposition;
+                }
 
                 for (const auto& [label, value] : State_->TaskSensorLabels) {
                     auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
@@ -516,7 +540,7 @@ public:
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        const bool useSharedReading = UseSharedReading(clusterConfiguration, format);
+        bool useSharedReading = UseSharedReading(clusterConfiguration, pqReadTopic, ctx);
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
@@ -655,17 +679,26 @@ public:
                 watermarksIdleTimeoutUs = out.Get<ui64>();
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
-                    streamingTopicReadEnabled = *parseResult;
-                    Add(props, StreamingTopicRead, ToString(*parseResult), pos, ctx);
+                    bool withStreamingValue = *parseResult;
+                    if (State_->StreamingTopicsReadByDefault && !withStreamingValue) {
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported in streaming query now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+                        return nullptr;
+                    }
+                    if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
+                        ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only"));
+                    }
+                    streamingTopicReadEnabled = withStreamingValue;
                 } else {
                     return {};
                 }
             }
         }
+        if (streamingTopicReadEnabled != State_->StreamingTopicsReadByDefault) {
+            Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
+        }
 
-        if (!streamingTopicReadEnabled) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
-            return nullptr;
+        if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {
@@ -745,7 +778,7 @@ public:
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
-        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic, ctx)), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -769,8 +802,26 @@ public:
         return clusterConfiguration;
     }
 
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+    bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
+        std::string_view format = pqReadTopic.Format().Ref().Content();
+        const auto& settings = pqReadTopic.Settings();
+        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
+
+        for (const auto& setting : settings.Raw()->Children()) {
+            const auto settingName = setting->Child(0)->Content();
+            if ("streaming" != settingName) {
+                continue;
+            }
+            if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
+                streamingTopicReadEnabled = *parseResult;
+            }
+        }
+        bool useSharedReading = clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+        if (!streamingTopicReadEnabled && useSharedReading) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
+            useSharedReading = false;
+        }
+        return useSharedReading;
     }
 
 private:

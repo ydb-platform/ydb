@@ -29,7 +29,6 @@ ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
 ydb/core/transfer/ut/functional Transfer.EnsureError
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnSingleShardTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletReboots]
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket2]

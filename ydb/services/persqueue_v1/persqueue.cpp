@@ -24,7 +24,7 @@ TGRpcPersQueueService::TGRpcPersQueueService(NActors::TActorSystem *system, TInt
 void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
 
-    ServicesInitializer(ActorSystem_, SchemeCache, Counters_, &ClustersCfgProvider).Execute();
+    ServicesInitializer(ActorSystem_, SchemeCache, Counters_).Execute();
 
     if (ActorSystem_->AppData<TAppData>()->PQConfig.GetEnabled()) {
         SetupIncomingRequests(std::move(logger));
@@ -85,8 +85,8 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_PQ_METHOD_IN_OUT(GetReadSessionsInfo, ReadInfoRequest, ReadInfoResponse, DoPQReadInfoRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_PQ_METHOD(DropTopic, DoPQDropTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_PQ_METHOD(CreateTopic, std::bind(DoPQCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_PQ_METHOD(AlterTopic, std::bind(DoPQAlterTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(CreateTopic, DoPQCreateTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(AlterTopic, DoPQAlterTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_PQ_METHOD(DescribeTopic, DoPQDescribeTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_PQ_METHOD(AddReadRule, DoPQAddReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_PQ_METHOD(RemoveReadRule, DoPQRemoveReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

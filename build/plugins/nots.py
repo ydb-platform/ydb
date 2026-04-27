@@ -450,16 +450,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 16:
+    if major < 20:
         raise Exception(
-            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
+            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major)
         )
 
-    if major < 20:
+    if major < 22:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/LVuJXYQ47adsqL".format(major),
             ]
         )
 

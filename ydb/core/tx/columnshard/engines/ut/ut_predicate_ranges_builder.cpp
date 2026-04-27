@@ -98,7 +98,8 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 1);
         const TString dbg = filter->DebugString();
         UNIT_ASSERT_C(!dbg.empty(), dbg);
-        // Явный NULL во втором ключе должен входить в префикс предиката (старый код давал NumColumns==1 для To).
+        // Explicit NULL in the second key column must be counted into the predicate prefix
+        // (old behavior produced NumColumns==1 for the To predicate).
         const NOlap::TPKRangeFilter& pkRange = *filter->begin();
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
@@ -202,7 +203,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         constexpr ui64 THi = 5ULL;
         static constexpr const char K[] = "k";
 
-        // From = (10,k), To = (5,k) — верхняя граница строго ниже нижней по первому столбцу.
+        // From = (10,k), To = (5,k): upper bound is strictly below lower bound by the first key column.
         TVector<TCell> fromCells;
         fromCells.push_back(TCell::Make(TLo));
         fromCells.push_back(TCell(K, sizeof(K) - 1));
@@ -678,7 +679,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 1);
     }
 
-    // TTableRange::IsEmptyRange: для Point всегда false (scheme_tabledefs.cpp).
+    // TTableRange::IsEmptyRange: for Point ranges it is always false (scheme_tabledefs.cpp).
     Y_UNIT_TEST(Point_IsEmptyRange_AlwaysFalse) {
         TVector<NScheme::TTypeInfo> types = PairTsUtf8KeyTypes();
         TVector<TCell> cells;
@@ -690,7 +691,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT(!point.IsEmptyRange(KeyTypesRef(types)));
     }
 
-    // Точка (null, null) на полном ключе — не ambiguous при columnCount=2.
+    // Point (null, null) on a full key is not ambiguous for columnCount=2.
     Y_UNIT_TEST(Point_IsAmbiguousReason_NullFullKey_Ok) {
         TVector<TCell> cells;
         cells.emplace_back();
@@ -832,7 +833,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT(kr.GetToInclusive());
     }
 
-    // Load() не восстанавливает флаг Point; ячейки From/To в protobuf совпадают для точки.
+    // Load() does not restore the Point flag; in protobuf, From/To cells are the same for a point range.
     Y_UNIT_TEST(SerializedTableRange_Point_SerializeLoad_CellsPreserved) {
         TVector<TCell> cells;
         cells.push_back(TCell::Make(8ULL));
@@ -852,8 +853,9 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT(loaded.ToInclusive);
     }
 
-    // Второй point после первого даёт «not sorted sequence»: To-предикат первой точки
-    // пересекается с From второй (см. TPKRangesFilter::Add / CrossRanges).
+    // Adding a second point after the first one yields "not sorted sequence":
+    // the To-predicate of the first point crosses the From-predicate of the second one
+    // (see TPKRangesFilter::Add / CrossRanges).
     Y_UNIT_TEST(TRangesBuilder_TwoPointsSecondFailsNotSortedSequence) {
         using NOlap::TRangesBuilder;
 

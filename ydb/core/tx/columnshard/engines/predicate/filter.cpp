@@ -31,35 +31,41 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    const auto sortingColumns = GetSortingColumnNames();
-    NArrow::NMerger::TRWSortableBatchPosition iterator = sortingColumns.empty()
-        ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
-        : NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingColumns, {}, false);
-    bool reachedEnd = false;
+    ui64 pos = 0;
+    const ui64 recordsCount = NArrow::NMerger::TRWSortableBatchPosition(data, 0, false).GetRecordsCount();
     for (const auto& range : SortedRanges) {
-        const ui64 initialIdx = iterator.GetPosition();
-        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(iterator);
-        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : iterator.GetRecordsCount();
+        const ui64 initialIdx = pos;
 
+        const auto fromCols = range.GetPredicateFrom().GetColumnNames();
+        NArrow::NMerger::TRWSortableBatchPosition itFrom = fromCols.empty()
+            ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
+            : NArrow::NMerger::TRWSortableBatchPosition(data, pos, fromCols, {}, false);
+
+        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(itFrom);
+        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : recordsCount;
+        AFL_VERIFY(beginIdx >= initialIdx);
         result.Add(false, beginIdx - initialIdx);
-        reachedEnd = !iterator.InitPosition(beginIdx);
-        if (reachedEnd) {
-            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+        pos = beginIdx;
+        if (pos >= recordsCount) {
             break;
         }
 
-        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
-        const ui64 endIdx = findEnd ? findEnd->GetPosition() : iterator.GetRecordsCount();
+        const auto toCols = range.GetPredicateTo().GetColumnNames();
+        NArrow::NMerger::TRWSortableBatchPosition itTo = toCols.empty()
+            ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
+            : NArrow::NMerger::TRWSortableBatchPosition(data, pos, toCols, {}, false);
 
-        result.Add(true, endIdx - beginIdx);
-        reachedEnd = !iterator.InitPosition(endIdx);
-        if (reachedEnd) {
-            AFL_VERIFY((i64)endIdx == iterator.GetRecordsCount());
+        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(itTo);
+        const ui64 endIdx = findEnd ? findEnd->GetPosition() : recordsCount;
+        AFL_VERIFY(endIdx >= pos);
+        result.Add(true, endIdx - pos);
+        pos = endIdx;
+        if (pos >= recordsCount) {
             break;
         }
     }
-    if (!reachedEnd) {
-        result.Add(false, iterator.GetRecordsCount() - iterator.GetPosition());
+    if (pos < recordsCount) {
+        result.Add(false, recordsCount - pos);
     }
     return result;
 }
@@ -249,8 +255,6 @@ TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
 void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
     auto addRow = [this](TConstArrayRef<TCell> cells) -> ui32 {
         std::vector<TCell> cellsWithDefaults;
-        // Length of the prefix taken from serialized cells (non-null values and explicit NULL markers).
-        // Typed defaults appended after the serialized prefix do not increase this count.
         ui32 explicitPrefixLen = 0;
         const size_t size = YdbPK.size();
         Y_ASSERT(size <= (size_t)ArrPK->num_fields());
@@ -261,7 +265,6 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
                 AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
                 ++explicitPrefixLen;
             } else if (i < cells.size() && cells[i].IsNull()) {
-                // Explicit NULL in TSerializedCellVec is an open-bound marker for this column (not a typed default).
                 cellsWithDefaults.emplace_back();
                 AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
                 ++explicitPrefixLen;

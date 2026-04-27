@@ -111,35 +111,44 @@ TResult AddConsumerImpl(
         }
         consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
-        consumer->SetKeepMessageOrder(rr.shared_read_rule_type().keep_messages_order());
-        auto defaultProcessingTimeout = rr.shared_read_rule_type().default_processing_timeout();
-        if (defaultProcessingTimeout.seconds() < 0 || defaultProcessingTimeout.nanos() < 0) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "default_processing_timeout in shared_read_rule_type can't be negative, provided "
-                << defaultProcessingTimeout.seconds() << " seconds and " << defaultProcessingTimeout.nanos() << " nanos"};
+        const auto& type = rr.shared_read_rule_type();
+        const auto& deadLetterPolicy = type.dead_letter_policy();
+
+        consumer->SetKeepMessageOrder(type.keep_messages_order());
+
+        if (type.has_default_processing_timeout()) {
+            auto defaultProcessingTimeout = type.default_processing_timeout();
+            if (auto r = ValidateDuration(defaultProcessingTimeout, "default_processing_timeout"); !r) {
+                return r;
+            }
+            consumer->SetDefaultProcessingTimeoutSeconds(defaultProcessingTimeout.seconds());
         }
-        consumer->SetDefaultProcessingTimeoutSeconds(defaultProcessingTimeout.seconds());
 
-        consumer->SetDeadLetterPolicyEnabled(rr.shared_read_rule_type().dead_letter_policy().enabled());
-        consumer->SetMaxProcessingAttempts(rr.shared_read_rule_type().dead_letter_policy().condition().max_processing_attempts());
-
-        auto delayMessageTime = rr.shared_read_rule_type().receive_message_delay();
-        if (delayMessageTime.seconds() < 0 || delayMessageTime.nanos() < 0) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "receive_message_delay in shared_read_rule_type can't be negative, provided "
-                << delayMessageTime.seconds() << " seconds and " << delayMessageTime.nanos() << " nanos"};
+        consumer->SetDeadLetterPolicyEnabled(deadLetterPolicy.enabled());
+        if (deadLetterPolicy.has_condition()) {
+            consumer->SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
         }
-        consumer->SetDefaultDelayMessageTimeMs(rr.shared_read_rule_type().receive_message_delay().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_delay().nanos() / 1'000'000);
 
-        auto receiveMessageWaitTime = rr.shared_read_rule_type().receive_message_wait_time();
-        if (receiveMessageWaitTime.seconds() < 0 || receiveMessageWaitTime.nanos() < 0) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "receive_message_wait_time in shared_read_rule_type can't be negative, provided "
-                << receiveMessageWaitTime.seconds() << " seconds and " << receiveMessageWaitTime.nanos() << " nanos"};
+        if (type.has_receive_message_delay()) {
+            auto delayMessageTime = type.receive_message_delay();
+            if (auto r = ValidateDuration(delayMessageTime, "receive_message_delay"); !r) {
+                return r;
+            }
+            consumer->SetDefaultDelayMessageTimeMs(ConvertDurationToMs32(delayMessageTime));
         }
-        consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_read_rule_type().receive_message_wait_time().seconds() * 1'000 + rr.shared_read_rule_type().receive_message_wait_time().nanos() / 1'000'000);
 
-        if (rr.shared_read_rule_type().dead_letter_policy().has_move_action()) {
+        if (type.has_receive_message_wait_time()) {
+            auto receiveMessageWaitTime = type.receive_message_wait_time();
+            if (auto r = ValidateDuration(receiveMessageWaitTime, "receive_message_wait_time"); !r) {
+                return r;
+            }
+            consumer->SetDefaultReceiveMessageWaitTimeMs(ConvertDurationToMs32(receiveMessageWaitTime));
+        }
+
+        if (deadLetterPolicy.has_move_action()) {
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-            consumer->SetDeadLetterQueue(rr.shared_read_rule_type().dead_letter_policy().move_action().dead_letter_queue());
-        } else if (rr.shared_read_rule_type().dead_letter_policy().has_delete_action()) {
+            consumer->SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
+        } else if (deadLetterPolicy.has_delete_action()) {
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
         } else {
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);

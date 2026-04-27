@@ -74,6 +74,9 @@ TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
     const EOperation operation
 );
+TResult ValidateDuration(const google::protobuf::Duration& duration, const TString& name);
+
+ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration);
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
 std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);

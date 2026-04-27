@@ -49,9 +49,8 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
     );
     runtime.Register(CreateCreateTopicActor(ctx));
 
-    for (int i = 0; i < 10; ++i) {
-        auto status = result->ResultStatus;
-        if (status) {
+    for (int i = 0; i < 50; ++i) {
+        if (result->ResultStatus) {
             break;
         }
 

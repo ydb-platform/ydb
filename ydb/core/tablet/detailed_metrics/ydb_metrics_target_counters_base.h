@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ydb_metrics_aggregator.h"
-
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>

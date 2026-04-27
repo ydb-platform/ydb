@@ -297,16 +297,6 @@ private:
     };
 
     /**
-     * The custom equality calculator, which allows using std::pair<ui64, ui32>
-     * as a key in standard maps and sets.
-     */
-    struct TabletIdFollowerIdPairEqual {
-        bool operator()(const std::pair<ui64, ui32>& p1, const std::pair<ui64, ui32>& p2) const {
-            return (p1.first == p2.first) && (p1.second == p2.second);
-        }
-    };
-
-    /**
      * The reverse lookup map, which provides a fast mechanism to figure out,
      * which table the given tablet ID + follower ID pair belongs to.
      *
@@ -316,8 +306,7 @@ private:
     std::unordered_map<
         std::pair<ui64, ui32>,
         ui64,
-        TabletIdFollowerIdPairHash,
-        TabletIdFollowerIdPairEqual
+        TabletIdFollowerIdPairHash
     > TabletIdFollowerIdToTableIdMap;
 };
 

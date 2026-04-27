@@ -348,4 +348,4 @@ TYdbMetricsAggregatorPtr CreateYdbMetricsAggregatorByTabletType(
     }
 }
 
-}
+} // namespace NKikimr

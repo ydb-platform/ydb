@@ -29,7 +29,7 @@ void TNodeDatabaseMetricsAggregator::HandleDatabaseSchemaVersionChange(
                 << message->TableMetricsConfig->TenantDbSchemaVersion
                 << ", the current known tenant database schema version "
                 << tableMetricsIt->second.TableMetricsConfig.TenantDbSchemaVersion
-                << ") received from for the tablet ID "
+                << ") received from the tablet ID "
                 << message->TabletID
                 << " (type "
                 << TTabletTypes::TypeToStr(message->TabletType)
@@ -201,7 +201,7 @@ void TNodeDatabaseMetricsAggregator::HandleDatabaseSchemaVersionChange(
                 << TTabletTypes::TypeToStr(message->TabletType)
                 << "), new tenant database schema version "
                 << message->TableMetricsConfig->TenantDbSchemaVersion
-                << " (changed from  "
+                << " (changed from "
                 << tableMetricsIt->second.TableMetricsConfig.TenantDbSchemaVersion
                 << ")) for the table "
                 << tableMetricsIt->second.TableMetricsConfig.TablePath
@@ -249,7 +249,7 @@ void TNodeDatabaseMetricsAggregator::HandleTableSchemaVersionChange(
                 << message->TableMetricsConfig->TableSchemaVersion
                 << ", the current known table schema version "
                 << tableMetricsIt->second.TableMetricsConfig.TableSchemaVersion
-                << ") received from for the tablet ID "
+                << ") received from the tablet ID "
                 << message->TabletID
                 << " (type "
                 << TTabletTypes::TypeToStr(message->TabletType)
@@ -386,7 +386,7 @@ void TNodeDatabaseMetricsAggregator::ProcessTabletCounters(
         // This is an existing table, make sure all tablets have the same type
         Y_ABORT_UNLESS(
             message->TabletType == tableMetricsIt->second.PartitionReplicaTabletType,
-            "The tablet ID %" PRIu64 " (type %s) of the table %s (table ID % " PRIu64
+            "The tablet ID %" PRIu64 " (type %s) of the table %s (table ID %" PRIu64
             ") uses an inconsistent type (expected %s)",
             message->TabletID,
             TTabletTypes::TypeToStr(message->TabletType),

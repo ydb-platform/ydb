@@ -1170,7 +1170,7 @@ public:
                 typeCounters->Forget(tabletId);
             }
 
-            // Also remove this tabled from the detailed metrics
+            // Also remove this tablet from the detailed metrics
             if (NodeDatabaseMetricsAggregator) {
                 NodeDatabaseMetricsAggregator->ForgetTablet(tabletId, followerId);
             }

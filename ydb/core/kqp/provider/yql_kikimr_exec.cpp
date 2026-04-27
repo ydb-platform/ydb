@@ -720,6 +720,10 @@ namespace {
                 request->mutable_retention_period()->set_seconds(
                         static_cast<ui64>(microValue / 1'000'000)
                 );
+            } else if (name == "setRetentionStorage") {
+                request->set_retention_storage_mb(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
             } else if (name == "setPartitionWriteSpeed") {
                 request->set_partition_write_speed_bytes_per_second(
                         FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
@@ -788,6 +792,10 @@ namespace {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_set_retention_period()->set_seconds(
                         static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setRetentionStorage") {
+                request->set_set_retention_storage_mb(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
                 );
             } else if (name == "setPartitionWriteSpeed") {
                 request->set_set_partition_write_speed_bytes_per_second(

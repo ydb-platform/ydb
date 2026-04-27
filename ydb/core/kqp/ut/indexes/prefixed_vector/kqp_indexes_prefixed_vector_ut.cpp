@@ -339,6 +339,36 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         return session;
     }
 
+    std::vector<ui64> ReadPostingParents(TSession& session, const TString& postingTablePath, i64 pk) {
+        const TString query = TStringBuilder()
+            << "SELECT __ydb_parent FROM `" << postingTablePath << "` "
+            << "WHERE pk=" << pk << " "
+            << "ORDER BY __ydb_parent;";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        std::vector<ui64> parents;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            parents.push_back(parser.ColumnParser(0).GetUint64());
+        }
+        return parents;
+    }
+
+    ui64 CountPostingRowsWithEmbedding(TSession& session, const TString& postingTablePath, i64 pk, TStringBuf embedding) {
+        const TString query = TStringBuilder()
+            << "SELECT COUNT(*) FROM `" << postingTablePath << "` "
+            << "WHERE pk=" << pk << " AND emb=\"" << embedding << "\";";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        return parser.ColumnParser(0).GetUint64();
+    }
+
     void DoCreatePrefixedVectorIndex(TSession & session, int levels, int flags = 0) {
         const char* cover = "";
         if (flags & F_COVERING) {
@@ -902,7 +932,16 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
         DoCreatePrefixedVectorIndex(session, 2, flags);
 
-        TString orig = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        static constexpr TStringBuf PostingTablePath = "/Root/TestTable/index/indexImplPostingTable";
+        static constexpr TStringBuf UpdatedEmbedding = "\x76\x75\x02";
+
+        TString orig;
+        std::vector<ui64> origParents;
+        if (flags & F_OVERLAP) {
+            origParents = ReadPostingParents(session, TString(PostingTablePath), 91);
+        } else {
+            orig = ReadTablePartToYson(session, TString(PostingTablePath));
+        }
 
         // Update to the table with index should succeed (embedding changes, but the cluster does not)
         {
@@ -915,11 +954,26 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
-        if (flags & F_COVERING) {
-            SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
+        if (flags & F_OVERLAP) {
+            const auto updatedParents = ReadPostingParents(session, TString(PostingTablePath), 91);
+            UNIT_ASSERT_VALUES_EQUAL(origParents.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(updatedParents.size(), origParents.size());
+            UNIT_ASSERT_C(std::any_of(updatedParents.begin(), updatedParents.end(), [&](ui64 parent) {
+                return std::find(origParents.begin(), origParents.end(), parent) != origParents.end();
+            }), "pk=91 lost all overlap cluster assignments after update");
+
+            if (flags & F_COVERING) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    CountPostingRowsWithEmbedding(session, TString(PostingTablePath), 91, UpdatedEmbedding),
+                    updatedParents.size());
+            }
+        } else {
+            const TString updated = ReadTablePartToYson(session, TString(PostingTablePath));
+            if (flags & F_COVERING) {
+                SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
+            }
+            UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
         }
-        UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
     Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdateNoClusterChange, Nullable, Covered) {

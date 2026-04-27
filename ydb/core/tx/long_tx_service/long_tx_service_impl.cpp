@@ -552,7 +552,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
             }
         }
 
-        RemoveWaitNodeEdges(lock.WaitNode);
+        UnlinkWaitNode(lock.WaitNode);
 
         Locks.erase(it);
     }
@@ -560,7 +560,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
 
 TLongTxServiceActor::TProxyLockState&
 TLongTxServiceActor::SubscribeToProxyLock(TProxyNodeState& node, ui64 lockId) {
-    auto& lock = node.Locks.try_emplace(lockId, lockId, node).first->second;
+    auto emplaceRes = node.Locks.try_emplace(lockId, lockId, node);
+    if (Settings.Counters && emplaceRes.second) {
+        Settings.Counters->RemoteLockSubscriptions->Inc();
+    }
+    auto& lock = emplaceRes.first->second;
     if (lock.State == EProxyLockState::Subscribed) {
         return lock;
     }
@@ -724,8 +728,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     // Special handling for successful lock subscriptions
     if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
-        if (lockTimestamp && !lock.Timestamp) {
+        bool gotTimestamp = false;
+        if (!lock.TimestampReady) {
             lock.Timestamp = lockTimestamp;
+            lock.TimestampReady = true;
+            gotTimestamp = true;
         }
         for (auto& pr : lock.NewSubscribers) {
             Send(pr.first,
@@ -742,6 +749,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
             TLockStateHandle{lock}, record.GetWaitEdges(),
             [&](const TWaitEdgeId& id) { return id.OwnerId.NodeId() != SelfId().NodeId(); });
 
+        if (gotTimestamp && lock.WaitNode.Island) {
+            ScheduleDeadlockDetection(*lock.WaitNode.Island, TDuration::Zero());
+        }
         return;
     }
 
@@ -759,10 +769,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
             0, pr.second);
     }
 
-    RemoveWaitNodeEdges(lock.WaitNode);
+    UnlinkWaitNode(lock.WaitNode);
 
     node->CookieToLock.erase(lock.Cookie);
     node->Locks.erase(itLock);
+    if (Settings.Counters) {
+        Settings.Counters->RemoteLockSubscriptions->Dec();
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev) {
@@ -802,6 +815,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
             }
             node->CookieToLock.erase(lock.Cookie);
             node->Locks.erase(itLock);
+            if (Settings.Counters) {
+                Settings.Counters->RemoteLockSubscriptions->Dec();
+            }
         }
 
         return;
@@ -1152,9 +1168,12 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
         lock.Cookie = 0;
     }
 
-    RemoveWaitNodeEdges(lock.WaitNode);
+    UnlinkWaitNode(lock.WaitNode);
 
-    node.Locks.erase(lockId);
+    const bool erased = node.Locks.erase(lockId);
+    if (Settings.Counters && erased) {
+        Settings.Counters->RemoteLockSubscriptions->Dec();
+    }
 }
 
 TLongTxServiceActor::TLockStateHandle TLongTxServiceActor::GetAwaiterHandle(const TLockInfo& awaiterInfo) {
@@ -1188,6 +1207,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     // 1. Update the local graph.
 
     TVector<TWaitEdgeInfo> actuallyAdded;
+    bool deadlockPossible = false;
     for (const auto& addedEdge : added) {
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
@@ -1224,6 +1244,50 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         Y_ABORT_UNLESS(insertHappened);
         actuallyAdded.push_back(addedEdge);
 
+        if (!awaiter.WaitNode().Island && !blocker.WaitNode().Island) {
+            // Create an island of two
+            const ui64 id = NextLockIslandId++;
+            auto& island = LockIslands.try_emplace(id, id).first->second;
+            island.Locks.PushBack(&awaiter.WaitNode());
+            island.Locks.PushBack(&blocker.WaitNode());
+            island.LocksCount = 2;
+            awaiter.WaitNode().Island = &island;
+            blocker.WaitNode().Island = &island;
+        } else if (!awaiter.WaitNode().Island && blocker.WaitNode().Island) {
+            blocker.WaitNode().Island->Locks.PushBack(&awaiter.WaitNode());
+            ++blocker.WaitNode().Island->LocksCount;
+            awaiter.WaitNode().Island = blocker.WaitNode().Island;
+        } else if (awaiter.WaitNode().Island && !blocker.WaitNode().Island) {
+            awaiter.WaitNode().Island->Locks.PushBack(&blocker.WaitNode());
+            ++awaiter.WaitNode().Island->LocksCount;
+            blocker.WaitNode().Island = awaiter.WaitNode().Island;
+        } else if (awaiter.WaitNode().Island != blocker.WaitNode().Island) {
+            // Merge smaller island into the bigger one.
+            auto [bigger, smaller] = std::pair(awaiter.WaitNode().Island, blocker.WaitNode().Island);
+            if (bigger->LocksCount < smaller->LocksCount) {
+                std::swap(bigger, smaller);
+            }
+            for (auto& lock : smaller->Locks) {
+                lock.Island = bigger;
+            }
+            bigger->Locks.Append(smaller->Locks);
+            bigger->LocksCount += smaller->LocksCount;
+            if (smaller->DeadlockDetectionScheduled && !bigger->DeadlockDetectionScheduled) {
+                ScheduleDeadlockDetection(*bigger, TDuration::Zero());
+            }
+            LockIslands.erase(smaller->Id);
+        } else {
+            // Awaiter and blocker belong to the same island, deadlock is possible.
+            deadlockPossible = true;
+        }
+
+        if (Settings.Counters) {
+            Settings.Counters->WaitGraphEdges->Inc();
+            if (addedEdge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+                Settings.Counters->LocalWaitGraphEdges->Inc();
+            }
+        }
+
         TXLOG_DEBUG("Added wait edge id: " << addedEdge.Id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << addedEdge.Blocker);
@@ -1246,6 +1310,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         }
 
         auto blockerInfo = it->second.Blocker.LockInfo(SelfId());
+        UnlinkWaitEdge(it->second);
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
@@ -1272,6 +1337,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                         }
                     }
 
+                    if (Settings.Counters) {
+                        Settings.Counters->WaitGraphEdgesSent->Add(
+                            updateEv->Record.GetAdded().size() + updateEv->Record.GetRemoved().size());
+                    }
+
                     if (!updateEv->Empty()) {
                         SendViaSession(
                             sessionId, subscriber, updateEv.Release(), IEventHandle::FlagTrackDelivery);
@@ -1296,6 +1366,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                 }
             }
 
+            if (Settings.Counters) {
+                Settings.Counters->WaitGraphEdgesSent->Add(
+                    updateEv->Record.GetAdded().size() + updateEv->Record.GetRemoved().size());
+            }
+
             if (!updateEv->Empty()) {
                 SendViaSession(
                     node.Session, MakeLongTxServiceID(node.NodeId),
@@ -1304,6 +1379,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         }
 
         // Otherwise the edges will be sent when we re-subscribe to locks in the TEvNodeConnected handler.
+    }
+
+    // 3. Run deadlock detection
+    if (deadlockPossible && awaiter.WaitNode().Island) {
+        ScheduleDeadlockDetection(*awaiter.WaitNode().Island, TDuration::MilliSeconds(10));
     }
 }
 
@@ -1338,13 +1418,49 @@ void TLongTxServiceActor::SyncLockWaitEdgesSubset(
     UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
 }
 
-void TLongTxServiceActor::RemoveWaitNodeEdges(TWaitNode& waitNode) {
+void TLongTxServiceActor::UnlinkWaitEdge(TWaitEdge& edge) {
+    static_cast<TIntrusiveListItem<TWaitEdge, TTagAwaiter>&>(edge).Unlink();
+    static_cast<TIntrusiveListItem<TWaitEdge, TTagBlocker>&>(edge).Unlink();
+
+    auto awaiter = edge.Awaiter;
+    auto blocker = edge.Blocker;
+    for (auto lock : {awaiter, blocker}) {
+        // We don't try to detect the case when the island is split into two
+        // (too expensive and not necessary for correctness), except the case
+        // when a lock becomes isolated.
+        auto& wn = lock.WaitNode();
+        if (wn.Island && wn.Awaiters.Empty() && wn.Blockers.Empty()) {
+            wn.Unlink();
+            --wn.Island->LocksCount;
+            if (!wn.Island->LocksCount) {
+                LockIslands.erase(wn.Island->Id);
+            } else if (wn.DeadlockDetectionVictim && !wn.Island->DeadlockDetectionScheduled) {
+                ScheduleDeadlockDetection(*wn.Island, TDuration::Zero());
+            }
+            wn.Island = nullptr;
+        }
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->WaitGraphEdges->Dec();
+        if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+            Settings.Counters->LocalWaitGraphEdges->Dec();
+        }
+    }
+}
+
+void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
+    auto remove = [&](TWaitEdge& edge) {
+        UnlinkWaitEdge(edge);
+        WaitEdges.erase(edge.Id);
+    };
     while (!waitNode.Awaiters.Empty()) {
-        WaitEdges.erase(waitNode.Awaiters.Back()->Id); // Unlinks the edge from the list.
+        remove(*waitNode.Awaiters.Back());
     }
     while (!waitNode.Blockers.Empty()) {
-        WaitEdges.erase(waitNode.Blockers.Back()->Id); // Unlinks the edge from the list.
+        remove(*waitNode.Blockers.Back());
     }
+    // waitNode.Island unlinked by UnlinkWaitEdge
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
@@ -1388,6 +1504,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
         << ", added count: " << record.GetAdded().size()
         << ", removed count: " << record.GetRemoved().size());
 
+    if (Settings.Counters) {
+        Settings.Counters->WaitGraphEdgesReceived->Add(
+            record.GetAdded().size() + record.GetRemoved().size());
+    }
+
     auto awaiter = GetAwaiterHandle(awaiterInfo);
     if (!awaiter) {
         return;
@@ -1424,6 +1545,191 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
     }
 
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TLongTxServiceActor::ScheduleDeadlockDetection(TLockIsland& island, TDuration delay) {
+    if (island.DeadlockDetectionScheduled) {
+        return;
+    }
+    if (delay) {
+        Schedule(delay, new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    } else {
+        Send(SelfId(), new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    }
+    island.DeadlockDetectionScheduled = true;
+}
+
+void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) {
+    // Deadlock detection algorithm. We go over the specified lock island and do the following:
+    // 1. Find strongly connected components of the wait graph.
+    // 2. For each non-trivial SCC find the youngest lock - this is the victim.
+    // 3. Break any local intra-SCC wait edges of this lock.
+    // 4. Repeat if any new edges were broken.
+    //
+    // The algorithm is scheduled when:
+    // 1. New edges are added (they could form a new cycle)
+    // 2. Information about a timestamp of some lock appears (this lock could be our victim)
+    // 3. A victim lock is removed from the graph (a new victim may appear in the same SCC)
+    //
+    // This ensures:
+    // 1. Determinism: given the same graph, nodes agree on who should break what and avoid
+    //    unnecessary transaction cancellations.
+    // 2. Forward progress: every cycle is eventually detected and broken, and remaining transactions
+    //    can finish their work.
+    //
+    // Possible TODO: implement topological pre-sorting with a Pearce-Kelly-style algorithm.
+    // This will allow quickly confirming on node addition that no new cycles have been formed.
+    // The complication is that this will require carefully re-running reachability analysis
+    // after edges are removed. Instead, to amortize the cost of edge addition, we simply delay
+    // running the algorithm a bit when new edges are added.
+
+    auto islandIt = LockIslands.find(ev->Get()->IslandId);
+    if (islandIt == LockIslands.end()) {
+        return;
+    }
+    auto& island = islandIt->second;
+
+    // The younger the lock, the more likely we are to break the wait by this lock.
+    // We want to abort wait edges of younger locks, so that older transactions can finish their work.
+    auto youngerLockCmp = [](const TLockStateHandle& left, const TLockStateHandle& right) {
+        if (left.Timestamp() != right.Timestamp()) {
+            return left.Timestamp() > right.Timestamp();
+        }
+        return left.LockId() > right.LockId();
+    };
+
+    for (auto& node : island.Locks) {
+        node.ClearBookkeeping();
+    }
+
+    // Kosaraju SCC algorithm, pass 1: DFS on forward graph (Awaiter -> Blocker edges),
+    // collecting nodes in finish order. Explicit stack to avoid recursion overhead.
+    // Each stack frame is (node, finishing): when finishing=true the node is being
+    // popped after all descendants have been processed.
+    TVector<TWaitNode*> finishOrder;
+    finishOrder.reserve(island.LocksCount);
+    {
+        TVector<std::pair<TWaitNode*, bool>> stack;
+        for (auto& startNode : island.Locks) {
+            if (startNode.DfsVisited) {
+                continue;
+            }
+            stack.push_back({&startNode, false});
+            while (!stack.empty()) {
+                auto [node, finishing] = stack.back();
+                stack.pop_back();
+                if (finishing) {
+                    finishOrder.push_back(node);
+                    continue;
+                }
+                if (node->DfsVisited) {
+                    continue;
+                }
+                node->DfsVisited = true;
+                stack.push_back({node, true});
+                for (auto& edge : node->Blockers) {
+                    if (!edge.Broken && !edge.Blocker.WaitNode().DfsVisited) {
+                        stack.push_back({&edge.Blocker.WaitNode(), false});
+                    }
+                }
+            }
+        }
+    }
+
+    // Kosaraju SCC algorithm, pass 2: DFS on reversed graph (Blocker -> Awaiter edges)
+    // in reverse finish order. Each DFS tree is one SCC.
+    //
+    // For each non-trivial SCC, find the youngest awaiter.
+    THashMap<size_t, TLockStateHandle> sccYoungestLock;
+    {
+        size_t sccId = 0;
+        TVector<TWaitNode*> sccNodes;
+        TVector<TWaitNode*> stack;
+        for (auto it = finishOrder.rbegin(); it != finishOrder.rend(); ++it) {
+            TWaitNode* start = *it;
+            if (start->SccId != size_t(-1)) {
+                continue;
+            }
+
+            stack.push_back(start);
+            while (!stack.empty()) {
+                TWaitNode* node = stack.back();
+                stack.pop_back();
+                if (node->SccId != size_t(-1)) {
+                    continue;
+                }
+                node->SccId = sccId;
+                sccNodes.push_back(node);
+
+                // Reversed edges: node->Awaiters contains edges where node is the Blocker,
+                // so edge.Awaiter is the neighbor in the reversed graph.
+                for (auto& edge : node->Awaiters) {
+                    if (!edge.Broken && edge.Awaiter.WaitNode().SccId == size_t(-1)) {
+                        stack.push_back(&edge.Awaiter.WaitNode());
+                    }
+                }
+            }
+
+            if (sccNodes.size() > 1) {
+                TLockStateHandle youngest;
+                bool hasLockWithoutTimestamp = false;
+                for (const auto* node : sccNodes) {
+                    if (!node->Awaiters.Empty()) {
+                        TLockStateHandle handle(node->Awaiters.Front()->Blocker);
+                        if (!handle.TimestampReady()) {
+                            // Timestamp not yet known, ignore this SCC for now.
+                            // Re-invocation will be scheduled when it arrives.
+                            hasLockWithoutTimestamp = true;
+                            break;
+                        } if (!youngest || youngerLockCmp(handle, youngest)) {
+                            youngest = handle;
+                        }
+                    }
+                }
+
+                if (!hasLockWithoutTimestamp) {
+                    Y_ABORT_UNLESS(youngest);
+                    sccYoungestLock[sccId] = youngest;
+                }
+            }
+
+            ++sccId;
+            sccNodes.clear();
+        }
+    }
+
+    // Break intra-SCC local edges of the youngest awaiter in each SCC.
+    // Each break eliminates at least one cycle.
+    // If further cycles remain, the rescheduled invocation handles them.
+    bool anyBroken = false;
+    for (const auto& [sccId, handle] : sccYoungestLock) {
+        handle.WaitNode().DeadlockDetectionVictim = true;
+        for (auto& edge : handle.WaitNode().Blockers) {
+            if (edge.Broken
+                || edge.Id.OwnerId.NodeId() != SelfId().NodeId()
+                || edge.Blocker.WaitNode().SccId != sccId) {
+                continue;
+            }
+
+            TXLOG_DEBUG("Breaking the wait edge id: " << edge.Id
+                << ", awaiter: " << edge.Awaiter.LockInfo(SelfId())
+                << ", blocker: " << edge.Blocker.LockInfo(SelfId()));
+            edge.Broken = true;
+            Send(edge.Id.OwnerId, new TEvLongTxService::TEvWaitingLockDeadlock(edge.Id.RequestId));
+            if (Settings.Counters) {
+                Settings.Counters->WaitGraphEdgesBroken->Inc();
+            }
+            anyBroken = true;
+        }
+    }
+
+    if (anyBroken) {
+        // Reschedule immediately: broken edges are marked but not yet removed,
+        // and other cycles may still exist within this island.
+        Send(SelfId(), new TEvPrivate::TEvRunDeadlockDetection(island.Id));
+    } else {
+        island.DeadlockDetectionScheduled = false;
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {

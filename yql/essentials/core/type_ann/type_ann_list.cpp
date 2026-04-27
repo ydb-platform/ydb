@@ -7388,7 +7388,7 @@ namespace {
         }
 
         auto ensureSortSpecValid = [&]() -> IGraphTransformer::TStatus {
-            if (!IsWindowNewPipelineEnabled(ctx.Types)) {
+            if (!IsWindowNewPipelineEnabled(ctx.Types) || ctx.Types.DeprecatedSQL) {
                 return IGraphTransformer::TStatus::Ok;
             }
             auto sortSpec = TWindowFrameSettings::GetSortSpec(*input, ctx.Expr);

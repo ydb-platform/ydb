@@ -42,18 +42,6 @@ namespace NKikimr::NGRpcProxy::V1 {
     using namespace NKikimr::NPQ;
     using namespace NKikimr::NPQ::NSchema;
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
-        const TString& name,
-        const Ydb::PersQueue::V1::TopicSettings& settings,
-        NKikimrSchemeOp::TModifyScheme& modifyScheme,
-        const TActorContext& ctx,
-        bool alter,
-        TString& error,
-        const TString& path,
-        const TString& database = TString(),
-        const TString& localDc = TString()
-    );
-
     TYdbPqCodes FillProposeRequestImpl(
         const TString& name,
         const Ydb::Topic::CreateTopicRequest& request,

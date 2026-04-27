@@ -6200,6 +6200,64 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
     return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
 }
 
+TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context) {
+    // simple_table_ref_core: object_ref | (cluster_expr DOT)? COMMAT? bind_parameter;
+    YQL_ENSURE(node.HasAlt_simple_table_ref_core1() || node.HasAlt_simple_table_ref_core2());
+    const TRule_cluster_expr* clusterExpr = nullptr;
+    if (node.HasAlt_simple_table_ref_core1() && node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
+        clusterExpr = &node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1();
+    } else if (node.HasAlt_simple_table_ref_core2() && node.GetAlt_simple_table_ref_core2().HasBlock1()) {
+        clusterExpr = &node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
+    }
+
+    if (clusterExpr && !ClusterExpr(*clusterExpr, false, context.ServiceId, context.Cluster)) {
+        return {};
+    }
+
+    TDeferredAtom result;
+    if (node.HasAlt_simple_table_ref_core1()) {
+        // object_ref: (cluster_expr .)? id_or_at
+        const auto& [hasAt, objectId] = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
+        if (context.Cluster.Empty()) {
+            Error() << "No cluster name given and no default cluster is selected";
+            return {};
+        }
+        if (hasAt && context.ServiceId == YtProviderName) {
+            Error() << "Temporary object is not supported";
+            return {};
+        }
+        result = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+    } else {
+        // (cluster_expr DOT)? COMMAT? bind_parameter
+        TString bindName;
+        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
+            return {};
+        }
+        if (context.Cluster.Empty()) {
+            Error() << "No cluster name given and no default cluster is selected";
+            return {};
+        }
+        if (context.ServiceId != YtProviderName) {
+            Error() << "Bind parameter is not supported";
+            return {};
+        }
+        if (node.GetAlt_simple_table_ref_core2().HasBlock2()) {
+            Error() << "Temporary object is not supported";
+            return {};
+        }
+
+        auto named = GetNamedNode(bindName);
+        if (!named) {
+            return {};
+        }
+
+        TDeferredAtom table;
+        MakeTableFromExpression(Context().Pos(), Context(), named, table);
+        result = TDeferredAtom(Ctx_.GetPrefixedPath(context.ServiceId, context.Cluster, table), Ctx_);
+    }
+    return result;
+}
+
 bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
     // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value | streaming_query_settings)
 

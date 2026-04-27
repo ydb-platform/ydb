@@ -1,6 +1,8 @@
 items:
 - name: System requirements
   href: system-requirements.md
+- name: CPU settings for production
+  href: cpu-production-settings.md
 - name: Versioning
   href: versioning.md
 - name: Maintenance

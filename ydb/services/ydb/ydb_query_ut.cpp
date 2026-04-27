@@ -212,6 +212,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestAttachSessionNodeShutdownHint) {
         TKikimrWithGrpcAndRootSchema server;
         auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
         runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
 
         ui16 grpc = server.GetPort();
@@ -246,6 +247,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestAttachSessionSessionShutdownHint) {
         TKikimrWithGrpcAndRootSchema server;
         auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
         runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
 
         ui16 grpc = server.GetPort();

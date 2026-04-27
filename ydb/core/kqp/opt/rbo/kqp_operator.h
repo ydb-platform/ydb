@@ -260,6 +260,7 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "TableFullScan"; }
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;

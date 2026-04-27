@@ -1072,11 +1072,7 @@ public:
     static TSettings GetSettings(const NKikimrSchemeOp::TRestoreTask& task);
 
     static ui64 GetReadBatchSize(const NKikimrSchemeOp::TRestoreTask& task) {
-        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
-            return GetSettings(task).GetLimits().GetReadBatchSize();
-        } else {
-            return 8388608; // Default 8MB for FS
-        }
+        return GetSettings(task).GetLimits().GetReadBatchSize();
     }
 
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)

@@ -540,8 +540,8 @@ public:
     TBuildIndexOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        EBuildIndexState State;
-        float Progress;
+        EBuildIndexState State = EBuildIndexState::Unspecified;
+        float Progress = 0;
         std::string Path;
         std::optional<TIndexDescription> Desctiption;
     };
@@ -568,13 +568,13 @@ public:
     TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        ECompactState State;
-        float Progress;
+        ECompactState State = ECompactState::Unspecified;
+        float Progress = 0;
         std::string Path;
-        bool Cascade;
-        uint32_t MaxInFlight;
-        uint32_t Total;
-        uint32_t Done;
+        bool Cascade = false;
+        uint32_t MaxInFlight = 0;
+        uint32_t Total = 0;
+        uint32_t Done = 0;
     };
 
     const TMetadata& Metadata() const;

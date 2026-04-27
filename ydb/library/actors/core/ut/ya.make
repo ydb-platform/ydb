@@ -27,6 +27,7 @@ SRCS(
     performance_ut.cpp
     process_stats_ut.cpp
     ask_ut.cpp
+    event_flat_ut.cpp
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp

@@ -2461,7 +2461,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
                     const auto& f = idx.GetBloomNGrammFilter();
                     return std::make_tuple(
-                        f.GetFalsePositiveProbability(),
                         f.GetNGrammSize(),
                         f.GetCaseSensitive(),
                         f.GetFilterSizeBytes());
@@ -2469,17 +2468,15 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             }
 
             UNIT_ASSERT_C(false, "idx_ngram with BloomNGrammFilter not found");
-            return std::make_tuple(0.0, 0u, false, 0u);
+            return std::make_tuple(0u, false, 0u);
         };
 
         {
-            const auto [fpp, ngram, cs, filterBytes] = readNgram();
+            const auto [ngram, cs, filterBytes] = readNgram();
             UNIT_ASSERT_VALUES_EQUAL_C(ngram, 5u, "ngramm_size from ALTER OBJECT FEATURES");
             UNIT_ASSERT_C(filterBytes > 0 && filterBytes <= 2048u,
                 TStringBuilder() << "filter_size_bytes after UPSERT (normalized from FEATURES), got " << filterBytes);
             UNIT_ASSERT_VALUES_EQUAL_C(cs, true, "case_sensitive after UPSERT");
-            UNIT_ASSERT_C(fpp > 0 && fpp < 1.0,
-                TStringBuilder() << "implicit fpp in (0,1) from filter/records sizing, got " << fpp);
         }
 
         ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
@@ -2488,7 +2485,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )", "cannot change false_positive_probability on a bloom ngram index created with deprecated sizing");
 
         {
-            const auto [fpp, ngram, cs, filterBytes] = readNgram();
+            const auto [ngram, cs, filterBytes] = readNgram();
             UNIT_ASSERT_VALUES_EQUAL_C(ngram, 5u, "ngram_size unchanged after rejected ALTER");
             UNIT_ASSERT_VALUES_EQUAL_C(cs, true, "case_sensitive unchanged after rejected ALTER");
             UNIT_ASSERT_C(filterBytes > 0 && filterBytes <= 2048u,

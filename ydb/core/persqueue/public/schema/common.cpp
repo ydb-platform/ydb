@@ -32,6 +32,34 @@ void CopyConfig(
     targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
 }
 
+TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList) {
+    return clustersList && clustersList->LocalCluster ? clustersList->LocalCluster->Name : "";
+}
+
+TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList, const NKikimrPQ::TPQTabletConfig& config) {
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {};
+    }
+
+    AFL_ENSURE(clustersList);
+
+    const auto localCluster = GetLocalClusterName(clustersList);
+    const auto& cluster = config.GetDC();
+
+    if (config.GetLocalDC() && !localCluster.empty() && cluster != localCluster) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Local cluster is not correct - provided '"
+            << config.GetDC() << "' instead of '" << localCluster << "'"};
+    }
+
+    const auto clusterFound = CountIf(clustersList->Clusters, [&](const auto& c) { return c.Name == cluster; });
+    if (!clusterFound)  {
+        return {Ydb::StatusIds::BAD_REQUEST,
+            TStringBuilder() << "Unknown cluster '" << cluster << "'"};
+    }
+
+    return {};
+}
+
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
         return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());

@@ -292,5 +292,6 @@ message TFeatureFlags {
     optional bool EnableSnapshotsLocking = 254 [default = true];
     optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
+    optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableLocalMinMaxIndex = 258 [default = false];
 }

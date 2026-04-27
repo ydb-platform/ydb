@@ -1481,7 +1481,7 @@ class TDataShard
 
     void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
 
-    void Handle(TEvents::TEvUndelivered::TPtr& ev);
+    void HandleInactive(TEvents::TEvUndelivered::TPtr& ev);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -3201,6 +3201,8 @@ private:
     TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
 
+    // If value is un-set then wait in StateInactive.
+    // Also it's fine if value is set and nullptr - it means: don't use the read factory.
     std::optional<NKqp::NScheduler::TSchedulableReadFactoryPtr> SchedulableReadFactory;
 
 public:
@@ -3301,7 +3303,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvents::TEvUndelivered, HandleInactive);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()

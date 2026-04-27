@@ -26,26 +26,29 @@ const TString TEST_POOL_ID = "test_pool";
 //                           Followers never request a scheduler factory themselves,
 //                           so quota is never applied on the follower regardless of
 //                           the pool settings.
+//   numShards             — Number of shards to create (default 1).
 struct TSchedulerTestHelper {
     Tests::TServer::TPtr Server;
     TActorId Sender;
 
     TTableId TableId;
-    ui64 TabletId = 0;
+    TVector<ui64> TabletIds;
     NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
 
-    // Default read target: follower pipe when withFollower=true, leader pipe otherwise.
-    TActorId ClientId;
-    // Always the leader pipe (available even when withFollower=true, for comparison tests).
-    TActorId LeaderClientId;
+    TVector<TActorId> ClientIds;
+    TVector<TActorId> LeaderClientIds;
 
     bool WithFollower = false;
 
     explicit TSchedulerTestHelper(std::optional<ui64> readLimitMs = std::nullopt,
                                   bool blockSchedulerFactory = false,
-                                  bool withFollower = false)
+                                  bool withFollower = false,
+                                  ui32 numShards = 1)
         : WithFollower(withFollower)
     {
+        Y_ABORT_UNLESS(!(withFollower && numShards > 1), "Follower mode with multiple shards not supported");
+        Y_ABORT_UNLESS(numShards >= 1, "numShards must be at least 1");
+
         using namespace NKqp;
         using namespace NKqp::NScheduler;
         using namespace NKqp::NScheduler::NHdrf;
@@ -97,26 +100,27 @@ struct TSchedulerTestHelper {
             {"key3", "Uint32", true, false},
             {"value", "Uint32", false, false},
         };
-        auto opts = TShardedTableOptions().Shards(1).Columns(columns);
+        auto opts = TShardedTableOptions().Shards(numShards).Columns(columns);
         if (withFollower) {
             opts.Followers(1);
         }
         auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", "table-1", opts);
 
         TableId = tableId;
-        TabletId = shards.at(0);
+        TabletIds = shards;
 
-        auto [tables, ownerId] = GetTables(Server, TabletId);
+        auto [tables, ownerId] = GetTables(Server, TabletIds[0]);
         UserTable = tables["table-1"];
 
-        LeaderClientId = runtime.ConnectToPipe(TabletId, Sender, 0, GetPipeConfigWithRetries());
-
-        if (withFollower) {
-            auto followerConfig = GetPipeConfigWithRetries();
-            followerConfig.ForceFollower = true;
-            ClientId = runtime.ConnectToPipe(TabletId, Sender, 0, followerConfig);
-        } else {
-            ClientId = LeaderClientId;
+        for (ui64 tabletId : TabletIds) {
+            LeaderClientIds.push_back(runtime.ConnectToPipe(tabletId, Sender, 0, GetPipeConfigWithRetries()));
+            if (withFollower) {
+                auto followerConfig = GetPipeConfigWithRetries();
+                followerConfig.ForceFollower = true;
+                ClientIds.push_back(runtime.ConnectToPipe(tabletId, Sender, 0, followerConfig));
+            } else {
+                ClientIds.push_back(LeaderClientIds.back());
+            }
         }
 
         if (blockSchedulerFactory) {
@@ -125,6 +129,10 @@ struct TSchedulerTestHelper {
             runtime.SimulateSleep(TDuration::Seconds(2));
         }
     }
+
+    ui64 TabletId() const { return TabletIds[0]; }
+    TActorId ClientId() const { return ClientIds[0]; }
+    TActorId LeaderClientId() const { return LeaderClientIds[0]; }
 
     void Upsert(ui32 key, ui32 value) const {
         ExecSQL(Server, Sender, TStringBuilder()
@@ -146,21 +154,28 @@ struct TSchedulerTestHelper {
         return request;
     }
 
-    // Send to the default target (follower if WithFollower, leader otherwise).
-    std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(TEvDataShard::TEvRead* request) const {
-        return ::NKikimr::SendRead(Server, TabletId, request, Sender, 0,
-                                   GetPipeConfigWithRetries(), ClientId);
+    std::unique_ptr<TEvDataShard::TEvRead> MakeRangeReadRequest(ui64 readId, ui32 lo, ui32 hi, ui32 maxRowsInResult = 0, const TString& poolId = TEST_POOL_ID) const {
+        auto request = MakeReadRequest(readId, poolId);
+        AddRangeQuery<ui32>(*request, {lo, lo, lo}, true, {hi, hi, hi}, true);
+        if (maxRowsInResult > 0) {
+            request->Record.SetMaxRowsInResult(maxRowsInResult);
+        }
+        return request;
     }
 
-    // Always send to the leader (useful for leader-vs-follower comparison tests).
+    std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(TEvDataShard::TEvRead* request, ui32 shardIdx = 0) const {
+        return ::NKikimr::SendRead(Server, TabletIds[shardIdx], request, Sender, 0,
+                                   GetPipeConfigWithRetries(), ClientIds[shardIdx]);
+    }
+
     std::unique_ptr<TEvDataShard::TEvReadResult> SendReadToLeader(TEvDataShard::TEvRead* request) const {
-        return ::NKikimr::SendRead(Server, TabletId, request, Sender, 0,
-                                   GetPipeConfigWithRetries(), LeaderClientId);
+        return ::NKikimr::SendRead(Server, TabletId(), request, Sender, 0,
+                                   GetPipeConfigWithRetries(), LeaderClientId());
     }
 
-    void SendReadAsync(TEvDataShard::TEvRead* request) const {
-        ::NKikimr::SendReadAsync(Server, TabletId, request, Sender, 0,
-                                  GetPipeConfigWithRetries(), ClientId);
+    void SendReadAsync(TEvDataShard::TEvRead* request, ui32 shardIdx = 0) const {
+        ::NKikimr::SendReadAsync(Server, TabletIds[shardIdx], request, Sender, 0,
+                                  GetPipeConfigWithRetries(), ClientIds[shardIdx]);
     }
 
     std::unique_ptr<TEvDataShard::TEvReadResult> WaitResult(TDuration timeout = TDuration::Seconds(30)) const {
@@ -174,18 +189,21 @@ struct TSchedulerTestHelper {
         ack->Record.SetSeqNo(result.GetSeqNo());
         ack->Record.SetMaxRows(rows);
         ack->Record.SetMaxBytes(bytes);
-        runtime.SendToPipe(TabletId, Sender, ack, 0, GetPipeConfigWithRetries(), ClientId);
+        runtime.SendToPipe(TabletId(), Sender, ack, 0, GetPipeConfigWithRetries(), ClientId());
     }
 
-    // Register an extra pool with zero quota in the same database.
-    void AddZeroQuotaPool(const TString& poolId) const {
+    void UpdatePoolQuota(double totalCpuLimitPercentPerNode, const TString& poolId = TEST_POOL_ID) const {
         using namespace NKqp::NScheduler;
         auto& runtime = *Server->GetRuntime();
         NResourcePool::TPoolSettings params;
-        params.TotalCpuLimitPercentPerNode = 0.;
+        params.TotalCpuLimitPercentPerNode = totalCpuLimitPercentPerNode;
         auto ev = std::make_unique<TEvAddPool>(TEST_DATABASE_ID, poolId, params);
         runtime.Send(NKqp::MakeKqpSchedulerServiceId(runtime.GetFirstNodeId()), Sender, ev.release());
         runtime.SimulateSleep(TDuration::Zero());
+    }
+
+    void AddZeroQuotaPool(const TString& poolId) const {
+        UpdatePoolQuota(0., poolId);
     }
 };
 

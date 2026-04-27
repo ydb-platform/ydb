@@ -3412,7 +3412,8 @@ public:
             }
         }
 
-        auto returnConsumedQuota = [&]() -> void {
+        // Return read quota after reading
+        Y_DEFER {
             if (schedulableRead) {
                 Reader->UpdateCycles();
                 schedulableRead->ReturnQuota(Reader->ElapsedCycles());
@@ -3420,8 +3421,6 @@ public:
         };
 
         if (Reader->Read(txc)) {
-            returnConsumedQuota();
-
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
                 state.ReadContinuePending = true;
@@ -3445,8 +3444,6 @@ public:
             }
             return true;
         }
-
-        returnConsumedQuota();
         return false;
     }
 
@@ -3661,7 +3658,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    auto replyWithError = [&] (auto code, const auto& msg, bool throttled = false) {
+    auto replyWithError = [&] (auto code, const auto& msg) {
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
 
         SetStatusError(
@@ -3669,7 +3666,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             code,
             msg);
         result->Record.SetReadId(readId.ReadId);
-        result->Record.SetThrottled(throttled);
         ctx.Send(ev->Sender, result.release());
 
         request->ReadSpan.EndError(msg);

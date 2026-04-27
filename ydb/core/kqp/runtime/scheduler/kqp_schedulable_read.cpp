@@ -73,6 +73,8 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
 }
 
 TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
+    Y_ASSERT(QuotaPerSecond != 0);
+
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
     if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {

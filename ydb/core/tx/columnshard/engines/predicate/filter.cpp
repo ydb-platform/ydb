@@ -5,7 +5,6 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <type_traits>
 
 namespace NKikimr::NOlap {
 
@@ -17,6 +16,16 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
     ui64 pos = 0;
     const ui64 recordsCount = data->num_rows();
+
+    auto iteratorAt = [&](const TPredicateContainer& pred, const ui64 atPos) {
+        std::vector<std::string> cols = pred.GetColumnNames();
+        auto it = cols.empty()
+            ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+            : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
+        AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
+        return it;
+    };
+
     for (const auto& range : SortedRanges) {
         const ui64 initialIdx = pos;
 
@@ -25,10 +34,7 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             if (predFrom.IsAll()) {
                 return pos;
             }
-            const auto fromCols = predFrom.GetColumnNames();
-            NArrow::NMerger::TRWSortableBatchPosition itFrom = fromCols.empty()
-                ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
-                : NArrow::NMerger::TRWSortableBatchPosition(data, pos, fromCols, {}, false);
+            auto itFrom = iteratorAt(predFrom, pos);
             const auto findBegin = predFrom.FindFirstIncluded(itFrom);
             return findBegin ? findBegin->GetPosition() : recordsCount;
         }();
@@ -44,10 +50,7 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             if (predTo.IsAll()) {
                 return recordsCount;
             }
-            const auto toCols = predTo.GetColumnNames();
-            NArrow::NMerger::TRWSortableBatchPosition itTo = toCols.empty()
-                ? NArrow::NMerger::TRWSortableBatchPosition(data, pos, false)
-                : NArrow::NMerger::TRWSortableBatchPosition(data, pos, toCols, {}, false);
+            auto itTo = iteratorAt(predTo, pos);
             const auto findEnd = predTo.FindFirstExcluded(itTo);
             return findEnd ? findEnd->GetPosition() : recordsCount;
         }();

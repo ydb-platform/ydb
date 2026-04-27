@@ -1906,17 +1906,23 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             if (!minMaxIndex.HasColumnId()) {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "ColumnId must be in MIN_MAX index description");
             }
-            const auto& columnName = columns.at(minMaxIndex.GetColumnId())->GetName();
+            auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
+            if (columnNameIt == columns.end()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "columnId from index desciption is not present in table description");
+            }
             Stream << "ALTER TABLE ";
             EscapeName(fullPath, Stream);
             Stream << "\nADD INDEX ";
             EscapeName(indexDesc.GetName(), Stream);
             Stream << " LOCAL USING min_max ON (";
-            EscapeName(columnName, Stream);
+            EscapeName(columnNameIt->second->GetName(), Stream);
             Stream << ");";
             break;
         }
-        default: break;
+        default: {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            TStringBuilder() << "Unsupported OLAP index implementation for index " << indexDesc.GetName());
+        }
     }
 }
 

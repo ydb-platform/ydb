@@ -1,7 +1,8 @@
 #pragma once
 #include <util/string/builder.h>
 #include <util/string/vector.h>
- 
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NOlap::NIndexes::NMinMax {
     inline const TString kMinMaxClassName = "MIN_MAX";
 

@@ -2729,21 +2729,27 @@ void TPartition::RunPersist() {
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
 
             std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
-            if (auto it = writeInfo->WriteStats.PerSourceMetrics.find("bytes"); it != writeInfo->WriteStats.PerSourceMetrics.end()) {
-                for (const auto& [sourceId, writtenBytes] : it->second) {
+            const auto& psm = writeInfo->WriteStats.PerSourceMetrics;
+            const size_t bytesIdx = static_cast<size_t>(ETag::BYTES);
+            const size_t messagesIdx = static_cast<size_t>(ETag::MESSAGES);
+            if (bytesIdx < psm.size()) {
+                for (const auto& [sourceId, writtenBytes] : psm[bytesIdx]) {
                     perSourceMetrics[sourceId].first = writtenBytes;
                 }
             }
-            if (auto it = writeInfo->WriteStats.PerSourceMetrics.find("messages"); it != writeInfo->WriteStats.PerSourceMetrics.end()) {
-                for (const auto& [sourceId, messagesWritten] : it->second) {
+            if (messagesIdx < psm.size()) {
+                for (const auto& [sourceId, messagesWritten] : psm[messagesIdx]) {
                     perSourceMetrics[sourceId].second = messagesWritten;
                 }
             }
             for (const auto& [sourceId, metrics] : perSourceMetrics) {
                 AutopartitioningManager->OnWrite(sourceId, metrics.first, metrics.second);
             }
-            for (auto& [tag, keysManager] : writeInfo->WriteStats.PartitioningKeysManagers) {
-                AutopartitioningManager->AddKeysStats(tag, keysManager);
+            const auto& pkm = writeInfo->WriteStats.PartitioningKeysManagers;
+            for (size_t i = 0; i < pkm.size(); ++i) {
+                if (pkm[i]) {
+                    AutopartitioningManager->AddKeysStats(static_cast<ETag>(i), *pkm[i]);
+                }
             }
         }
         WriteInfosApplied.clear();

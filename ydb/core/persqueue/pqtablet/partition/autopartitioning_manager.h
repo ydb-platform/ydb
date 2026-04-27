@@ -8,9 +8,9 @@
 
 #include <library/cpp/sliding_window/sliding_window.h>
 
+#include <memory>
+
 #include <util/generic/fwd.h>
-
-
 
 namespace NKikimr::NPQ {
 
@@ -19,16 +19,23 @@ class TPartitionId;
 using TUint128 = unsigned __int128;
 
 struct TAutopartitioningManagerSnapshot {
-    std::unordered_map<TString, std::vector<std::pair<TString, ui64>>> PerSourceMetrics;
-    std::unordered_map<TString, NPQ::TPartitioningKeysManager> KeysManagers;
+    std::vector<std::vector<std::pair<TString, ui64>>> PerSourceMetrics;
+    std::vector<std::unique_ptr<NPQ::TPartitioningKeysManager>> KeysManagers;
 };
+
+enum class ETag : ui8 {
+    BYTES = 0,
+    MESSAGES = 1,
+};
+
+inline constexpr size_t AutoscaleMetricTagCount = static_cast<size_t>(ETag::MESSAGES) + 1;
 
 class IAutopartitioningManager {
 public:
     virtual ~IAutopartitioningManager() = default;
 
     virtual void OnWrite(const TString& sourceId, ui64 bytes, ui64 messages, const TString& key = "") = 0;
-    virtual void AddKeysStats(const TString& tag, const NPQ::TPartitioningKeysManager& keysManager) = 0;
+    virtual void AddKeysStats(ETag tag, const NPQ::TPartitioningKeysManager& keysManager) = 0;
     virtual void CleanUp() = 0;
 
     virtual NKikimrPQ::EScaleStatus GetScaleStatus(NKikimrPQ::EScaleStatus currentState) = 0;

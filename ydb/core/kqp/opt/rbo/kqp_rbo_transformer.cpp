@@ -334,11 +334,15 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
 
         auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         auto planElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+        planElement["Node Type"] = "Query";
+        planElement["PlanNodeType"] = "Query";
         planElement["Plans"] = planList;
         planJson["Plan"] = planElement;
 
         auto simplifiedPlanList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         auto simplifiedPlanElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+        simplifiedPlanElement["Node Type"] = "Query";
+        simplifiedPlanElement["PlanNodeType"] = "Query";
         simplifiedPlanElement["Plans"] = simplifiedPlanList;
 
         planJson["SimplifiedPlan"] = simplifiedPlanElement;

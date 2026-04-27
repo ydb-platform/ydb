@@ -23,6 +23,6 @@ bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns,
 bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error);
-bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& name, const TString& value, TString& error);
+bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
 }

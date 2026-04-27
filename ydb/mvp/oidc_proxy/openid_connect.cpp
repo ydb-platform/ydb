@@ -44,7 +44,7 @@ void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuild
     headers->Set("Access-Control-Allow-Origin", origin);
     headers->Set("Access-Control-Allow-Credentials", "true");
     headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent");
-    headers->Set("Access-Control-Expose-Headers", "traceresponse,X-Worker-Name");
+    headers->Set("Access-Control-Expose-Headers", "traceresponse,X-Worker-Name,X-Request-Id");
     headers->Set("Access-Control-Allow-Methods", "OPTIONS,GET,POST,PUT,DELETE");
     headers->Set("Allow", "OPTIONS,GET,POST,PUT,DELETE");
 }
@@ -77,7 +77,7 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
     meta.Aux.emplace_back(name, value);
 }
 
-NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings) {
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId) {
     TContext context(request);
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
@@ -89,14 +89,12 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
-
+    SetRequestIdHeader(responseHeaders, requestId);
+    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
     if (context.IsNavigationRequest()) {
-        responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
         responseHeaders.Set(LOCATION_HEADER, redirectUrl);
         return request->CreateResponse("302", "Authorization required", responseHeaders);
     }
-
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
     responseHeaders.Set("Content-Type", "application/json; charset=utf-8");
     TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
     return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
@@ -249,6 +247,9 @@ TString DecodeToken(const TStringBuf& cookie) {
 }
 
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
+    if (!cookies.Has(cookieName)) {
+        return {};
+    }
     TStringBuf cookieValue = cookies.Get(cookieName);
     if (!cookieValue.Empty()) {
         BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
@@ -330,10 +331,11 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     return outRequest;
 }
 
-NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage) {
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage, TStringBuf requestId) {
     NHttp::THeadersBuilder headers;
     headers.Set("Content-Type", "text/html");
     SetCORS(request, &headers);
+    SetRequestIdHeader(headers, requestId);
 
     TStringBuilder html;
     html << "<html><head><title>403 Forbidden</title></head><body bgcolor=\"white\"><center><h1>";
@@ -343,10 +345,11 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIn
     return request->CreateResponse("403", "Forbidden", headers, html);
 }
 
-NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage) {
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage, TStringBuf requestId) {
     NHttp::THeadersBuilder headers;
     headers.Set("Content-Type", "text/html");
     SetCORS(request, &headers);
+    SetRequestIdHeader(headers, requestId);
 
     TStringBuilder html;
     html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";

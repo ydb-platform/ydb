@@ -24,8 +24,7 @@ public:
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
-        TDuration writeHedgingDelay,
-        TDuration writeRequestTimeout,
+        TDuration writeHandoffDelay,
         TDuration traceSamplePeriod,
         NMonitoring::TDynamicCounterPtr counters);
 

@@ -6,8 +6,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
-    // Currently we ingore cbo join type.
-    if (false && props.JoinAlgo.has_value()) {
+    if (props.JoinAlgo.has_value()) {
         return;
     }
 

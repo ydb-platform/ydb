@@ -144,7 +144,11 @@ public:
 
         SumWrittenBytes->Update(size, now);
 
+#ifdef _win_
+        NKikimr::NPQ::TUint128 sourceIdHash = decodedSourceId.size() > 0 ? (double)Hash(decodedSourceId) : 0.;
+#else
         auto sourceIdHash = decodedSourceId.size() > 0 ? Hash(decodedSourceId) : 0;
+#endif
         TString sourceIdHashStr = decodedSourceId.size() > 0 // Kinesis protocol use empty sourceId
             ? AsKeyBound(sourceIdHash)
             : "";

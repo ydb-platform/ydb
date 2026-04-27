@@ -825,6 +825,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         auto& out = *settings->MutableVectorTopK();
         out.SetColumn(in.GetColumn());
         *out.MutableSettings() = in.GetSettings();
+        const auto guard = TxAlloc->TypeEnv.BindAllocator();
         auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         out.SetTargetVector(TString(target.AsStringRef()));
         out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
@@ -2119,7 +2120,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
 
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
     const auto& keyTypes = tableInfo->KeyColumnTypes;
-    for (auto i = 0ul, s = stage.TableOpsSize(); i < s; ++i) {
+    for (size_t i = 0, s = stage.TableOpsSize(); i < s; ++i) {
         const auto& op = stage.GetTableOps(i);
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
@@ -2380,7 +2381,9 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
         }
         task.Meta.TaskParams.emplace("query_path", queryPath);
-
+        if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
+            task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
+        }
         tasksIds.push_back(task.Id);
     }
 
@@ -2745,6 +2748,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->SetItemsLimit(*GetMeta().MaxBatchSize);
             settings->SetIsBatch(true);
         } else {
+            const auto guard = TxAlloc->TypeEnv.BindAllocator();
             ui64 itemsLimit = ExtractPhyValue(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             settings->SetItemsLimit(itemsLimit);
         }
@@ -2754,6 +2758,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
             *out.MutableSettings() = in.GetSettings();
+            const auto guard = TxAlloc->TypeEnv.BindAllocator();
             auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
             out.SetTargetVector(TString(target.AsStringRef()));
             out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());

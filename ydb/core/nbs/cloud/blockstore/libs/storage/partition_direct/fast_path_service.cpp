@@ -61,8 +61,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             directBlockGroups,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
-            storageConfig.GetWriteHedgingDelay(),
-            storageConfig.GetWriteRequestTimeout(),
+            storageConfig.GetWriteHandoffDelay(),
             storageConfig.GetTraceSamplePeriod(),
             regionCounters);
     }

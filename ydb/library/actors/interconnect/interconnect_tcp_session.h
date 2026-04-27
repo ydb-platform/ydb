@@ -354,7 +354,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
-        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 

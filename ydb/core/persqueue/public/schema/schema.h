@@ -16,6 +16,7 @@ enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvSchemaOperationResponse,
     EvAlterTopicResponse,
+    EvCreateTopicResponse,
     EvDropTopicResponse,
     EvEnd
 };
@@ -67,12 +68,61 @@ struct TAlterTopicSettings {
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);
 NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TAlterTopicResponse>&& promise, TAlterTopicSettings&& settings);
 
+//
+// Add Consumer
+//
+struct TAddConsumerSettings {
+    TString Database;
+    TString PeerName;
+    TString Path;
+    Ydb::Topic::Consumer Consumer;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    ui64 Cookie = 0;
+};
+
+NActors::IActor* CreateAddConsumerActor(const NActors::TActorId& parentId, TAddConsumerSettings&& settings);
+
+//
+// Remove Consumer
+//
+struct TRemoveConsumerSettings {
+    TString Database;
+    TString PeerName;
+    TString Path;
+    TString ConsumerName;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    ui64 Cookie = 0;
+};
+
+NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TRemoveConsumerSettings&& settings);
 
 //
 // Create Topic
 //
+struct TCreateTopicResponse {
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorMessage;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
+
+struct TEvCreateTopicResponse: public NActors::TEventLocal<TEvCreateTopicResponse, EEv::EvCreateTopicResponse>
+                             , public TCreateTopicResponse {
+    TEvCreateTopicResponse(
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+        TString&& errorMessage = {},
+        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
+    )
+        : TCreateTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+    {
+    }
+};
+
 struct TCreateTopicSettings {
+    TString Database;
+    TString PeerName;
     Ydb::Topic::CreateTopicRequest Request;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);

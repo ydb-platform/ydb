@@ -20,7 +20,7 @@ std::optional<TContinuationToken> WaitForToken(
 
     std::optional<TContinuationToken> token;
 
-    while (!closed.load() && remainingTime > TDuration::Zero()) {
+    do {
         writer.WaitEvent().Wait(remainingTime);
 
         for (auto event : writer.GetEvents(false, std::nullopt)) {
@@ -40,7 +40,7 @@ std::optional<TContinuationToken> WaitForToken(
         }
 
         remainingTime = timeout - (TInstant::Now() - startTime);
-    }
+    } while (!closed.load() && remainingTime > TDuration::Zero());
 
     return std::nullopt;
 }

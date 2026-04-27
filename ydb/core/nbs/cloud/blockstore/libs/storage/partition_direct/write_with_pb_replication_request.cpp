@@ -16,7 +16,6 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     ui64 lsn,
     NWilson::TTraceId traceId,
     TDuration hedgingDelay,
-    TDuration timeout,
     TDuration pbufferReplyTimeout)
     : TBaseWriteRequestExecutor(
           actorSystem,
@@ -27,50 +26,23 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
           std::move(request),
           lsn,
           std::move(traceId),
-          hedgingDelay,
-          timeout)
+          hedgingDelay)
     , PbufferReplyTimeout(pbufferReplyTimeout)
 {}
 
 void TWriteWithPbReplicationRequestExecutor::Run()
 {
-    ScheduleRequestTimeoutCallback();
-    ScheduleHedging();
-    SendWriteRequestToManyPBuffers(
-        {ELocation::PBuffer0, ELocation::PBuffer1, ELocation::PBuffer2});
+    SendWriteRequestToManyPBuffers();
 }
 
-void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
+void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers()
 {
-    if (!HedgingDelay) {
-        return;
-    }
+    std::vector<ELocation> locations = {
+        ELocation::PBuffer0,
+        ELocation::PBuffer1,
+        ELocation::PBuffer2};
 
-    DirectBlockGroup->Schedule(
-        HedgingDelay,
-        [weakSelf = weak_from_this()]()
-        {
-            if (auto self = std::static_pointer_cast<
-                    TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
-            {
-                if (!self->CompletedWrites.Count()) {
-                    self->SendWriteRequestToManyPBuffers(
-                        {ELocation::PBuffer2,
-                         ELocation::HOPBuffer0,
-                         ELocation::HOPBuffer1});
-                }
-            }
-        });
-}
-
-void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
-    TVector<ELocation> locations)
-{
-    if (Promise.IsReady()) {
-        return;
-    }
-
-    TVector<ui8> hostsIndexes;
+    std::vector<ui8> hostsIndexes;
     hostsIndexes.reserve(3);
     for (auto location: locations) {
         hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
@@ -126,8 +98,9 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
-    if (CompletedWrites.Count() + availableHandOffLocations.size() <
+    std::vector<ELocation> handoffLocations(
+        {ELocation::HOPBuffer0, ELocation::HOPBuffer1});
+    if (CompletedWrites.Count() + handoffLocations.size() <
         QuorumDirectBlockGroupHostCount)
     {
         auto resultError =
@@ -152,8 +125,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
             NKikimrServices::NBS_PARTITION,
             "trying to send fallback writeRequest to %d handoff",
             i);
-
-        SendWriteRequest(availableHandOffLocations[i]);
+        SendWriteRequest(handoffLocations[i]);
     }
 }
 

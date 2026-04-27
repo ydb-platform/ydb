@@ -2,6 +2,7 @@
 
 #include "schema.h"
 
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
@@ -48,6 +49,13 @@ struct TResult : public std::pair<Ydb::StatusIds::StatusCode, TString>{
 
 std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName);
 
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& destination,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& source
+);
+
+TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList);
+TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList, const NKikimrPQ::TPQTabletConfig& config);
 
 struct TClientServiceType {
     TString Name;
@@ -60,12 +68,10 @@ TClientServiceTypes GetSupportedClientServiceTypes();
 TResult ValidatePartitionStrategy(const NKikimrPQ::TPQTabletConfig& config);
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 );
 
@@ -90,14 +96,17 @@ TResult ProcessTopicAttributes(
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings // out parameter
 );
 
-TResult ProcessAddConsumer(
+TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,
     const TClientServiceTypes& supportedClientServiceTypes,
     const bool checkServiceType,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
-TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter);
+TResult ProcessAlterConsumer(
+    Ydb::Topic::Consumer& consumer,
+    const Ydb::Topic::AlterConsumer& alter
+);
 
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,

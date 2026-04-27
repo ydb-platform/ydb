@@ -619,6 +619,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     TPhysicalShardReadSettings readSettings;
+    const auto guard = typeEnv.BindAllocator();
 
     switch(operation.GetTypeCase()){
         case NKqpProto::TKqpPhyTableOperation::kReadRanges: {

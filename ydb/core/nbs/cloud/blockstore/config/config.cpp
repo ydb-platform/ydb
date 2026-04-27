@@ -11,8 +11,7 @@ namespace {
 
 const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
 const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MicroSeconds(700);
-const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
+const auto DefaultHedgingDelay = TDuration::MilliSeconds(0);
 
 }   // namespace
 
@@ -142,20 +141,12 @@ TDuration TStorageConfig::GetTraceSamplePeriod() const
                : DefaultTraceSamplePeriod;
 }
 
-TDuration TStorageConfig::GetWriteHedgingDelay() const
+TDuration TStorageConfig::GetWriteHandoffDelay() const
 {
-    return StorageServiceConfig.HasWriteHedgingDelay()
+    return StorageServiceConfig.HasWriteHandoffDelay()
                ? TDuration::MicroSeconds(
-                     StorageServiceConfig.GetWriteHedgingDelay())
+                     StorageServiceConfig.GetWriteHandoffDelay())
                : DefaultHedgingDelay;
-}
-
-TDuration TStorageConfig::GetWriteRequestTimeout() const
-{
-    return StorageServiceConfig.HasWriteRequestTimeout()
-               ? TDuration::MilliSeconds(
-                     StorageServiceConfig.GetWriteRequestTimeout())
-               : DefaultWriteRequestTimeout;
 }
 
 TDuration TStorageConfig::GetPBufferReplyTimeout() const

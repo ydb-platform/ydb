@@ -16,8 +16,7 @@ TWriteWithDirectReplicationRequestExecutor::
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout)
+        TDuration hedgingDelay)
     : TBaseWriteRequestExecutor(
           actorSystem,
           vChunkConfig,
@@ -27,62 +26,54 @@ TWriteWithDirectReplicationRequestExecutor::
           std::move(request),
           lsn,
           std::move(traceId),
-          hedgingDelay,
-          timeout)
+          hedgingDelay)
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
-    ScheduleRequestTimeoutCallback();
-    ScheduleHedging();
     SendWriteRequest(ELocation::PBuffer0);
     SendWriteRequest(ELocation::PBuffer1);
     SendWriteRequest(ELocation::PBuffer2);
-}
 
-void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
-{
-    if (!HedgingDelay) {
-        return;
-    }
-
-    DirectBlockGroup->Schedule(
-        HedgingDelay,
-        [weakSelf = weak_from_this()]()
-        {
-            if (auto self = std::static_pointer_cast<
-                    TWriteWithDirectReplicationRequestExecutor>(
-                    weakSelf.lock()))
+    if (HedgingDelay) {
+        DirectBlockGroup->Schedule(
+            HedgingDelay,
+            [weakSelf = weak_from_this()]()
             {
-                self->SendWriteRequestsToHandoffPBuffers();
-            }
-        });
+                if (auto self = weakSelf.lock()) {
+                    std::static_pointer_cast<
+                        TWriteWithDirectReplicationRequestExecutor>(self)
+                        ->SendWriteRequestsToHandoffPBuffers();
+                }
+            });
+    }
 }
 
 void TWriteWithDirectReplicationRequestExecutor::
     SendWriteRequestsToHandoffPBuffers()
 {
-    if (Promise.IsReady()) {
-        return;
-    }
-
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
-    const size_t neededHedgingRequestsCount = std::min(
-        QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
-        availableHandOffLocations.size());
-
-    for (size_t i = 0; i < neededHedgingRequestsCount; ++i) {
-        const auto& location = availableHandOffLocations[i];
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "handoff buffer %lu since we "
+            "HOPBuffer0 since we "
             "have %lu completed writes",
-            GetLocationIndex(location),
             CompletedWrites.Count());
 
-        SendWriteRequest(location);
+        SendWriteRequest(ELocation::HOPBuffer0);
+    }
+
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteWithDirectReplicationRequestExecutor. Send write request to "
+            "HOPBuffer1 since we "
+            "have %lu completed writes",
+            CompletedWrites.Count());
+
+        SendWriteRequest(ELocation::HOPBuffer1);
     }
 }
 

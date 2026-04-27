@@ -21,6 +21,45 @@ std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
     }
 }
 
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+) {
+    targetConfig.CopyFrom(sourceConfig);
+
+    // keep previous values or set in ModifyPersqueueConfig
+    targetConfig.ClearTotalGroupCount();
+    targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+}
+
+TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList) {
+    return clustersList && clustersList->LocalCluster ? clustersList->LocalCluster->Name : "";
+}
+
+TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList, const NKikimrPQ::TPQTabletConfig& config) {
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {};
+    }
+
+    AFL_ENSURE(clustersList);
+
+    const auto localCluster = GetLocalClusterName(clustersList);
+    const auto& cluster = config.GetDC();
+
+    if (config.GetLocalDC() && !localCluster.empty() && cluster != localCluster) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Local cluster is not correct - provided '"
+            << config.GetDC() << "' instead of '" << localCluster << "'"};
+    }
+
+    const auto clusterFound = CountIf(clustersList->Clusters, [&](const auto& c) { return c.Name == cluster; });
+    if (!clusterFound)  {
+        return {Ydb::StatusIds::BAD_REQUEST,
+            TStringBuilder() << "Unknown cluster '" << cluster << "'"};
+    }
+
+    return {};
+}
+
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
         return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());
@@ -169,7 +208,7 @@ TResult ProcessTopicAttributes(
                     if (ms > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
                         return {Ydb::StatusIds::BAD_REQUEST,
                             TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << ms <<
-                            ") must be less then default limit for database " <<
+                            ") must be less than default limit for database " <<
                             DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS};
                     }
                     if (ms > 0) {
@@ -249,7 +288,7 @@ TClientServiceTypes GetSupportedClientServiceTypes() {
     return serviceTypes;
 }
 
-TResult ProcessAddConsumer(
+TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,
     const TClientServiceTypes& supportedClientServiceTypes,
@@ -265,6 +304,10 @@ TResult ProcessAddConsumer(
     }
     if (consumerName.empty()) {
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "consumer with empty name is forbidden"};
+    }
+    if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << NPQ::CLIENTID_COMPACTION_CONSUMER 
+            << " to a topic without compactification enabled"};
     }
 
     ::NKikimrPQ::TPQTabletConfig_TConsumer* consumer = config->AddConsumers();

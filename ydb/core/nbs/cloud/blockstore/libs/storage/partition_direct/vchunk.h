@@ -32,8 +32,7 @@ public:
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
-        TDuration writeHedgingDelay,
-        TDuration writeRequestTimeout,
+        TDuration writeHandoffDelay,
         TDuration traceSamplePeriod,
         NMonitoring::TDynamicCounterPtr counters);
 
@@ -98,8 +97,7 @@ private:
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
-    const TDuration WriteHedgingDelay;
-    const TDuration WriteRequestTimeout;
+    const TDuration WriteHandoffDelay;
     const TDuration TraceSamplePeriod;
 
     TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};

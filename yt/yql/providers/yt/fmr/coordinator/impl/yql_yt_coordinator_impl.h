@@ -22,7 +22,7 @@ struct TFmrCoordinatorSettings {
     // Default setting. Spetify inside default_operation_settings.yaml
     TDuration IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TDuration TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    TDuration WorkerDeadlineLease = TDuration::Seconds(25);
+    TDuration WorkerDeadlineLease = TDuration::Seconds(5);
     TDuration TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
     TDuration SessionInactivityTimeout = TDuration::Minutes(30);
     TDuration HealthCheckInterval = TDuration::Seconds(1);

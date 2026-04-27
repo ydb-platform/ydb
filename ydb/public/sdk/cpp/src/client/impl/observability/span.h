@@ -21,19 +21,13 @@ namespace NYdb::inline Dev::NObservability {
 
 class TRequestSpan {
 public:
-    TRequestSpan(const std::string& ydbClientType
+    static std::shared_ptr<TRequestSpan> Create(
+        const std::string& ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
         , const std::string& requestName
         , const std::string& discoveryEndpoint
         , const std::string& database
-        , const TLog& log = TLog()
-        , NTrace::ESpanKind kind = NTrace::ESpanKind::CLIENT
-    );
-
-    TRequestSpan(const std::string& ydbClientType
-        , std::shared_ptr<NTrace::ITracer> tracer
-        , const std::string& requestName
-        , const std::shared_ptr<TDbDriverState>& dbDriverState
+        , const TLog& log
         , NTrace::ESpanKind kind = NTrace::ESpanKind::CLIENT
     );
 
@@ -43,7 +37,8 @@ public:
         , const std::shared_ptr<TDbDriverState>& dbDriverState
     );
 
-    static std::shared_ptr<TRequestSpan> CreateForRetryAttempt(const std::string& ydbClientType
+    static std::shared_ptr<TRequestSpan> CreateForRetryAttempt(
+        const std::string& ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
         , const std::shared_ptr<TDbDriverState>& dbDriverState
         , std::uint32_t attempt
@@ -52,14 +47,29 @@ public:
 
     ~TRequestSpan() noexcept;
 
+    TRequestSpan(const TRequestSpan&) = delete;
+    TRequestSpan& operator=(const TRequestSpan&) = delete;
+
     void SetPeerEndpoint(const std::string& endpoint) noexcept;
     void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) noexcept;
     void RecordException(const std::string& type, const std::string& message, const std::string& stacktrace = {}) noexcept;
     std::unique_ptr<NTrace::IScope> Activate() noexcept;
+    void SetRetryCount(std::uint32_t count) noexcept;
 
     void End(EStatus status) noexcept;
 
 private:
+    TRequestSpan(const std::string& ydbClientType
+        , std::shared_ptr<NTrace::ITracer> tracer
+        , const std::string& requestName
+        , const std::string& discoveryEndpoint
+        , const std::string& database
+        , const TLog& log
+        , NTrace::ESpanKind kind
+    );
+
+    void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;
+
     TLog Log_;
     std::shared_ptr<NTrace::ISpan> Span_;
 };

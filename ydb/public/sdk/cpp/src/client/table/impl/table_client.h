@@ -291,11 +291,9 @@ private:
                     sessionPtr->SessionImpl_->AddQueryToCache(*dataQuery);
                 }
 
-                obs->SetPeerEndpoint(status.Endpoint);
+                obs->End(status.Status, status.Endpoint);
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
-
-                obs->End(dataQueryResult.GetStatus());
 
                 delete sessionPtr;
                 tx.reset();

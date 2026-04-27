@@ -152,9 +152,14 @@ ydb.RunWithRetry            (INTERNAL)
   `ydb.CreateSession`, `ydb.ExecuteQuery`, `ydb.ExecuteDataQuery`,
   `ydb.BeginTransaction`, `ydb.Commit`, `ydb.Rollback`,
   `ydb.ExecuteSchemeQuery`, `ydb.BulkUpsert`.
-- Retry-спаны (`SpanKind = INTERNAL`): `ydb.RunWithRetry`,
-  `ydb.Try` (по одному на каждую попытку, с атрибутами
-  `ydb.retry.attempt`, `ydb.retry.backoff_ms`).
+- Retry-спаны (`SpanKind = INTERNAL`):
+  - `ydb.RunWithRetry` — обёртка над всей retryable-логикой.
+    При фактических повторах содержит атрибут `ydb.retry.count` (общее число
+    выполненных повторов, `>= 1`).
+  - `ydb.Try` — по одному на каждую попытку. На retry-попытках содержит
+    атрибуты `ydb.retry.attempt` (`1..N`) и `ydb.retry.backoff_ms`
+    (длительность sleep перед этой попыткой). На первой (не retry) попытке
+    эти атрибуты не выставляются.
 - Общие атрибуты на всех YDB-спанах:
   - `db.system.name = ydb`
   - `db.namespace` (имя базы)
@@ -162,7 +167,8 @@ ydb.RunWithRetry            (INTERNAL)
   - `network.peer.address`, `network.peer.port` (фактический узел кластера)
 - На ошибках добавляются:
   - `db.response.status_code` — строковый статус YDB (например, `ABORTED`)
-  - `error.type` — тот же строковый статус
+  - `error.type` — категория источника ошибки: `ydb_error` (ошибка,
+    возвращённая YDB) или `transport_error` (ошибка транспортного уровня)
   - событие `exception` с `exception.type` и `exception.message`
 
 #### В Prometheus:
@@ -170,7 +176,9 @@ ydb.RunWithRetry            (INTERNAL)
   (OTel Semantic Conventions). Лейблы: `db.system.name`, `db.namespace`,
   `db.operation.name` (с префиксом `ydb.`), `ydb.client.api`
   (`Query` / `Table`). Для ошибок добавляются `db.response.status_code`
-  и `error.type`.
+  (точный YDB-статус, например `ABORTED`) и `error.type` —
+  низкокардинальная категория источника ошибки: `ydb_error` (статусы YDB-сервера)
+  или `transport_error` (клиентские/транспортные статусы).
 - `db_client_operation_requests_total` — счётчик начатых операций
   (включая каждую попытку ретрая).
 - `db_client_operation_errors_total` — счётчик неуспешных попыток.

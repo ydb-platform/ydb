@@ -112,8 +112,7 @@ public:
                 try {
                     auto result = future.GetValue();
                     const auto& resultEndpoint = result.GetEndpoint();
-                    obs->SetPeerEndpoint(!resultEndpoint.empty() ? resultEndpoint : sessionEndpoint);
-                    obs->End(result.GetStatus());
+                    obs->End(result.GetStatus(), !resultEndpoint.empty() ? resultEndpoint : sessionEndpoint);
                     return result;
                 } catch (...) {
                     obs->EndWithClientInternalError();
@@ -191,18 +190,17 @@ public:
         auto responseCb = [promise, session, obs]
             (Ydb::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
                 try {
-                    obs->SetPeerEndpoint(status.Endpoint);
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
                         NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
                         TStatus rollbackTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
-                        obs->End(rollbackTxStatus.GetStatus());
+                        obs->End(rollbackTxStatus.GetStatus(), rollbackTxStatus.GetEndpoint());
 
                         promise.SetValue(std::move(rollbackTxStatus));
                     } else {
-                        obs->End(status.Status);
+                        obs->End(status.Status, status.Endpoint);
                         promise.SetValue(TStatus(std::move(status)));
                     }
                 } catch (...) {
@@ -239,19 +237,18 @@ public:
         auto responseCb = [promise, session, obs]
             (Ydb::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
                 try {
-                    obs->SetPeerEndpoint(status.Endpoint);
                     if (response) {
                         NYdb::NIssue::TIssues opIssues;
                         NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
                         TStatus commitTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
-                        obs->End(commitTxStatus.GetStatus());
+                        obs->End(commitTxStatus.GetStatus(), commitTxStatus.GetEndpoint());
 
                         TCommitTransactionResult commitTxResult(std::move(commitTxStatus));
                         promise.SetValue(std::move(commitTxResult));
                     } else {
-                        obs->End(status.Status);
+                        obs->End(status.Status, status.Endpoint);
                         promise.SetValue(TCommitTransactionResult(TStatus(std::move(status))));
                     }
                 } catch (...) {
@@ -493,8 +490,7 @@ public:
                 );
 
                 if (Observation) {
-                    Observation->SetPeerEndpoint(session->GetEndpoint());
-                    Observation->End(EStatus::SUCCESS);
+                    Observation->End(EStatus::SUCCESS, session->GetEndpoint());
                 }
                 ScheduleReply(std::move(val));
             }
@@ -505,8 +501,7 @@ public:
                 {
                     auto val = future.ExtractValue();
                     if (obs) {
-                        obs->SetPeerEndpoint(val.GetEndpoint());
-                        obs->End(val.GetStatus());
+                        obs->End(val.GetStatus(), val.GetEndpoint());
                     }
                     promise.SetValue(std::move(val));
                 });
@@ -711,30 +706,26 @@ int64_t TQueryClient::GetCurrentPoolSize() const {
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings)
 {
-    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
-    return ctx->Execute();
+    return TRetryContextResultAsync::TPtr(
+        new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings))->Execute();
 }
 
 TAsyncStatus TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings))->Execute();
 }
 
 TAsyncStatus TQueryClient::RetryQuery(TQueryWithoutSessionFunc&& queryFunc, TRetryOperationSettings settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession(*this, std::move(queryFunc), settings))->Execute();
 }
 
 TStatus TQueryClient::RetryQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
-    return NRetry::Sync::RunSyncRetryWithParentSpan(
-        Impl_,
-        NRetry::Sync::TRetryWithSession(*this, queryFunc, settings));
+    return NRetry::Sync::TRetryWithSession(*this, queryFunc, settings).Execute();
 }
 
 TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings) {
-    return NRetry::Sync::RunSyncRetryWithParentSpan(
-        Impl_,
-        NRetry::Sync::TRetryWithoutSession(*this, queryFunc, settings));
+    return NRetry::Sync::TRetryWithoutSession(*this, queryFunc, settings).Execute();
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, const TTxControl& txControl,
@@ -744,8 +735,8 @@ TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, cons
     auto queryFunc = [&query, &txControl](TSession session, TDuration duration) -> TAsyncExecuteQueryResult {
         return session.ExecuteQuery(query, txControl, TExecuteQuerySettings().ClientTimeout(duration));
     };
-    TRetryContextResultAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
-    return ctx->Execute();
+    return TRetryContextResultAsync::TPtr(
+        new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings))->Execute();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

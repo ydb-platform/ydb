@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
 #include <util/string/cast.h>
 
@@ -65,10 +66,10 @@ std::shared_ptr<TFakeHistogram> GetDuration(
         {"db.namespace", dbNamespace},
         {"db.operation.name", operation},
         {"ydb.client.api", "Query"},
-        {"db.response.status_code", ToString(status)},
     };
     if (status != EStatus::SUCCESS) {
-        labels["error.type"] = ToString(status);
+        labels["db.response.status_code"] = ToString(status);
+        labels["error.type"] = std::string(NObservability::CategorizeErrorType(status));
     }
     return registry->GetHistogram("db.client.operation.duration", labels);
 }
@@ -150,11 +151,11 @@ TEST(QueryMetricsIntegration, CreateSessionRecordsMetrics) {
     auto session = client.GetSession().ExtractValueSync();
     ASSERT_TRUE(session.IsSuccess()) << session.GetIssues().ToString();
 
-    auto requests = GetCounter(registry, database, "db.client.operation.requests", "ydb.GetSession");
+    auto requests = GetCounter(registry, database, "db.client.operation.requests", "ydb.CreateSession");
     ASSERT_NE(requests, nullptr) << "CreateSession request counter not created";
     EXPECT_GE(requests->Get(), 1);
 
-    auto duration = GetDuration(registry, database, "ydb.GetSession", EStatus::SUCCESS);
+    auto duration = GetDuration(registry, database, "ydb.CreateSession", EStatus::SUCCESS);
     ASSERT_NE(duration, nullptr) << "CreateSession duration histogram not created";
     EXPECT_GE(duration->Count(), 1u);
 

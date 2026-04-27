@@ -21,8 +21,8 @@ class IClientImplCommon;
 
 namespace NYdb::inline Dev::NRetry {
 
-TDuration Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
-void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
+std::chrono::microseconds Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
+std::chrono::microseconds AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
     std::uint32_t retryNumber, const std::function<void()>& fn);
 
 enum class NextStep {

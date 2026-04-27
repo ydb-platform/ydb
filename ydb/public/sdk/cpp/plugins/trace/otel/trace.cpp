@@ -25,6 +25,15 @@ otel_trace::SpanKind MapSpanKind(ESpanKind kind) {
     return otel_trace::SpanKind::kInternal;
 }
 
+otel_trace::StatusCode MapSpanStatus(ESpanStatus status) {
+    switch (status) {
+        case ESpanStatus::Unset: return otel_trace::StatusCode::kUnset;
+        case ESpanStatus::Ok:    return otel_trace::StatusCode::kOk;
+        case ESpanStatus::Error: return otel_trace::StatusCode::kError;
+    }
+    return otel_trace::StatusCode::kUnset;
+}
+
 class TOtelScope : public IScope {
 public:
     TOtelScope(otel_nostd::shared_ptr<otel_trace::Span> span)
@@ -70,28 +79,8 @@ public:
         return std::make_unique<TOtelScope>(Span_);
     }
 
-    void RecordException(const std::string& type
-        , const std::string& message
-        , const std::string& stacktrace
-    ) override {
-        std::vector<std::pair<otel_nostd::string_view, otel_common::AttributeValue>> attrs;
-        attrs.reserve(3);
-        attrs.emplace_back(
-            otel_nostd::string_view("exception.type"),
-            otel_common::AttributeValue(otel_nostd::string_view(type))
-        );
-        attrs.emplace_back(
-            otel_nostd::string_view("exception.message"),
-            otel_common::AttributeValue(otel_nostd::string_view(message))
-        );
-        if (!stacktrace.empty()) {
-            attrs.emplace_back(
-                otel_nostd::string_view("exception.stacktrace"),
-                otel_common::AttributeValue(otel_nostd::string_view(stacktrace))
-            );
-        }
-        Span_->AddEvent("exception", attrs);
-        Span_->SetStatus(otel_trace::StatusCode::kError, message);
+    void SetStatus(ESpanStatus status, const std::string& description) override {
+        Span_->SetStatus(MapSpanStatus(status), description);
     }
 
 private:

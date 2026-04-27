@@ -1,5 +1,3 @@
-* Added spans and traces implementation and OpenTelemetry demo 
-
 * Added interface for export of metrics and spans, supported plugin for OpenTelemetry
 
 * Supported gRPC compression option on client side

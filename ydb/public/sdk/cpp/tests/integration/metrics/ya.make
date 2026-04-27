@@ -19,6 +19,7 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/metrics
+    ydb/public/sdk/cpp/src/client/impl/observability
 )
 
 YQL_LAST_ABI_VERSION()

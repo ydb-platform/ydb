@@ -12,24 +12,21 @@ TRequestObservation::TRequestObservation(const std::string& ydbClientType
     , const std::string& operationName
     , const std::shared_ptr<TDbDriverState>& dbDriverState
 ) : Span_(
-        std::make_shared<TRequestSpan>(ydbClientType
+        TRequestSpan::Create(ydbClientType
             , std::move(tracer)
             , operationName
-            , dbDriverState
+            , dbDriverState->DiscoveryEndpoint
+            , dbDriverState->Database
+            , dbDriverState->Log
         )
     ), Metrics_(
         std::make_shared<TRequestMetrics>(operationCollector, operationName, dbDriverState->Log)
     )
 {}
 
-void TRequestObservation::SetPeerEndpoint(const std::string& endpoint) noexcept {
+void TRequestObservation::End(EStatus status, const std::string& endpoint) noexcept {
     if (Span_) {
         Span_->SetPeerEndpoint(endpoint);
-    }
-}
-
-void TRequestObservation::End(EStatus status) noexcept {
-    if (Span_) {
         Span_->End(status);
     }
     if (Metrics_) {

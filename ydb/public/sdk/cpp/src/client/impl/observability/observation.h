@@ -17,8 +17,7 @@ public:
         , const std::shared_ptr<TDbDriverState>& dbDriverState
     );
 
-    void SetPeerEndpoint(const std::string& endpoint) noexcept;
-    void End(EStatus status) noexcept;
+    void End(EStatus status, const std::string& endpoint = "") noexcept;
     void EndWithClientInternalError() noexcept;
 
 private:

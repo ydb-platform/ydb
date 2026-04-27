@@ -51,10 +51,10 @@ protected:
             {"db.namespace", kTestDbNamespace},
             {"db.operation.name", YdbOp(op)},
             {"ydb.client.api", "Unspecified"},
-            {"db.response.status_code", ToString(status)},
         };
         if (status != EStatus::SUCCESS) {
-            labels["error.type"] = ToString(status);
+            labels["db.response.status_code"] = ToString(status);
+            labels["error.type"] = std::string(NObservability::CategorizeErrorType(status));
         }
         return Registry->GetHistogram("db.client.operation.duration", labels);
     }
@@ -248,18 +248,10 @@ TEST(RequestMetricsDbNamespaceTest, DifferentNamespacesAreSeparateMetricSeries) 
 
     auto durAlpha = registry->GetHistogram(
         "db.client.operation.duration",
-        [&] {
-            auto l = labelsAlpha("ydb.GetSession");
-            l["db.response.status_code"] = ToString(EStatus::SUCCESS);
-            return l;
-        }());
+        labelsAlpha("ydb.GetSession"));
     auto durBeta = registry->GetHistogram(
         "db.client.operation.duration",
-        [&] {
-            auto l = labelsBeta("ydb.GetSession");
-            l["db.response.status_code"] = ToString(EStatus::SUCCESS);
-            return l;
-        }());
+        labelsBeta("ydb.GetSession"));
     ASSERT_NE(durAlpha, nullptr);
     ASSERT_NE(durBeta, nullptr);
     EXPECT_EQ(durAlpha->Count(), 1u);
@@ -279,7 +271,7 @@ TEST(RequestMetricsClientAliasesTest, QueryOperationsUseOtelStandardMetrics) {
             {
                 {"db.system.name", "ydb"},
                 {"db.namespace", ""},
-                {"db.operation.name", "ExecuteQuery"},
+                {"db.operation.name", "ydb.ExecuteQuery"},
                 {"ydb.client.api", "Query"},
             }
         ),
@@ -291,7 +283,7 @@ TEST(RequestMetricsClientAliasesTest, QueryOperationsUseOtelStandardMetrics) {
             {
                 {"db.system.name", "ydb"},
                 {"db.namespace", ""},
-                {"db.operation.name", "ExecuteQuery"},
+                {"db.operation.name", "ydb.ExecuteQuery"},
                 {"ydb.client.api", "Query"},
             }
         ),
@@ -303,9 +295,8 @@ TEST(RequestMetricsClientAliasesTest, QueryOperationsUseOtelStandardMetrics) {
             {
                 {"db.system.name", "ydb"},
                 {"db.namespace", ""},
-                {"db.operation.name", "ExecuteQuery"},
+                {"db.operation.name", "ydb.ExecuteQuery"},
                 {"ydb.client.api", "Query"},
-                {"db.response.status_code", ToString(EStatus::SUCCESS)},
             }
         ),
         nullptr
@@ -351,7 +342,6 @@ TEST(RequestMetricsClientAliasesTest, TableOperationsUseOtelStandardMetrics) {
                 {"db.namespace", ""},
                 {"db.operation.name", "ydb.ExecuteDataQuery"},
                 {"ydb.client.api", "Table"},
-                {"db.response.status_code", ToString(EStatus::SUCCESS)},
             }
         ),
         nullptr

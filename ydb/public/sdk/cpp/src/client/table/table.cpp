@@ -1590,27 +1590,21 @@ TTypeBuilder TTableClient::GetTypeBuilder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings))->Execute();
 }
 
 TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings))->Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    return NRetry::Sync::RunSyncRetryWithParentSpan(
-        Impl_,
-        NRetry::Sync::TRetryWithoutSession(*this, operation, settings)
-    );
+    return NRetry::Sync::TRetryWithoutSession(*this, operation, settings).Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    return NRetry::Sync::RunSyncRetryWithParentSpan(
-        Impl_,
-        NRetry::Sync::TRetryWithSession(*this, operation, settings)
-    );
+    return NRetry::Sync::TRetryWithSession(*this, operation, settings).Execute();
 }
 
 NThreading::TFuture<void> TTableClient::Stop() {

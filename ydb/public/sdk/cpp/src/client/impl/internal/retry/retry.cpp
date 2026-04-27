@@ -28,16 +28,18 @@ TBackoffDuration CalcBackoffTime(const TBackoffSettings& settings, std::uint32_t
 
 }
 
-TDuration Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
+std::chrono::microseconds Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber) {
     const auto duration = CalcBackoffTime(settings, retryNumber);
     std::this_thread::sleep_for(duration);
-    return TDuration::MicroSeconds(static_cast<ui64>(duration.count()));
+    return std::chrono::duration_cast<std::chrono::microseconds>(duration);
 }
 
-void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
+std::chrono::microseconds AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
     std::uint32_t retryNumber, const std::function<void()>& fn)
 {
-    client->ScheduleTask(fn, std::chrono::duration_cast<TDeadline::Duration>(CalcBackoffTime(settings, retryNumber)));
+    const auto duration = CalcBackoffTime(settings, retryNumber);
+    client->ScheduleTask(fn, std::chrono::duration_cast<TDeadline::Duration>(duration));
+    return std::chrono::duration_cast<std::chrono::microseconds>(duration);
 }
 
 }

@@ -13,13 +13,11 @@ PEERDIR(
     library/cpp/testing/common
     library/cpp/testing/gtest
     ydb/public/api/grpc
-    ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(
     table_ut.cpp
-    table_spans_ut.cpp
 )
 
 END()

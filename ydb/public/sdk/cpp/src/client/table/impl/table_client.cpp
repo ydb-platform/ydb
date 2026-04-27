@@ -421,9 +421,8 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();
             }
-            obs->SetPeerEndpoint(status.Endpoint);
+            obs->End(status.Status, status.Endpoint);
             TCreateSessionResult val(TStatus(std::move(status)), std::move(session));
-            obs->End(val.GetStatus());
             createSessionPromise.SetValue(std::move(val));
         };
 
@@ -797,8 +796,7 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, co
 
     return future.Apply([obs](NThreading::TFuture<TStatus> f) mutable {
         auto status = f.ExtractValue();
-        obs->SetPeerEndpoint(status.GetEndpoint());
-        obs->End(status.GetStatus());
+        obs->End(status.GetStatus(), status.GetEndpoint());
         return status;
     });
 }
@@ -826,10 +824,9 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
                 txId = result.tx_meta().id();
             }
 
-            obs->SetPeerEndpoint(status.Endpoint);
+            obs->End(status.Status, status.Endpoint);
             TBeginTransactionResult beginTxResult(TStatus(std::move(status)),
                 TTransaction(session, txId));
-            obs->End(beginTxResult.GetStatus());
             promise.SetValue(std::move(beginTxResult));
         };
 
@@ -872,9 +869,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
                 }
             }
 
-            obs->SetPeerEndpoint(status.Endpoint);
+            obs->End(status.Status, status.Endpoint);
             TCommitTransactionResult commitTxResult(TStatus(std::move(status)), queryStats);
-            obs->End(commitTxResult.GetStatus());
             promise.SetValue(std::move(commitTxResult));
         };
 
@@ -910,8 +906,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
 
     return future.Apply([obs](TAsyncStatus fut) {
         auto status = fut.GetValue();
-        obs->SetPeerEndpoint(status.GetEndpoint());
-        obs->End(status.GetStatus());
+        obs->End(status.GetStatus(), status.GetEndpoint());
         return status;
     });
 }
@@ -1188,9 +1183,8 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto promise = NewPromise<TBulkUpsertResult>();
     auto extractor = [promise, obs](google::protobuf::Any* any, TPlainStatus status) mutable {
         Y_UNUSED(any);
-        obs->SetPeerEndpoint(status.Endpoint);
+        obs->End(status.Status, status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
-        obs->End(val.GetStatus());
         promise.SetValue(std::move(val));
     };
 
@@ -1240,9 +1234,8 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto extractor = [promise, obs]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Y_UNUSED(any);
-            obs->SetPeerEndpoint(status.Endpoint);
+            obs->End(status.Status, status.Endpoint);
             TBulkUpsertResult val(TStatus(std::move(status)));
-            obs->End(val.GetStatus());
             promise.SetValue(std::move(val));
         };
 

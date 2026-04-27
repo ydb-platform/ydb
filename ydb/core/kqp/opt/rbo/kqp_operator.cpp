@@ -804,7 +804,6 @@ TString TOpSort::ToString(TExprContext& ctx) {
 /**
  * OpAggregate operator methods
  */
-
 TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
                            const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos)
     : IUnaryOperator(EOperator::Aggregate, pos, input)
@@ -812,6 +811,16 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
     , KeyColumns(keyColumns)
     , AggregationPhase(aggPhase)
     , DistinctAll(distinctAll) {
+}
+
+TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
+                           const EOpPhase aggPhase, bool distinctAll, const std::optional<i64>& memoryLimit, const TPhysicalOpProps& props, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, props, input)
+    , AggregationTraitsList(aggTraitsList)
+    , KeyColumns(keyColumns)
+    , AggregationPhase(aggPhase)
+    , DistinctAll(distinctAll)
+    , MemoryLimit(memoryLimit) {
 }
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
@@ -859,8 +868,8 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     TStringBuilder strBuilder;
     strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") as "
-                   << AggregationTraitsList[i].ResultColName.GetFullName();
+        strBuilder << AggregationTraitsList[i].ResultColName.GetFullName() << ": " << AggregationTraitsList[i].AggFunction << "("
+                   << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }

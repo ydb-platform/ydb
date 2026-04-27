@@ -1,32 +1,33 @@
 LIBRARY()
 
-    SRCS(
-        ddisk.cpp
-        ddisk.h
-        ddisk_actor.cpp
-        ddisk_actor.h
-        ddisk_actor_boot.cpp
-        ddisk_actor_chunks.cpp
-        ddisk_actor_connect.cpp
-        ddisk_actor_persistent_buffer.cpp
-        ddisk_actor_read_write.cpp
-        ddisk_actor_sync.cpp
-        direct_io_op.cpp
-        persistent_buffer_space_allocator.cpp
-        persistent_buffer_mon.cpp
-        segment_manager.cpp
-        write_persistent_buffers_request_actor.cpp
-    )
+SRCS(
+    ddisk.cpp
+    ddisk.h
+    ddisk_actor.cpp
+    ddisk_actor.h
+    ddisk_actor_boot.cpp
+    ddisk_actor_chunks.cpp
+    ddisk_actor_connect.cpp
+    ddisk_actor_in_mem.cpp
+    ddisk_actor_persistent_buffer.cpp
+    ddisk_actor_read_write.cpp
+    ddisk_actor_sync.cpp
+    direct_io_op.cpp
+    persistent_buffer_space_allocator.cpp
+    persistent_buffer_mon.cpp
+    segment_manager.cpp
+    write_persistent_buffers_request_actor.cpp
+)
 
-    PEERDIR(
-        ydb/core/protos
-        ydb/core/blobstorage/vdisk/common
-        ydb/library/pdisk_io
-    )
+PEERDIR(
+    ydb/core/protos
+    ydb/core/blobstorage/vdisk/common
+    ydb/library/pdisk_io
+)
 
 END()
 
 RECURSE_FOR_TESTS(
-    ut
-    ut_large
+ut
+ut_large
 )

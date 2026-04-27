@@ -21,9 +21,9 @@ namespace {
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 // Controller that tracks the maximum pages-in-flight count observed via the
-// OnPageCreated / OnPageSent hooks, which are called server-side each time a
-// new page is enqueued / dequeued for the consumer.
-// Used by TestBackpressureSlowConsumerWithLimit.
+// OnPageCreated hook, which is invoked server-side each time a new streaming
+// page is enqueued for the consumer.
+// Used by TestBackpressureSlowConsumerWithLimit and several other streaming tests.
 class TBackpressureController: public TDefaultTestsController {
 private:
     mutable TAdaptiveLock Lock;
@@ -131,8 +131,9 @@ public:
 };
 
 // Tracks per-page memory reservation sizes from DoStartReserveMemory (NSSA path).
-// Bug #2: without the page-range filter, each page reserves memory for the entire
-// portion (N × page_size), so reservations grow linearly with page number.
+// Without the page-range filter, each page would reserve memory for the entire
+// portion (N × page_size), so reservations would grow linearly with page number.
+// This controller is used to regression-test that the per-page filter is in place.
 class TMemoryReservationTrackingController: public TDefaultTestsController {
 private:
     mutable TAdaptiveLock Lock;
@@ -186,12 +187,13 @@ void TestMemoryReservationPerPage() {
     // This test verifies that DoStartReserveMemory (NSSA path) only reserves memory
     // for the current streaming page's chunks, not for the entire portion.
     //
-    // Bug #2: without the page-range filter in DoStartReserveMemory, each page's
-    // reservation covers all N pages worth of chunks, so the reservation grows
-    // linearly: page 1 → 1×size, page 2 → 2×size, ..., page N → N×size.
+    // Regression check: without the page-range filter in DoStartReserveMemory,
+    // each page's reservation would cover all N pages worth of chunks, so the
+    // reservation would grow linearly: page 1 → 1×size, page 2 → 2×size, ...,
+    // page N → N×size.
     //
-    // After the fix, each page should reserve approximately the same amount
-    // (1 page worth of data), bounded by a small constant factor.
+    // With the filter in place, each page should reserve approximately the same
+    // amount (1 page worth of data), bounded by a small constant factor.
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -260,8 +262,8 @@ void TestMemoryReservationPerPage() {
     Cerr << "]" << Endl;
 
     // The NSSA path (DoStartReserveMemory) is only triggered when the program uses
-    // the NSSA graph. If no reservations were recorded, the old path was used instead
-    // and this test is a no-op (the old path is covered by TestResourceGuardsAccumulation).
+    // the NSSA graph. If no reservations were recorded, the legacy path was used
+    // instead and this test is a no-op for the current configuration.
     if (reservations.size() < 2) {
         Cerr << "MemoryReservationPerPage: NSSA path not triggered, skipping assertions." << Endl;
         return;
@@ -270,9 +272,10 @@ void TestMemoryReservationPerPage() {
     // Streaming must have produced multiple pages for this test to be meaningful.
     UNIT_ASSERT_GT(totalPagesCreated, 3u);
 
-    // BUG DETECTION: If reservations are monotonically increasing, Bug #2 is present.
-    // With the bug: page K reserves K × page_size bytes (entire portion up to page K).
-    // After the fix: each page reserves approximately 1 × page_size bytes.
+    // Regression check: if reservations are monotonically increasing, the
+    // page-range filter in DoStartReserveMemory has regressed.
+    // Without the filter: page K reserves K × page_size bytes (entire portion up to page K).
+    // With the filter: each page reserves approximately 1 × page_size bytes.
     //
     // We use a soft check: the max reservation should not exceed 3× the first page's
     // reservation. With the bug, it would be N × firstPageReservation.
@@ -849,13 +852,11 @@ void TestReverseStreamingScan() {
     }
 }
 
-// Verifies that reverse streaming terminates after the first page (index 0)
-// instead of restarting it forever.
-// Reverse streaming smoke test with bounded page count.
+// Reverse streaming smoke test with a small, bounded page count.
 //
-// This test keeps the dataset small enough to finish quickly while still forcing
-// multiple reverse-streaming pages. It validates that reverse streaming completes
-// and returns all rows.
+// Keeps the dataset small enough to finish quickly while still forcing multiple
+// reverse-streaming pages (via memoryLimit=1 and MinRecordsCount=1). Validates
+// that reverse streaming terminates correctly and returns all rows.
 void TestReverseStreamingSmallBounded() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1811,23 +1812,22 @@ void TestBlobReadErrorDuringStreaming() {
     UNIT_ASSERT_GT(batchesBeforeError, 0u);
 }
 
-// BUG DIAGNOSTIC TEST: Verifies that ResourceGuards accumulate across streaming pages.
+// Regression test: verifies that ResourceGuards do NOT accumulate across streaming pages.
 //
-// In the current implementation, ContinueCursor() resets stage data for the next page
-// but does NOT clear ResourceGuards. Each page's TAllocateMemoryStep appends new guards
-// via RegisterAllocationGuard(). Without clearing, guards accumulate across pages:
+// Historically, ContinueCursor() reset stage data for the next page but did not clear
+// ResourceGuards. Each page's TAllocateMemoryStep appends new guards via
+// RegisterAllocationGuard(); without clearing, guards would accumulate across pages:
 //   - Page 0: N guards
 //   - Page 1: 2*N guards (N from page 0 + N from page 1)
 //   - Page 2: 3*N guards
 //   - ...
 //   - Page K: (K+1)*N guards
 //
-// This test detects the bug by tracking guard counts per page via the
-// OnStreamingPageResult hook. If the guard count is monotonically increasing,
-// the bug is confirmed.
+// This test tracks guard counts per page via the OnStreamingPageResult hook and
+// asserts that counts stay roughly constant (i.e. guards are cleared between pages).
 //
-// EXPECTED BEHAVIOR (after fix): Guard counts should be roughly constant per page.
-// ACTUAL BEHAVIOR (with bug): Guard counts grow monotonically with each page.
+// EXPECTED BEHAVIOR (current, fixed): guard counts are roughly constant per page.
+// REGRESSION SIGNATURE: guard counts grow monotonically with each page.
 void TestResourceGuardsAccumulation() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1911,9 +1911,9 @@ void TestResourceGuardsAccumulation() {
     // Streaming must have produced multiple pages for this test to be meaningful.
     UNIT_ASSERT_GT(totalPagesCreated, 3u);
 
-    // BUG DETECTION: If guard counts are monotonically increasing, the bug is confirmed.
-    // This assertion will FAIL with the current code (confirming the bug).
-    // After the fix (adding ResourceGuards.clear() in ContinueCursor), this should pass.
+    // Regression check: guard counts must not accumulate across streaming pages
+    // with the current implementation, which clears ResourceGuards in ContinueCursor().
+    // If this assertion starts failing, it likely means that fix regressed.
     //
     // We use a soft check: the max guard count across all pages should not exceed
     // 3x the guard count of the first page. With the bug, it would be N*firstPageGuards

@@ -1,8 +1,8 @@
 #include "meta.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>

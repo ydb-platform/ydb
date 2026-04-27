@@ -119,14 +119,18 @@ public:
             return false;
         }
         // Check if at least 3 consecutive pages show strictly increasing guard counts.
-        ui32 increasingRuns = 0;
+        // A run of 3 strictly increasing values requires 2 consecutive increasing transitions.
+        ui32 currentRun = 1;
         for (size_t i = 1; i < GuardCountsPerPage.size(); ++i) {
             if (GuardCountsPerPage[i] > GuardCountsPerPage[i - 1]) {
-                ++increasingRuns;
+                if (++currentRun >= 3) {
+                    return true;
+                }
+            } else {
+                currentRun = 1;
             }
         }
-        // If more than half the transitions are increasing, it's a leak.
-        return increasingRuns > GuardCountsPerPage.size() / 2;
+        return false;
     }
 };
 

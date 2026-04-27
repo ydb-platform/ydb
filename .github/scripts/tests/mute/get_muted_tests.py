@@ -47,6 +47,8 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         testowners_table = ydb_wrapper.get_table_path("testowners")
         
         if job_id and branch:  # extend all tests from main by new tests from pr
+            if not build_type:
+                raise ValueError("build_type is required when job_id and branch are set")
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
             print(f'   - job_id: {job_id}')
             print(f'   - branch: {branch}')
@@ -70,6 +72,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
+                and build_type = '{build_type}'
                 and run_timestamp >= CurrentUtcDate() - 30*Interval("P1D")
                 and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
         )

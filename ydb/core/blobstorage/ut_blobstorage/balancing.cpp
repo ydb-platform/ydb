@@ -53,7 +53,7 @@ struct TTestEnv {
     }
 
     static TString PrepareData(const ui32 dataLen, const ui32 start) {
-        TString data(::Reserve(dataLen));
+        TString data(::Reserve(dataLen) );
         for (ui32 i = 0; i < dataLen; ++i) {
             data.push_back('a' + (start + i) % 26);
         }

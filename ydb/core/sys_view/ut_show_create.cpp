@@ -2163,7 +2163,7 @@ Y_UNIT_TEST(TableColumnAlterObject) {
 }
 
 Y_UNIT_TEST(TableFamilyParameters) {
-    TTestEnv env(1, 4, {.StoragePools = 4, .ShowCreateTable = true, .EnableTableCacheModes = true});
+    TTestEnv env(1, 4, {.StoragePools = 4, .ShowCreateTable = true, .EnableTableCacheModes = true, .EnableLocalMinMaxIndex = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2294,6 +2294,139 @@ Y_UNIT_TEST(TableFamilyParameters) {
                 FAMILY `default` (CACHE_MODE = 'in_memory'),
                 PRIMARY KEY (`Key`)
             );
+        )"
+    );
+}
+
+Y_UNIT_TEST(TestMinMaxIndex) {
+    TTestEnv env(1, 4, {.StoragePools = 4, .ShowCreateTable = true, .EnableTableCacheModes = true, .EnableLocalMinMaxIndex = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/olapTableMinMax`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_minmax LOCAL USING min_max
+                    ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", "olapTableMinMax",
+        R"(
+            CREATE TABLE `olapTableMinMax` (
+                `timestamp` Timestamp NOT NULL,
+                `resource_id` Utf8,
+                `uid` Utf8 NOT NULL,
+                PRIMARY KEY (`timestamp`, `uid`)
+            )
+            PARTITION BY HASH(`timestamp`, `uid`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+
+            ALTER TABLE `/Root/olapTableMinMax` ADD INDEX `idx_minmax` LOCAL USING min_max ON (`resource_id`);
+        )"
+    );
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/olapTableMinMax`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+
+            ALTER TABLE `/Root/olapTableMinMax` ADD INDEX `idx_minmax_via_alter_table` LOCAL USING min_max ON (`resource_id`);
+
+        )", "olapTableMinMax",
+        R"(
+            CREATE TABLE `olapTableMinMax` (
+                `timestamp` Timestamp NOT NULL,
+                `resource_id` Utf8,
+                `uid` Utf8 NOT NULL,
+                PRIMARY KEY (`timestamp`, `uid`)
+            )
+            PARTITION BY HASH(`timestamp`, `uid`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+
+            ALTER TABLE `/Root/olapTableMinMax` ADD INDEX `idx_minmax_via_alter_table` LOCAL USING min_max ON (`resource_id`);
+        )"
+    );
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/olapTableMinMax`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_minmax LOCAL USING min_max
+                    ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ALTER TABLE `/Root/olapTableMinMax` DROP INDEX `idx_minmax`;
+        )", "olapTableMinMax",
+        R"(
+            CREATE TABLE `olapTableMinMax` (
+                `timestamp` Timestamp NOT NULL,
+                `resource_id` Utf8,
+                `uid` Utf8 NOT NULL,
+                PRIMARY KEY (`timestamp`, `uid`)
+            )
+            PARTITION BY HASH(`timestamp`, `uid`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+        )"
+    );
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/olapTableMinMax`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_minmax LOCAL USING min_max
+                    ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ALTER TABLE `/Root/olapTableMinMax` RENAME INDEX `idx_minmax` TO `idx_minmax_renamed`;
+        )", "olapTableMinMax",
+        R"(
+            CREATE TABLE `olapTableMinMax` (
+                `timestamp` Timestamp NOT NULL,
+                `resource_id` Utf8,
+                `uid` Utf8 NOT NULL,
+                PRIMARY KEY (`timestamp`, `uid`)
+            )
+            PARTITION BY HASH(`timestamp`, `uid`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+
+            ALTER TABLE `/Root/olapTableMinMax` ADD INDEX `idx_minmax_renamed` LOCAL USING min_max ON (`resource_id`);
         )"
     );
 }

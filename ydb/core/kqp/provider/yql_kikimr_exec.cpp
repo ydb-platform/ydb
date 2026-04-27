@@ -4,6 +4,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -2395,6 +2396,13 @@ public:
                                 }
 
                                 add_index->mutable_local_bloom_ngram_filter_index();
+                            } else if (type == "localMinMax") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_min_max_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2485,6 +2493,9 @@ public:
                                             FillLocalBloomNgramFilterSetting(
                                                 localBloomNgramFilterDesc,
                                                 name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                                             break;
                                         }
                                         default:
@@ -2590,6 +2601,27 @@ public:
                             }
 
                             break;
+                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                 NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return SyncError();
+                            }
+
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(add_index->data_columns())));
+                                return SyncError();
+                            }
+
+                            if (add_index->index_columns_size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(add_index->index_columns())));
+                                return SyncError();
+                            }
+
+                            break;
+                        }
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();
@@ -2640,6 +2672,29 @@ public:
                         : 0;
 
                     if (table.Metadata->StoreType == EStoreType::Column) {
+                        const auto indexIter = std::find_if(table.Metadata->OlapIndexes.begin(), table.Metadata->OlapIndexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.GetName() == alterIndexName;
+                        });
+                        if (indexIter == table.Metadata->OlapIndexes.end()) {
+                            TString allOlapIndexes = "[";
+                            for(auto& olapIndex: table.Metadata->OlapIndexes) {
+                                allOlapIndexes += olapIndex.GetName() + ", ";
+                            }
+                            allOlapIndexes.pop_back();
+                            allOlapIndexes.pop_back();
+                            allOlapIndexes += "]";
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " does not exist in table " << table.Metadata->Name << ". Only these do exist: " << allOlapIndexes));
+                            return SyncError();
+                        }
+
+                        if (indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter && indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter ) {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " is " << indexIter->GetClassName() << " index. "
+                                 << "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
+                            return SyncError();
+                        }
+
                         if (tableSettingsCount > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                 "ALTER INDEX option 'tableSettings' is not supported for column tables; use 'indexSettings'"));
@@ -2651,43 +2706,23 @@ public:
                                 "ALTER INDEX for column tables requires non-empty option 'indexSettings'"));
                             return SyncError();
                         }
-
-                        TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
-                        TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
-                        bool useBloomFilter = false;
-
-                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
-                        for (auto&& is : alterIndexSettings) {
-                            YQL_ENSURE(is.Value().Maybe<TCoAtom>());
-                            const auto& nameAtom = is.Name();
-                            const auto& valueAtom = is.Value().Cast<TCoAtom>();
-                            TString ngramErr;
-                            FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), ngramErr);
-                            if (ngramErr) {
-                                TString bloomErr;
-                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
-                                if (bloomErr) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
-                                    return SyncError();
-                                }
-
-                                useBloomFilter = true;
-                            }
-                        }
-
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
 
-                        if (!useBloomFilter) {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                    "Local bloom ngram filter index support is disabled"));
-                                return SyncError();
+                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
+                        TString err;
+                        if (indexIter->GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter) {
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), err);
+                                if (!err.empty()){
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()), TStringBuilder() << "invalid parameter for bloom filter index: " << err));
+                                    return SyncError();
+                                }
                             }
-
-                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
-                        } else {
                             if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom filter index support is disabled"));
@@ -2698,7 +2733,30 @@ public:
                             if (localBloomFilterDesc.FalsePositiveProbability) {
                                 proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
                             }
+                        } else {
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+                                FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), err);
+                                if (!err.empty()){
+                                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()), TStringBuilder() << "invalid parameter for bloom ngram filter index: " << err));
+                                    return SyncError();
+                                }
+
+                            }
+                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom ngram filter index support is disabled"));
+                                return SyncError();
+                            }
+
+                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
+
                         }
+
                     } else {
                         const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
                             return index.Name == alterIndexName;

@@ -328,6 +328,9 @@ private:
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomNgramFilterIndex:
             explain = "Local bloom indexes are not supported by index build operation";
             return false;
+        case Ydb::Table::TableIndex::TypeCase::kLocalMinMaxIndex:
+            explain = "Local min_max index is not supported by index build operation";
+            return false;
         };
 
         buildInfo.IndexName = index.name();

@@ -89,6 +89,7 @@ struct TIndexDescription {
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
+        LocalMinMax = 9,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -145,6 +146,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -185,6 +187,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -277,6 +280,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -323,6 +327,7 @@ struct TIndexDescription {
                 return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return false;
         }
     }
@@ -339,6 +344,7 @@ struct TIndexDescription {
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return {};
         }
         return {};
@@ -721,6 +727,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
 
+    TVector<NKikimrSchemeOp::TOlapIndexDescription> OlapIndexes;
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
@@ -854,12 +861,16 @@ struct TKikimrTableMetadata : public TThrRefBase {
                 implTable = implTable->Next;
             } while (implTable);
         }
+
+        for(auto& index: OlapIndexes) {
+            *message->AddOlapIndexes() = index;
+        }
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {

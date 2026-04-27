@@ -217,6 +217,7 @@ message TKqpTableMetadataProto {
     optional uint64 RecordsCount = 13;
     optional uint64 DataSize = 14;
     optional bool StatsLoaded = 15;
+    repeated NKikimrSchemeOp.TOlapIndexDescription OlapIndexes = 16;
 }
 
 message TRlPath {

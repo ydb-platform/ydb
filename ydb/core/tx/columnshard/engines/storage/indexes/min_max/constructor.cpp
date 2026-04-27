@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreateIndexMeta(

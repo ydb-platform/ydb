@@ -16,7 +16,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
-
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 
@@ -1238,6 +1238,13 @@ private:
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
+            } else if (type == "localMinMax") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalMinMax;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1246,6 +1253,13 @@ private:
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                     "Local bloom ngram indexes are supported only for column tables"));
+                return TStatus::Error;
+            }
+
+            if (indexType == TIndexDescription::EType::LocalMinMax &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                 return TStatus::Error;
             }
 
@@ -1307,6 +1321,9 @@ private:
                         FillLocalBloomNgramFilterSetting(
                             localBloomNgramFilterDescription,
                             name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalMinMax: {
                         break;
                     }
                     default:
@@ -1402,6 +1419,25 @@ private:
                     }
 
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
+                    break;
+                }
+                case TIndexDescription::EType::LocalMinMax: {
+                    if (!dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (meta->StoreType != EStoreType::Column) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (indexColums.size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    
                     break;
                 }
             }

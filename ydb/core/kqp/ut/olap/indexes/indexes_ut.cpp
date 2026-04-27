@@ -2122,6 +2122,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 uid Utf8,
                 resource_id Utf8,
                 message Utf8,
+                level Int32,
+                is_active Bool,
                 PRIMARY KEY (id)
             )
             PARTITION BY HASH(id)
@@ -2143,26 +2145,36 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
         )");
 
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_level_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "level", "ngramm_size" : 3, "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_active_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "is_active", "false_positive_probability" : 0.01}`);
+        )");
+
         if (UseQueryService) {
             auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(R"(
                 --!syntax_v1
-                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message) VALUES
-                    (1, "uid_1", "res_a", "alpha"),
-                    (2, "uid_2", "res_b", "beta"),
-                    (3, "uid_3", "res_c", "gamma"),
-                    (4, "uid_4", "res_b", "delta");
+                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message, level, is_active) VALUES
+                    (1, "uid_1", "res_a", "alpha", 10, true),
+                    (2, "uid_2", "res_b", "beta", 20, false),
+                    (3, "uid_3", "res_c", "gamma", 10, true),
+                    (4, "uid_4", "res_b", "delta", 30, false);
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         } else {
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
-                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message) VALUES
-                    (1, "uid_1", "res_a", "alpha"),
-                    (2, "uid_2", "res_b", "beta"),
-                    (3, "uid_3", "res_c", "gamma"),
-                    (4, "uid_4", "res_b", "delta");
+                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message, level, is_active) VALUES
+                    (1, "uid_1", "res_a", "alpha", 10, true),
+                    (2, "uid_2", "res_b", "beta", 20, false),
+                    (3, "uid_3", "res_c", "gamma", 10, true),
+                    (4, "uid_4", "res_b", "delta", 30, false);
             )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -2193,9 +2205,19 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE message LIKE "%ta%"
         )", "[[2u;]]");
 
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE level = 10
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE is_active = true
+        )", "[[2u;]]");
+
         auto tableDesc = client.Ls("/Root/indexTypesTable");
         auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
-        std::unordered_set<TString> expectedIndexNames{"idx_uid_bf", "idx_resource_bf", "idx_message_ngram"};
+        std::unordered_set<TString> expectedIndexNames{"idx_uid_bf", "idx_resource_bf", "idx_message_ngram", "idx_level_ngram", "idx_active_bf"};
         UNIT_ASSERT_VALUES_EQUAL(indexes.size(), expectedIndexNames.size());
         for (auto&& index : indexes) {
             UNIT_ASSERT(expectedIndexNames.erase(index.GetName()));
@@ -2215,7 +2237,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             CREATE TABLE `/Root/indexUnsupportedTypesTable`
             (
                 id Int32 NOT NULL,
-                level Int32,
+                payload_yson Yson,
+                payload_json Json,
                 PRIMARY KEY (id)
             )
             PARTITION BY HASH(id)
@@ -2225,9 +2248,18 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/indexUnsupportedTypesTable` (TYPE TABLE) SET (
                 ACTION=UPSERT_INDEX,
-                NAME=idx_level_ngram,
+                NAME=idx_yson_ngram,
                 TYPE=BLOOM_NGRAMM_FILTER,
-                FEATURES=`{"column_name" : "level", "ngramm_size" : 3, "false_positive_probability" : 0.01}`
+                FEATURES=`{"column_name" : "payload_yson", "ngramm_size" : 3, "false_positive_probability" : 0.01}`
+            );
+        )", "column type");
+
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexUnsupportedTypesTable` (TYPE TABLE) SET (
+                ACTION=UPSERT_INDEX,
+                NAME=idx_json_bloom,
+                TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "payload_json", "false_positive_probability" : 0.01}`
             );
         )", "column type");
 

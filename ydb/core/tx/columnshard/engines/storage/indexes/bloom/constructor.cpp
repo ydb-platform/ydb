@@ -7,11 +7,35 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+namespace {
+
+bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
+    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        return false;
+    }
+
+    switch (typeId) {
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            return false;
+        default:
+            return true;
+    }
+}
+
+} // namespace
+
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
     if (!columnInfo) {
         errors.AddError("no column with name " + GetColumnName());
+        return nullptr;
+    }
+
+    if (!IsSupportedTypeForEquals(columnInfo->GetType().GetTypeId())) {
+        errors.AddError(Sprintf("inappropriate column type for bloom index: %s", columnInfo->GetTypeName().c_str()));
         return nullptr;
     }
 

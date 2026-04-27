@@ -146,7 +146,7 @@ public:
         }
 
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            if (Clusters->IsFatalFormatError(row.Get(0).AsRef())) {
+            if (!row.Get(0).AsRef().empty()) {
                 InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
             }
             return EScan::Final;

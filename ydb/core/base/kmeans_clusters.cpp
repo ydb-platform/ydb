@@ -410,16 +410,6 @@ public:
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
-    bool IsFatalFormatError(const TArrayRef<const char>& data) override {
-        if (!data.size() || FormatByte != data.back()) {
-            return false;
-        }
-        if (IsBitQuantized()) {
-            return !(data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]));
-        }
-        return data.size() != 1 + sizeof(TCoord) * Dimensions;
-    }
-
     TString FormatError(const TArrayRef<const char>& data) override {
         if (!data.size()) {
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;

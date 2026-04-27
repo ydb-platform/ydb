@@ -501,7 +501,7 @@ protected:
 
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            if (Clusters->IsFatalFormatError(embedding)) {
+            if (!embedding.empty()) {
                 InvalidEmbeddingError = Clusters->FormatError(embedding);
             }
             return;
@@ -537,7 +537,7 @@ protected:
         }
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
-            if (Clusters->IsFatalFormatError(embedding)) {
+            if (!embedding.empty()) {
                 InvalidEmbeddingError = Clusters->FormatError(embedding);
             }
             return;

@@ -1862,18 +1862,18 @@ namespace Tests {
     TServer::~TServer() {
         ShutdownGRpc();
 
+        if (Runtime) {
+            WaitFinalization();
+            SysViewsRosterUpdateObserver.Remove();
+            Runtime->CleanupActorSystems();
+        }
+
         if (YqSharedResources) {
             YqSharedResources->Stop();
         }
 
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
-        }
-
-        if (Runtime) {
-            WaitFinalization();
-            SysViewsRosterUpdateObserver.Remove();
-            Runtime.Destroy();
         }
 
         if (FederatedQuerySetupDriver_) {
@@ -1891,6 +1891,10 @@ namespace Tests {
             // Stop requests and wait for their completion
             Driver->Stop(true);
             Driver.Reset();
+        }
+
+        if (Runtime) {
+            Runtime.Destroy();
         }
     }
 

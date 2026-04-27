@@ -1,13 +1,50 @@
 from __future__ import annotations
-from typing import Set, Tuple
-import operator
+import os
 import re
 import xml.etree.ElementTree as ET
 import sys
-import yaml
 import json
 
-from junit_utils import add_junit_property
+CONFIG_DIR = os.path.join('.github', 'config')
+MUTE_CONFIG = os.path.join(CONFIG_DIR, 'mute_config.json')
+
+def _normalize_relative_path(path: str) -> str:
+    return path.replace('\\', '/')
+
+
+def _repo_root_from_this_file() -> str:
+    # .../<repo>/.github/scripts/tests/mute/mute_utils.py
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+
+
+def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
+    cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_CONFIG)
+    with open(cfg_path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f'{cfg_path}: expected JSON object')
+
+    raw_default = data.get('default_muted_ya_path')
+    if not isinstance(raw_default, str) or not raw_default.strip():
+        raise ValueError(f'{cfg_path}: "default_muted_ya_path" must be a non-empty string')
+    default_path = _normalize_relative_path(raw_default.strip())
+
+    per_preset: dict[str, str] = {}
+    raw_paths = data.get('muted_ya_paths', {})
+    if not isinstance(raw_paths, dict):
+        raise ValueError(f'{cfg_path}: "muted_ya_paths" must be a JSON object')
+    for preset, rel_path in raw_paths.items():
+        if not isinstance(preset, str) or not preset:
+            raise ValueError(f'{cfg_path}: "muted_ya_paths" keys must be non-empty strings')
+        if not isinstance(rel_path, str) or not rel_path.strip():
+            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset}"] must be a non-empty string')
+        per_preset[preset] = _normalize_relative_path(rel_path.strip())
+    return default_path, per_preset
+
+
+def dedicated_relative(preset: str) -> str:
+    default_path, per_preset = _load_muted_ya_path_policy()
+    return per_preset.get(preset, default_path)
 
 
 def pattern_to_re(pattern):
@@ -44,6 +81,12 @@ class MuteTestCheck:
 
 
 def mute_target(testcase):
+    try:
+        from junit_utils import add_junit_property
+    except ModuleNotFoundError:
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from junit_utils import add_junit_property
+
     err_text = []
     err_msg = None
     found = False
@@ -84,38 +127,6 @@ def mute_target(testcase):
     return True
 
 
-def remove_failure(node):
-    while 1:
-        failure = node.find("failure")
-        if failure is None:
-            break
-        node.remove(failure)
-
-
-def op_attr(node, attr, op, value):
-    v = int(node.get(attr, 0))
-    node.set(attr, str(op(v, value)))
-
-
-def inc_attr(node, attr, value):
-    return op_attr(node, attr, operator.add, value)
-
-
-def dec_attr(node, attr, value):
-    return op_attr(node, attr, operator.sub, value)
-
-
-def update_suite_info(root, n_remove_failures=None, n_remove_errors=None, n_skipped=None):
-    if n_remove_failures:
-        dec_attr(root, "failures", n_remove_failures)
-
-    if n_remove_errors:
-        dec_attr(root, "errors", n_remove_errors)
-
-    if n_skipped:
-        inc_attr(root, "skipped", n_skipped)
-
-
 def recalc_suite_info(suite):
     tests = failures = skipped = 0
     elapsed = 0.0
@@ -141,8 +152,8 @@ def _split(s: str, sep: str) -> tuple[str, str]:
     else:
         return s[:p], s[p + 1 :]
 
-def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
-    result = set()
+def get_previously_skipped_tests(report_json_path: str) -> set[tuple[str, str]]:
+    result: set[tuple[str, str]] = set()
     if report_json_path:
         with open(report_json_path, 'r') as f:
             report = json.load(f)
@@ -161,6 +172,8 @@ def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
     return result
 
 def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
+    import yaml
+
     with open(muted_txt_path) as file:
         muted_tests = file.readlines()
     previously_skipped = get_previously_skipped_tests(report_json_path)
@@ -195,5 +208,11 @@ def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> Non
 
 
 if __name__ == "__main__":
-    args = sys.argv
-    globals()[args[1]](*args[2:])
+    if len(sys.argv) == 4 and sys.argv[1] == "convert_muted_txt_to_yaml":
+        convert_muted_txt_to_yaml(sys.argv[2], sys.argv[3])
+    else:
+        print(
+            "Usage: mute_utils.py convert_muted_txt_to_yaml <muted_txt_path> <report_json_path>",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)

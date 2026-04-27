@@ -1,5 +1,6 @@
 #include "base_handler.h"
 #include "http.h"
+#include "http_dump.h"
 #include "json_proxy.h"
 #include "json_proxy_config_items.h"
 #include "json_proxy_config_updates.h"
@@ -160,35 +161,6 @@ private:
         response << "\r\n";
         response.Write(blob.data(), blob.size());
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-    }
-
-    static bool IsHiddenHeader(const TString& headerName) {
-        return stricmp(headerName.data(), "Authorization") == 0
-            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0
-            || stricmp(headerName.data(), "Session_id") == 0;
-    }
-
-    static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
-        TStringBuilder result;
-        result << "{";
-
-        result << " Method: " << request.GetMethod()
-               << " Uri: " << request.GetUri();
-
-        result << " Headers {";
-        for (const auto& header : request.GetHeaders()) {
-            if (IsHiddenHeader(header.Name())) {
-                continue;
-            }
-
-            result << " " << header.ToString();
-        }
-        result << " }";
-
-        result << " Body: " << request.GetPostContent().Head(1000);
-
-        result << " }";
-        return result;
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {

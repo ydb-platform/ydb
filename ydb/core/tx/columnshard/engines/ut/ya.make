@@ -8,6 +8,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/formats/arrow
+    ydb/core/kqp/ut/common
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat

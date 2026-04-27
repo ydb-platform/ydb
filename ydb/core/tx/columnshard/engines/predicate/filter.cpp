@@ -9,22 +9,6 @@
 
 namespace NKikimr::NOlap {
 
-std::vector<std::string> TPKRangesFilter::GetSortingColumnNames() const {
-    for (auto&& range : SortedRanges) {
-        auto fromCols = range.GetPredicateFrom().GetColumnNames();
-        if (!fromCols.empty()) {
-            return fromCols;
-        }
-
-        auto toCols = range.GetPredicateTo().GetColumnNames();
-        if (!toCols.empty()) {
-            return toCols;
-        }
-    }
-
-    return {};
-}
-
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (IsEmpty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();

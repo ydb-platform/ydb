@@ -2,6 +2,11 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/strbuf.h>
@@ -102,6 +107,78 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         const NOlap::TPKRangeFilter& pkRange = *filter->begin();
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateFrom().NumColumns(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
+    }
+
+    Y_UNIT_TEST(QueryServiceAst_And_Execute_RangeByPrefix) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+        auto kikimr = NKqp::DefaultKikimrRunner({}, appConfig);
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/RangesAstLogsQs` (
+                `timestamp` Timestamp,
+                `resource_type` Utf8,
+                `resource_id` Utf8,
+                `uid` Utf8,
+                `level` Int32,
+                PRIMARY KEY (`timestamp`, `resource_type`, `resource_id`, `uid`)
+            )
+            PARTITION BY HASH(`timestamp`, `uid`)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )").GetValueSync());
+
+        auto upsertRes = queryClient.ExecuteQuery(R"(
+            --!syntax_v1
+            UPSERT INTO `/Root/RangesAstLogsQs` (`timestamp`, `resource_type`, `resource_id`, `uid`, `level`) VALUES
+                (Timestamp("2026-04-16T03:22:00Z"), "a1", "r1", "u1", 1),
+                (Timestamp("2026-04-16T03:22:00Z"), "a1", "r2", "u2", 2),
+                (Timestamp("2026-04-16T03:30:00Z"), "a1", "r3", "u3", 3),
+                (Timestamp("2026-04-16T03:35:00Z"), "a1", "r4", "u4", 4);
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/RangesAstLogsQs`
+            WHERE (`timestamp`,`resource_type`) > (Timestamp("2026-04-16T03:21:01Z"), "a1")
+              AND (`timestamp`,`resource_type`) < (Timestamp("2026-04-16T03:36:01Z"), "a1");
+        )";
+
+        {
+            NYdb::NQuery::TExecuteQuerySettings settings;
+            settings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+            settings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+            auto explainRes = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+            UNIT_ASSERT(explainRes.GetStats().has_value());
+
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*explainRes.GetStats());
+            UNIT_ASSERT_C(!stats.query_ast().empty(), "QueryService explain: query_ast is empty");
+
+            const TString ast = stats.query_ast();
+            UNIT_ASSERT_C(ast.Contains("(declare %kqp%tx_result_binding_0_0"), ast);
+            UNIT_ASSERT_C(ast.Contains("OptionalType (OptionalType (DataType 'Timestamp"), ast);
+            UNIT_ASSERT_C(ast.Contains("OptionalType (OptionalType (DataType 'Utf8"), ast);
+            UNIT_ASSERT_C(ast.Contains("KqpBlockReadOlapTableRanges"), ast);
+            UNIT_ASSERT_C(ast.Contains("UsedKeyColumns"), ast);
+            UNIT_ASSERT_C(ast.Contains("\"timestamp\"") && ast.Contains("\"resource_type\""), ast);
+            UNIT_ASSERT_C(ast.Contains("Just (Just (Timestamp"), ast);
+            UNIT_ASSERT_C(ast.Contains("(Just (Nothing $4))") || ast.Contains("(Just (Nothing $4)"), ast);
+        }
+
+        auto execRes = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(execRes.IsSuccess(), execRes.GetIssues().ToString());
+
+        ui64 rows = 0;
+        for (const auto& rs : execRes.GetResultSets()) {
+            rows += rs.RowsCount();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 4u);
     }
 
     // scheme_tabledefs.h: "probably most used case" — full prefix on both sides, inclusive.

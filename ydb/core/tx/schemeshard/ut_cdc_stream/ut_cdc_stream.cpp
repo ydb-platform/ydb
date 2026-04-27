@@ -1697,10 +1697,30 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
+        // remember index schema-versions after the change and before reboot
+        auto getTableIndexSchemaVersion = [&](const auto& path) {
+            auto describe = DescribePath(runtime, tenantSchemeShard, path);
+            auto table = describe.GetPathDescription().GetTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(table.TableIndexesSize(), 1, table.DebugString());
+            return table.GetTableIndexes(0).GetSchemaVersion();
+        };
+        auto getIndexSchemaVersion = [&](const auto& path) {
+            auto describe = DescribePath(runtime, tenantSchemeShard, path);
+            return describe.GetPathDescription().GetTableIndex().GetSchemaVersion();
+        };
+        const ui64 tableIndexSchemaVersion = getTableIndexSchemaVersion("/MyRoot/Tenant/Table");
+        const ui64 indexSchemaVersion = getIndexSchemaVersion("/MyRoot/Tenant/Table/Index");
+        UNIT_ASSERT_VALUES_EQUAL(tableIndexSchemaVersion, indexSchemaVersion);
+
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Tenant/Table"), {
             NLs::PathExist,
         });
+
+        // check that index schema-versions after reboot are the same as before
+        UNIT_ASSERT_VALUES_EQUAL(getTableIndexSchemaVersion("/MyRoot/Tenant/Table"), tableIndexSchemaVersion);
+        UNIT_ASSERT_VALUES_EQUAL(getIndexSchemaVersion("/MyRoot/Tenant/Table/Index"), indexSchemaVersion);
     }
 
 } // TCdcStreamTests

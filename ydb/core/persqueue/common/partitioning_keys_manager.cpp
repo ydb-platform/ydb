@@ -20,14 +20,14 @@ void TPartitioningKeysManager::Add(TUint128 key, ui64 weight) {
     KeysCounter.Use(key, now);
     RemoveOldSketches(now);
     EnsureSketch(now);
-    Sketches.back().BytesSketch.Add(key, weight);
+    Sketches.back().Sketch.Add(key, weight);
 }
 
 void TPartitioningKeysManager::Add(TUint128 key, ui64 weight, TInstant now) {
     KeysCounter.Use(key, now);
     RemoveOldSketches(now);
     EnsureSketch(now);
-    Sketches.back().BytesSketch.Add(key, weight);
+    Sketches.back().Sketch.Add(key, weight);
 }
 
 void TPartitioningKeysManager::Merge(const TPartitioningKeysManager& other) {
@@ -43,7 +43,7 @@ void TPartitioningKeysManager::Merge(const TPartitioningKeysManager& other) {
             currentSketch = std::prev(Sketches.end());
         }
 
-        currentSketch->BytesSketch.Merge(sketch.BytesSketch);
+        currentSketch->Sketch.Merge(sketch.Sketch);
     }
 }
 
@@ -52,7 +52,7 @@ TUint128 TPartitioningKeysManager::GetMedianKey() {
 
     TVector<std::pair<TUint128, ui64>> keysWithWeights;
     for (const auto& sketch : Sketches) {
-        const auto& levels = sketch.BytesSketch.GetLevels();
+        const auto& levels = sketch.Sketch.GetLevels();
         for (const auto& level : levels) {
             for (const auto& item : level.Items) {
                 keysWithWeights.emplace_back(item, level.Weight);

@@ -172,6 +172,7 @@ namespace NKikimr::NKll {
         }
 
         void Merge(const TKllSketch<T>& other) {
+            N_ += other.N_;
             size_t currentLevel = other.Levels_.size() - 1;
             for (auto iter = other.Levels_.rbegin(); iter != other.Levels_.rend(); ++iter) {
                 for (const auto& item : iter->Items) {

@@ -250,7 +250,7 @@ protected:
     }
 
 protected:
-    bool IsEnabled() {
+    virtual bool IsEnabled() {
         return MaxUsagePerSec > 0;
     }
 
@@ -394,6 +394,12 @@ public:
         MaxUsagePerSec = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
         this->TWindowedAutopartitioningManager::UpdateConfig(config);
     }
+
+protected:
+    bool IsEnabled() override {
+        return TWindowedAutopartitioningManager::IsEnabled()
+            && AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnMessages();
+    }
 };
 
 class TStatefulAutopartitioningManager : public IAutopartitioningManager {
@@ -403,8 +409,8 @@ private:
 
     enum class EState : ui8 {
         NORMAL = 0,
-        SPLIT_BY_MESSAGES = 1,
-        SPLIT_BY_BYTES = 2,
+        SPLIT_BY_MESSAGES = 1 << 0,
+        SPLIT_BY_BYTES = 1 << 1,
         ANY_SPLIT = SPLIT_BY_MESSAGES | SPLIT_BY_BYTES,
     };
 

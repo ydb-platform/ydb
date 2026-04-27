@@ -29,7 +29,7 @@ private:
     static constexpr auto DEFAULT_MIN_WEIGHT = 16; // 16 bytes
 
     struct KllSketchWrapper {
-        NKll::TDynamicKllSketch<TUint128> BytesSketch;
+        NKll::TDynamicKllSketch<TUint128> Sketch;
         TInstant StartTime;
     };
 

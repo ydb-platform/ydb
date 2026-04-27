@@ -70,8 +70,7 @@ void MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSort>& sort, const TIn
     const auto currentStageId = *(sort->Props.StageId);
     if (CanPropagateOverConnection(prevStageId, currentStageId, props)) {
         // Update conection type.
-        props.StageGraph.UpdateConnection(prevStageId, currentStageId,
-                                          MakeIntrusive<TMergeConnection>(sort->GetSortElements(), props.StageGraph.GetStorageType(prevStageId)));
+        props.StageGraph.UpdateConnection(prevStageId, currentStageId, MakeIntrusive<TMergeConnection>(sort->GetSortElements()));
         // Push to stage.
         sort->Props.StageId = prevStageId;
     }
@@ -91,21 +90,6 @@ void MaybeUpdateSortElements(TVector<TSortElement>& sortElements, const TVector<
             sortElement.SortColumn = it->second;
         }
     }
-}
-
-void StripAliasFromSortElements(TVector<TSortElement>& sortElements, const TString& alias) {
-    for (auto& sortElement : sortElements) {
-        const auto sortColName = sortElement.SortColumn;
-        const auto sortAlias = sortColName.GetAlias();
-        if (sortAlias == alias) {
-            // strip alias
-            sortElement.SortColumn = TInfoUnit(sortColName.GetColumnName());
-        }
-    }
-}
-
-bool NeedsToStripAliasFromSort(const TIntrusivePtr<IOperator>& input) {
-    return input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->NeedsMap();
 }
 
 bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, ui32& sortDirection) {
@@ -170,9 +154,6 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
     ui32 sortDirecion = ESortDir::None;
 
     if (CanPushSortToStage(sort, sortInput)) {
-        if (NeedsToStripAliasFromSort(sortInput)) {
-            StripAliasFromSortElements(sort->GetSortElements(), CastOperator<TOpRead>(sortInput)->Alias);
-        }
         MaybePushToStageAndUpdateConnection(sort, sortInput, props);
         return MakeIntrusive<TOpSort>(sortInput, sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, EOpPhase::Intermediate);
     } else if (CanPropagateSortOverInput(sortInput)) {

@@ -70,6 +70,9 @@ void FinishWithError(
     }
 
     auto* sys = NActors::TActivationContext::ActorSystem();
+    // FinishWithError is used for early Propose-time rejects of topic requests.
+    // The operation does not proceed to the normal completion path in these cases,
+    // so the error cloud event is sent immediately instead of via context.OnComplete.
     auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
     sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
@@ -82,6 +85,9 @@ void ScheduleSendTopicCloudEvent(
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     if (!BuildTopicCloudEventInfo(operation, context, status, reason, info)) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "Failed to build topic cloud event info for operation: "
+                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
         return;
     }
 
@@ -104,15 +110,26 @@ TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(const TOperationId& id, const TTx
 
 bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
 {
+    switch (Transaction.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+            break;
+        default:
+            return TDone::ProgressState(context);
+    }
+
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+        "Scheduling send topic cloud event for operation: "
+            << NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType()));
+
     ScheduleSendTopicCloudEvent(
         Transaction,
         context,
         NKikimrScheme::StatusSuccess,
         TString());
 
-    TDone::ProgressState(context);
-
-    return false;
+    return TDone::ProgressState(context);
 }
 
 } // NKikimr::NSchemeShard

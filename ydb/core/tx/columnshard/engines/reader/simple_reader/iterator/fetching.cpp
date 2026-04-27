@@ -278,7 +278,8 @@ void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::I
 
 TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    // Only applies to non-in-memory portion sources.
+    // Streaming page splitting only applies to non-in-memory portion sources;
+    // in-memory sources are read in a single batch and need no paging.
     if (source->IsSourceInMemory()) {
         return true;
     }

@@ -104,14 +104,15 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
         ("has_cursor", source->HasCursor())("streaming", source->IsStreamingMode());
     // HasCursor() is the single source of truth for whether we still need to advance.
     //   HasCursor()==false: ContinueCursor() has already been invoked (e.g. by the
-    //     streaming prefetch path in TSyncPointResult::OnSourceReady), which resets
+    //     streaming prefetch path in TSyncPointResult::OnSourceReady), which extracts
     //     ScriptCursor.  Nothing to do here.
-    //   HasCursor()==true:  prefetch was skipped (backpressure limit) or streaming
-    //     is off, so advance the cursor now.
-    // Note: PrefetchTriggered is intentionally not consulted here.  ContinueCursor()
-    // unconditionally resets both ScriptCursor and PrefetchTriggered in the streaming
-    // path, so a (HasCursor && PrefetchTriggered) state cannot be observed when this
-    // ack-driven Continue() runs.
+    //   HasCursor()==true:  prefetch was skipped (backpressure limit reached) or
+    //     streaming is disabled, so advance the cursor now in response to the ack.
+    // Note: PrefetchTriggered is intentionally not consulted here. The flag exists
+    // to prevent a re-entrant double-advance inside OnSourceReady when ContinueCursor
+    // completes synchronously; by the time this ack-driven Continue() runs, the
+    // synchronous-completion window has already closed and HasCursor() alone gives
+    // the correct answer.
     if (source->HasCursor()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "call_continue_cursor")
             ("source_idx", source->GetSourceIdx())

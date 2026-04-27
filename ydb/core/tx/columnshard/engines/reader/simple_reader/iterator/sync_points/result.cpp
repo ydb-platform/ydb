@@ -42,14 +42,17 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         const bool isFinished = source->GetStageResult().IsFinished();
         if (resultChunk && resultChunk->HasData()) {
-            // In streaming mode every page is tracked for backpressure.
-            // Always set partialSourceAddress so OnSentDataFromInterval can call
-            // OnPageSent(). For the last page Continue() becomes a no-op.
+            // partialSourceAddress is the handle that lets OnSentDataFromInterval()
+            // route the client ack back to this sync point (Continue / OnPageSent).
+            //
+            // Streaming mode: set unconditionally for every page so each page is
+            //   paired with OnPageCreated()/OnPageSent() for backpressure accounting.
+            //   For the very last page Continue() becomes a no-op (HasMorePages()==false).
+            // Non-streaming mode: set only when more chunks remain in StageResult
+            //   (!isFinished); the final chunk needs no Continue() callback.
             const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
             std::optional<TPartialSourceAddress> partialSourceAddress;
             if (isStreamingMode) {
-                // Always set the address in streaming mode so every page is paired
-                // with OnPageCreated()/OnPageSent().
                 partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex(), /*streamingPage=*/true);
                 Collection->OnPageCreated();
                 // Track resource guard counts per streaming page for diagnostics.
@@ -75,11 +78,12 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetDeprecatedPortionId()));
-            // In streaming mode, prefetch the next page while sending the current one,
-            // up to MaxPagesInFlight. If the limit is reached, Continue() will resume
-            // fetching after OnPageSent(). Use HasMorePages(), not !isFinished: per-page
-            // fetch makes isFinished true after each built page.
-
+            // In streaming mode, prefetch the next page while the current one is being
+            // sent to the client, up to MaxPagesInFlight pages in flight. If the limit
+            // is reached, Continue() will resume fetching once a page is acked via
+            // OnPageSent(). Note: we use HasMorePages() instead of !isFinished because
+            // streaming builds one page per StageResult, so isFinished is true after
+            // every built page even when more pages remain in the portion.
             const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
             if (isStreamingMode && hasMorePages) {
                 if (Collection->GetPagesInFlightCount() < Collection->GetMaxPagesInFlight()) {
@@ -125,11 +129,14 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             source->MutableAs<IDataSource>()->ContinueCursor(source);
             return ESourceAction::Wait;
         } else {
-            // In streaming mode, isFinished is always true after each page
-            // (the pages deque has only one entry per streaming page).  When the
-            // current page yields no data after filtering (!HasData()), the
-            // !isFinished branch above is never taken.  We must still advance to
-            // the next page via ContinueCursor() if HasMorePages().
+            // Streaming mode special case: isFinished is true after every built
+            // page (StageResult holds exactly one page in streaming mode), so when
+            // a page yields no data after filtering (resultChunk has !HasData()),
+            // execution falls into this `else` branch instead of the !isFinished
+            // branch above. We must still advance to the next page via
+            // ContinueCursor() when HasMorePages() is true; otherwise the scan
+            // would prematurely skip remaining pages (see the BUG_streaming_premature_finish
+            // diagnostic below).
             const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
             const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
             if (isStreamingMode && hasMorePages) {

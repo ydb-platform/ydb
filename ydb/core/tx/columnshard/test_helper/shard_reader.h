@@ -129,18 +129,20 @@ public:
         ++IterationsCount;
     }
 
-    // Send TEvAbortExecution to the scan actor, simulating a client-side abort.
-    // After calling this the scan actor will call Finish(ExternalAbort) and
-    // PassAway WITHOUT sending TEvScanError to the compute actor (edge actor).
-    // Therefore the caller must NOT call Receive() after Abort() – it will block
-    // forever.  Use MarkAborted() to record the aborted state after dispatching
-    // events.
+    // Send TEvAbortExecution to the scan actor, simulating a client-side abort,
+    // and immediately transition the reader to the finished/error state.
+    //
+    // The scan actor processes TEvAbortExecution by calling Finish(ExternalAbort)
+    // and PassAway() WITHOUT sending TEvScanError to the edge actor, so a
+    // subsequent Receive() would block forever in GrabEdgeEvents. To make the
+    // misuse fail fast, Abort() sets the internal Finished flag to -1 so any
+    // subsequent Receive()/Ack() trips the AFL_VERIFY(!Finished) assertion.
+    //
+    // After calling Abort() the caller may want to drain pending events via
+    // runtime.DispatchEvents(...) so the abort message is actually delivered
+    // and processed by the actor system, but no further reader-side bookkeeping
+    // is required.
     void Abort(const TString &reason = "test abort");
-
-    // Mark the reader as aborted without waiting for an event from the scan
-    // actor.  Call this after Abort() + DispatchEvents() to record the aborted
-    // state so that IsFinished() / IsError() return the correct values.
-    void MarkAborted();
 
     bool Receive() {
         AFL_VERIFY(!Finished);

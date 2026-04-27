@@ -7,6 +7,7 @@ PEERDIR(
 SRCS(
     protobuf_printer_ut.cpp
     test_proto.proto
+    test_proto_required.proto
 )
 
 END()

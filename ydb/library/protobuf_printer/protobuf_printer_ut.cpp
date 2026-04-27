@@ -9,6 +9,7 @@
 #include "stream_helper.h"
 #include "token_field_printer.h"
 #include <ydb/library/protobuf_printer/ut/test_proto.pb.h>
+#include <ydb/library/protobuf_printer/ut/test_proto_required.pb.h>
 
 #include <library/cpp/testing/unittest/gtest.h>
 
@@ -208,20 +209,23 @@ Y_UNIT_TEST_SUITE(SecurityJsonPrinterTest) {
     }
 
     Y_UNIT_TEST(NoThrowWithMissingKeyExplicitDefaultThrowRequired) {
-        NTestProto::TComplexObject sens;
-        sens.set_sens_string("secret");
+        NTestProto::TObjectWithRequiredFields obj;
+        obj.set_required_sensitive_no_default("secret");
+        obj.set_required_non_sensitive_no_default("public");
 
         NProtobufJson::TProto2JsonConfig cfg;
         cfg.UseJsonName = true;
         cfg.MissingSingleKeyMode = NProtobufJson::TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
 
         TString actualJson;
-        EXPECT_NO_THROW(actualJson = SecureProto2JsonString(sens, cfg));
-        const auto json = ReadJsonFromString(actualJson);
-
-        EXPECT_TRUE(json.Has("sensString"));
-        EXPECT_EQ(TString("***"), json["sensString"].GetStringSafe());
-        EXPECT_FALSE(json.Has("map2"));
+        EXPECT_NO_THROW(actualJson = SecureProto2JsonString(obj, cfg));
+        EXPECT_EQ(
+            ReadJsonFromString(R"json({
+                "requiredSensitiveNoDefault": "***",
+                "requiredNonSensitiveNoDefault": "public",
+                "requiredNonSensitiveWithDefault": "non_sensitive_default"
+            })json"),
+            ReadJsonFromString(actualJson));
     }
 }
 

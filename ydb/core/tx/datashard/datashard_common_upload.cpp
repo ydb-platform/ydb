@@ -3,6 +3,7 @@
 #include "datashard_user_db.h"
 
 #include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>

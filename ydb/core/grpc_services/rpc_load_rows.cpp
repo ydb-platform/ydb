@@ -18,7 +18,6 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
-
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
 #include <algorithm>

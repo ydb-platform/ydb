@@ -4,7 +4,6 @@
 #include "execution_unit_ctors.h"
 
 #include <ydb/core/change_exchange/change_record.h>
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {

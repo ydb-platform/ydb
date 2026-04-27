@@ -2,7 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NReplication::NService {
 

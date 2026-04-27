@@ -5,13 +5,13 @@
   "mute_window_days": 4,
   "unmute_window_days": 7,
   "delete_window_days": 7,
-  "manual_unmute_issue_closed_lookback_days": 14,
-  "manual_unmute_currently_muted_lookback_days": 30,
+  "manual_unmute_issue_closed_lookback_days": 7,
+  "manual_unmute_currently_muted_lookback_days": 14,
   "default_muted_ya_path": ".github/config/muted_ya.txt",
   "muted_ya_paths": {
     "release-asan": ".github/config/muted_ya_asan.txt",
-    "release-tsan": ".github/config/muted_ya.txt",
-    "release-msan": ".github/config/muted_ya.txt"
+    "release-tsan": ".github/config/muted_ya_tsan.txt",
+    "release-msan": ".github/config/muted_ya_msan.txt"
   },
   "default_build_types": [
     "relwithdebinfo"

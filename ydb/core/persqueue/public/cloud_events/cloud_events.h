@@ -37,7 +37,6 @@ struct TCloudEvent : public NActors::TEventLocal<TCloudEvent, static_cast<ui32>(
 };
 
 /** Serialized cloud event payload (protobuf wire format); name kept for API compatibility. */
-TString BuildTopicCloudEventJson(const TCloudEventInfo& info);
 TString GetCloudEventType(const TCloudEventInfo& info);
 
 NActors::IActor* CreateCloudEventActor();

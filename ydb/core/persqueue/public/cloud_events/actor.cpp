@@ -24,13 +24,17 @@ using EStatus = yandex::cloud::events::EventStatus;
 namespace {
 
 std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
-    if (operation.HasCreatePersQueueGroup()) {
-        return "CreateTopic";
-    } else if (operation.HasAlterPersQueueGroup()) {
-        return "AlterTopic";
-    } else if (operation.HasDrop()) {
-        return "DeleteTopic";
+    switch (operation.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+            return "CreateTopic";
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+            return "AlterTopic";
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+            return "DeleteTopic";
+        default:
+            break;
     }
+
     return "";
 }
 
@@ -222,8 +226,6 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
     FillTopicEvent(ev, info, [&info](TEvent& event) {
         if (info.OperationStatus == NKikimrScheme::StatusSuccess) {
             event.set_event_status(EStatus::DONE);
-        } else if (info.OperationStatus == NKikimrScheme::StatusAccepted) {
-            event.set_event_status(EStatus::STARTED);
         } else {
             event.set_event_status(EStatus::ERROR);
             event.mutable_error()->set_message(info.Issue);
@@ -253,8 +255,6 @@ TString SerializeEvent(const TEvent& ev) {
     return data;
 }
 
-} // anonymous namespace
-
 TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
     TString data;
 
@@ -275,6 +275,8 @@ TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
 
     return data;
 }
+
+} // anonymous namespace
 
 TCloudEventsActor::TCloudEventsActor()
 {
@@ -303,13 +305,21 @@ void TCloudEventsActor::Bootstrap() {
 
 void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
     if (!EventsWriter) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "No events writer configured");
+        PassAway();
         return;
     }
 
-    TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
-    if (EventsWriter) {
+    try {
+        TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
         EventsWriter->Write(data);
+    } catch (const std::exception& e) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "Failed to write cloud event: " << e.what());
     }
+
+    PassAway();
 }
 
 NActors::IActor* CreateCloudEventActor() {

@@ -38,11 +38,7 @@ SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_script.cpp
-<<<<<<< HEAD
-=======
-    ut_minmax_serialization.cpp
     ut_predicate_ranges_builder.cpp
->>>>>>> 11e54aa67a3 (Fix TRangesBuilder AddRange (#38801))
     helper.cpp
 )
 

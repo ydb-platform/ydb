@@ -14,7 +14,6 @@ struct FormatConfig {
     // CSV / TSV options (used when Format is CsvWithNames, TsvWithNames, or Csv).
     arrow::csv::ParseOptions CsvParseOpts = arrow::csv::ParseOptions::Defaults();
     arrow::csv::ConvertOptions CsvConvOpts = arrow::csv::ConvertOptions::Defaults();
-    bool CsvHasHeader = true;
 
     // JSON options (used when Format is JsonEachRow or JsonList).
     arrow::json::ParseOptions JsonParseOpts = arrow::json::ParseOptions::Defaults();

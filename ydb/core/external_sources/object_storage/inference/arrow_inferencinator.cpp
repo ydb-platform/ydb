@@ -16,6 +16,8 @@
 
 #include <util/string/join.h>
 
+#include <optional>
+
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
 #define LOG_I(name, stream) \
@@ -49,7 +51,6 @@ bool ShouldBeOptional(const arrow::DataType& type, const std::shared_ptr<FormatC
     case arrow::Type::STRING:
     case arrow::Type::BINARY:
     case arrow::Type::LARGE_BINARY:
-    case arrow::Type::FIXED_SIZE_BINARY:
         return false;
     default:
         return true;
@@ -127,7 +128,7 @@ std::variant<ArrowFields, TString> ReadFields(
 {
     int64_t fileSize = 0;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
-        return TStringBuilder{} << errorHeader << "coudn't get file size: " << sizeStatus.ToString();
+        return TStringBuilder{} << errorHeader << "couldn't get file size: " << sizeStatus.ToString();
     }
     if (fileSize <= 0 || fileSize > INT32_MAX) {
         return TStringBuilder{} << errorHeader << "empty file";
@@ -288,7 +289,7 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         LOG_D("TArrowInferencinator", "HandleFileError: " << ev->Get()->Issues.ToOneLineString());
-        ctx.Send(RequesterId_, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
+        ReplyAndReset(ctx, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 
 private:

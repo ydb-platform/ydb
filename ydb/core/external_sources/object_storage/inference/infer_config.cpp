@@ -6,7 +6,7 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-void ConfigureCsv(FormatConfig& config, const THashMap<TString, TString>& params, bool hasHeader) {
+void ConfigureCsv(FormatConfig& config, const THashMap<TString, TString>& params) {
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
         if (delimiter->size() != 1) {
             throw yexception() << "invalid parameter: csv_delimiter must be single character";
@@ -14,7 +14,6 @@ void ConfigureCsv(FormatConfig& config, const THashMap<TString, TString>& params
         config.CsvParseOpts.delimiter = (*delimiter)[0];
     }
     config.CsvConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
-    config.CsvHasHeader = hasHeader;
 }
 
 void ConfigureTsv(FormatConfig& config) {
@@ -63,10 +62,8 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
 
     switch (format) {
     case EFileFormat::CsvWithNames:
-        ConfigureCsv(*config, params, /*hasHeader=*/true);
-        break;
     case EFileFormat::Csv:
-        ConfigureCsv(*config, params, /*hasHeader=*/false);
+        ConfigureCsv(*config, params);
         break;
     case EFileFormat::TsvWithNames:
         ConfigureTsv(*config);

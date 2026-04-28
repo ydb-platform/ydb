@@ -6,10 +6,12 @@
 #include <arrow/buffer_builder.h>
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
+#include <arrow/csv/parser.h>
 #include <arrow/json/chunker.h>
 #include <arrow/json/options.h>
 #include <arrow/io/memory.h>
 #include <arrow/util/endian.h>
+#include <arrow/util/string_view.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
@@ -114,7 +116,7 @@ public:
                 break;
             }
             case EFileFormat::Csv: {
-                auto withHeader = PrependSyntheticCsvHeader(data, Config_->CsvParseOpts.delimiter);
+                auto withHeader = PrependSyntheticCsvHeader(data, Config_->CsvParseOpts);
                 file = CleanupCsvFile(withHeader, request, Config_->CsvParseOpts, ctx);
                 if (!file) {
                     return;
@@ -149,23 +151,31 @@ public:
         }
     }
 
-    static TString PrependSyntheticCsvHeader(const TString& data, char delimiter) {
-        size_t firstNewline = data.find('\n');
-        TStringBuf firstLine = (firstNewline == TString::npos)
-            ? TStringBuf{data}
-            : TStringBuf{data.data(), firstNewline};
+    // Determine the number of columns in the first CSV row by letting Arrow's
+    // CSV BlockParser parse a single row. This correctly handles quoted fields
+    // (which may legally contain delimiter characters) and any delimiter/escape
+    // configuration carried in `options`.
+    static size_t DetectCsvColumnCount(const TString& data, const arrow::csv::ParseOptions& options) {
+        constexpr int32_t kSingleRow = 1;
+        arrow::csv::BlockParser parser(options, /*num_cols=*/-1, /*first_row=*/-1, /*max_num_rows=*/kSingleRow);
 
-        size_t columnCount = 1;
-        for (char c : firstLine) {
-            if (c == delimiter) {
-                ++columnCount;
-            }
+        arrow::util::string_view view{data.data(), data.size()};
+        uint32_t parsedBytes = 0;
+        // ParseFinal tolerates a missing trailing newline on the last (in this case only) row.
+        auto status = parser.ParseFinal(view, &parsedBytes);
+        if (!status.ok() || parser.num_cols() <= 0) {
+            return 1;
         }
+        return static_cast<size_t>(parser.num_cols());
+    }
+
+    static TString PrependSyntheticCsvHeader(const TString& data, const arrow::csv::ParseOptions& options) {
+        const size_t columnCount = DetectCsvColumnCount(data, options);
 
         TStringBuilder header;
         for (size_t i = 0; i < columnCount; ++i) {
             if (i > 0) {
-                header << delimiter;
+                header << options.delimiter;
             }
             header << "column" << i;
         }

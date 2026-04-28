@@ -91,8 +91,7 @@ const TString boolTrueSuffix = TString("\0\1", 2);
 const TString boolFalseSuffix = TString("\0\0", 2);
 const TString nullSuffix = TString("\0\2", 2);
 
-const TString compError = "Comparison is not allowed between literals on both sides";
-const TString varError = "Variables are not supported at the moment";
+const TString compError = "Comparison is not allowed between literals/variables on both sides";
 const TString predError = "Predicates are not allowed in this context";
 const TString filterError = "'@' is only allowed inside filters";
 const TString emptyError = "Cannot collect tokens for the given JSON path"; 
@@ -471,23 +470,20 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.* + $.a.*", {"", "\2a"});
         ValidateJsonExists("$.a.b.*.c + $.a.b.*.d", {"\2a\2b"});
 
-        // Error on left - propagated immediately, right not collected
-        ValidateError("$var + $.b", varError);
-        ValidateError("$var - $.b", varError);
-        ValidateError("$var * $.b", varError);
-        ValidateError("$var / $.b", varError);
-        ValidateError("$var % $.b", varError);
+        // Variable on left - propagated immediately, right not collected
+        ValidateJsonExists("$var + $.b", {"\2b"});
+        ValidateJsonExists("$var - $.b", {"\2b"});
+        ValidateJsonExists("$var * $.b", {"\2b"});
+        ValidateJsonExists("$var / $.b", {"\2b"});
+        ValidateJsonExists("$var % $.b", {"\2b"});
 
-        // Error on right - left tokens lost, error propagated
-        ValidateError("$.a + $var", varError);
-        ValidateError("$.a - $var", varError);
-        ValidateError("$.a * $var", varError);
+        // Variable on right - left tokens lost, variable not collected
+        ValidateJsonExists("$.a + $var", {"\2a"});
+        ValidateJsonExists("$.a - $var", {"\2a"});
+        ValidateJsonExists("$.a * $var", {"\2a"});
 
-        // Both sides error
-        ValidateError("$var + $var", varError);
-
-        // Error propagates through chained binary: ($.a + $var) + $.c
-        ValidateError("$.a + $var + $.c", varError);
+        // Variable propagates through chained binary: ($.a + $var) + $.c
+        ValidateJsonExists("$.a + $var + $.c", {"\2a", "\2c"});
     }
 
     // Non-trivial combinations of unary and binary arithmetic operators
@@ -712,10 +708,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("1 == 1", compError, ECallableType::JsonValue);
 
         // Variables
-        ValidateError("$var == \"x\"", varError, ECallableType::JsonValue);
-        ValidateError("\"x\" == $var", varError, ECallableType::JsonValue);
-        ValidateError("$var == $var", varError, ECallableType::JsonValue);
-        ValidateError("$ == $var", varError, ECallableType::JsonValue);
+        ValidateError("$var == \"x\"", compError, ECallableType::JsonValue);
+        ValidateError("\"x\" == $var", compError, ECallableType::JsonValue);
+        ValidateError("$var == $var", compError, ECallableType::JsonValue);
+        ValidateQueries("$ == $var", {""}, ECallableType::JsonValue);
     }
 
     // Comparison operators <, <=, >, >=, != collect path tokens from both operands; literals are silently dropped.
@@ -842,9 +838,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a < -5) && ($.b > -1) || ($.c != 3)", {"\2a", "\2b", "\2c"});
 
         // Variables
-        ValidateError("$var < 5", varError, ECallableType::JsonValue);
-        ValidateError("5 > $var", varError, ECallableType::JsonValue);
-        ValidateError("$var != $var", varError, ECallableType::JsonValue);
+        ValidateError("$var < 5", emptyError, ECallableType::JsonValue);
+        ValidateError("5 > $var", emptyError, ECallableType::JsonValue);
+        ValidateError("$var != $var", emptyError, ECallableType::JsonValue);
     }
 
     // Comparison operators inside filter predicates (EMode::Filter allows predicates)
@@ -1056,10 +1052,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Same path on both sides (two different equality conditions)
         ValidateJsonValue("($.a == 1) && ($.a == 2)", {"\2a" + numSuffix(1), "\2a" + numSuffix(2)});
 
-        // Variables are not supported
-        ValidateError("($var == 1) && ($.b == 2)", varError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) && ($var == 2)", varError, ECallableType::JsonValue);
-        ValidateError("($var == 1) && ($var == 2)", varError, ECallableType::JsonValue);
+        // Variables with literals
+        ValidateError("($var == 1) && ($.b == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($.a == 1) && ($var == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($var == 1) && ($var == 2)", compError, ECallableType::JsonValue);
 
         // Predicates are not allowed in JsonExists
         ValidateError("($.a == 10) && ($.b == 20)", predError, ECallableType::JsonExists);
@@ -1138,9 +1134,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a starts with \"x\") || ($.b == 1) || exists($.c.d)",{"\2a", "\2b" + numSuffix(1), "\2c\2d"});
 
         // Variable on left or right side
-        ValidateError("($var == 1) || ($.b == 2)", varError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || ($var == 2)", varError, ECallableType::JsonValue);
-        ValidateError("($var == 1) || ($var == 2)", varError, ECallableType::JsonValue);
+        ValidateError("($var == 1) || ($.b == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($.a == 1) || ($var == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($var == 1) || ($var == 2)", compError, ECallableType::JsonValue);
 
         // Predicates not allowed in Context for JsonExists
         ValidateError("($.a == 10) || ($.b == 20)", predError, ECallableType::JsonExists);

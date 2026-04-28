@@ -973,40 +973,33 @@ void TFixture::TestEmptySourceIdParallelTx()
 
     NTopic::TTopicClient client(GetDriver());
 
-    auto makeSettings = [this]() {
-        NTopic::TWriteSessionSettings options;
-        options.Path(GetTopicUtPath("topic_A"));
-        options.ProducerId("");
-        options.MessageGroupId("");
-        options.Codec(ECodec::RAW);
-        return options;
+    auto createTxAndWrite = [this, &client](const TString& message, const TString& label) {
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        NTopic::TWriteSessionSettings settings;
+        settings.Path(GetTopicUtPath("topic_A"));
+        settings.ProducerId("");
+        settings.MessageGroupId("");
+        settings.Codec(ECodec::RAW);
+        auto ws = client.CreateSimpleBlockingWriteSession(settings);
+        auto msg = NTopic::TWriteMessage(message);
+        UNIT_ASSERT_C(ws->Write(std::move(msg), tx.get()), label << " write failed");
+        UNIT_ASSERT_C(ws->Close(), label << " close write session failed");
+
+        return std::make_pair(std::move(session), std::move(tx));
     };
 
-    auto session1 = CreateSession();
-    auto tx1 = session1->BeginTx();
-    {
-        auto ws1 = client.CreateSimpleBlockingWriteSession(makeSettings());
-        auto msg = NTopic::TWriteMessage("tx1_msg");
-        UNIT_ASSERT_C(ws1->Write(std::move(msg), tx1.get()), "tx1 write failed");
-        UNIT_ASSERT_C(ws1->Close(), "tx1 close write session failed");
-    }
-
-    auto session2 = CreateSession();
-    auto tx2 = session2->BeginTx();
-    {
-        auto ws2 = client.CreateSimpleBlockingWriteSession(makeSettings());
-        auto msg = NTopic::TWriteMessage("tx2_msg");
-        UNIT_ASSERT_C(ws2->Write(std::move(msg), tx2.get()), "tx2 write failed");
-        UNIT_ASSERT_C(ws2->Close(), "tx2 close write session failed");
-    }
+    auto [session1, tx1] = createTxAndWrite("message #1", "tx1");
+    auto [session2, tx2] = createTxAndWrite("message #2", "tx2");
 
     session1->CommitTx(*tx1, EStatus::SUCCESS);
     session2->CommitTx(*tx2, EStatus::SUCCESS);
 
     auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2u);
-    UNIT_ASSERT_VALUES_EQUAL(messages[0], "tx1_msg");
-    UNIT_ASSERT_VALUES_EQUAL(messages[1], "tx2_msg");
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
 }
 
 void TFixture::TestWriteToTopic11()

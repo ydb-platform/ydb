@@ -1,5 +1,6 @@
 #include "ydb_metrics_aggregator.h"
 #include "ut_helpers.h"
+#include "ut_sensors_json_builder.h"
 
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -144,152 +145,24 @@ Y_UNIT_TEST_SUITE(TYdbMetricsAggregatorTest) {
         Cerr << "TEST Target counters (initial):" << Endl << countersJson << Endl;
 
         TString expectedJsonAllZeros = NormalizeJson(
-R"json(
-{
-  "sensors": [
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.rows"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_hit.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_miss.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.consumed_cpu_us"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.rows"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.rows"
-      },
-      "value": 0
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.row_count"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.rows"
-      },
-      "value": 0
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.size_bytes"
-      },
-      "value": 0
-    },
-    {
-      "hist": {
-        "bounds": [
-          0,
-          10,
-          20,
-          30,
-          40,
-          50,
-          60,
-          70,
-          80,
-          90,
-          100
-        ],
-        "buckets": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "inf": 0
-      },
-      "kind": "HIST",
-      "labels": {
-        "name": "table.datashard.used_core_percents"
-      }
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.bytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.rows"
-      },
-      "value": 0
-    }
-  ]
-}
-)json"
+            TSensorsJsonBuilder::Start()
+                .AddRate("table.datashard.bulk_upsert.bytes", 0)
+                .AddRate("table.datashard.bulk_upsert.rows", 0)
+                .AddRate("table.datashard.cache_hit.bytes", 0)
+                .AddRate("table.datashard.cache_miss.bytes", 0)
+                .AddRate("table.datashard.consumed_cpu_us", 0)
+                .AddRate("table.datashard.erase.bytes", 0)
+                .AddRate("table.datashard.erase.rows", 0)
+                .AddRate("table.datashard.read.bytes", 0)
+                .AddRate("table.datashard.read.rows", 0)
+                .AddGauge("table.datashard.row_count", 0)
+                .AddRate("table.datashard.scan.bytes", 0)
+                .AddRate("table.datashard.scan.rows", 0)
+                .AddGauge("table.datashard.size_bytes", 0)
+                .AddCpuHistogram("table.datashard.used_core_percents", {})
+                .AddRate("table.datashard.write.bytes", 0)
+                .AddRate("table.datashard.write.rows", 0)
+                .BuildJson()
         );
 
         UNIT_ASSERT_EQUAL_C(
@@ -307,152 +180,40 @@ R"json(
         Cerr << "TEST Target counters (2 source groups added):" << Endl << countersJson << Endl;
 
         TString expectedJson = NormalizeJson(
-R"json(
-{
-  "sensors": [
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.bytes"
-      },
-      "value": 21020
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.rows"
-      },
-      "value": 21018
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_hit.bytes"
-      },
-      "value": 21026
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_miss.bytes"
-      },
-      "value": 21028
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.consumed_cpu_us"
-      },
-      "value": 21030
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.bytes"
-      },
-      "value": 21016
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.rows"
-      },
-      "value": 21014
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.bytes"
-      },
-      "value": 21012
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.rows"
-      },
-      "value": 21010
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.row_count"
-      },
-      "value": 21002
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.bytes"
-      },
-      "value": 21024
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.rows"
-      },
-      "value": 21022
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.size_bytes"
-      },
-      "value": 21004
-    },
-    {
-      "hist": {
-        "bounds": [
-          0,
-          10,
-          20,
-          30,
-          40,
-          50,
-          60,
-          70,
-          80,
-          90,
-          100
-        ],
-        "buckets": [
-          21002,
-          21004,
-          21006,
-          21008,
-          21010,
-          21012,
-          21014,
-          21016,
-          21018,
-          21020,
-          21022
-        ],
-        "inf": 21024
-      },
-      "kind": "HIST",
-      "labels": {
-        "name": "table.datashard.used_core_percents"
-      }
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.bytes"
-      },
-      "value": 21008
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.rows"
-      },
-      "value": 21006
-    }
-  ]
-}
-)json"
+            TSensorsJsonBuilder::Start()
+                .AddRate("table.datashard.bulk_upsert.bytes", 21020)
+                .AddRate("table.datashard.bulk_upsert.rows", 21018)
+                .AddRate("table.datashard.cache_hit.bytes", 21026)
+                .AddRate("table.datashard.cache_miss.bytes", 21028)
+                .AddRate("table.datashard.consumed_cpu_us", 21030)
+                .AddRate("table.datashard.erase.bytes", 21016)
+                .AddRate("table.datashard.erase.rows", 21014)
+                .AddRate("table.datashard.read.bytes", 21012)
+                .AddRate("table.datashard.read.rows", 21010)
+                .AddGauge("table.datashard.row_count", 21002)
+                .AddRate("table.datashard.scan.bytes", 21024)
+                .AddRate("table.datashard.scan.rows", 21022)
+                .AddGauge("table.datashard.size_bytes", 21004)
+                .AddCpuHistogram(
+                    "table.datashard.used_core_percents",
+                    {
+                      {0,   21002},
+                      {10,  21004},
+                      {20,  21006},
+                      {30,  21008},
+                      {40,  21010},
+                      {50,  21012},
+                      {60,  21014},
+                      {70,  21016},
+                      {80,  21018},
+                      {90,  21020},
+                      {100, 21022},
+                    },
+                    21024
+                )
+                .AddRate("table.datashard.write.bytes", 21008)
+                .AddRate("table.datashard.write.rows", 21006)
+                .BuildJson()
         );
 
         UNIT_ASSERT_EQUAL_C(
@@ -469,152 +230,40 @@ R"json(
         Cerr << "TEST Target counters (all source groups added):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
-{
-  "sensors": [
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.bytes"
-      },
-      "value": 321030
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.rows"
-      },
-      "value": 321027
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_hit.bytes"
-      },
-      "value": 321039
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_miss.bytes"
-      },
-      "value": 321042
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.consumed_cpu_us"
-      },
-      "value": 321045
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.bytes"
-      },
-      "value": 321024
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.rows"
-      },
-      "value": 321021
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.bytes"
-      },
-      "value": 321018
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.rows"
-      },
-      "value": 321015
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.row_count"
-      },
-      "value": 321003
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.bytes"
-      },
-      "value": 321036
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.rows"
-      },
-      "value": 321033
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.size_bytes"
-      },
-      "value": 321006
-    },
-    {
-      "hist": {
-        "bounds": [
-          0,
-          10,
-          20,
-          30,
-          40,
-          50,
-          60,
-          70,
-          80,
-          90,
-          100
-        ],
-        "buckets": [
-          321003,
-          321006,
-          321009,
-          321012,
-          321015,
-          321018,
-          321021,
-          321024,
-          321027,
-          321030,
-          321033
-        ],
-        "inf": 321036
-      },
-      "kind": "HIST",
-      "labels": {
-        "name": "table.datashard.used_core_percents"
-      }
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.bytes"
-      },
-      "value": 321012
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.rows"
-      },
-      "value": 321009
-    }
-  ]
-}
-)json"
+            TSensorsJsonBuilder::Start()
+                .AddRate("table.datashard.bulk_upsert.bytes", 321030)
+                .AddRate("table.datashard.bulk_upsert.rows", 321027)
+                .AddRate("table.datashard.cache_hit.bytes", 321039)
+                .AddRate("table.datashard.cache_miss.bytes", 321042)
+                .AddRate("table.datashard.consumed_cpu_us", 321045)
+                .AddRate("table.datashard.erase.bytes", 321024)
+                .AddRate("table.datashard.erase.rows", 321021)
+                .AddRate("table.datashard.read.bytes", 321018)
+                .AddRate("table.datashard.read.rows", 321015)
+                .AddGauge("table.datashard.row_count", 321003)
+                .AddRate("table.datashard.scan.bytes", 321036)
+                .AddRate("table.datashard.scan.rows", 321033)
+                .AddGauge("table.datashard.size_bytes", 321006)
+                .AddCpuHistogram(
+                    "table.datashard.used_core_percents",
+                    {
+                      {0,   321003},
+                      {10,  321006},
+                      {20,  321009},
+                      {30,  321012},
+                      {40,  321015},
+                      {50,  321018},
+                      {60,  321021},
+                      {70,  321024},
+                      {80,  321027},
+                      {90,  321030},
+                      {100, 321033},
+                    },
+                    321036
+                )
+                .AddRate("table.datashard.write.bytes", 321012)
+                .AddRate("table.datashard.write.rows", 321009)
+                .BuildJson()
         );
 
         UNIT_ASSERT_EQUAL_C(
@@ -623,7 +272,7 @@ R"json(
             "Expected JSON (all source groups added):" << Endl << expectedJson
         );
 
-        // TEST 4: Update the first source groups and make sure the target counters are updated
+        // TEST 4: Update the first source group and make sure the target counters are updated
         PopulateDataShardPublicCounters(runtime, "source-group-1", 1000);
         aggregator->RecalculateAllTargetCounters();
 
@@ -631,152 +280,40 @@ R"json(
         Cerr << "TEST Target counters (the first group updated):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
-{
-  "sensors": [
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.bytes"
-      },
-      "value": 1320030
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.rows"
-      },
-      "value": 1320027
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_hit.bytes"
-      },
-      "value": 1320039
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_miss.bytes"
-      },
-      "value": 1320042
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.consumed_cpu_us"
-      },
-      "value": 1320045
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.bytes"
-      },
-      "value": 1320024
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.rows"
-      },
-      "value": 1320021
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.bytes"
-      },
-      "value": 1320018
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.rows"
-      },
-      "value": 1320015
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.row_count"
-      },
-      "value": 1320003
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.bytes"
-      },
-      "value": 1320036
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.rows"
-      },
-      "value": 1320033
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.size_bytes"
-      },
-      "value": 1320006
-    },
-    {
-      "hist": {
-        "bounds": [
-          0,
-          10,
-          20,
-          30,
-          40,
-          50,
-          60,
-          70,
-          80,
-          90,
-          100
-        ],
-        "buckets": [
-          1320003,
-          1320006,
-          1320009,
-          1320012,
-          1320015,
-          1320018,
-          1320021,
-          1320024,
-          1320027,
-          1320030,
-          1320033
-        ],
-        "inf": 1320036
-      },
-      "kind": "HIST",
-      "labels": {
-        "name": "table.datashard.used_core_percents"
-      }
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.bytes"
-      },
-      "value": 1320012
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.rows"
-      },
-      "value": 1320009
-    }
-  ]
-}
-)json"
+            TSensorsJsonBuilder::Start()
+                .AddRate("table.datashard.bulk_upsert.bytes", 1320030)
+                .AddRate("table.datashard.bulk_upsert.rows", 1320027)
+                .AddRate("table.datashard.cache_hit.bytes", 1320039)
+                .AddRate("table.datashard.cache_miss.bytes", 1320042)
+                .AddRate("table.datashard.consumed_cpu_us", 1320045)
+                .AddRate("table.datashard.erase.bytes", 1320024)
+                .AddRate("table.datashard.erase.rows", 1320021)
+                .AddRate("table.datashard.read.bytes", 1320018)
+                .AddRate("table.datashard.read.rows", 1320015)
+                .AddGauge("table.datashard.row_count", 1320003)
+                .AddRate("table.datashard.scan.bytes", 1320036)
+                .AddRate("table.datashard.scan.rows", 1320033)
+                .AddGauge("table.datashard.size_bytes", 1320006)
+                .AddCpuHistogram(
+                    "table.datashard.used_core_percents",
+                    {
+                      {0,   1320003},
+                      {10,  1320006},
+                      {20,  1320009},
+                      {30,  1320012},
+                      {40,  1320015},
+                      {50,  1320018},
+                      {60,  1320021},
+                      {70,  1320024},
+                      {80,  1320027},
+                      {90,  1320030},
+                      {100, 1320033},
+                    },
+                    1320036
+                )
+                .AddRate("table.datashard.write.bytes", 1320012)
+                .AddRate("table.datashard.write.rows", 1320009)
+                .BuildJson()
         );
 
         UNIT_ASSERT_EQUAL_C(
@@ -793,152 +330,40 @@ R"json(
         Cerr << "TEST Target counters (the first source group removed):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
-{
-  "sensors": [
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.bytes"
-      },
-      "value": 320020
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.bulk_upsert.rows"
-      },
-      "value": 320018
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_hit.bytes"
-      },
-      "value": 320026
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.cache_miss.bytes"
-      },
-      "value": 320028
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.consumed_cpu_us"
-      },
-      "value": 320030
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.bytes"
-      },
-      "value": 320016
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.erase.rows"
-      },
-      "value": 320014
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.bytes"
-      },
-      "value": 320012
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.read.rows"
-      },
-      "value": 320010
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.row_count"
-      },
-      "value": 320002
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.bytes"
-      },
-      "value": 320024
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.scan.rows"
-      },
-      "value": 320022
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "name": "table.datashard.size_bytes"
-      },
-      "value": 320004
-    },
-    {
-      "hist": {
-        "bounds": [
-          0,
-          10,
-          20,
-          30,
-          40,
-          50,
-          60,
-          70,
-          80,
-          90,
-          100
-        ],
-        "buckets": [
-          320002,
-          320004,
-          320006,
-          320008,
-          320010,
-          320012,
-          320014,
-          320016,
-          320018,
-          320020,
-          320022
-        ],
-        "inf": 320024
-      },
-      "kind": "HIST",
-      "labels": {
-        "name": "table.datashard.used_core_percents"
-      }
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.bytes"
-      },
-      "value": 320008
-    },
-    {
-      "kind": "RATE",
-      "labels": {
-        "name": "table.datashard.write.rows"
-      },
-      "value": 320006
-    }
-  ]
-}
-)json"
+            TSensorsJsonBuilder::Start()
+                .AddRate("table.datashard.bulk_upsert.bytes", 320020)
+                .AddRate("table.datashard.bulk_upsert.rows", 320018)
+                .AddRate("table.datashard.cache_hit.bytes", 320026)
+                .AddRate("table.datashard.cache_miss.bytes", 320028)
+                .AddRate("table.datashard.consumed_cpu_us", 320030)
+                .AddRate("table.datashard.erase.bytes", 320016)
+                .AddRate("table.datashard.erase.rows", 320014)
+                .AddRate("table.datashard.read.bytes", 320012)
+                .AddRate("table.datashard.read.rows", 320010)
+                .AddGauge("table.datashard.row_count", 320002)
+                .AddRate("table.datashard.scan.bytes", 320024)
+                .AddRate("table.datashard.scan.rows", 320022)
+                .AddGauge("table.datashard.size_bytes", 320004)
+                .AddCpuHistogram(
+                    "table.datashard.used_core_percents",
+                    {
+                      {0,   320002},
+                      {10,  320004},
+                      {20,  320006},
+                      {30,  320008},
+                      {40,  320010},
+                      {50,  320012},
+                      {60,  320014},
+                      {70,  320016},
+                      {80,  320018},
+                      {90,  320020},
+                      {100, 320022},
+                    },
+                    320024
+                )
+                .AddRate("table.datashard.write.bytes", 320008)
+                .AddRate("table.datashard.write.rows", 320006)
+                .BuildJson()
         );
 
         UNIT_ASSERT_EQUAL_C(

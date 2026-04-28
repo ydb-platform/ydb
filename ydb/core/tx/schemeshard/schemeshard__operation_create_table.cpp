@@ -547,6 +547,18 @@ public:
         }
 
         if (schema.HasDetailedMetricsSettings()) {
+            // Do not allow changing detailed metrics settings without the feature flag
+            if (!AppData()->FeatureFlags.GetEnableDetailedMetrics()) {
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "The detailed metrics settings are specified in the request, "
+                    "but the detailed metrics feature is disabled by the corresponding "
+                    "feature flag (EnableDetailedMetrics)"
+                );
+
+                return result;
+            }
+
             TString errorString;
 
             // Make sure the detailed metrics settings are valid (correct metrics level etc)
@@ -617,6 +629,7 @@ public:
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
+            .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDetailedMetrics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

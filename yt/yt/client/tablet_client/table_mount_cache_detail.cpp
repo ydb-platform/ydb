@@ -503,6 +503,7 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         NTabletClient::EErrorCode::InvalidMountRevision,
         NTabletClient::EErrorCode::TabletServantIsNotActive,
         NTabletClient::EErrorCode::TabletResharded,
+        NTabletClient::EErrorCode::TestingFailureBeforeWrite,
         NYTree::EErrorCode::ResolveError
     };
 

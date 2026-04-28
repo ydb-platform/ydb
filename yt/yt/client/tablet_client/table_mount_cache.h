@@ -163,6 +163,7 @@ struct TTableMountInfo final
     TTabletInfoPtr GetTabletForRow(NTableClient::TVersionedRow row) const;
     //! Returns error in case no mounted tablets are present. It may be used for cache invalidation.
     TErrorOr<TTabletInfoPtr> GetRandomMountedTablet() const;
+    TTabletInfoPtr FindTabletById(TTabletId id) const;
 
     void ValidateTabletOwner() const;
     void ValidateDynamic() const;
@@ -231,6 +232,7 @@ struct TTabletRedirectionHint
 struct ITableMountCache
     : public virtual TRefCounted
 {
+    //! May throw if another client requested this entry first and the result is not ready yet.
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
 
     //! Invalidates cached table info for all table infos owning this tablet.

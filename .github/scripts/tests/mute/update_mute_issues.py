@@ -728,6 +728,11 @@ def update_all_closed_issues_status(status_field_id, unmuted_option_id):
                       id
                       state
                       url
+                      labels(first: 40) {
+                        nodes {
+                          name
+                        }
+                      }
                     }
                   }
                   fieldValues(first: 20) {
@@ -761,6 +766,12 @@ def update_all_closed_issues_status(status_field_id, unmuted_option_id):
         items = result['data']['organization']['projectV2']['items']['nodes']
         for item in items:
             if item['content'] and item['content']['state'] == 'CLOSED':
+                label_nodes = (item['content'].get('labels') or {}).get('nodes') or []
+                label_names = {
+                    str(n.get('name')).strip().lower() for n in label_nodes if n and n.get('name')
+                }
+                if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in label_names:
+                    continue
                 # Check if status is not already Unmuted
                 current_status = None
                 for field_value in item['fieldValues']['nodes']:

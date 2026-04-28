@@ -24,6 +24,20 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
     }
     props.JoinAlgo = joinAlgo;
 }
+
+// For row storage read we create a separate stage.
+// TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
+void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPlanProps& props) {
+    const auto readStageId = *read->Props.StageId;
+    if (!op->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+        const auto newStageId = props.StageGraph.AddStage();
+        op->Props.StageId = newStageId;
+        props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));
+    } else {
+        op->Props.StageId = readStageId;
+    }
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -97,38 +111,30 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         const auto prevStageId = *(childOp->Props.StageId);
 
-        // If the child operator is a source, it requires its own stage
-        // So we have build a new stage for current operator
-        if (childOp->Kind == EOperator::Source) {
-            auto opRead = CastOperator<TOpRead>(childOp);
-            const auto newStageId = props.StageGraph.AddStage();
-            input->Props.StageId = newStageId;
-            TIntrusivePtr<TConnection> connection = MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(prevStageId));
-            props.StageGraph.Connect(prevStageId, newStageId, connection);
-        }
-        // If the child operator is not single use, we also need to create a new stage
-        // for current operator with a map connection
-        else if (!childOp->IsSingleConsumer()) {
+        if (childOp->GetKind() == EOperator::Source) {
+            ProcessSource(input, CastOperator<TOpRead>(childOp), props);
+        } else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TMapConnection>(props.StageGraph.GetOutputIndex(prevStageId)));
         } else {
             input->Props.StageId = prevStageId;
         }
-        YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages map/filter";
     } else if (input->Kind == EOperator::Sort) {
         auto sort = CastOperator<TOpSort>(input);
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         const auto prevStageId = *(sort->GetInput()->Props.StageId);
         props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages sort";
     } else if (input->Kind == EOperator::Limit) {
-
         auto limit = CastOperator<TOpLimit>(input);
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         const auto prevStageId = *(limit->GetInput()->Props.StageId);
         props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages limit";
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
 
@@ -157,7 +163,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
         }
 
-        YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
+        YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
     }

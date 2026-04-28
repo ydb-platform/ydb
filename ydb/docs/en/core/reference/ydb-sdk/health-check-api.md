@@ -43,6 +43,14 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   await monitoring.selfCheck();
   ```
 
+- Rust
+
+  This functionality is not currently supported
+
+- PHP
+
+  This functionality is not currently supported
+
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -99,7 +107,15 @@ The complete list of extra parameters is presented below:
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported
+
+- Rust
+
+  This functionality is not currently supported
+
+- PHP
+
+  This functionality is not currently supported
 
 {% endlist %}
 

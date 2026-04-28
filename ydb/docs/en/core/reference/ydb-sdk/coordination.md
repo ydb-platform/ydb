@@ -74,6 +74,27 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
   await client.createNode("/path/to/mynode", {});
   ```
 
+- Rust
+
+  Use [`Client::coordination_client`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.coordination_client) to get a coordination client. Create a node via [`CoordinationClient::create_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_node) with a path and a [`NodeConfig`](https://docs.rs/ydb/latest/ydb/struct.NodeConfig.html) (typically built via [`NodeConfigBuilder`](https://docs.rs/ydb/latest/ydb/struct.NodeConfigBuilder.html)). The Rust SDK also provides `alter_node`, `drop_node`, and `describe_node`. For a complete example, see [`mutex.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/mutex.rs).
+
+  ```rust
+  use ydb::NodeConfigBuilder;
+
+  let mut coordination_client = client.coordination_client();
+
+  coordination_client
+      .create_node(
+          "/path/to/mynode".into(),
+          NodeConfigBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -151,6 +172,25 @@ To start working with coordination nodes, a client must establish a session with
   await using session = await client.createSession("/path/to/mynode", {}, signal);
   ```
 
+- Rust
+
+  Create a session via [`CoordinationClient::create_session`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_session) with a node path and [`SessionOptions`](https://docs.rs/ydb/latest/ydb/struct.SessionOptions.html) (built via [`SessionOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.SessionOptionsBuilder.html), for example to set timeouts and a description). The session constructor establishes the underlying stream internally; there is no explicit `connect` call as in the Java SDK.
+
+  ```rust
+  use ydb::SessionOptionsBuilder;
+
+  let session = coordination_client
+      .create_session(
+          "/path/to/mynode".into(),
+          SessionOptionsBuilder::default().build()?,
+      )
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Session control {#session-control}
@@ -176,6 +216,14 @@ It's important for the client application to monitor the session state, as it ca
   In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
 
   For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
+
+- Rust
+
+  Use [`CoordinationSession::alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): it returns a [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) that is cancelled when the session ends (similar to tracking context cancellation in Go). When you release a [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) or drop the session, the SDK releases the semaphore on the server in the background.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -260,6 +308,23 @@ When creating a semaphore, you can specify its limit. The limit determines the m
     data: new Uint8Array(),
   });
   ```
+
+- Rust
+
+  [`CoordinationSession::create_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.create_semaphore) accepts a name, a limit, and arbitrary `data` stored with the semaphore.
+
+  ```rust
+  session.create_semaphore("my-semaphore", 10, vec![]).await?;
+
+  // or attach custom data stored with the semaphore:
+  session
+      .create_semaphore("other-semaphore", 10, b"my-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -363,6 +428,28 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
   } // lease.release() called automatically
   ```
 
+- Rust
+
+  [`acquire_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore) returns a [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html). To control queue timeout, ephemeral mode, and operation data, use [`AcquireOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.AcquireOptionsBuilder.html) and [`acquire_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.acquire_semaphore_with_params).
+
+  ```rust
+  use std::time::Duration;
+  use ydb::AcquireOptionsBuilder;
+
+  let _lease = session.acquire_semaphore("my-semaphore", 5).await?;
+
+  let opts = AcquireOptionsBuilder::default()
+      .timeout(Duration::from_secs(30))
+      .build()?;
+  let _lease = session
+      .acquire_semaphore_with_params("my-semaphore", 5, opts)
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -431,6 +518,18 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
     data: new Uint8Array(),
   });
   ```
+
+- Rust
+
+  ```rust
+  session
+      .update_semaphore("my-semaphore", b"updated-data".to_vec())
+      .await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -527,6 +626,18 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   });
   ```
 
+- Rust
+
+  [`describe_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore) requests owners and waiters by default. You can customize the set of returned fields via [`DescribeOptions`](https://docs.rs/ydb/latest/ydb/struct.DescribeOptions.html) and [`describe_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore_with_params). For change notifications, see [`WatchOptions`](https://docs.rs/ydb/latest/ydb/struct.WatchOptions.html) in the crate documentation.
+
+  ```rust
+  let description = session.describe_semaphore("my-semaphore").await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -593,6 +704,20 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   ```javascript
   await lease.release();
   ```
+
+- Rust
+
+  Call [`Lease::release`](https://docs.rs/ydb/latest/ydb/struct.Lease.html#method.release), or just drop the lease value — the Rust SDK releases it on the server on `Drop` as well.
+
+  ```rust
+  let lease = session.acquire_semaphore("my-semaphore", 1).await?;
+  // ...
+  lease.release();
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 

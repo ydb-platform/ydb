@@ -376,6 +376,34 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
 
   {% endlist %}
 
+- Python
+
+  The Python SDK uses the standard `logging` library. To enable a specific logging level:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
+  ```
+
+- JavaScript
+
+  The SDK uses the [debug](https://www.npmjs.com/package/debug) library for logging.
+  To enable logs, set the `DEBUG` environment variable to filter SDK events, for example `DEBUG=ydbjs:*`.
+
+- Rust
+
+  The `ydb` crate uses [`tracing`](https://docs.rs/tracing) for diagnostics output (this includes regular debug/trace logs, not only distributed tracing). To see logs in the console, install a subscriber before creating the client, for example [`tracing_subscriber::fmt`](https://docs.rs/tracing-subscriber) with the desired level (`TRACE` for maximum verbosity). For a complete working example, see [`basic-logs.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/basic-logs.rs).
+
+  ```rust
+  tracing_subscriber::fmt()
+      .with_max_level(tracing::Level::TRACE)
+      .init();
+
+  let client = ydb::ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .client()?;
+  ```
+
 - PHP
 
   For logging purposes, you need to use a class, that implements `\Psr\Log\LoggerInterface`.
@@ -392,20 +420,5 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   ]
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
-
-- Python
-
-  The Python SDK uses the standard `logging` library. To enable a specific logging level:
-
-  ```python
-  import logging
-
-  logging.getLogger('ydb').setLevel(logging.DEBUG)
-  ```
-
-- JavaScript
-
-  The SDK uses the [debug](https://www.npmjs.com/package/debug) library for logging.
-  To enable logs, set the `DEBUG` environment variable to filter SDK events, for example `DEBUG=ydbjs:*`.
 
 {% endlist %}

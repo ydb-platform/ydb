@@ -191,6 +191,21 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
   await driver.ready()
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
+  ```
+
 - PHP
 
   ```php
@@ -217,14 +232,6 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
   ];
 
   $ydb = new Ydb($config);
-  ```
-
-- Rust
-
-  ```rust
-  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
-        .with_credentials(AccessTokenCredentials::from("..."))
-        .client()?
   ```
 
 {% endlist %}

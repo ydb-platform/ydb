@@ -410,6 +410,66 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let rows: Vec<Value> = vec![
+          ydb_struct!(
+              "id" => 1_u64,
+              "val" => Value::Text("1".into()),
+          ),
+          ydb_struct!(
+              "id" => 2_u64,
+              "val" => Value::Text("2".into()),
+          ),
+          ydb_struct!(
+              "id" => 3_u64,
+              "val" => Value::Text("3".into()),
+          ),
+      ];
+
+      client
+          .table_client()
+          .retry_execute_bulk_upsert("/local/tablename".into(), rows)
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $rows = [
+      ['id' => 1, 'val' => '1'],
+      ['id' => 2, 'val' => '2'],
+      ['id' => 3, 'val' => '3'],
+  ];
+
+  $ydb->table()->bulkUpsert('tablename', $rows, [
+      'id'  => 'UINT64',
+      'val' => 'UTF8',
+  ]);
+  ```
 
 {% endlist %}

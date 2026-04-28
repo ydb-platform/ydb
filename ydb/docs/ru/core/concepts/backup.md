@@ -74,7 +74,7 @@
 ## См. также
 
 - [Коллекции резервных копий](datamodel/backup-collection.md) — архитектура и ограничения
-- [Резервное копирование и восстановление](../devops/backup-and-recovery.md) — практическое руководство
+- [Резервное копирование и восстановление](../devops/backup-and-recovery/index.md) — практическое руководство
 - [Справочник export/import](../reference/ydb-cli/export-import/index.md) — команды CLI
 - Справочник YQL:
   - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)

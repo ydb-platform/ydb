@@ -53,4 +53,4 @@ ydb operation get <operation-id>
 * [CREATE BACKUP COLLECTION](create-backup-collection.md)
 * [BACKUP](backup.md)
 * [DROP BACKUP COLLECTION](drop-backup-collection.md)
-* [Резервное копирование и восстановление](../../../devops/backup-and-recovery.md)
+* [Резервное копирование и восстановление](../../../devops/backup-and-recovery/index.md)

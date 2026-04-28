@@ -111,7 +111,7 @@ public:
     TCallableTypeBuilder(const TCallableTypeBuilder&) = default;
     TCallableTypeBuilder& operator=(const TCallableTypeBuilder&) = default;
     void Reserve(ui32 size);
-    TCallableTypeBuilder& Add(TType* time);
+    TCallableTypeBuilder& Add(TType* type);
     TCallableTypeBuilder& SetArgumentName(const TStringBuf& name);
     TCallableTypeBuilder& SetArgumentFlags(ui64 flags);
     TCallableTypeBuilder& SetOptionalArgs(ui32 count);

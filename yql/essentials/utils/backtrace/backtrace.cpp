@@ -197,20 +197,20 @@ void EnableKikimrBacktraceFormat() {
 
 namespace {
 NYql::NBacktrace::TStackFrame SFrames[NYql::NBacktrace::Limit]; // NOLINT(modernize-avoid-c-arrays)
-void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t count) {
+void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* frames, size_t cnt) {
     auto& outp = *out;
     Y_UNUSED(SFrames);
 #if defined(_linux_) && defined(_x86_64_)
     if (KikimrSymbolize) {
-        for (size_t i = 0; i < count; ++i) {
+        for (size_t i = 0; i < cnt; ++i) {
             SFrames[i] = NYql::NBacktrace::TStackFrame{.File = frames[i].File, .Address = frames[i].Address};
         }
-        NYql::NBacktrace::Symbolize(SFrames, count, out);
+        NYql::NBacktrace::Symbolize(SFrames, cnt, out);
         return;
     }
 #endif
-    outp << "StackFrames: " << count << "\n";
-    for (size_t i = 0; i < count; ++i) {
+    outp << "StackFrames: " << cnt << "\n";
+    for (size_t i = 0; i < cnt; ++i) {
         auto& frame = frames[i];
         auto fileName = frame.File;
         if (!strcmp(fileName, "/proc/self/exe")) {

@@ -925,11 +925,11 @@ TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnO
         .Build();
 }
 
-TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
+TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& input, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx)
 {
-    YQL_ENSURE(node.IsCallable({"UnionAllPositional", "UnionMergePositional", "IntersectPositional", "IntersectAllPositional", "ExceptPositional", "ExceptAllPositional"}));
-    auto targetColumnOrder = optCtx.Types->LookupColumnOrder(node);
+    YQL_ENSURE(input.IsCallable({"UnionAllPositional", "UnionMergePositional", "IntersectPositional", "IntersectAllPositional", "ExceptPositional", "ExceptAllPositional"}));
+    auto targetColumnOrder = optCtx.Types->LookupColumnOrder(input);
     YQL_ENSURE(targetColumnOrder);
 
     for (ui32 childIndex = 0; childIndex < children.size(); ++childIndex) {
@@ -938,10 +938,10 @@ TExprNode::TPtr ExpandPositionalSelectOp(const TExprNode& node, const TVector<TC
         child = NormalizeColumnOrder(child, childColumnOrder, *targetColumnOrder, ctx);
     }
 
-    TStringBuf callable = node.Content();
+    TStringBuf callable = input.Content();
     YQL_ENSURE(callable.ChopSuffix("Positional"));
-    auto res = ctx.NewCallable(node.Pos(), callable, std::move(children));
-    return KeepColumnOrder(res, node, ctx, *optCtx.Types);
+    auto res = ctx.NewCallable(input.Pos(), callable, std::move(children));
+    return KeepColumnOrder(res, input, ctx, *optCtx.Types);
 }
 
 TExprNode::TPtr BuildValues(

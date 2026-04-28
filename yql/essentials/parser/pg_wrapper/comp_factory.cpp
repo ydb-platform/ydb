@@ -3355,38 +3355,38 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
     }
 }
 
-NUdf::TUnboxedValue PgValueFromString(const TStringBuf s, ui32 pgTypeId) {
+NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId) {
     switch (pgTypeId) {
     case BOOLOID: {
-        return ScalarDatumToPod(BoolGetDatum(FromString<bool>(s)));
+        return ScalarDatumToPod(BoolGetDatum(FromString<bool>(text)));
     }
     case INT2OID: {
-        return ScalarDatumToPod(Int16GetDatum(FromString<i16>(s)));
+        return ScalarDatumToPod(Int16GetDatum(FromString<i16>(text)));
     }
     case INT4OID: {
-        return ScalarDatumToPod(Int32GetDatum(FromString<i32>(s)));
+        return ScalarDatumToPod(Int32GetDatum(FromString<i32>(text)));
     }
     case INT8OID: {
-        return ScalarDatumToPod(Int64GetDatum(FromString<i64>(s)));
+        return ScalarDatumToPod(Int64GetDatum(FromString<i64>(text)));
     }
     case FLOAT4OID: {
-        return ScalarDatumToPod(Float4GetDatum(FloatFromString(s)));
+        return ScalarDatumToPod(Float4GetDatum(FloatFromString(text)));
     }
     case FLOAT8OID: {
-        return ScalarDatumToPod(Float8GetDatum(DoubleFromString(s)));
+        return ScalarDatumToPod(Float8GetDatum(DoubleFromString(text)));
     }
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        auto ret = MakeVar(s);
+        auto ret = MakeVar(text);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
-        auto ret = MakeCString(s);
+        auto ret = MakeCString(text);
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        return PgValueFromNativeText(s, pgTypeId);
+        return PgValueFromNativeText(text, pgTypeId);
     }
 }
 

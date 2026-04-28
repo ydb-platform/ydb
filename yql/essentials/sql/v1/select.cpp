@@ -2989,7 +2989,7 @@ TSourcePtr BuildSelectCore(
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
-    TWinSpecs&& winSpecs,
+    TWinSpecs&& windowSpec,
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec,
     TVector<TNodePtr>&& terms,
     bool distinct,
@@ -3001,7 +3001,7 @@ TSourcePtr BuildSelectCore(
     TColumnsSets&& distinctSets)
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
-                             having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+                             having, std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 class TSelectOp: public IRealSource {

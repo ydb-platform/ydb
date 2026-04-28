@@ -267,7 +267,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return {};
             }
 
-            TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *State_->Configuration));
             auto content = child;
             if (auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>()) {
                 TKeySelectorBuilder builder(child.Pos(), ctx, useNativeDescSort, outItemType);
@@ -615,7 +615,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
                 return {};
             }
 
-            TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *State_->Configuration));
             auto content = child;
             auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>();
             if (keepSort && sorted) {
@@ -818,9 +818,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ResPull(TExprBase node,
     const bool hasSettings = NYql::HasAnySetting(section.Settings().Ref(),
         EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
 
-    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
-         ? GetNativeYtTypeFlags(*scheme->Cast<TStructExprType>())
-         : 0ul;
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(read.DataSource().Cluster().StringValue(), *State_->Configuration);
+    const ui64 nativeTypeFlags = GetNativeYtTypeFlags(*scheme->Cast<TStructExprType>()) & nativeTypeCompatibility;
 
     bool requiresMapOrMerge = false;
     bool hasRanges = false;
@@ -836,8 +835,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ResPull(TExprBase node,
         }
         requiresMapOrMerge = requiresMapOrMerge || pathInfo.Table->RequiresRemap()
             || !IsSameAnnotation(*scheme, *pathInfo.Table->RowSpec->GetType())
-            || nativeTypeFlags != pathInfo.GetNativeYtTypeFlags()
-            || firstNativeType != pathInfo.GetNativeYtType();
+            || firstNativeType != pathInfo.GetNativeYtType()
+            || nativeTypeFlags != pathInfo.GetNativeYtTypeFlags();
         hasRanges = hasRanges || pathInfo.Ranges;
         hasNonTemp = hasNonTemp || !pathInfo.Table->IsTemp;
         hasDynamic = hasDynamic || pathInfo.Table->Meta->IsDynamic;

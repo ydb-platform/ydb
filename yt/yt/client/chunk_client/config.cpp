@@ -175,6 +175,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("fail_on_unresolved_node_id", &TThis::FailOnUnresolvedNodeId)
+        .Default(false);
     registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)

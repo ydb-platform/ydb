@@ -1976,13 +1976,13 @@ TTupleLiteral::TTupleLiteral(TRuntimeNode* values, TTupleType* type, bool valida
     }
 }
 
-TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TTupleType* type, const TTypeEnvironment& env, bool useCachedEmptyTuple) {
+TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* items, TTupleType* type, const TTypeEnvironment& env, bool useCachedEmptyTuple) {
     MKQL_ENSURE(valuesCount == type->GetElementsCount(), "Wrong count of elements");
     TRuntimeNode* allocatedValues = nullptr;
     if (valuesCount) {
         allocatedValues = static_cast<TRuntimeNode*>(env.AllocateBuffer(valuesCount * sizeof(*allocatedValues)));
         for (ui32 i = 0; i < valuesCount; ++i) {
-            allocatedValues[i] = values[i];
+            allocatedValues[i] = items[i];
         }
     } else if (useCachedEmptyTuple) {
         return env.GetEmptyTupleLazy();

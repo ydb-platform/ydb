@@ -277,9 +277,6 @@
             "checksum": "301eed9c09055cdfc7583c80dfd27fec",
             "size": 1300,
             "uri": "https://{canondata_backend}/1903885/4d7b69fe68d2f1114db0fe9dc61d02f7d3f678ec/resource.tar.gz#test.test_aggregate-aggregate_distinct_in_access_node_exprs-default.txt-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_aggregate-aggregate_distinct_in_access_node_exprs-default.txt-Results_/extracted"
         }
     ],
     "test.test[aggregate-null_type-default.txt-Debug]": [

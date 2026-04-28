@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.2
+Version: 8.3
 Summary: Interfaces for Python
 Author-email: Zope Foundation and contributors <zope-dev@zope.dev>
 Maintainer-email: Plone Foundation and contributors <zope-dev@zope.dev>
@@ -74,6 +74,24 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 
 Change log
 ==========
+
+8.3 (2026-04-10)
+----------------
+
+- Add support for free-threaded Python 3.14t: declare ``Py_mod_gil_not_used``
+  in C extension, replace borrowed-reference ``PyDict_GetItem()`` with strong-
+  reference ``PyDict_GetItemRef()`` in cache lookups, and use ``Py_TYPE()``
+  macro instead of direct ``ob_type`` struct access.
+
+- Add CI testing for free-threaded Python 3.14t (Linux).
+
+- Guard 4 unprotected ``PyErr_Clear()`` calls in the C extension with
+  ``PyErr_ExceptionMatches`` checks, matching the pattern already used at 7
+  other sites in the same file. Without the guard, ``KeyboardInterrupt``,
+  ``MemoryError``, and ``SystemExit`` are silently swallowed in
+  ``implementedBy`` and ``providedBy``.
+  See `issue 358 <https://github.com/zopefoundation/zope.interface/issues/358>`_.
+
 
 8.2 (2026-01-09)
 ----------------

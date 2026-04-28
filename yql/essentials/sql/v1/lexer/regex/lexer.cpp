@@ -49,32 +49,32 @@ TTokenMatcher ANSICommentMatcher(TString name, TTokenMatcher defaultComment) {
     };
 }
 
-size_t MatchANSIMultilineComment(TStringBuf prefix) {
-    if (!prefix.StartsWith("/*")) {
+size_t MatchANSIMultilineComment(TStringBuf remaining) {
+    if (!remaining.StartsWith("/*")) {
         return 0;
     }
 
     size_t skipped = 0;
 
-    prefix.Skip(2);
+    remaining.Skip(2);
     skipped += 2;
 
     for (;;) {
-        if (prefix.StartsWith("*/")) {
-            prefix.Skip(2);
+        if (remaining.StartsWith("*/")) {
+            remaining.Skip(2);
             skipped += 2;
             return skipped;
         }
 
         bool isSkipped = false;
-        if (prefix.StartsWith("/*")) {
-            size_t limit = prefix.rfind("*/");
+        if (remaining.StartsWith("/*")) {
+            size_t limit = remaining.rfind("*/");
             if (limit == std::string::npos) {
                 return 0;
             }
 
-            size_t len = MatchANSIMultilineComment(prefix.Head(limit));
-            prefix.Skip(len);
+            size_t len = MatchANSIMultilineComment(remaining.Head(limit));
+            remaining.Skip(len);
             skipped += len;
 
             isSkipped = len != 0;
@@ -84,11 +84,11 @@ size_t MatchANSIMultilineComment(TStringBuf prefix) {
             continue;
         }
 
-        if (prefix.empty()) {
+        if (remaining.empty()) {
             return 0;
         }
 
-        prefix.Skip(1);
+        remaining.Skip(1);
         skipped += 1;
     }
 }

@@ -16,12 +16,6 @@ namespace {
 
 using namespace NNodes;
 
-bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char Flag[] = "FieldSubsetEnableMultiusage";
-    return !IsOptimizerDisabled<Flag>(*optCtx.Types) || optCtx.IsSingleUsage(node);
-}
-
 bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char OptName[] = "PushdownComplexFiltersOverAggregate";
@@ -170,9 +164,6 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
 }
 
 TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (!AllowSubsetFieldsForNode(node.Input().Ref(), optCtx)) {
-        return node.Ptr();
-    }
     auto itemArg = node.Lambda().Args().Arg(0);
     auto itemType = itemArg.Ref().GetTypeAnn();
     if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
@@ -257,10 +248,6 @@ bool HaveFieldsSubsetLMap(const TExprNode::TPtr& start, const TExprNode& arg, TS
 }
 
 TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    static const char OptName[] = "LMapSubsetFields";
-    if (IsOptimizerDisabled<OptName>(*optCtx.Types)) {
-        return node.Ptr();
-    }
     auto itemArg = node.Lambda().Args().Arg(0);
     auto itemType = itemArg.Ref().GetTypeAnn();
     if (itemType->GetKind() != ETypeAnnotationKind::Stream || GetSeqItemType(itemType)->GetKind() != ETypeAnnotationKind::Struct) {
@@ -309,9 +296,6 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
 
 TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoMapBase self(node);
-    if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-        return node;
-    }
     auto ret = LMapSubsetFields(self, ctx, optCtx);
     if (ret != node) {
         YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
@@ -2613,10 +2597,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoGroupingCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoGroupingCore self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         if (!self.ConvertHandler()) {
             return node;
         }
@@ -2654,10 +2634,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["CombineByKey"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoCombineByKey self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         auto itemArg = self.PreMapLambda().Args().Arg(0);
         auto itemType = itemArg.Ref().GetTypeAnn();
         if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
@@ -3272,10 +3248,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoAggregate self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx) && !optCtx.IsPersistentNode(self.Input())) {
-            return node;
-        }
-
         auto ret = AggregateSubsetFieldsAnalyzer(self, ctx, *optCtx.ParentsMap);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFieldsAnalyzer";
@@ -3343,10 +3315,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoCondense::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         const TCoCondense self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if (HaveFieldsSubset(self.SwitchHandler().Body().Ptr(), self.SwitchHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
@@ -3378,10 +3346,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoCondense1::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         const TCoCondense1 self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if (HaveFieldsSubset(self.InitHandler().Body().Ptr(), self.InitHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
@@ -3415,10 +3379,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoChain1Map::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         const TCoChain1Map self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if (HaveFieldsSubset(self.InitHandler().Body().Ptr(), self.InitHandler().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
@@ -3449,10 +3409,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoMapNext::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoMapNext self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if ((
              HaveFieldsSubset(self.Lambda().Body().Ptr(), self.Lambda().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false) &&
@@ -3482,10 +3438,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoSqueezeToDict::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         const TCoSqueezeToDict self(node);
-        if (!AllowSubsetFieldsForNode(self.Stream().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if (HaveFieldsSubset(self.KeySelector().Body().Ptr(), self.KeySelector().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
@@ -3517,10 +3469,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map[TCoCombineCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         const TCoCombineCore self(node);
-        if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
-            return node;
-        }
-
         std::map<std::string_view, TExprNode::TPtr> usedFields;
         if (HaveFieldsSubset(self.KeyExtractor().Body().Ptr(), self.KeyExtractor().Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap, false)
             && !usedFields.empty()
@@ -3554,12 +3502,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map[TCoMapJoinCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map[TCoMapJoinCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         const TCoMapJoinCore self(node);
-        if (!AllowSubsetFieldsForNode(self.LeftInput().Ref(), optCtx)) {
-            return node;
-        }
-
         const auto& leftItemType = GetSeqItemType(*self.LeftInput().Ref().GetTypeAnn());
         if (ETypeAnnotationKind::Struct != leftItemType.GetKind()) {
             return node;

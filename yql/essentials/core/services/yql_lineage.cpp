@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/limiting_allocator.h>
 #include <yql/essentials/utils/std_allocator.h>
 
@@ -192,18 +193,17 @@ private:
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone, ui32 version)
+    TLineageScanner(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, const TLineageRunOptions& options)
         : Root_(root)
         , Ctx_(ctx)
         , ExprCtx_(exprCtx)
+        , Options_(options)
         , Allocator_(MakeLimitingAllocator(ctx.LineageSettings.LineageMemoryLimit, TDefaultAllocator::Instance()))
         , Reads_(Allocator_.get())
         , Writes_(Allocator_.get())
         , ReadIds_(Allocator_.get())
         , Lineages_(Allocator_.get())
         , HasReads_(Allocator_.get())
-        , Standalone_(standalone)
-        , Version_(version)
         , StringPool_(4096, TMemoryPool::TExpGrow::Instance(), Allocator_.get())
         , Strings_(Allocator_.get())
         , TableIds_(Allocator_.get())
@@ -213,8 +213,8 @@ public:
         , SchemaRefs_(Allocator_.get())
         , LineageRefs_(Allocator_.get())
     {
-        if (version != 1 && version != 2) {
-            throw yexception() << "Unsupported LineageVersion is provided: " << version;
+        if (Options_.Version != 1 && Options_.Version != 2) {
+            throw yexception() << "Unsupported LineageVersion is provided: " << Options_.Version;
         }
     }
 
@@ -248,9 +248,9 @@ public:
         NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
         CollectResults();
         writer.OnBeginMap();
-        if (Version_ > 1) {
+        if (Options_.Version > 1) {
             writer.OnKeyedItem("Version");
-            writer.OnInt64Scalar(Version_);
+            writer.OnInt64Scalar(Options_.Version);
             WriteSchemaSet(writer);
             WriteLineageSet(writer);
         }
@@ -290,7 +290,7 @@ public:
             writer.OnEndMap();
         }
         writer.OnEndList();
-        if (Version_ > 1) {
+        if (Options_.Version > 1) {
             WriteReadSet(writer);
         }
         writer.OnEndMap();
@@ -388,8 +388,8 @@ private:
     }
 
     void AddLineageRef(const TLineage& lineage, const TStringBuf& tableName) {
-        // TODO: remove Standalone_ after fixing all failed tests, see YQL-20445
-        if (Standalone_ && !lineage.Fields.Defined()) {
+        // TODO: remove Standalone check after fixing all failed tests, see YQL-20445
+        if (Options_.Standalone && !lineage.Fields.Defined()) {
             YQL_ENSURE(!GetEnv("YQL_DETERMINISTIC_MODE"), "Can't calculate lineage");
             return;
         }
@@ -429,7 +429,7 @@ private:
                 items.push_back({value, count});
             }
         }
-        if (Version_ > 1 && isDuplicate) {
+        if (Options_.Version > 1 && isDuplicate) {
             writer.OnKeyedItem("SchemaSets");
             writer.OnBeginList();
             for (auto& [value, ind] : items) {
@@ -468,7 +468,7 @@ private:
                 items.push_back({&value, count});
             }
         }
-        if (Version_ > 1 && isDuplicate) {
+        if (Options_.Version > 1 && isDuplicate) {
             SortBy(items, [](const auto& x) { return x.second; });
             writer.OnKeyedItem("LineageSets");
             writer.OnBeginList();
@@ -518,7 +518,7 @@ private:
         writer.OnKeyedItem("Lineage");
         auto it = LineageRefs_.find(tableName);
         if (it == LineageRefs_.end()) {
-            if (Standalone_) {
+            if (Options_.Standalone) {
                 writer.OnEntity();
                 return;
             }
@@ -532,7 +532,7 @@ private:
         }
         for (const auto& [fieldName, lineage] : lineageRefs) {
             writer.OnKeyedItem(fieldName);
-            if (Version_ > 1 && LineageSets_.at(*lineage) > 1) {
+            if (Options_.Version > 1 && LineageSets_.at(*lineage) > 1) {
                 writer.OnBeginList();
                 writer.OnListItem();
                 writer.OnBeginMap();
@@ -549,7 +549,7 @@ private:
 
     void WriteLineageSection(NYson::TYsonWriter& writer, const TVectorLimited<TFieldLineage>* fieldLineage) {
         TMapLimited<std::pair<TStringBuf, ETransformsType>, TSetLimited<ui32>> inputSets(Allocator_.get());
-        if (Version_ > 1) {
+        if (Options_.Version > 1) {
             // if several indices have the save (Field, Transforms), replace them with new syntetic index which is stored into IndexSets_
             for (const auto& i : *fieldLineage) {
                 inputSets.try_emplace(make_pair(i.Field, i.Transforms), TSetLimited<ui32>(Allocator_.get())).first->second.insert(i.InputIndex);
@@ -566,7 +566,7 @@ private:
         TVectorLimited<TFieldLineage> items(Allocator_.get());
         for (const auto& i : *fieldLineage) {
             ui32 inputIndex = i.InputIndex;
-            if (Version_ > 1) {
+            if (Options_.Version > 1) {
                 if (checkedItems.contains(make_pair(TString(i.Field), i.Transforms))) {
                     continue;
                 }
@@ -604,7 +604,7 @@ private:
 
     void WriteSchemaRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
         const auto schema = SchemaRefs_[tableName];
-        if (Version_ > 1 && SchemaSets_[schema] > 1) {
+        if (Options_.Version > 1 && SchemaSets_[schema] > 1) {
             writer.OnKeyedItem("SchemaRef");
             writer.OnInt64Scalar(SchemaSets_[schema] - 1);
         } else {
@@ -615,7 +615,7 @@ private:
 
     void WriteProviderSchemaRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
         const auto schema = SchemaRefs_[tableName];
-        if (Version_ > 1 && SchemaSets_[schema] > 1) {
+        if (Options_.Version > 1 && SchemaSets_[schema] > 1) {
             writer.OnKeyedItem("YtSchemaRef");
             writer.OnInt64Scalar(SchemaSets_[schema] - 1);
         } else {
@@ -635,7 +635,11 @@ private:
             if (formatter) {
                 formatter->WriteTypeDetails(writer, *i->GetItemType());
             } else {
-                writer.OnStringScalar(FormatType(i->GetItemType()));
+                if (Options_.Standalone && Options_.YsonTypeFormat) {
+                    NCommon::WriteTypeToYson(writer, i->GetItemType());
+                } else {
+                    writer.OnStringScalar(FormatType(i->GetItemType()));
+                }
             }
         }
 
@@ -750,7 +754,7 @@ private:
 
     void Warning(const TExprNode& node) {
         auto message = TStringBuilder() << node.Type() << " : " << node.Content() << " is not supported";
-        if (Standalone_) {
+        if (Options_.Standalone) {
             auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
             ExprCtx_.AddWarning(issue);
@@ -1474,6 +1478,7 @@ private:
     const TExprNode& Root_;
     TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;
+    TLineageRunOptions Options_;
     std::unique_ptr<ILimitingAllocator> Allocator_;
     TNodeMapLimited<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
@@ -1481,8 +1486,6 @@ private:
     TNodeMapLimited<TVectorLimited<ui32>> ReadIds_;
     TNodeMapLimited<TLineage> Lineages_;
     TNodeSetLimited HasReads_;
-    bool Standalone_;
-    ui32 Version_;
     TMemoryPool StringPool_;
     THashSetLimited<TStringBuf> Strings_;
     TMapLimited<TStringBuf, ui32> TableIds_;
@@ -1521,8 +1524,8 @@ void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& li
 
 } // namespace
 
-TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone, ui32 version) {
-    TLineageScanner scanner(root, ctx, exprCtx, standalone, version);
+TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, const TLineageRunOptions& options) {
+    TLineageScanner scanner(root, ctx, exprCtx, options);
     return scanner.Process();
 }
 

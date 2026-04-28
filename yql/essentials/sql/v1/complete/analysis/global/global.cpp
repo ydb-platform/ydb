@@ -3,13 +3,13 @@
 #include "column.h"
 #include "function.h"
 #include "input.h"
-#include "named_node.h"
+#include "named_node_resolution.h"
+#include "named_node_visibility.h"
 #include "parse_tree.h"
+#include "parser.h"
 #include "use.h"
 
-#include <yql/essentials/sql/v1/complete/antlr4/pipeline.h>
 #include <yql/essentials/sql/v1/complete/syntax/ansi.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <library/cpp/iterator/functools.h>
 
@@ -117,62 +117,23 @@ TColumnContext TColumnContext::Asterisk() {
     return {.Columns = {{.Name = "*"}}};
 }
 
-class TErrorStrategy: public antlr4::DefaultErrorStrategy {
+class TSpecializedGlobalAnalysis final: public IGlobalAnalysis {
 public:
-    antlr4::Token* singleTokenDeletion(antlr4::Parser* /* recognizer */) override {
-        return nullptr;
-    }
-};
-
-template <bool IsAnsiLexer>
-class TSpecializedGlobalAnalysis: public IGlobalAnalysis {
-public:
-    using TLexer = std::conditional_t<
-        IsAnsiLexer,
-        NALAAnsiAntlr4::SQLv1Antlr4Lexer,
-        NALADefaultAntlr4::SQLv1Antlr4Lexer>;
-
-    TSpecializedGlobalAnalysis()
-        : Chars_()
-        , Lexer_(&Chars_)
-        , Tokens_(&Lexer_)
-        , Parser_(&Tokens_)
+    explicit TSpecializedGlobalAnalysis(IParser::TPtr parser)
+        : Parser_(std::move(parser))
     {
-        Lexer_.removeErrorListeners();
-        Parser_.removeErrorListeners();
-        Parser_.setErrorHandler(std::make_shared<TErrorStrategy>());
     }
 
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
-        TString recovered;
-        if (IsRecoverable(input)) {
-            recovered = TString(input.Text);
+        TParsedInput parsed = Parser_->Parse(std::move(input));
 
-            // - "_" is to parse `SELECT x._ FROM table`
-            //        instead of `SELECT x.FROM table`
-            recovered.insert(input.CursorPosition, "_");
-
-            input.Text = recovered;
-        }
-
-        SQLv1::Sql_queryContext* sqlQuery = Parse(input.Text);
-        Y_ENSURE(sqlQuery);
+        INamedNodes::TPtr nodes = ResolveNamedNodes(parsed, env);
 
         TGlobalContext ctx;
-
-        TParsedInput parsed = {
-            .Original = input,
-            .Tokens = &Tokens_,
-            .Parser = &Parser_,
-            .SqlQuery = sqlQuery,
-        };
-
-        TNamedNodes nodes = CollectNamedNodes(parsed, env);
-
-        ctx.Use = FindUseStatement(parsed, nodes);
-        ctx.Names = Keys(nodes);
-        ctx.EnclosingFunction = EnclosingFunction(parsed, nodes);
-        ctx.Column = InferColumnContext(parsed, nodes);
+        ctx.Use = FindUseStatement(parsed, *nodes);
+        ctx.Names = VisibleNamedNodes(parsed);
+        ctx.EnclosingFunction = EnclosingFunction(parsed, *nodes);
+        ctx.Column = InferColumnContext(parsed, *nodes);
 
         if (ctx.Use && ctx.Column) {
             EnrichTableClusters(*ctx.Column, *ctx.Use);
@@ -182,30 +143,6 @@ public:
     }
 
 private:
-    bool IsRecoverable(TCompletionInput input) const {
-        TStringBuf s = input.Text;
-        size_t i = input.CursorPosition;
-
-        return (i < s.size() && IsWordBoundary(s[i]) || i == s.size());
-    }
-
-    SQLv1::Sql_queryContext* Parse(TStringBuf input) {
-        Chars_.load(input.Data(), input.Size(), /* lenient = */ false);
-        Lexer_.reset();
-        Tokens_.setTokenSource(&Lexer_);
-        Parser_.reset();
-        return Parser_.sql_query();
-    }
-
-    TVector<TString> Keys(const TNamedNodes& nodes) {
-        TVector<TString> keys;
-        keys.reserve(nodes.size());
-        for (const auto& [name, _] : nodes) {
-            keys.emplace_back(name);
-        }
-        return keys;
-    }
-
     void EnrichTableClusters(TColumnContext& column, const TClusterContext& use) {
         for (auto& table : column.Tables) {
             if (table.Cluster.empty()) {
@@ -214,20 +151,17 @@ private:
         }
     }
 
-    void DebugPrint(TStringBuf query, antlr4::ParserRuleContext* ctx) {
-        Cerr << "= = = = = = " << Endl;
-        Cerr << query << Endl;
-        Cerr << ctx->toStringTree(&Parser_, true) << Endl;
-    }
-
-    antlr4::ANTLRInputStream Chars_;
-    TLexer Lexer_;
-    antlr4::CommonTokenStream Tokens_;
-    SQLv1 Parser_;
+    IParser::TPtr Parser_;
 };
 
 class TGlobalAnalysis: public IGlobalAnalysis {
 public:
+    TGlobalAnalysis()
+        : DefaultAnalysis_(MakeParser(/* isAnsiLexer = */ false))
+        , AnsiAnalysis_(MakeParser(/* isAnsiLexer = */ true))
+    {
+    }
+
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
         const bool isAnsiLexer = IsAnsiQuery(TString(input.Text));
         return GetSpecialized(isAnsiLexer).Analyze(std::move(input), std::move(env));
@@ -241,8 +175,8 @@ private:
         return DefaultAnalysis_;
     }
 
-    TSpecializedGlobalAnalysis</* IsAnsiLexer = */ false> DefaultAnalysis_;
-    TSpecializedGlobalAnalysis</* IsAnsiLexer = */ true> AnsiAnalysis_;
+    TSpecializedGlobalAnalysis DefaultAnalysis_;
+    TSpecializedGlobalAnalysis AnsiAnalysis_;
 };
 
 IGlobalAnalysis::TPtr MakeGlobalAnalysis() {

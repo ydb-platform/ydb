@@ -225,7 +225,7 @@ struct TSensorOptions
     bool Global = false;
     bool Sparse = false;
     bool Hot = false;
-    bool DisableSensorsRename = false;
+    std::optional<bool> DisableSensorsRename;
     bool DisableDefault = false;
     bool DisableProjections = false;
     bool ProducerRemoveSupport = false;

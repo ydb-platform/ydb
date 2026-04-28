@@ -1,8 +1,8 @@
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/filters.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/events.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/context.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
@@ -38,7 +38,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
 using namespace NKikimr::NOlap::NReader;
-using namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering;
+using namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering;
 
 namespace {
 
@@ -264,7 +264,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(
         0, requestSnapshot, ERequestSorting::NONE);
     readDesc.SetScanCursor(nullptr);
 
-    auto readMetadata = std::make_shared<NSimple::TReadMetadata>(
+    auto readMetadata = std::make_shared<NTrivial::TReadMetadata>(
         versionedIndex, readDesc);
     readMetadata->SetPKRangesFilter(readDesc.PKRangesFilter);
 
@@ -282,7 +282,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(
 
 struct TManagerSetupResult {
     NActors::TActorId ManagerId;
-    std::shared_ptr<NSimple::TSpecialReadContext> Context;
+    std::shared_ptr<NTrivial::TSpecialReadContext> Context;
 };
 
 class TManagerSetupActor
@@ -302,7 +302,7 @@ public:
 
     void Bootstrap() {
         Result->Context =
-            std::make_shared<NSimple::TSpecialReadContext>(ReadCtx);
+            std::make_shared<NTrivial::TSpecialReadContext>(ReadCtx);
         auto* manager =
             new TDuplicateManager(*Result->Context, Portions);
         Result->ManagerId = RegisterWithSameMailbox(manager);
@@ -583,13 +583,13 @@ Y_UNIT_TEST(OverlappingPortionsMergeDeduplication) {
     UNIT_ASSERT_C(!sub2->Failed,
         "P2 should not fail: " << sub2->FailureReason);
 
-    auto p1Filter = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto p1Filter = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(p1Filter.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(p1Filter[0], true);
     UNIT_ASSERT_VALUES_EQUAL(p1Filter[1], false);
     UNIT_ASSERT_VALUES_EQUAL(p1Filter[2], false);
 
-    auto p2Filter = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto p2Filter = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(p2Filter.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(p2Filter[0], true);
     UNIT_ASSERT_VALUES_EQUAL(p2Filter[1], true);
@@ -642,14 +642,14 @@ Y_UNIT_TEST(BoundaryOverlapSingleKey) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: key 1 kept, key 3 kept, key 5 deduped by newer P2
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
     // P2: all keys kept (key 5 is newer, keys 7,9 unique)
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -704,14 +704,14 @@ Y_UNIT_TEST(ReverseRequestOrder) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: key 1 unique, keys 2,3 deduped by newer P2
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
     UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
     // P2: all keys kept
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -765,7 +765,7 @@ Y_UNIT_TEST(FullContainment) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: keys 1,10 unique (kept); keys 3,5,7 deduped by newer P2
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 5u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
@@ -774,7 +774,7 @@ Y_UNIT_TEST(FullContainment) {
     UNIT_ASSERT_VALUES_EQUAL(f1[4], true);
 
     // P2: all keys kept (newer)
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -828,14 +828,14 @@ Y_UNIT_TEST(IdenticalKeyRanges) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: all deduped by newer P2
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], false);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
     UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
     // P2: all kept (newer)
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -900,7 +900,7 @@ Y_UNIT_TEST(ThreePortionsChainOverlap) {
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
     // P1: keys 1,2 unique; keys 3,4 deduped by P2
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
@@ -908,7 +908,7 @@ Y_UNIT_TEST(ThreePortionsChainOverlap) {
     UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
 
     // P2: keys 3,4 kept (newer than P1); keys 5,6 deduped by P3
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -916,7 +916,7 @@ Y_UNIT_TEST(ThreePortionsChainOverlap) {
     UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
     // P3: all keys kept (newest or unique)
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -981,21 +981,21 @@ Y_UNIT_TEST(ThreePortionsRequestMiddleFirst) {
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
     // Results must be the same regardless of request order
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
     UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[2], false);
     UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -1050,14 +1050,14 @@ Y_UNIT_TEST(OlderPortionWinsOnTxIdTiebreak) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: key 1 unique; keys 2,3 deduped by P2 (higher txId)
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
     UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
     // P2: all kept (higher txId wins on overlap, key 4 unique)
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1111,12 +1111,12 @@ Y_UNIT_TEST(SingleKeyPortionSharedBoundary) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
     // P1: single key 5 deduped by newer P2 (version 20 > 10)
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f1.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(f1[0], false);
 
     // P2: key 5 kept (newer), keys 7,10 unique
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1184,7 +1184,7 @@ Y_UNIT_TEST(MixedExclusiveAndOverlapping) {
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
     // P2: keys 5,6 unique; keys 7,8 deduped by P3
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1192,7 +1192,7 @@ Y_UNIT_TEST(MixedExclusiveAndOverlapping) {
     UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
     // P3: all kept
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
     UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -1259,7 +1259,7 @@ Y_UNIT_TEST(ManyUpdatesDeleteAllFilterCoversAllRows) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
         "P1 filter must cover all 10 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST(ManyUpdatesDeleteAllFilterCoversAllRows) {
             "P1 row " << i << " must be deduped (newer P3 exists)");
     }
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u,
         "P2 filter must cover all 10 records but got " << f2.size());
     for (ui32 i = 0; i < f2.size(); ++i) {
@@ -1275,7 +1275,7 @@ Y_UNIT_TEST(ManyUpdatesDeleteAllFilterCoversAllRows) {
             "P2 row " << i << " must be deduped (newer P3 exists)");
     }
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u,
         "P3 filter must cover all 10 records but got " << f3.size());
     for (ui32 i = 0; i < f3.size(); ++i) {
@@ -1348,7 +1348,7 @@ Y_UNIT_TEST(DeletePortionRequestedFirst) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
         "P1 filter must cover all 10 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1356,7 +1356,7 @@ Y_UNIT_TEST(DeletePortionRequestedFirst) {
             "P1 row " << i << " must be deduped");
     }
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u,
         "P2 filter must cover all 10 records but got " << f2.size());
     for (ui32 i = 0; i < f2.size(); ++i) {
@@ -1364,7 +1364,7 @@ Y_UNIT_TEST(DeletePortionRequestedFirst) {
             "P2 row " << i << " must be deduped");
     }
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u,
         "P3 filter must cover all 10 records but got " << f3.size());
     for (ui32 i = 0; i < f3.size(); ++i) {
@@ -1439,7 +1439,7 @@ Y_UNIT_TEST(ManyNarrowPortionsBatchSplit) {
 
     UNIT_ASSERT_C(subWide->FilterReady && !subWide->Failed,
         subWide->FailureReason);
-    auto fWide = subWide->ReceivedFilter.BuildSimpleFilter();
+    auto fWide = subWide->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(fWide.size(), N,
         "Wide filter must cover " << N << " records but got " << fWide.size());
     for (ui32 i = 0; i < fWide.size(); ++i) {
@@ -1450,7 +1450,7 @@ Y_UNIT_TEST(ManyNarrowPortionsBatchSplit) {
     for (ui64 k = 0; k < N; ++k) {
         UNIT_ASSERT_C(narrowSubs[k]->FilterReady && !narrowSubs[k]->Failed,
             "Narrow P" << (k+1) << " failed: " << narrowSubs[k]->FailureReason);
-        auto f = narrowSubs[k]->ReceivedFilter.BuildSimpleFilter();
+        auto f = narrowSubs[k]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), 1u,
             "Narrow P" << (k+1) << " filter must be 1 entry but got " << f.size());
         UNIT_ASSERT_VALUES_EQUAL_C(f[0], true,
@@ -1533,7 +1533,7 @@ Y_UNIT_TEST(ManyUpdatesAllRequestsSimultaneous) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -1611,7 +1611,7 @@ Y_UNIT_TEST(ManyUpdatesWithNarrowPortionDeleteAll) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
         "P1 filter must cover all 10 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1619,12 +1619,12 @@ Y_UNIT_TEST(ManyUpdatesWithNarrowPortionDeleteAll) {
             "P1 row " << i << " (pk=" << (i+1) << ") must be deduped");
     }
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 1u,
         "P2 filter must cover 1 record but got " << f2.size());
     UNIT_ASSERT_VALUES_EQUAL(f2[0], false);
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u,
         "P3 filter must cover all 10 records but got " << f3.size());
     for (ui32 i = 0; i < f3.size(); ++i) {
@@ -1703,7 +1703,7 @@ Y_UNIT_TEST(ManyUpdatesMultipleNarrowPortions) {
     UNIT_ASSERT_C(sub4->FilterReady && !sub4->Failed, sub4->FailureReason);
     UNIT_ASSERT_C(sub5->FilterReady && !sub5->Failed, sub5->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
         "P1 filter must cover all 10 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1711,22 +1711,22 @@ Y_UNIT_TEST(ManyUpdatesMultipleNarrowPortions) {
             "P1 row " << i << " (pk=" << (i+1) << ") must be deduped");
     }
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 1u,
         "P2 filter must cover 1 record but got " << f2.size());
     UNIT_ASSERT_VALUES_EQUAL(f2[0], false);
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 1u,
         "P3 filter must cover 1 record but got " << f3.size());
     UNIT_ASSERT_VALUES_EQUAL(f3[0], false);
 
-    auto f4 = sub4->ReceivedFilter.BuildSimpleFilter();
+    auto f4 = sub4->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f4.size(), 1u,
         "P4 filter must cover 1 record but got " << f4.size());
     UNIT_ASSERT_VALUES_EQUAL(f4[0], false);
 
-    auto f5 = sub5->ReceivedFilter.BuildSimpleFilter();
+    auto f5 = sub5->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f5.size(), 10u,
         "P5 filter must cover all 10 records but got " << f5.size());
     for (ui32 i = 0; i < f5.size(); ++i) {
@@ -1790,7 +1790,7 @@ Y_UNIT_TEST(MultipleWideOverlappingPortions) {
     for (ui32 p = 0; p < portionCount; ++p) {
         UNIT_ASSERT_C(subs[p]->FilterReady && !subs[p]->Failed,
             "P" << (p+1) << " failed: " << subs[p]->FailureReason);
-        auto f = subs[p]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[p]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), N,
             "P" << (p+1) << " filter must cover " << N
             << " records but got " << f.size());
@@ -1876,7 +1876,7 @@ Y_UNIT_TEST(NarrowUpdatesDeleteAllReverseRequestOrder) {
     UNIT_ASSERT_C(sub4->FilterReady && !sub4->Failed, sub4->FailureReason);
     UNIT_ASSERT_C(sub5->FilterReady && !sub5->Failed, sub5->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
         "P1 filter must cover 10 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1884,14 +1884,14 @@ Y_UNIT_TEST(NarrowUpdatesDeleteAllReverseRequestOrder) {
             "P1 row " << i << " must be deduped");
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildSimpleFilter().size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildSimpleFilter().size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildSimpleFilter().size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildSimpleFilter()[0], false);
-    UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildSimpleFilter()[0], false);
-    UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildSimpleFilter()[0], false);
+    UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildTrivialFilter().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildTrivialFilter().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildTrivialFilter().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildTrivialFilter()[0], false);
+    UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildTrivialFilter()[0], false);
+    UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildTrivialFilter()[0], false);
 
-    auto f5 = sub5->ReceivedFilter.BuildSimpleFilter();
+    auto f5 = sub5->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f5.size(), 10u,
         "P5 filter must cover 10 records but got " << f5.size());
     for (ui32 i = 0; i < f5.size(); ++i) {
@@ -1969,7 +1969,7 @@ Y_UNIT_TEST(WidePortionContainedInAnother) {
     UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
     UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-    auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 20u,
         "P1 filter must cover 20 records but got " << f1.size());
     for (ui32 i = 0; i < f1.size(); ++i) {
@@ -1977,7 +1977,7 @@ Y_UNIT_TEST(WidePortionContainedInAnother) {
             "P1 row " << i << " must be deduped by P3");
     }
 
-    auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 11u,
         "P2 filter must cover 11 records but got " << f2.size());
     for (ui32 i = 0; i < f2.size(); ++i) {
@@ -1985,7 +1985,7 @@ Y_UNIT_TEST(WidePortionContainedInAnother) {
             "P2 row " << i << " must be deduped by P3");
     }
 
-    auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
     UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 20u,
         "P3 filter must cover 20 records but got " << f3.size());
     for (ui32 i = 0; i < f3.size(); ++i) {
@@ -2069,7 +2069,7 @@ Y_UNIT_TEST(ManyUpdatesEveryKeyHasNarrowUpdate) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -2173,7 +2173,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticScenario) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -2183,7 +2183,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticScenario) {
 
     THashMap<ui64, ui32> trueCountPerKey;
     for (ui32 idx = 0; idx < subs.size(); ++idx) {
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         const auto& p = portions[idx];
         ui64 startKey = p->IndexKeyStart().GetValue<ui64>(0).value();
         for (ui32 i = 0; i < f.size(); ++i) {
@@ -2205,7 +2205,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticScenario) {
 
     for (ui32 idx = 0; idx < subs.size(); ++idx) {
         if (portions[idx]->GetPortionId() == newestBulkPid) {
-            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
             for (ui32 i = 0; i < f.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL_C(f[i], true,
                     "Newest bulk portion row " << i << " must be kept");
@@ -2308,7 +2308,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticDeleteAll) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -2318,7 +2318,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticDeleteAll) {
 
     THashMap<ui64, ui32> trueCountPerKey;
     for (ui32 idx = 0; idx < subs.size(); ++idx) {
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         const auto& p = portions[idx];
         ui64 startKey = p->IndexKeyStart().GetValue<ui64>(0).value();
         for (ui32 i = 0; i < f.size(); ++i) {
@@ -2341,7 +2341,7 @@ Y_UNIT_TEST(ManyUpdatesRealisticDeleteAll) {
     {
         ui32 delIdx = subs.size() - 1;
         UNIT_ASSERT_VALUES_EQUAL(portions[delIdx]->GetPortionId(), deletePid);
-        auto f = subs[delIdx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[delIdx]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), numKeys,
             "Delete portion filter size " << f.size());
         for (ui32 i = 0; i < f.size(); ++i) {
@@ -2415,7 +2415,7 @@ Y_UNIT_TEST(StaggeredOverlapWithGaps) {
             "P" << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "P" << portions[idx]->GetPortionId()
@@ -2537,7 +2537,7 @@ Y_UNIT_TEST(TwoConcurrentChainsPrematureDrain) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), portions[idx]->GetRecordsCount(),
             "Portion " << portions[idx]->GetPortionId()
             << " filter size mismatch");
@@ -2545,7 +2545,7 @@ Y_UNIT_TEST(TwoConcurrentChainsPrematureDrain) {
 
     THashMap<ui64, ui32> trueCountPerKey;
     for (ui32 idx = 0; idx < subs.size(); ++idx) {
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 startKey = portions[idx]->IndexKeyStart().GetValue<ui64>(0).value();
         for (ui32 i = 0; i < f.size(); ++i) {
             if (f[i]) {
@@ -2671,7 +2671,7 @@ Y_UNIT_TEST(TwoConcurrentChainsManyPortions) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), portions[idx]->GetRecordsCount(),
             "Portion " << portions[idx]->GetPortionId()
             << " filter size mismatch");
@@ -2784,7 +2784,7 @@ Y_UNIT_TEST(ManyUpdatesBulkFirstRequest) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -2896,7 +2896,7 @@ Y_UNIT_TEST(ManyUpdatesExactFailingTestParams) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         ui64 expected = portions[idx]->GetRecordsCount();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
             "Portion " << portions[idx]->GetPortionId()
@@ -2992,7 +2992,7 @@ Y_UNIT_TEST(ManyUpdatesSingleKeyStorm) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), portions[idx]->GetRecordsCount(),
             "Portion " << portions[idx]->GetPortionId()
             << " filter size mismatch");
@@ -3013,7 +3013,7 @@ Y_UNIT_TEST(ManyUpdatesSingleKeyStorm) {
     UNIT_ASSERT_VALUES_EQUAL(trueCountPerKey.size(), numKeys);
 
     {
-        auto wideF = subs.back()->ReceivedFilter.BuildSimpleFilter();
+        auto wideF = subs.back()->ReceivedFilter.BuildTrivialFilter();
         for (ui32 i = 0; i < wideF.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(wideF[i], true,
                 "Wide portion (newest) row " << i << " must be kept");
@@ -3102,7 +3102,7 @@ Y_UNIT_TEST(ManyUpdatesReverseRequestOrder) {
             "Portion " << portions[idx]->GetPortionId()
             << " failed: " << subs[idx]->FailureReason);
 
-        auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f.size(), portions[idx]->GetRecordsCount(),
             "Portion " << portions[idx]->GetPortionId()
             << " filter size mismatch");
@@ -3123,4 +3123,824 @@ Y_UNIT_TEST(ManyUpdatesReverseRequestOrder) {
     UNIT_ASSERT_VALUES_EQUAL(trueCountPerKey.size(), numKeys);
 }
 
+<<<<<<< HEAD:ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/ut/ut_manager.cpp
+=======
+Y_UNIT_TEST(DescSorted_SingleExclusivePortionGetsAllowAllFilter) {
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(edgeActor);
+    auto cdm =
+        std::make_shared<NColumnFetching::TColumnDataManager>(edgeActor);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 10, 20, 100));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(1, 1), portions, dam, cdm, edgeActor, setup, ERequestSorting::DESC);
+
+    auto subscriber = std::make_shared<TTestFilterSubscriber>();
+    runtime.Send(
+        MakeFilterRequestHandle(actorId, edgeActor, 1, 100, subscriber));
+
+    NActors::TDispatchOptions options;
+    options.CustomFinalCondition =
+        [&subscriber]() { return subscriber->FilterReady; };
+    runtime.DispatchEvents(options, TDuration::Seconds(1));
+
+    UNIT_ASSERT_C(subscriber->FilterReady,
+                  "subscriber should have received the filter");
+    UNIT_ASSERT(!subscriber->Failed);
+    UNIT_ASSERT(subscriber->ReceivedFilter.IsTotalAllowFilter());
+    UNIT_ASSERT_VALUES_EQUAL(
+        subscriber->ReceivedFilter.GetRecordsCountVerified(), 100);
+}
+
+Y_UNIT_TEST(DescSorted_OverlappingPortionsMergeDeduplication) {
+    // Test with DESC sorting: P1=[1,3] pk={1,2,3} version=10, P2=[2,4] pk={2,3,4} version=20
+    // In DESC order, keys are processed from highest to lowest
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam =
+        std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm =
+        std::make_shared<NColumnFetching::TColumnDataManager>(
+            tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 3, 3));
+    portions.push_back(MakeTestPortion(2, 2, 4, 3));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId,
+        1, {1, 2, 3}, {10, 10, 10}, {1, 1, 1}, {0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId,
+        2, {2, 3, 4}, {20, 20, 20}, {1, 1, 1}, {0, 0, 0});
+
+    NActors::TActorId columnCacheServiceId =
+        NColumnFetching::TGeneralCache::MakeServiceId(
+            runtime.GetNodeId(0));
+    runtime.RegisterService(columnCacheServiceId,
+        runtime.Register(
+            new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm,
+        tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+
+    runtime.Send(
+        MakeFilterRequestHandle(actorId, edgeActor, 1, 3, sub1));
+    NActors::TDispatchOptions opt1;
+    opt1.CustomFinalCondition =
+        [&]() { return sub1->FilterReady || sub1->Failed; };
+    runtime.DispatchEvents(opt1, TDuration::Seconds(5));
+
+    runtime.Send(
+        MakeFilterRequestHandle(actorId, edgeActor, 2, 3, sub2));
+    NActors::TDispatchOptions opt2;
+    opt2.CustomFinalCondition =
+        [&]() { return sub2->FilterReady || sub2->Failed; };
+    runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+
+    UNIT_ASSERT_C(sub1->FilterReady,
+        "P1 filter should be ready; failure=" << sub1->FailureReason);
+    UNIT_ASSERT_C(!sub1->Failed,
+        "P1 should not fail: " << sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady,
+        "P2 filter should be ready; failure=" << sub2->FailureReason);
+    UNIT_ASSERT_C(!sub2->Failed,
+        "P2 should not fail: " << sub2->FailureReason);
+
+    auto p1Filter = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(p1Filter.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(p1Filter[0], true);   // key 1 unique
+    UNIT_ASSERT_VALUES_EQUAL(p1Filter[1], false);  // key 2 deduped by P2
+    UNIT_ASSERT_VALUES_EQUAL(p1Filter[2], false);  // key 3 deduped by P2
+
+    auto p2Filter = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(p2Filter.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(p2Filter[0], true);   // key 2 kept (newer)
+    UNIT_ASSERT_VALUES_EQUAL(p2Filter[1], true);   // key 3 kept (newer)
+    UNIT_ASSERT_VALUES_EQUAL(p2Filter[2], true);   // key 4 unique
+}
+
+Y_UNIT_TEST(DescSorted_ThreePortionsChainOverlap) {
+    // Test with DESC sorting: P1=[1,4], P2=[3,6], P3=[5,8]
+    // Chain: P1-P2 overlap on 3,4; P2-P3 overlap on 5,6.
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 4, 4));
+    portions.push_back(MakeTestPortion(2, 3, 6, 4));
+    portions.push_back(MakeTestPortion(3, 5, 8, 4));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1, 2, 3, 4}, {10, 10, 10, 10}, {1, 1, 1, 1}, {0, 0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {3, 4, 5, 6}, {20, 20, 20, 20}, {1, 1, 1, 1}, {0, 0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId, 3,
+        {5, 6, 7, 8}, {30, 30, 30, 30}, {1, 1, 1, 1}, {0, 0, 0, 0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub3 = std::make_shared<TTestFilterSubscriber>();
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 4, sub1));
+    NActors::TDispatchOptions opt1;
+    opt1.CustomFinalCondition = [&]() { return sub1->FilterReady || sub1->Failed; };
+    runtime.DispatchEvents(opt1, TDuration::Seconds(5));
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 4, sub2));
+    NActors::TDispatchOptions opt2;
+    opt2.CustomFinalCondition = [&]() { return sub2->FilterReady || sub2->Failed; };
+    runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 3, 4, sub3));
+    NActors::TDispatchOptions opt3;
+    opt3.CustomFinalCondition = [&]() { return sub3->FilterReady || sub3->Failed; };
+    runtime.DispatchEvents(opt3, TDuration::Seconds(5));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+    UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
+
+    // P1: keys 1,2 unique; keys 3,4 deduped by P2
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
+    UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
+
+    // P2: keys 3,4 kept (newer than P1); keys 5,6 deduped by P3
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[2], false);
+    UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
+
+    // P3: all keys kept (newest or unique)
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[2], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[3], true);
+}
+
+Y_UNIT_TEST(DescSorted_ManyUpdatesDeleteAllFilterCoversAllRows) {
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 10, 10));
+    portions.push_back(MakeTestPortion(2, 1, 10, 10));
+    portions.push_back(MakeTestPortion(3, 1, 10, 10));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1,2,3,4,5,6,7,8,9,10},
+        {10,10,10,10,10,10,10,10,10,10},
+        {1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {1,2,3,4,5,6,7,8,9,10},
+        {20,20,20,20,20,20,20,20,20,20},
+        {1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 3,
+        {1,2,3,4,5,6,7,8,9,10},
+        {30,30,30,30,30,30,30,30,30,30},
+        {1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub3 = std::make_shared<TTestFilterSubscriber>();
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 10, sub1));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 10, sub2));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 3, 10, sub3));
+
+    NActors::TDispatchOptions opts;
+    opts.CustomFinalCondition = [&]() {
+        return (sub1->FilterReady || sub1->Failed) &&
+               (sub2->FilterReady || sub2->Failed) &&
+               (sub3->FilterReady || sub3->Failed);
+    };
+    runtime.DispatchEvents(opts, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+    UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
+
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u,
+        "P1 filter must cover all 10 records but got " << f1.size());
+    for (ui32 i = 0; i < f1.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false,
+            "P1 row " << i << " must be deduped (newer P3 exists)");
+    }
+
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u,
+        "P2 filter must cover all 10 records but got " << f2.size());
+    for (ui32 i = 0; i < f2.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false,
+            "P2 row " << i << " must be deduped (newer P3 exists)");
+    }
+
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u,
+        "P3 filter must cover all 10 records but got " << f3.size());
+    for (ui32 i = 0; i < f3.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true,
+            "P3 row " << i << " must be kept (newest version)");
+    }
+}
+
+Y_UNIT_TEST(DescSorted_MixedExclusiveAndOverlapping) {
+    // P1=[1,3] exclusive, P2=[5,8] overlaps with P3=[7,10]
+    // P1 should get allow-all. P2/P3 go through merge.
+    // P2: pk={5,6,7,8} version=10
+    // P3: pk={7,8,9,10} version=20
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 3, 2));
+    portions.push_back(MakeTestPortion(2, 5, 8, 4));
+    portions.push_back(MakeTestPortion(3, 7, 10, 4));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {5, 6, 7, 8}, {10, 10, 10, 10}, {1, 1, 1, 1}, {0, 0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId, 3,
+        {7, 8, 9, 10}, {20, 20, 20, 20}, {1, 1, 1, 1}, {0, 0, 0, 0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto subExcl = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub3 = std::make_shared<TTestFilterSubscriber>();
+
+    // P1 is exclusive — should get allow-all immediately
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 2, subExcl));
+    NActors::TDispatchOptions optE;
+    optE.CustomFinalCondition = [&]() { return subExcl->FilterReady; };
+    runtime.DispatchEvents(optE, TDuration::Seconds(1));
+
+    UNIT_ASSERT(subExcl->FilterReady);
+    UNIT_ASSERT(subExcl->ReceivedFilter.IsTotalAllowFilter());
+    UNIT_ASSERT_VALUES_EQUAL(subExcl->ReceivedFilter.GetRecordsCountVerified(), 2);
+
+    // Now request overlapping portions
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 4, sub2));
+    NActors::TDispatchOptions opt2;
+    opt2.CustomFinalCondition = [&]() { return sub2->FilterReady || sub2->Failed; };
+    runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 3, 4, sub3));
+    NActors::TDispatchOptions opt3;
+    opt3.CustomFinalCondition = [&]() { return sub3->FilterReady || sub3->Failed; };
+    runtime.DispatchEvents(opt3, TDuration::Seconds(5));
+
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+    UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
+
+    // P2: keys 5,6 unique; keys 7,8 deduped by P3
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[2], false);
+    UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
+
+    // P3: all kept
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[2], true);
+    UNIT_ASSERT_VALUES_EQUAL(f3[3], true);
+}
+
+Y_UNIT_TEST(DescSorted_ReverseRequestOrder) {
+    // Same overlap as OverlappingPortionsMergeDeduplication, but request P2 first.
+    // P1: pk={1,2,3} version=10 (older)
+    // P2: pk={2,3,4} version=20 (newer)
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 3, 3));
+    portions.push_back(MakeTestPortion(2, 2, 4, 3));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1, 2, 3}, {10, 10, 10}, {1, 1, 1}, {0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {2, 3, 4}, {20, 20, 20}, {1, 1, 1}, {0, 0, 0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+
+    // Request P2 FIRST, then P1
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 3, sub2));
+    NActors::TDispatchOptions opt2;
+    opt2.CustomFinalCondition = [&]() { return sub2->FilterReady || sub2->Failed; };
+    runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 3, sub1));
+    NActors::TDispatchOptions opt1;
+    opt1.CustomFinalCondition = [&]() { return sub1->FilterReady || sub1->Failed; };
+    runtime.DispatchEvents(opt1, TDuration::Seconds(5));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+
+    // P1: key 1 unique, keys 2,3 deduped by newer P2
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
+    UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
+
+    // P2: all keys kept
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[2], true);
+}
+
+Y_UNIT_TEST(DescSorted_FullContainment) {
+    // P1=[1,10] pk={1,3,5,7,10} version=10 (outer, older)
+    // P2=[3,7]  pk={3,5,7}       version=20 (inner, newer)
+    // Keys 3,5,7 overlap. P2 wins.
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 10, 5));
+    portions.push_back(MakeTestPortion(2, 3, 7, 3));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1, 3, 5, 7, 10}, {10, 10, 10, 10, 10}, {1, 1, 1, 1, 1}, {0, 0, 0, 0, 0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {3, 5, 7}, {20, 20, 20}, {1, 1, 1}, {0, 0, 0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 5, sub1));
+    NActors::TDispatchOptions opt1;
+    opt1.CustomFinalCondition = [&]() { return sub1->FilterReady || sub1->Failed; };
+    runtime.DispatchEvents(opt1, TDuration::Seconds(5));
+
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 3, sub2));
+    NActors::TDispatchOptions opt2;
+    opt2.CustomFinalCondition = [&]() { return sub2->FilterReady || sub2->Failed; };
+    runtime.DispatchEvents(opt2, TDuration::Seconds(5));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+
+    // P1: keys 1,10 unique (kept); keys 3,5,7 deduped by newer P2
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f1.size(), 5u);
+    UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
+    UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
+    UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
+    UNIT_ASSERT_VALUES_EQUAL(f1[4], true);
+
+    // P2: all keys kept (newer)
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
+    UNIT_ASSERT_VALUES_EQUAL(f2[2], true);
+}
+
+Y_UNIT_TEST(DescSorted_MultipleWideOverlappingPortions) {
+    // 5 wide portions [1,10], each with all 10 keys, increasing versions.
+    // All requests sent simultaneously. Tests many-to-many deduplication.
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    const ui32 portionCount = 5;
+    const ui64 N = 10;
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    TColumnDataMap columnStore;
+
+    for (ui32 p = 1; p <= portionCount; ++p) {
+        portions.push_back(MakeTestPortion(p, 1, N, N));
+        std::vector<ui64> pk, ps, tx, wr;
+        for (ui64 k = 1; k <= N; ++k) {
+            pk.push_back(k);
+            ps.push_back(p * 10);
+            tx.push_back(1);
+            wr.push_back(0);
+        }
+        RegisterColumnData(columnStore, tabletActorId, p, pk, ps, tx, wr);
+    }
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    std::vector<std::shared_ptr<TTestFilterSubscriber>> subs(portionCount);
+    for (ui32 p = 0; p < portionCount; ++p) {
+        subs[p] = std::make_shared<TTestFilterSubscriber>();
+        runtime.Send(MakeFilterRequestHandle(
+            actorId, edgeActor, p + 1, N, subs[p]));
+    }
+
+    NActors::TDispatchOptions opts;
+    opts.CustomFinalCondition = [&]() {
+        for (auto& s : subs) {
+            if (!s->FilterReady && !s->Failed) return false;
+        }
+        return true;
+    };
+    runtime.DispatchEvents(opts, TDuration::Seconds(10));
+
+    for (ui32 p = 0; p < portionCount; ++p) {
+        UNIT_ASSERT_C(subs[p]->FilterReady && !subs[p]->Failed,
+            "P" << (p+1) << " failed: " << subs[p]->FailureReason);
+        auto f = subs[p]->ReceivedFilter.BuildTrivialFilter();
+        UNIT_ASSERT_VALUES_EQUAL_C(f.size(), N,
+            "P" << (p+1) << " filter must cover " << N
+            << " records but got " << f.size());
+
+        bool isNewest = (p + 1 == portionCount);
+        for (ui32 i = 0; i < f.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(f[i], isNewest,
+                "P" << (p+1) << " row " << i
+                << (isNewest ? " must be kept" : " must be deduped"));
+        }
+    }
+}
+
+Y_UNIT_TEST(DescSorted_BorderOrderingWithMultiplePortions) {
+    // Test that borders are processed in correct order with DESC sorting
+    // Portions: P1=[1,10], P2=[5,15], P3=[10,20]
+    // In DESC order, borders should be processed from highest to lowest
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 10, 10));
+    portions.push_back(MakeTestPortion(2, 5, 15, 11));
+    portions.push_back(MakeTestPortion(3, 10, 20, 11));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1,2,3,4,5,6,7,8,9,10},
+        {10,10,10,10,10,10,10,10,10,10},
+        {1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {5,6,7,8,9,10,11,12,13,14,15},
+        {20,20,20,20,20,20,20,20,20,20,20},
+        {1,1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 3,
+        {10,11,12,13,14,15,16,17,18,19,20},
+        {30,30,30,30,30,30,30,30,30,30,30},
+        {1,1,1,1,1,1,1,1,1,1,1},
+        {0,0,0,0,0,0,0,0,0,0,0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub3 = std::make_shared<TTestFilterSubscriber>();
+
+    // Request in reverse order to test border processing
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 3, 11, sub3));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 11, sub2));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 10, sub1));
+
+    NActors::TDispatchOptions opts;
+    opts.CustomFinalCondition = [&]() {
+        return (sub1->FilterReady || sub1->Failed) &&
+               (sub2->FilterReady || sub2->Failed) &&
+               (sub3->FilterReady || sub3->Failed);
+    };
+    runtime.DispatchEvents(opts, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+    UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
+
+    // P1: keys 1-4 unique, keys 5-10 deduped by P2 or P3
+    auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f1.size(), 10u);
+    for (ui32 i = 0; i < 4; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f1[i], true, i);
+    }
+    for (ui32 i = 4; i < 10; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, i);
+    }
+
+    // P2: keys 5-9 deduped by P3, keys 10-15 deduped by P3
+    auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f2.size(), 11u);
+    for (ui32 i = 0; i < 5; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f2[i], true, i);
+    }
+    for (ui32 i = 5; i < 11; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false, i);
+    }
+
+    // P3: all kept (newest)
+    auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+    UNIT_ASSERT_VALUES_EQUAL(f3.size(), 11u);
+    for (ui32 i = 0; i < 11; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, i);
+    }
+}
+
+Y_UNIT_TEST(DescSorted_ConcurrentChainsWithReverseOrder) {
+    // Test concurrent batch chains with DESC sorting
+    // Similar to TwoConcurrentChainsPrematureDrain but with DESC order
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    TColumnDataMap columnStore;
+    ui64 pid = 1;
+
+    for (ui64 k = 0; k <= 9; ++k) {
+        if (k == 6) continue;
+        portions.push_back(MakeTestPortion(pid, k, k, 1));
+        RegisterColumnData(columnStore, tabletActorId, pid, {k}, {10}, {1}, {0});
+        ++pid;
+    }
+
+    ui64 pOldId = pid++;
+    portions.push_back(MakeTestPortion(pOldId, 6, 6, 1));
+    RegisterColumnData(columnStore, tabletActorId, pOldId, {6}, {50}, {1}, {0});
+
+    ui64 pNewId = pid++;
+    portions.push_back(MakeTestPortion(pNewId, 0, 9, 10));
+    {
+        std::vector<ui64> pk, ps, tx, wr;
+        for (ui64 k = 0; k <= 9; ++k) {
+            pk.push_back(k);
+            ps.push_back(100);
+            tx.push_back(1);
+            wr.push_back(0);
+        }
+        RegisterColumnData(columnStore, tabletActorId, pNewId, pk, ps, tx, wr);
+    }
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(1000, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    std::vector<std::shared_ptr<TTestFilterSubscriber>> subs(portions.size());
+
+    // Send P_old's request FIRST (border=key6) to trigger chain A
+    ui32 pOldIdx = Max<ui32>();
+    ui32 pKey9Idx = Max<ui32>();
+    for (ui32 i = 0; i < portions.size(); ++i) {
+        if (portions[i]->GetPortionId() == pOldId) pOldIdx = i;
+        if (portions[i]->IndexKeyStart().GetValue<ui64>(0).value() == 9 &&
+            portions[i]->GetRecordsCount() == 1) pKey9Idx = i;
+    }
+    UNIT_ASSERT(pOldIdx != Max<ui32>());
+    UNIT_ASSERT(pKey9Idx != Max<ui32>());
+
+    {
+        auto s = std::make_shared<TTestFilterSubscriber>();
+        subs[pOldIdx] = s;
+        runtime.Send(MakeFilterRequestHandle(
+            actorId, edgeActor, portions[pOldIdx]->GetPortionId(),
+            portions[pOldIdx]->GetRecordsCount(), s));
+    }
+    {
+        auto s = std::make_shared<TTestFilterSubscriber>();
+        subs[pKey9Idx] = s;
+        runtime.Send(MakeFilterRequestHandle(
+            actorId, edgeActor, portions[pKey9Idx]->GetPortionId(),
+            portions[pKey9Idx]->GetRecordsCount(), s));
+    }
+
+    for (ui32 i = 0; i < portions.size(); ++i) {
+        if (i == pOldIdx || i == pKey9Idx) continue;
+        auto s = std::make_shared<TTestFilterSubscriber>();
+        subs[i] = s;
+        runtime.Send(MakeFilterRequestHandle(
+            actorId, edgeActor, portions[i]->GetPortionId(),
+            portions[i]->GetRecordsCount(), s));
+    }
+
+    NActors::TDispatchOptions opts;
+    opts.CustomFinalCondition = [&]() {
+        for (auto& s : subs) {
+            if (!s || (!s->FilterReady && !s->Failed)) return false;
+        }
+        return true;
+    };
+    runtime.DispatchEvents(opts, TDuration::Seconds(30));
+
+    for (ui32 idx = 0; idx < subs.size(); ++idx) {
+        UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
+            "Portion " << portions[idx]->GetPortionId()
+            << " failed: " << subs[idx]->FailureReason);
+
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+        UNIT_ASSERT_VALUES_EQUAL_C(f.size(), portions[idx]->GetRecordsCount(),
+            "Portion " << portions[idx]->GetPortionId()
+            << " filter size mismatch");
+    }
+
+    THashMap<ui64, ui32> trueCountPerKey;
+    for (ui32 idx = 0; idx < subs.size(); ++idx) {
+        auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+        ui64 startKey = portions[idx]->IndexKeyStart().GetValue<ui64>(0).value();
+        for (ui32 i = 0; i < f.size(); ++i) {
+            if (f[i]) {
+                trueCountPerKey[startKey + i]++;
+            }
+        }
+    }
+
+    for (const auto& [key, count] : trueCountPerKey) {
+        UNIT_ASSERT_VALUES_EQUAL_C(count, 1u,
+            "Key " << key << " has " << count
+            << " surviving versions (expected exactly 1, duplicate detected)");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(trueCountPerKey.size(), 10u);
+}
+
+Y_UNIT_TEST(DescSorted_NonSequentialBorderProcessing) {
+    // Test that borders are processed correctly even when they don't arrive sequentially
+    // Portions: P1=[1,5], P2=[10,15], P3=[20,25]
+    // Request order: P2, P1, P3 (non-sequential)
+    NActors::TTestActorRuntimeBase runtime(1, false);
+    InitializeRuntimeWithLogging(runtime);
+    NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+    auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+    auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+    std::deque<std::shared_ptr<TPortionInfo>> portions;
+    portions.push_back(MakeTestPortion(1, 1, 5, 5));
+    portions.push_back(MakeTestPortion(2, 10, 15, 6));
+    portions.push_back(MakeTestPortion(3, 20, 25, 6));
+
+    TColumnDataMap columnStore;
+    RegisterColumnData(columnStore, tabletActorId, 1,
+        {1,2,3,4,5}, {10,10,10,10,10}, {1,1,1,1,1}, {0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 2,
+        {10,11,12,13,14,15}, {20,20,20,20,20,20}, {1,1,1,1,1,1}, {0,0,0,0,0,0});
+    RegisterColumnData(columnStore, tabletActorId, 3,
+        {20,21,22,23,24,25}, {30,30,30,30,30,30}, {1,1,1,1,1,1}, {0,0,0,0,0,0});
+
+    auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+    runtime.RegisterService(cacheId,
+        runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+    TManagerSetupResult setup;
+    auto actorId = SetupDuplicateManager(
+        runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::DESC);
+    NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    auto sub1 = std::make_shared<TTestFilterSubscriber>();
+    auto sub2 = std::make_shared<TTestFilterSubscriber>();
+    auto sub3 = std::make_shared<TTestFilterSubscriber>();
+
+    // Request in non-sequential order: P2, P1, P3
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 6, sub2));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 5, sub1));
+    runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 3, 6, sub3));
+
+    NActors::TDispatchOptions opts;
+    opts.CustomFinalCondition = [&]() {
+        return (sub1->FilterReady || sub1->Failed) &&
+               (sub2->FilterReady || sub2->Failed) &&
+               (sub3->FilterReady || sub3->Failed);
+    };
+    runtime.DispatchEvents(opts, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(sub1->FilterReady && !sub1->Failed, sub1->FailureReason);
+    UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
+    UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
+
+    // All portions are exclusive, so all should get allow-all
+    UNIT_ASSERT(sub1->ReceivedFilter.IsTotalAllowFilter());
+    UNIT_ASSERT(sub2->ReceivedFilter.IsTotalAllowFilter());
+    UNIT_ASSERT(sub3->ReceivedFilter.IsTotalAllowFilter());
+}
+
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377)):ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/ut/ut_manager.cpp
 }

@@ -108,7 +108,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         const TString defaultReader = [&]() {
             const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "SIMPLE";
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "TRIVIAL";
             if (Self->HasIndex()) {
                 return Self->GetIndexAs<TColumnEngineForLogs>()
                     .GetVersionedIndex()
@@ -124,7 +124,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
             const TString scanType = [&]() {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
+<<<<<<< HEAD
             auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
+=======
+            auto constructor =
+                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }

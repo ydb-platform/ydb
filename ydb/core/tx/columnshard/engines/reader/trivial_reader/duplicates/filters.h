@@ -4,8 +4,13 @@
 
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 
+<<<<<<< HEAD:ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/filters.h
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
     
+=======
+namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
+
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377)):ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.h
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {

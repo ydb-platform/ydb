@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates)
+UNITTEST_FOR(ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates)
 
 FORK_SUBTESTS()
 
@@ -20,9 +20,9 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common
     ydb/core/tx/columnshard/engines/reader/common_reader/common
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
-    ydb/core/tx/columnshard/engines/reader/simple_reader/constructor
-    ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates
-    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator
+    ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor
+    ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates
+    ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/storage/chunks
     ydb/core/tx/columnshard/engines/storage/indexes

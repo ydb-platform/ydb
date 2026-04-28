@@ -1,4 +1,4 @@
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/filters.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
@@ -12,7 +12,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
+namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 namespace {
 
@@ -35,7 +35,7 @@ public:
     }
 };
 
-// Helper to create a simple arrow RecordBatch with a single int32 "key" column and a "version" column
+// Helper to create a trivial arrow RecordBatch with a single int32 "key" column and a "version" column
 std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const std::vector<int32_t>& keys, const std::vector<int32_t>& versions) {
     return NColumnShard::MakeTestBatch<arrow::Int32Type, arrow::Int32Type>({"key", "version"}, keys, versions);
 }
@@ -560,13 +560,13 @@ Y_UNIT_TEST_SUITE(TFilterAccumulatorTests) {
         accumulator->AddFilter(std::move(filter));
 
         UNIT_ASSERT(subscriber->FilterReady);
-        auto simpleFilter = subscriber->ReceivedFilter.BuildSimpleFilter();
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter.size(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter[0], true);
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter[1], true);
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter[2], true);
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter[3], false);
-        UNIT_ASSERT_VALUES_EQUAL(simpleFilter[4], false);
+        auto trivialFilter = subscriber->ReceivedFilter.BuildTrivialFilter();
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter[0], true);
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter[1], true);
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter[2], true);
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter[3], false);
+        UNIT_ASSERT_VALUES_EQUAL(trivialFilter[4], false);
     }
 
     Y_UNIT_TEST(AbortDoesNotDeliverFilter) {
@@ -585,4 +585,4 @@ Y_UNIT_TEST_SUITE(TFilterAccumulatorTests) {
     }
 }
 
-}  // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering
+}  // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

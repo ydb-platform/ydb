@@ -1,4 +1,5 @@
 #include "executor.h"
+#include "merge.h"
 #include "private_events.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
@@ -18,13 +19,24 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+<<<<<<< HEAD
                 std::make_unique<TEvIntervalConstructionResult>(std::move(Request),
+=======
+                new NPrivate::TEvFilterConstructionResult(
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
                     TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
+<<<<<<< HEAD
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
             std::make_unique<TEvIntervalConstructionResult>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard)));
+=======
+        AFL_VERIFY(AllocationGuard);
+        const std::shared_ptr<TBuildDuplicateFilters> task =
+            std::make_shared<TBuildDuplicateFilters>(std::move(Request), std::move(objectAddresses), std::move(AllocationGuard));
+        NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     }
 
     virtual bool DoIsAborted() const override {
@@ -42,7 +54,11 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(
+<<<<<<< HEAD
             Request.GetGlobalContext().GetOwner(), std::make_unique<TEvIntervalConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage),
+=======
+            Request.GetGlobalContext().GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage),
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
                                                        Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
 };
@@ -54,7 +70,11 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+<<<<<<< HEAD
             std::make_unique<TEvIntervalConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+=======
+            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
 
@@ -88,13 +108,18 @@ private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         if (result.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+<<<<<<< HEAD
                 std::make_unique<TEvIntervalConstructionResult>(std::move(Request),
+=======
+                new NPrivate::TEvFilterConstructionResult(
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
                     TConclusionStatus::Fail(result.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
         if (result.HasRemovedData()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+<<<<<<< HEAD
 <<<<<<< HEAD
                 new NPrivate::TEvFilterConstructionResult(
                     TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()),
@@ -103,6 +128,10 @@ private:
                 std::make_unique<TEvIntervalConstructionResult>(std::move(Request),
                     TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
 >>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
             return;
         }
 
@@ -145,7 +174,11 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+<<<<<<< HEAD
             std::make_unique<TEvIntervalConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+=======
+            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
 

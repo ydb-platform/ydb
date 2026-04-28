@@ -1,8 +1,14 @@
 #include "filters.h"
 
+<<<<<<< HEAD:ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/filters.cpp
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
     
     
+=======
+namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
+
+
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377)):ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.cpp
 TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
     : OriginalRequest(request)
     , Counters(counters)

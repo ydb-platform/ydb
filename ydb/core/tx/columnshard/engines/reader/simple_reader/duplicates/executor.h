@@ -1,6 +1,10 @@
 #pragma once
 
 #include "context.h"
+<<<<<<< HEAD
+=======
+#include "splitter.h"
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
     

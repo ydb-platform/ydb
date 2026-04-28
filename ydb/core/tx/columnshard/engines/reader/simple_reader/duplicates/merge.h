@@ -22,8 +22,13 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
 
 public:
+<<<<<<< HEAD
     TBuildFilterTaskContext(TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor,
         std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+=======
+    TBuildFilterTaskContext(
+        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         : Context(std::move(context))
         , Executor(executor)
         , Intervals(std::move(intervals))
@@ -99,7 +104,10 @@ private:
 
     THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }

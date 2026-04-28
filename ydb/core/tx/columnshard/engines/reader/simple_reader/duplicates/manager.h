@@ -3,8 +3,8 @@
 #include "common.h"
 #include "context.h"
 #include "events.h"
-#include "filters.h"
 #include "private_events.h"
+#include "splitter.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -30,6 +30,9 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 
 private:
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     class TFilterSizeProvider {
     public:
         size_t operator()(const NArrow::TColumnFilter& filter) {
@@ -86,7 +89,10 @@ private:
             }
             return false;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         void OnError(const TString& error) {
             for (auto&& [_, subscribers] : SubscribersByPortion) {
                 for (auto&& subscriber : subscribers) {
@@ -109,15 +115,22 @@ private:
     };
 
 private:
+<<<<<<< HEAD
     inline static const ui64 FILTER_CACHE_SIZE = 10000000;   // 10 MiB
     inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
 
 =======
 >>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+    inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
+    inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
+
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
-    const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+    const std::shared_ptr<NColumnShard::TSimpleDuplicateFilteringCounters> Counters;
+    const TPortionIntervalTree Intervals;
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
@@ -136,13 +149,21 @@ private:
     
     std::optional<NArrow::TSimpleRow> LastBorder;
 
+<<<<<<< HEAD
     std::unordered_map<ui64, NArrow::TColumnFilter> ReadyFilters; // PortionId -> TColumnFilter
+=======
+    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
+    TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
+    THashMap<TIntervalBordersView, TIntervalInFlightInfo> IntervalsInFlight;
+    ui64 ExpectedIntersectionCount = 0;
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     std::shared_ptr<TAtomicCounter> AbortionFlag;
     ui64 PrevRowsAdded = 0;
     ui64 PrevRowsSkipped = 0;
     std::unordered_set<ui64> ExclusivePortions;
 
 private:
+<<<<<<< HEAD
 <<<<<<< HEAD
     static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
         TPortionIntervalTree intervals;
@@ -165,6 +186,17 @@ private:
     }
 
 <<<<<<< HEAD
+=======
+    static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
+        TPortionIntervalTree intervals;
+        for (const auto& portion : portions) {
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true,
+                                   portion->IndexKeyEnd(), true), portion);
+        }
+        return intervals;
+    }
+
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const TPortionIntervalTree& intervals) {
         THashMap<ui64, TPortionInfo::TConstPtr> portions;
         intervals.EachRange(
@@ -176,23 +208,33 @@ private:
     }
 
     bool IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const;
+<<<<<<< HEAD
 
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
     void ValidateInFlightProgress() const {
         for (const auto& [_, inFlight] : IntervalsInFlight) {
             inFlight.ValidateProgress();
         }
     }
+<<<<<<< HEAD
 =======
     bool IsExclusiveInterval(const ui64 portionId) const;
 >>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
+            hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
+<<<<<<< HEAD
             hFunc(TEvIntervalConstructionResult, Handle);
+=======
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -200,6 +242,7 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
+<<<<<<< HEAD
 <<<<<<< HEAD
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
 
@@ -215,11 +258,24 @@ private:
     void AbortAndPassAway(const TString& error) {
         AbortionFlag->Inc();
         FiltersBuilder.Abort(error);
+=======
+    void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
+    void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        AbortAndPassAway("aborted by actor system");
+    }
+
+    void AbortAndPassAway(const TString& reason) {
+        AbortionFlag->Inc();
+        for (auto& [_, info] : IntervalsInFlight) {
+            info.OnError(reason);
+        }
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
         PassAway();
     }
 
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
         std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
+<<<<<<< HEAD
         for (const auto& columnId : PKColumns->GetColumnIds()) {
             fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
         }
@@ -231,6 +287,34 @@ private:
     
 private:
     void BuildExclusivePortions();
+=======
+        {
+            for (const auto& columnId : PKColumns->GetColumnIds()) {
+                fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
+            }
+            for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
+            }
+        }
+        return fieldsByColumn;
+    }
+
+    TSortableBorders GetBorders(const ui64 portionId) {
+        auto findCached = MaterializedBordersCache.Find(portionId);
+        if (findCached != MaterializedBordersCache.End()) {
+            return findCached.Value();
+        }
+        const auto& portion = Portions->GetPortionVerified(portionId);
+        TSortableBorders result =
+            TSortableBorders(std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyStart().BuildSortablePosition()),
+                std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyEnd().BuildSortablePosition()));
+        MaterializedBordersCache.Insert(portionId, result);
+        return result;
+    }
+
+    TIntervalsIterator StartIntervalProcessing(
+        const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor);
+>>>>>>> af473aa4b23 (trivial reader has been introduced (#38377))
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

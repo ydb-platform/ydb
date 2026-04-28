@@ -168,6 +168,52 @@ def merge_area_override_since(mapping_data: list, existing_by_key: dict, url_to_
             row["area_override_since"] = scan_to_utc_date(old.get("area_override_since"))
 
 
+def delete_stale_github_issue_mapping_rows(
+    ydb_wrapper, table_path: str, existing_by_key: dict, mapping_data: list
+) -> None:
+    """Delete rows not present in the current recomputed snapshot."""
+    new_keys = {
+        (
+            row["full_name"],
+            row["branch"],
+            row["build_type"],
+            row["github_issue_number"],
+        )
+        for row in mapping_data
+    }
+    stale_keys = [k for k in existing_by_key.keys() if k not in new_keys]
+    if not stale_keys:
+        return
+
+    delete_query = f"""
+        DECLARE $full_name AS Utf8;
+        DECLARE $branch AS Utf8;
+        DECLARE $build_type AS Utf8;
+        DECLARE $github_issue_number AS Uint64;
+
+        DELETE FROM `{table_path}`
+        WHERE full_name = $full_name
+          AND branch = $branch
+          AND build_type = $build_type
+          AND github_issue_number = $github_issue_number;
+    """
+    for full_name, branch, build_type, github_issue_number in stale_keys:
+        ydb_wrapper.execute_dml(
+            delete_query,
+            {
+                "$full_name": full_name,
+                "$branch": branch,
+                "$build_type": build_type,
+                "$github_issue_number": ydb.TypedValue(
+                    value=int(github_issue_number),
+                    value_type=ydb.PrimitiveType.Uint64,
+                ),
+            },
+            query_name="github_issue_mapping_delete_stale_row",
+        )
+    print(f"Deleted {len(stale_keys)} stale github_issue_mapping row(s)")
+
+
 def get_area_to_owner_mapping(ydb_wrapper):
     """Load area -> owner_team mapping from YDB."""
     try:
@@ -450,6 +496,9 @@ def main():
 
             if mapping_data:
                 bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
+                delete_stale_github_issue_mapping_rows(
+                    ydb_wrapper, table_path, existing_by_key, mapping_data
+                )
             else:
                 print("No mapping data to insert")
 

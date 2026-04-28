@@ -137,9 +137,7 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         NActors::TExecutorPoolState poolState;
         NActors::GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
-        if (poolState.PossibleMaxLimit > 0) {
-            userPoolSize = static_cast<ui32>(poolState.PossibleMaxLimit);
-        }
+        userPoolSize = Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
     }
 
     if (!userPoolSize) {

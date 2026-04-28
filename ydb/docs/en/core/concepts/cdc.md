@@ -238,8 +238,8 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
   * `step`: Global coordinator time. Part of the [virtual timestamp](#virtual-timestamps).
   * `txId`: Unique transaction ID. Part of the [virtual timestamp](#virtual-timestamps).
   * `snapshot`: Whether the event is part of a snapshot.
-  * `user` : User identifier. Present if the `USER_SIDS` setting is enabled. Contains user's `SID` and it is equal with `ttl@system` if record is deleted by TTL process.
-  * `traceId` : Open telemetry identifier. Presents if the `TRACE_IDS` setting is enabled.
+  * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's `SID` and equals `ttl@system` if the record is deleted by the TTL process.
+  * `traceId`: OpenTelemetry trace ID. Present if the `TRACE_IDS` setting is enabled.
 
 When reading using Kafka API, the Debezium-compatible primary key of the modified row is specified as the message key:
 

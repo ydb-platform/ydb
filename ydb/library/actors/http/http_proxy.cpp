@@ -1,7 +1,11 @@
-#include <ydb/library/actors/core/events.h>
-#include <library/cpp/monlib/metrics/metric_registry.h>
-#include <cctype>
 #include "http_proxy.h"
+
+#include <ydb/library/actors/core/events.h>
+
+#include <library/cpp/monlib/metrics/metric_registry.h>
+#include <library/cpp/ipv6_address/ipv6_address.h>
+
+#include <cctype>
 
 namespace NHttp {
 
@@ -338,23 +342,20 @@ TActorId TUrlHandler::GetHandler(const TString& url) const {
 }
 
 bool IsIPv6(const TString& host) {
-    if (host.find_first_not_of(":0123456789abcdef") != TString::npos) {
+    if (host.find('%') != TString::npos) {
+        // zone_id is probably used. This is a valid ipv6 format, but unacceptable in our context.
         return false;
     }
-    if (std::count(host.begin(), host.end(), ':') < 2) {
-        return false;
-    }
-    return true;
+
+    bool isValid = false;
+    const auto ip = TIpv6Address::FromString(host, isValid);
+    return isValid && ip.IsIpv6();
 }
 
 bool IsIPv4(const TString& host) {
-    if (host.find_first_not_of(".0123456789") != TString::npos) {
-        return false;
-    }
-    if (std::count(host.begin(), host.end(), '.') != 3) {
-        return false;
-    }
-    return true;
+    bool isValid = false;
+    const auto ip = TIpv6Address::FromString(host, isValid);
+    return isValid && !ip.IsIpv6();
 }
 
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri) {

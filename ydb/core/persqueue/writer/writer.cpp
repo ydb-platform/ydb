@@ -588,8 +588,19 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             return false;
         }
 
+        auto& partitionRequest = *record.MutablePartitionRequest();
+        const bool addInternalSourceIdForNoDedupTx = !Opts.UseDeduplication && static_cast<bool>(Opts.TxId);
+        if (addInternalSourceIdForNoDedupTx) {
+            const TString internalSourceId = NPQ::NSourceIdEncoding::EncodeSimple(SourceId);
+            for (auto& write : *partitionRequest.MutableCmdWrite()) {
+                if (write.GetSourceId().empty()) {
+                    write.SetSourceId(internalSourceId);
+                }
+            }
+        }
+
         auto& pqConfig = AppData(ActorContext())->PQConfig;
-        for (const auto& write : record.GetPartitionRequest().GetCmdWrite()) {
+        for (const auto& write : partitionRequest.GetCmdWrite()) {
             if (write.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
                 auto errorMsg = TStringBuilder() << "Too big message. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
                     << " bytes, but got " << write.GetData().size() << " bytes";
@@ -605,7 +616,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             }
         }
 
-        SetWriteId(*record.MutablePartitionRequest());
+        SetWriteId(partitionRequest);
 
         Pending.emplace(cookie, TRequestHolder(TUserWriteRequest(std::move(record)), false, std::move(ev->TraceId), {}, {}));
 

@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char secretPath[] = "eds_iam_token";
         auto [location, databasePath] = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
         ExecQuery(fmt::format(R"(
-            CREATE SECRET {secret} WITH (value = "{token}");
+            CREATE SECRET `{secret}` WITH (value = "{token}");
             )",
             "secret"_a = secretPath,
             "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
@@ -1203,6 +1203,73 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "pq_source"_a = pqSourceName,
             "topic_name"_a = topicName
         ), EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+    }
+
+    Y_UNIT_TEST_TWIN_F(CreateExternalDataSourceAuthMethodIamError, WithFeatureFlag, TStreamingWithSchemaSecretsTestFixture) {
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(WithFeatureFlag);
+
+        constexpr char secretPath[] = "eds_bad_iam_token";
+        ExecQuery(fmt::format(R"(
+            CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
+            "secret"_a = secretPath,
+            "token"_a = "xyz@builtin"
+            ));
+        Y_DEFER {
+            ExecQuery(fmt::format(R"(DROP SECRET `{secret}`;)", "secret"_a = secretPath));
+        };
+
+        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
+        constexpr char pqSourceName[] = "sourceNameCloud";
+        TVector expected {
+            std::pair { EStatus::UNSUPPORTED, "Error: AUTH_METHOD=IAM is disabled" },
+            std::pair { EStatus::UNAUTHORIZED, "Error: Access denied" },
+        };
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{pq_location}",
+                DATABASE_NAME = "{pq_database_name}",
+                AUTH_METHOD = "IAM",
+                INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                SERVICE_ACCOUNT_ID = "{service_account_id}"
+            );)",
+            "pq_source"_a = pqSourceName,
+            "pq_location"_a = YDB_ENDPOINT,
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret"_a = secretPath,
+            "service_account_id"_a = serviceAccountId
+        ), expected[WithFeatureFlag].first, expected[WithFeatureFlag].second);
+    }
+
+    Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIamMissingToken, TStreamingWithSchemaSecretsTestFixture) {
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
+
+        constexpr char secretPath[] = "eds_unknown_iam_token";
+
+        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
+        constexpr char pqSourceName[] = "sourceNameUnknownToken";
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{pq_location}",
+                DATABASE_NAME = "{pq_database_name}",
+                AUTH_METHOD = "IAM",
+                INITIAL_TOKEN_SECRET_PATH = "{secret}",
+                SERVICE_ACCOUNT_ID = "{service_account_id}"
+            );)",
+            "pq_source"_a = pqSourceName,
+            "pq_location"_a = YDB_ENDPOINT,
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret"_a = secretPath,
+            "service_account_id"_a = serviceAccountId
+        ),
+        EStatus::BAD_REQUEST,
+        fmt::format(
+            R"(Error: secret `/Root/{secret}` not found)",
+            "secret"_a = secretPath));
     }
 }
 

@@ -449,9 +449,11 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             body = content.get('body') or ''
             state_reason = (content.get('stateReason') or '').strip().upper()
             label_nodes = (content.get('labels') or {}).get('nodes') or []
-            label_names = [n['name'] for n in label_nodes if n and n.get('name')]
+            label_names = [
+                str(n['name']).strip().lower() for n in label_nodes if n and n.get('name')
+            ]
             if state == 'CLOSED':
-                if MANUAL_FAST_UNMUTE_GITHUB_LABEL in label_names:
+                if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in label_names:
                     pass
                 elif state_reason == 'COMPLETED':
                     pass
@@ -517,7 +519,7 @@ def map_tests_to_manual_fast_unmute_issue_url(issues_dict):
     out = {}
     for _issue_id, info in (issues_dict or {}).items():
         labels = info.get('labels') or []
-        if MANUAL_FAST_UNMUTE_GITHUB_LABEL not in labels:
+        if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() not in labels:
             continue
         bt = info.get('build_type') or DEFAULT_BUILD_TYPE
         url = info.get('url')
@@ -546,7 +548,7 @@ def get_muted_tests_from_issues(issues_dict=None):
         if state == 'CLOSED':
             labels = info.get('labels') or []
             closed_ok = (
-                MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
+                MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in labels
                 or state_reason == 'COMPLETED'
                 or (not state_reason and info.get('has_mute_body'))
             )

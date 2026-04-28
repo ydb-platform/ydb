@@ -2852,7 +2852,7 @@ public:
                                     )));
 
                                     compact.set_cascade(value);
-                                } else if (name == "maxShardsInFlight") {
+                                } else if (name == "maxShardsInFlight" || name == "parallel") {
                                     i32 value = FromString<i32>(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                                     );

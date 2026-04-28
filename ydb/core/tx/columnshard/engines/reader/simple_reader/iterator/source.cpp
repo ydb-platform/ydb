@@ -157,12 +157,17 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
                 "total_pages", GetEarlyPages().size())(
                 "reverse", GetContext()->GetReadMetadata()->IsDescSorted())(
                 "has_more_pages", hasMorePagesBeforeAdvance);
+            const ui32 pageIndexBefore = GetCurrentEarlyPageIndex();
             AdvanceEarlyPage();
+            const ui32 pageIndexAfter = GetCurrentEarlyPageIndex();
+            NYDBTest::TControllers::GetColumnShardController()->OnStreamingPageAdvance(
+                GetSourceIdx(), pageIndexBefore, pageIndexAfter,
+                GetContext()->GetReadMetadata()->IsDescSorted());
 
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
                 "event", GetContext()->GetReadMetadata()->IsDescSorted() ?
                     "ContinueCursor_PrevPage_Refetch" : "ContinueCursor_NextPage_Refetch")(
-                "page_index_after", GetCurrentEarlyPageIndex())(
+                "page_index_after", pageIndexAfter)(
                 "total_pages", GetEarlyPages().size())(
                 "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
 

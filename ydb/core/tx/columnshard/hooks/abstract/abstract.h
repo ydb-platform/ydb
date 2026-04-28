@@ -334,6 +334,16 @@ public:
     // linearly with the page number the whole-portion over-accounting bug is present.
     virtual void OnStreamingMemoryReserved(const ui64 /*sizeToReserve*/) {
     }
+
+    // Called from IDataSource::ContinueCursor (streaming mode) each time the early
+    // page index is advanced. Records (sourceIdx, pageBefore -> pageAfter) so tests
+    // can detect double-advances and skipped pages caused by prefetch / Continue()
+    // races. In a correct implementation, each (sourceIdx, pageBefore) transition
+    // must occur exactly once and pageAfter == pageBefore + 1 for forward scans
+    // (or pageBefore - 1 for reverse).
+    virtual void OnStreamingPageAdvance(
+        const ui64 /*sourceIdx*/, const ui32 /*pageBefore*/, const ui32 /*pageAfter*/, const bool /*reverse*/) {
+    }
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);

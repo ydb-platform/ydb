@@ -99,7 +99,9 @@ std::shared_ptr<TRequestSpan> TRequestSpan::Create(const std::string& ydbClientT
     , const std::string& database
     , const TLog& log
     , NTrace::ESpanKind kind
+    , const std::shared_ptr<TRequestSpan>& parent
 ) {
+    NTrace::ISpan* parentRaw = parent ? parent->Span_.get() : nullptr;
     return std::shared_ptr<TRequestSpan>(new TRequestSpan(
         ydbClientType,
         std::move(tracer),
@@ -107,7 +109,8 @@ std::shared_ptr<TRequestSpan> TRequestSpan::Create(const std::string& ydbClientT
         discoveryEndpoint,
         database,
         log,
-        kind
+        kind,
+        parentRaw
     ));
 }
 
@@ -131,6 +134,7 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(const std::str
     , const std::shared_ptr<TDbDriverState>& dbDriverState
     , std::uint32_t attempt
     , std::int64_t backoffMs
+    , const std::shared_ptr<TRequestSpan>& parent
 ) {
     auto span = Create(
         ydbClientType,
@@ -139,7 +143,8 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(const std::str
         dbDriverState->DiscoveryEndpoint,
         dbDriverState->Database,
         dbDriverState->Log,
-        NTrace::ESpanKind::INTERNAL
+        NTrace::ESpanKind::INTERNAL,
+        parent
     );
     if (span) {
         span->SetRetryAttributes(attempt, backoffMs);
@@ -154,6 +159,7 @@ TRequestSpan::TRequestSpan(const std::string& ydbClientType
     , const std::string& database
     , const TLog& log
     , NTrace::ESpanKind kind
+    , NTrace::ISpan* parent
 ) : Log_(log) {
     if (!tracer) {
         return;
@@ -165,7 +171,7 @@ TRequestSpan::TRequestSpan(const std::string& ydbClientType
 
     try {
         const auto operationName = NormalizeOperationName(requestName);
-        Span_ = tracer->StartSpan(operationName, kind);
+        Span_ = tracer->StartSpan(operationName, kind, parent);
         if (!Span_) {
             return;
         }

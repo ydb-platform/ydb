@@ -608,13 +608,18 @@ public:
         );
     }
 
-    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt, std::int64_t backoffMs) {
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(
+        std::uint32_t attempt,
+        std::int64_t backoffMs,
+        const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr)
+    {
         return NObservability::TRequestSpan::CreateForRetryAttempt(
             "Query",
             Tracer_,
             DbDriverState_,
             attempt,
-            backoffMs
+            backoffMs,
+            parent
         );
     }
 

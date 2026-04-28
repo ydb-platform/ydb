@@ -41,7 +41,12 @@ public:
 class ITracer {
 public:
     virtual ~ITracer() = default;
-    virtual std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind = ESpanKind::INTERNAL) = 0;
+
+    virtual std::shared_ptr<ISpan> StartSpan(
+        const std::string& name
+        , ESpanKind kind = ESpanKind::INTERNAL
+        , ISpan* parent = nullptr
+    ) = 0;
 };
 
 class ITraceProvider {

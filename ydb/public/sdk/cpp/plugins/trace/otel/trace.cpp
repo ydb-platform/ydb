@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/trace.h>
 
 #include <opentelemetry/common/attribute_value.h>
+#include <opentelemetry/context/runtime_context.h>
+#include <opentelemetry/trace/context.h>
 #include <opentelemetry/trace/scope.h>
 #include <opentelemetry/trace/span.h>
 #include <opentelemetry/trace/tracer.h>
@@ -50,6 +52,10 @@ public:
         : Span_(std::move(span))
     {}
 
+    const otel_nostd::shared_ptr<otel_trace::Span>& RawSpan() const noexcept {
+        return Span_;
+    }
+
     void End() override {
         Span_->End();
     }
@@ -93,9 +99,13 @@ public:
         : Tracer_(std::move(tracer))
     {}
 
-    std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind) override {
+    std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind, ISpan* parent) override {
         otel_trace::StartSpanOptions options;
         options.kind = MapSpanKind(kind);
+        if (auto* otelParent = dynamic_cast<TOtelSpan*>(parent)) {
+            auto context = opentelemetry::context::RuntimeContext::GetCurrent();
+            options.parent = otel_trace::SetSpan(context, otelParent->RawSpan());
+        }
         return std::make_shared<TOtelSpan>(Tracer_->StartSpan(name, options));
     }
 

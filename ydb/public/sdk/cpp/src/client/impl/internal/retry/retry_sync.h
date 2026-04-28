@@ -20,8 +20,9 @@ protected:
 
 public:
     TStatusType Execute() {
-        auto parentSpan = Client_.Impl_->CreateRetryRootSpan();
-        auto parentScope = parentSpan ? parentSpan->Activate() : nullptr;
+        ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
+        auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
+        auto& parentSpan = ParentSpan_;
 
         try {
             auto status = ExecuteImpl();
@@ -93,7 +94,7 @@ private:
     }
 
     TStatusType RunAttempt(std::int64_t backoffMs) {
-        auto attemptSpan = Client_.Impl_->CreateRetryAttemptSpan(this->RetryNumber_, backoffMs);
+        auto attemptSpan = Client_.Impl_->CreateRetryAttemptSpan(this->RetryNumber_, backoffMs, ParentSpan_);
         std::unique_ptr<NTrace::IScope> scope;
         if (attemptSpan) {
             scope = attemptSpan->Activate();
@@ -106,6 +107,8 @@ private:
         }
         return status;
     }
+
+    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
 };
 
 template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>

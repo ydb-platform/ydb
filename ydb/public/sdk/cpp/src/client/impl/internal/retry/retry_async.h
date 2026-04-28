@@ -27,32 +27,34 @@ protected:
 
 public:
     TAsyncStatusType Execute() {
-        auto parentSpan = Client_.Impl_->CreateRetryRootSpan();
+        ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
+
+        auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
 
         this->RetryStartTime_ = TInstant::Now();
         TPtr self(this);
         DoRetry(self);
 
         return this->Promise_.GetFuture().Apply(
-            [parentSpan = std::move(parentSpan), self](const auto& f) mutable {
+            [self](const auto& f) mutable {
                 try {
                     auto value = f.GetValue();
-                    if (parentSpan) {
-                        parentSpan->SetRetryCount(self->RetryNumber_);
-                        parentSpan->End(value.GetStatus());
+                    if (self->ParentSpan_) {
+                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
+                        self->ParentSpan_->End(value.GetStatus());
                     }
                     return value;
                 } catch (...) {
-                    if (parentSpan) {
-                        parentSpan->SetRetryCount(self->RetryNumber_);
+                    if (self->ParentSpan_) {
+                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
                         try {
                             std::rethrow_exception(std::current_exception());
                         } catch (const std::exception& e) {
-                            parentSpan->RecordException(typeid(e).name(), e.what());
+                            self->ParentSpan_->RecordException(typeid(e).name(), e.what());
                         } catch (...) {
-                            parentSpan->RecordException("unknown", "unknown exception");
+                            self->ParentSpan_->RecordException("unknown", "unknown exception");
                         }
-                        parentSpan->End(EStatus::CLIENT_INTERNAL_ERROR);
+                        self->ParentSpan_->End(EStatus::CLIENT_INTERNAL_ERROR);
                     }
                     throw;
                 }
@@ -73,6 +75,7 @@ protected:
 
     static void DoRetry(TPtr self) {
         self->StartAttemptSpan();
+        auto scope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
         self->Retry();
     }
 
@@ -123,7 +126,8 @@ protected:
 
 private:
     void StartAttemptSpan() {
-        AttemptSpan_ = Client_.Impl_->CreateRetryAttemptSpan(this->RetryNumber_, LastBackoffMs_);
+        AttemptSpan_ = Client_.Impl_->CreateRetryAttemptSpan(
+            this->RetryNumber_, LastBackoffMs_, ParentSpan_);
     }
 
     void EndAttemptSpan(EStatus status) {
@@ -133,6 +137,7 @@ private:
         }
     }
 
+    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
     std::shared_ptr<NObservability::TRequestSpan> AttemptSpan_;
     std::int64_t LastBackoffMs_ = 0;
 };

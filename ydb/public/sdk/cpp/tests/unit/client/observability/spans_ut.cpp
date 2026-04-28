@@ -420,6 +420,45 @@ TEST_P(SpanTest, RecordExceptionEmitsEvent) {
     EXPECT_TRUE(found);
 }
 
+TEST_P(SpanTest, ExplicitParentIsPropagatedToTracer) {
+    const auto& p = GetParam();
+
+    auto parent = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType, Tracer, p.RetryOp, "localhost:2135", kTestDbNamespace, TLog{}, NTrace::ESpanKind::INTERNAL);
+    ASSERT_NE(parent, nullptr);
+    auto parentRecord = Tracer->GetLastSpanRecord();
+    auto* parentRaw = parentRecord.Span.get();
+
+    auto child = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType, Tracer, p.ExecuteOp, "localhost:2135", kTestDbNamespace,
+        TLog{}, NTrace::ESpanKind::CLIENT, parent);
+    ASSERT_NE(child, nullptr);
+    auto childRecord = Tracer->GetLastSpanRecord();
+
+    EXPECT_EQ(childRecord.Parent, parentRaw)
+        << "child span must receive parent pointer through ITracer::StartSpan";
+}
+
+TEST_P(SpanTest, RetryAttemptParentedToRoot) {
+    const auto& p = GetParam();
+
+    auto parent = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType, Tracer, p.RetryOp, "localhost:2135", kTestDbNamespace, TLog{}, NTrace::ESpanKind::INTERNAL);
+    ASSERT_NE(parent, nullptr);
+    auto parentRecord = Tracer->GetLastSpanRecord();
+    auto* parentRaw = parentRecord.Span.get();
+
+    // Imitating what retry contexts do: create attempt span with explicit parent.
+    auto attempt = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType, Tracer, "ydb.Try", "localhost:2135", kTestDbNamespace,
+        TLog{}, NTrace::ESpanKind::INTERNAL, parent);
+    ASSERT_NE(attempt, nullptr);
+    auto attemptRecord = Tracer->GetLastSpanRecord();
+
+    EXPECT_EQ(attemptRecord.Parent, parentRaw)
+        << "retry attempt span must be parented to retry root span explicitly";
+}
+
 INSTANTIATE_TEST_SUITE_P(
     Clients,
     SpanTest,

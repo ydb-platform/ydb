@@ -158,7 +158,10 @@ public:
     void CollectRetryStatSync(EStatus status);
 
     std::shared_ptr<NObservability::TRequestSpan> CreateRetryRootSpan();
-    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt, std::int64_t backoffMs);
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt
+        , std::int64_t backoffMs
+        , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
+    );
 
 public:
     TClientSettings Settings_;

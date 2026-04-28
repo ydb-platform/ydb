@@ -29,6 +29,7 @@ public:
         , const std::string& database
         , const TLog& log
         , NTrace::ESpanKind kind = NTrace::ESpanKind::CLIENT
+        , const std::shared_ptr<TRequestSpan>& parent = nullptr
     );
 
     static std::shared_ptr<TRequestSpan> CreateForClientRetry(
@@ -43,6 +44,7 @@ public:
         , const std::shared_ptr<TDbDriverState>& dbDriverState
         , std::uint32_t attempt
         , std::int64_t backoffMs
+        , const std::shared_ptr<TRequestSpan>& parent = nullptr
     );
 
     ~TRequestSpan() noexcept;
@@ -66,6 +68,7 @@ private:
         , const std::string& database
         , const TLog& log
         , NTrace::ESpanKind kind
+        , NTrace::ISpan* parent
     );
 
     void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;

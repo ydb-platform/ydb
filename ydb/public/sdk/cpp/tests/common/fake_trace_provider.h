@@ -93,10 +93,14 @@ private:
 
 class TFakeTracer : public NTrace::ITracer {
 public:
-    std::shared_ptr<NTrace::ISpan> StartSpan(const std::string& name, NTrace::ESpanKind kind) override {
+    std::shared_ptr<NTrace::ISpan> StartSpan(
+        const std::string& name,
+        NTrace::ESpanKind kind,
+        NTrace::ISpan* parent
+    ) override {
         auto span = std::make_shared<TFakeSpan>();
         std::lock_guard lock(Mutex_);
-        Spans_.push_back({name, kind, span});
+        Spans_.push_back({name, kind, span, parent});
         return span;
     }
 
@@ -104,6 +108,7 @@ public:
         std::string Name;
         NTrace::ESpanKind Kind;
         std::shared_ptr<TFakeSpan> Span;
+        NTrace::ISpan* Parent = nullptr;
     };
 
     std::vector<TSpanRecord> GetSpans() const {

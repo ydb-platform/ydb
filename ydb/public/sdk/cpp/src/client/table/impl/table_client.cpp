@@ -45,13 +45,18 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryRo
     );
 }
 
-std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAttemptSpan(std::uint32_t attempt, std::int64_t backoffMs) {
+std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAttemptSpan(
+    std::uint32_t attempt
+    , std::int64_t backoffMs
+    , const std::shared_ptr<NObservability::TRequestSpan>& parent
+) {
     return NObservability::TRequestSpan::CreateForRetryAttempt(
         "Table",
         Tracer_,
         DbDriverState_,
         attempt,
-        backoffMs
+        backoffMs,
+        parent
     );
 }
 

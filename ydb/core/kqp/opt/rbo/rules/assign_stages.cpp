@@ -95,15 +95,17 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             }
 
             if (join->Props.LeftShuffleEliminated) {
-                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>());
+                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
             } else {
-                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, 0u, seHashFunc));
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftOutputIndex, seHashFunc);
+                props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
             }
 
             if (join->Props.RightShuffleEliminated) {
-                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>());
+                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>(rightOutputIndex));
             } else {
-                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, 0u, seHashFunc));
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightOutputIndex, seHashFunc);
+                props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
             }
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
@@ -166,7 +168,14 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns));
+            const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+            auto connection = MakeIntrusive<TShuffleConnection>(
+                aggregate->KeyColumns,
+                outputIndex,
+                ctx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType()
+            );
+
+            props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
         }

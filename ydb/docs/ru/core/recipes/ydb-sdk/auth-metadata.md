@@ -119,26 +119,31 @@
 
   {% include [auth-metadata](../../_includes/python/async/auth-metadata.md) %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  var metadataProvider = new MetadataProvider();
-
-  // Await initial IAM token.
-  await metadataProvider.Initialize();
-
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: metadataProvider
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
+<<<<<<< HEAD
+=======
+  Для Entity Framework и linq2db используйте тот же connectionString.
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, MetadataUrlCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(MetadataUrlCredentials::new())
+      .client()?;
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 - PHP
 
   ```php

@@ -130,10 +130,18 @@
 
 - Python (asyncio)
 
+<<<<<<< HEAD
   ```python
     import os
     import ydb
     import asyncio
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 
     async def ydb_init():
         async with ydb.aio.Driver(

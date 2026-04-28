@@ -148,24 +148,22 @@
 
   {% include [auth-access-token](../../_includes/python/async/auth-access-token.md) %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-  const string token = "MY_VERY_SECURE_TOKEN";
+  var builder = new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
+  {
+      CredentialsProvider = new TokenProvider("MY_VERY_SECURE_TOKEN")
+  };
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new TokenProvider(token)
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(builder);
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
+  
+  Для Entity Framework и linq2db не поддерживается.
 
 - PHP
 

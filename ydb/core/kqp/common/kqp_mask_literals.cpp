@@ -40,8 +40,8 @@ TVisitFunctor MakeFunctor(void (TStringMaskVisitor::*memberPtr)(const T&)) {
 // Masking is driven by the grammar, not by scanning token text: YQL accepts
 // several string quotings ('x', "x", @@x@@, typed literals) and a token-level
 // check would miss some of them. Each handler below matches a grammar rule
-// where a string may carry sensitive data and sets NextToken_, which VisitToken
-// then emits instead of the original token value.
+// where a string may carry sensitive data and sets NextTokenReplacement_,
+// which VisitToken then emits instead of the original token value.
 class TStringMaskVisitor {
 public:
     explicit TStringMaskVisitor(const TDispatchMap& dispatch)
@@ -66,9 +66,9 @@ public:
             First_ = false;
         }
 
-        if (NextToken_) {
-            Sb_ << *NextToken_;
-            NextToken_ = Nothing();
+        if (NextTokenReplacement_) {
+            Sb_ << *NextTokenReplacement_;
+            NextTokenReplacement_ = Nothing();
         } else {
             Sb_ << str;
         }
@@ -78,7 +78,7 @@ public:
     // INSERT ... VALUES (@@multi@@). Covers all string-quoting forms uniformly.
     void VisitLiteralValue(const TRule_literal_value& msg) {
         if (msg.Alt_case() == TRule_literal_value::kAltLiteralValue3) {
-            NextToken_ = "'***removed***'";
+            NextTokenReplacement_ = "'***removed***'";
         }
         VisitAllFields(TRule_literal_value::GetDescriptor(), msg);
     }
@@ -87,7 +87,7 @@ public:
     // foo = 'secret' would slip past VisitLiteralValue without its own handler.
     void VisitPragmaValue(const TRule_pragma_value& msg) {
         if (msg.Alt_case() == TRule_pragma_value::kAltPragmaValue3) {
-            NextToken_ = "'***removed***'";
+            NextTokenReplacement_ = "'***removed***'";
         }
         VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
@@ -97,7 +97,7 @@ public:
     // Both the string and NULL alternatives map to Token1 in the generated
     // proto, so we mask unconditionally.
     void VisitPasswordValue(const TRule_password_value& msg) {
-        NextToken_ = "'***removed***'";
+        NextTokenReplacement_ = "'***removed***'";
         VisitAllFields(TRule_password_value::GetDescriptor(), msg);
     }
 
@@ -106,7 +106,7 @@ public:
     // it the same. Token1 is the HASH keyword, Token2 is the string.
     void VisitHashOption(const TRule_hash_option& msg) {
         Visit(msg.GetToken1());
-        NextToken_ = "'***removed***'";
+        NextTokenReplacement_ = "'***removed***'";
         Visit(msg.GetToken2());
     }
 
@@ -116,7 +116,7 @@ public:
     // through literal_value.
     void VisitObjectFeatureValue(const TRule_object_feature_value& msg) {
         if (msg.Alt_case() == TRule_object_feature_value::kAltObjectFeatureValue3) {
-            NextToken_ = "'***removed***'";
+            NextTokenReplacement_ = "'***removed***'";
         }
         VisitAllFields(TRule_object_feature_value::GetDescriptor(), msg);
     }
@@ -147,7 +147,7 @@ private:
     const TDispatchMap& Dispatch_;
     TStringBuilder Sb_;
     bool First_ = true;
-    TMaybe<TString> NextToken_;
+    TMaybe<TString> NextTokenReplacement_;
 };
 
 const TDispatchMap& GetDispatch() {
@@ -178,7 +178,7 @@ NSQLTranslationV1::TParsers MakeParsers() {
 
 } // anonymous namespace
 
-TString MaskSensitiveLiterals(const TString& query) {
+TMaybe<TString> MaskSecretValueLiterals(const TString& query) {
     static NSQLTranslationV1::TLexers lexers = MakeLexers();
     static NSQLTranslationV1::TParsers parsers = MakeParsers();
 
@@ -190,7 +190,7 @@ TString MaskSensitiveLiterals(const TString& query) {
         /* ansiLexer = */ false,
         &arena);
     if (!ast) {
-        return query;
+        return Nothing();
     }
 
     TStringMaskVisitor visitor(GetDispatch());

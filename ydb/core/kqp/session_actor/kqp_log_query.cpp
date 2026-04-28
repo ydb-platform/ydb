@@ -327,7 +327,11 @@ void TLogQuery::LogCompleted(const TKqpQueryState& state,
         TString queryText;
         if (state.PreparedQuery) {
             if (HasSensitiveSchemeOperation(state.PreparedQuery->GetPhysicalQuery())) {
-                queryText = MaskSensitiveLiterals(query);
+                // If the parser fails, MaskSecretValueLiterals returns Nothing(); we must NOT
+                // fall back to the original text — it is known to carry secrets at this point —
+                // so suppress the query entirely.
+                auto masked = MaskSecretValueLiterals(query);
+                queryText = masked ? *masked : TString(SENSITIVE_QUERY_PLACEHOLDER);
             } else {
                 queryText = query;
             }

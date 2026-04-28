@@ -6,112 +6,116 @@
 
 namespace NKikimr::NKqp {
 
-Y_UNIT_TEST_SUITE(MaskSensitiveLiteralsTest) {
+Y_UNIT_TEST_SUITE(MaskSecretValueLiteralsTest) {
 
     Y_UNIT_TEST(SelectNumber) {
-        auto result = MaskSensitiveLiterals("select 1;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "1");
-        UNIT_ASSERT_STRING_CONTAINS(result, ";");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select 1;"),
+            "select 1 ;");
     }
 
     Y_UNIT_TEST(SelectTrue) {
-        auto result = MaskSensitiveLiterals("select true;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "true");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select true;"),
+            "select true ;");
     }
 
     Y_UNIT_TEST(SelectStringLiteral) {
-        auto result = MaskSensitiveLiterals("select 'foo';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("foo"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select 'foo';"),
+            "select '***removed***' ;");
     }
 
     Y_UNIT_TEST(SelectDoubleQuotedString) {
-        auto result = MaskSensitiveLiterals("select \"foo\";");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("foo"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select \"foo\";"),
+            "select '***removed***' ;");
     }
 
     Y_UNIT_TEST(SelectMultilineString) {
-        auto result = MaskSensitiveLiterals("select @@multi\nline@@;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("multi"));
-        UNIT_ASSERT(!result.Contains("line"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select @@multi\nline@@;"),
+            "select '***removed***' ;");
     }
 
     Y_UNIT_TEST(SelectFloat) {
-        auto result = MaskSensitiveLiterals("select 3.0;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "3.");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select 3.0;"),
+            "select 3.0 ;");
     }
 
     Y_UNIT_TEST(SelectColumn) {
-        auto result = MaskSensitiveLiterals("select col;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "col");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select col;"),
+            "select col ;");
     }
 
     Y_UNIT_TEST(WhereWithStringLiteral) {
-        auto result = MaskSensitiveLiterals("select * from `logs/of/bob` where pwd='foo';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT_STRING_CONTAINS(result, "`logs/of/bob`");
-        UNIT_ASSERT(!result.Contains("foo"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select * from `logs/of/bob` where pwd='foo';"),
+            "select * from `logs/of/bob` where pwd = '***removed***' ;");
     }
 
     Y_UNIT_TEST(CreateUserPassword) {
-        auto result = MaskSensitiveLiterals("CREATE USER foo PASSWORD 'secret123';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("secret123"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("CREATE USER foo PASSWORD 'secret123';"),
+            "CREATE USER foo PASSWORD '***removed***' ;");
     }
 
     Y_UNIT_TEST(AlterUserPassword) {
-        auto result = MaskSensitiveLiterals("ALTER USER foo WITH PASSWORD 'newsecret';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("newsecret"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("ALTER USER foo WITH PASSWORD 'newsecret';"),
+            "ALTER USER foo WITH PASSWORD '***removed***' ;");
     }
 
     Y_UNIT_TEST(CreateUserEncryptedPassword) {
-        auto result = MaskSensitiveLiterals("CREATE USER foo ENCRYPTED PASSWORD 'secret';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("'secret'"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("CREATE USER foo ENCRYPTED PASSWORD 'secret';"),
+            "CREATE USER foo ENCRYPTED PASSWORD '***removed***' ;");
     }
 
     Y_UNIT_TEST(CreateUserPasswordDoubleQuoted) {
-        auto result = MaskSensitiveLiterals("CREATE USER foo PASSWORD \"secret\";");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("secret"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("CREATE USER foo PASSWORD \"secret\";"),
+            "CREATE USER foo PASSWORD '***removed***' ;");
     }
 
     Y_UNIT_TEST(CreateUserPasswordMultiline) {
-        auto result = MaskSensitiveLiterals("CREATE USER foo PASSWORD @@secret@@;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("secret"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("CREATE USER foo PASSWORD @@secret@@;"),
+            "CREATE USER foo PASSWORD '***removed***' ;");
     }
 
     Y_UNIT_TEST(CreateUserHash) {
-        auto result = MaskSensitiveLiterals("CREATE USER foo HASH '{\"hash\":\"x\"}';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("hash"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("CREATE USER foo HASH '{\"hash\":\"x\"}';"),
+            "CREATE USER foo HASH '***removed***' ;");
     }
 
     Y_UNIT_TEST(PragmaNumber) {
-        auto result = MaskSensitiveLiterals("pragma a=1");
-        UNIT_ASSERT_STRING_CONTAINS(result, "1");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("pragma a=1"),
+            "pragma a = 1");
     }
 
     Y_UNIT_TEST(PragmaString) {
-        auto result = MaskSensitiveLiterals("pragma a='foo';");
-        UNIT_ASSERT_STRING_CONTAINS(result, "'***removed***'");
-        UNIT_ASSERT(!result.Contains("foo"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("pragma a='foo';"),
+            "pragma a = '***removed***' ;");
     }
 
     Y_UNIT_TEST(PragmaTrue) {
-        auto result = MaskSensitiveLiterals("pragma a=true;");
-        UNIT_ASSERT_STRING_CONTAINS(result, "true");
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("pragma a=true;"),
+            "pragma a = true ;");
     }
 
-    Y_UNIT_TEST(InvalidSqlReturnsOriginal) {
+    Y_UNIT_TEST(InvalidSqlReturnsNothing) {
+        // Parser fails on invalid SQL — returns Nothing() so the caller is
+        // forced to suppress the query instead of silently logging the
+        // unmasked text.
         TString query = "CREATE SCRET my_sct WITH (value = \"va\")";
-        auto result = MaskSensitiveLiterals(query);
-        // Parser fails on invalid SQL — returns original unchanged
-        UNIT_ASSERT_VALUES_EQUAL(result, query);
+        UNIT_ASSERT(!MaskSecretValueLiterals(query).Defined());
     }
 }
 

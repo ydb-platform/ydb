@@ -1998,13 +1998,20 @@ namespace NActors {
             Payloads.resize(TScheme::PayloadFieldCount);
             ArrayPayloads.resize(TScheme::PayloadFieldCount);
 
+            size_t wireIndex = 0;
             TScheme::ForEachPayloadField([&]<class TField>() {
+                if (!HasStoredField<TScheme, TField>()) {
+                    return;
+                }
+
                 constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
+                Y_ENSURE(wireIndex < wirePayloads.size(),
+                    "Missing wire payload " << wireIndex << " for flat event payload slot " << payloadIndex);
                 if constexpr (TField::Kind == EFieldKind::Bytes) {
-                    Payloads[payloadIndex] = std::move(wirePayloads[payloadIndex]);
+                    Payloads[payloadIndex] = std::move(wirePayloads[wireIndex]);
                     ArrayPayloads[payloadIndex] = {};
                 } else {
-                    const TRope& wirePayload = wirePayloads[payloadIndex];
+                    const TRope& wirePayload = wirePayloads[wireIndex];
                     const size_t bytes = wirePayload.GetSize();
                     using TValue = typename TField::TValue;
                     Y_ENSURE(bytes % sizeof(TValue) == 0,
@@ -2019,7 +2026,11 @@ namespace NActors {
                     }
                     Payloads[payloadIndex] = {};
                 }
+                ++wireIndex;
             });
+            Y_ENSURE(wireIndex == wirePayloads.size(),
+                "Unexpected number of wire payloads " << wirePayloads.size()
+                << ", expected " << wireIndex << " for concrete flat event layout");
         }
 
         template <class TScheme>

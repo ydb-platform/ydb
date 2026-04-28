@@ -805,6 +805,38 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 909);
     }
 
+    Y_UNIT_TEST(ExtendedPayloadsMapOnlyStoredPayloadFields) {
+        using TScheme = TEvFlatRepeatedFields::TSchemeV1;
+
+        constexpr size_t headerSize = TScheme::template GetPayloadRefOffset<TEvFlatRepeatedFields::TNumbersTag>()
+            + sizeof(typename TScheme::TPayloadRef);
+
+        TString header = TString::Uninitialized(headerSize);
+        char* ptr = header.Detach();
+        std::memset(ptr, 0, headerSize);
+        WriteUnaligned<ui8>(ptr + 0, 1);
+        WriteUnaligned<ui32>(ptr + TScheme::template GetFixedOffset<TEvFlatRepeatedFields::TMarkerTag>(), 123);
+        WriteUnaligned<TPoint>(
+            ptr + TScheme::template GetFixedOffset<TEvFlatRepeatedFields::TPointTag>(),
+            TPoint{.X = 7, .Y = 8});
+        WriteUnaligned<typename TScheme::TPayloadRef>(
+            ptr + TScheme::template GetPayloadRefOffset<TEvFlatRepeatedFields::TNumbersTag>(),
+            typename TScheme::TPayloadRef{.PayloadId = 1});
+
+        const TVector<ui32> values = {100, 200, 300};
+        auto buffers = MakeSerializedData({TRope(MakeArrayPayload(values))}, std::move(header));
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[0]), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 300u);
+        UNIT_ASSERT(!loaded->HasField<TEvFlatRepeatedFields::TItemsTag>());
+        UNIT_ASSERT(!loaded->HasField<TEvFlatRepeatedFields::TEmptyItemsTag>());
+    }
+
     Y_UNIT_TEST(ArrayPayloadPreservesAlignmentLocally) {
         using TScheme = TEvFlatMessage::TSchemeV2;
 

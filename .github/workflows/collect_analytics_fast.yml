@@ -79,12 +79,6 @@ jobs:
         else
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_bugs_count_by_period.sql --table_path test_results/analytics/github_issues_bugs_count_by_period --store_type column --partition_keys date_window area --primary_keys date_window area --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
-    - name: Upload MUTED test monitor data mart with GitHub issue links
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
-    - name: Upload FULL test monitor data mart
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_monitor_mart.sql --table_path test_results/analytics/test_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
     - name: Upload muted tests with issue and area data mart
       continue-on-error: true
       run: |
@@ -93,9 +87,6 @@ jobs:
         else
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_with_issue_and_area.sql --table_path test_results/analytics/muted_tests_with_issue_and_area --store_type column --partition_keys date_window branch build_type area --primary_keys date_window full_name branch build_type --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
-    - name: Upload muted tests statistic data mart
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_statistic.sql --table_path test_results/analytics/muted_tests_statistic --store_type column --partition_keys month_point_date branch build_type owner --primary_keys ym branch build_type owner
     - name: Upload muted tests daily by team (pre-aggregation for BI)
       continue-on-error: true
       run: |

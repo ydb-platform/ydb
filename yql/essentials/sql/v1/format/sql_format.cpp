@@ -3352,11 +3352,14 @@ public:
     bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
         formattedQuery = (mode == EFormatMode::Obfuscate) ? "" : query;
         auto parsedSettings = Settings_;
+        parsedSettings.InferSyntaxVersion = true;
+        parsedSettings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+        parsedSettings.V0ForceDisable = false;
         if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
             return false;
         }
 
-        if (parsedSettings.PgParser) {
+        if ((parsedSettings.SyntaxVersion == 0) || parsedSettings.PgParser) {
             return mode != EFormatMode::Obfuscate;
         }
 
@@ -3387,7 +3390,8 @@ public:
             }
 
             TVector<NSQLTranslation::TParsedToken> comments;
-            TParsedTokenList parsedTokens, stmtTokens;
+            TParsedTokenList parsedTokens;
+            TParsedTokenList stmtTokens;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
@@ -3402,8 +3406,8 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
-            if (!message) {
+            google::protobuf::Message* message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message || IsEmptyQuery(message)) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";
@@ -3467,9 +3471,16 @@ ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
 TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
                     const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;
+    parsedSettings.InferSyntaxVersion = true;
+    parsedSettings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+    parsedSettings.V0ForceDisable = false;
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
+    }
+
+    if ((parsedSettings.SyntaxVersion == 0) || parsedSettings.PgParser) {
+        return query;
     }
 
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);

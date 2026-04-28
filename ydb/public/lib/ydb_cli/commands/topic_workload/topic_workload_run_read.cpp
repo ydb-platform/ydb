@@ -65,6 +65,9 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
         .DefaultValue(0)
         .Hidden()
         .StoreResult(&Scenario.PartitionMaxInflightBytes);
+    config.Opts->AddLongOption("direct-read", "Direct read mode.")
+        .Hidden()
+        .StoreTrue(&Scenario.DirectRead);
     config.IsNetworkIntensive = true;
 }
 

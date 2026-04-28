@@ -22,75 +22,6 @@
 #include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/core/kqp/ut/common/arrow_builders.h>
 
-#include <functional>
-#include <tuple>
-
-template <class... Es>
-static TString BuildParamTestName(const char* base, const Es&... es) {
-    TString s = base;
-    ((s += "-", s += ToString(es)), ...);
-    return s;
-}
-
-template <class F>
-static void ForEachProductRanges(F&& f) {
-    std::invoke(std::forward<F>(f));
-}
-
-template <class F, class FirstRange, class... RestRanges>
-static void ForEachProductRanges(F&& f, const FirstRange& first, const RestRanges&... rest) {
-    for (auto&& x : first) {
-        auto bound = std::bind_front(std::forward<F>(f), x);
-        ForEachProductRanges(std::move(bound), rest...);
-    }
-}
-
-template <class... Enums, class F>
-static void ForEachEnums(F&& f) {
-    ForEachProductRanges(std::forward<F>(f), GetEnumAllValues<Enums>()...);
-}
-
-template <class Tuple, size_t... I>
-static TString BuildParamTestNameFromTupleImpl(const char* base, const Tuple& t, std::index_sequence<I...>) {
-    return BuildParamTestName(base, std::get<I>(t)...);
-}
-
-template <class Tuple>
-static TString BuildParamTestNameFromTuple(const char* base, const Tuple& t) {
-    return BuildParamTestNameFromTupleImpl(base, t, std::make_index_sequence<std::tuple_size<Tuple>::value>{});
-}
-
-#define Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(N, ...) \
-    struct TTestCase##N: public TCurrentTestCase { \
-        using Types = std::tuple<__VA_ARGS__>; \
-        Types Args; \
-        TString ParametrizedTestName; \
-        explicit TTestCase##N(Types args) \
-            : Args(std::move(args)) \
-            , ParametrizedTestName(BuildParamTestNameFromTuple(#N, Args)) { \
-            Name_ = ParametrizedTestName.c_str(); \
-        } \
-        static THolder<NUnitTest::TBaseTestCase> Create(Types args) { \
-            return ::MakeHolder<TTestCase##N>(std::move(args)); \
-        } \
-        void Execute_(NUnitTest::TTestContext&) override; \
-        template <size_t I> \
-        decltype(auto) Arg() const { \
-            return std::get<I>(Args); \
-        } \
-    }; \
-    struct TTestRegistration##N { \
-        TTestRegistration##N() { \
-            ForEachEnums<__VA_ARGS__>([&](auto... items) { \
-                TCurrentTest::AddTest([=] { \
-                    return TTestCase##N::Create(typename TTestCase##N::Types(items...)); \
-                }); \
-            }); \
-        } \
-    }; \
-    static TTestRegistration##N testRegistration##N; \
-    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -482,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TTestHelper::TColumnTable TestTable;
     };
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -498,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -513,7 +444,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -531,7 +462,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -551,7 +482,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -566,7 +497,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` order by b, id", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -581,7 +512,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -596,7 +527,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -651,7 +582,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
+    Y_UNIT_TEST(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
@@ -690,7 +621,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCSVBoolFormats, EQueryMode, ETableKind) {
+    Y_UNIT_TEST(TestCSVBoolFormats, EQueryMode, ETableKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
@@ -722,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFeatureFlag, EQueryMode, ETableKind) {
+    Y_UNIT_TEST(TestFeatureFlag, EQueryMode, ETableKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
@@ -763,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helperEnabled, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id", "[[1;[100];[%true]];[2;[200];[%false]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolAsPrimaryKey, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolAsPrimaryKey, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -871,7 +802,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                       "b, id, int", R"([[%true;1;100];[%false;2;200]])");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -968,7 +899,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT b, id, int FROM `" + dsFromCs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolOperatorsAndAggregations, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolOperatorsAndAggregations, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -1026,7 +957,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[#;1u];[[%false];1u];[[%true];1u]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBoolWithLimit, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestOrderByBoolWithLimit, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -1125,7 +1056,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, qDescPk, R"([[%true;1]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolCompare, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolCompare, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
         TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
@@ -1205,7 +1136,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         check("b <= true", R"([[%true;1;100];[%false;2;200];[%true;3;300];[%false;4;400]])");
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolFilterWithColumns, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolFilterWithColumns, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
         TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
@@ -1287,7 +1218,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[%true;1];[%true;3]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolWriteComparison, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolWriteComparison, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -1342,7 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[[%true];1];[[%false];2]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolNot, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolNot, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -1388,7 +1319,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, q, R"([[%false;1];[%true;2]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolGroupByCounts, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestBoolGroupByCounts, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 

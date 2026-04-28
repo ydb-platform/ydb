@@ -65,13 +65,14 @@ public:
     virtual void SetError(ui64 shardId) = 0;
     virtual void SetError() = 0;
 
-    virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
-    virtual std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const = 0;
+    virtual void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) = 0;
+    virtual TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const = 0;
 
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
     virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
     virtual bool HasTopics() const = 0;
+    virtual void SetSkipTopicsConflictCheck(bool skipConflictCheck) = 0;
 
     virtual void AddParticipantNode(const ui32 nodeId) = 0;
     virtual const THashSet<ui32>& GetParticipantNodes() const = 0;

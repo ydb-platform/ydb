@@ -19,6 +19,8 @@ from .topic_writer import (
     InternalMessage,
     TopicWriterStopped,
     TopicWriterError,
+    TopicWriterBufferFullError,
+    internal_message_size_bytes,
     messages_to_proto_requests,
     PublicWriteResult,
     PublicWriteResultTypes,
@@ -277,6 +279,9 @@ class WriterAsyncIOReconnector:
     else:
         _stop_reason: asyncio.Future
     _init_info: Optional[PublicWriterInitInfo]
+    _buffer_bytes: int
+    _buffer_messages: int
+    _buffer_updated: asyncio.Event
 
     def __init__(
         self, driver: SupportedDriverType, settings: WriterSettings, tx: Optional["BaseQueryTxContext"] = None
@@ -317,6 +322,12 @@ class WriterAsyncIOReconnector:
         self._messages = deque()
         self._messages_future = deque()
         self._new_messages = asyncio.Queue()
+        self._backpressure_enabled = (
+            settings.max_buffer_size_bytes is not None or settings.max_buffer_messages is not None
+        )
+        self._buffer_bytes = 0
+        self._buffer_messages = 0
+        self._buffer_updated = asyncio.Event()
         self._stop_reason = self._loop.create_future()
         connection_task = asyncio.create_task(self._connection_loop())
         connection_task.set_name("connection_loop")
@@ -371,7 +382,6 @@ class WriterAsyncIOReconnector:
             return stop_reason
 
     async def write_with_ack_future(self, messages: List[PublicMessage]) -> List[asyncio.Future]:
-        # todo check internal buffer limit
         self._check_stop()
 
         if self._settings.auto_seqno:
@@ -379,6 +389,9 @@ class WriterAsyncIOReconnector:
 
         internal_messages = self._prepare_internal_messages(messages)
         messages_future = [self._loop.create_future() for _ in internal_messages]
+
+        if self._backpressure_enabled:
+            await self._acquire_buffer_space(internal_messages)
 
         self._messages_future.extend(messages_future)
 
@@ -388,6 +401,46 @@ class WriterAsyncIOReconnector:
             self._messages_for_encode.put_nowait(internal_messages)
 
         return messages_future
+
+    async def _acquire_buffer_space(self, internal_messages: List[InternalMessage]) -> None:
+        """Wait until the buffer is below its limit, then admit the batch (soft-limit semantics).
+
+        Blocking starts only when the buffer is already at or above the limit at call time.
+        Once unblocked, the entire batch is admitted regardless of its size, so callers that
+        batch messages never get a permanent deadlock.
+        """
+        max_buf = self._settings.max_buffer_size_bytes
+        max_msgs = self._settings.max_buffer_messages
+        timeout_sec = self._settings.buffer_wait_timeout_sec
+        deadline = self._loop.time() + timeout_sec if timeout_sec is not None else None
+
+        while True:
+            self._buffer_updated.clear()
+            if (max_buf is None or self._buffer_bytes < max_buf) and (
+                max_msgs is None or self._buffer_messages < max_msgs
+            ):
+                break
+            self._check_stop()
+            if deadline is not None:
+                assert timeout_sec is not None
+                remaining = deadline - self._loop.time()
+                if remaining <= 0:
+                    raise TopicWriterBufferFullError(
+                        "Topic writer buffer full: no free space within %.1f s"
+                        " (buffer_bytes=%d, max_bytes=%s, buffer_msgs=%d, max_msgs=%s)"
+                        % (timeout_sec, self._buffer_bytes, max_buf, self._buffer_messages, max_msgs)
+                    )
+                try:
+                    await asyncio.wait_for(self._buffer_updated.wait(), timeout=min(0.5, remaining))
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await self._buffer_updated.wait()
+
+        self._check_stop()
+        new_bytes = sum(internal_message_size_bytes(m) for m in internal_messages)
+        self._buffer_bytes += new_bytes
+        self._buffer_messages += len(internal_messages)
 
     def _add_messages_to_send_queue(self, internal_messages: List[InternalMessage]):
         self._messages.extend(internal_messages)
@@ -516,13 +569,20 @@ class WriterAsyncIOReconnector:
                     messages.extend(self._messages_for_encode.get_nowait())
 
                 logger.debug(
-                    "writer reconnector %s encode %s messages",
+                    "writer reconnector %s start encoding %s messages",
                     self._id,
                     len(messages),
                 )
 
                 batch_codec = await self._codec_selector(messages)
                 await self._encode_data_inplace(batch_codec, messages)
+
+                logger.debug(
+                    "writer reconnector %s encoded %s messages",
+                    self._id,
+                    len(messages),
+                )
+
                 self._add_messages_to_send_queue(messages)
         except BaseException as err:
             self._stop(err)
@@ -631,6 +691,8 @@ class WriterAsyncIOReconnector:
             for ack in resp.acks:
                 self._handle_receive_ack(ack)
 
+            logger.debug("writer reconnector %s handled %s acks", self._id, len(resp.acks))
+
     def _handle_receive_ack(self, ack):
         current_message = self._messages.popleft()
         message_future = self._messages_future.popleft()
@@ -639,6 +701,10 @@ class WriterAsyncIOReconnector:
                 "internal error - receive unexpected ack. Expected seqno: %s, received seqno: %s"
                 % (current_message.seq_no, ack.seq_no)
             )
+        if self._backpressure_enabled:
+            self._buffer_bytes = max(0, self._buffer_bytes - internal_message_size_bytes(current_message))
+            self._buffer_messages = max(0, self._buffer_messages - 1)
+            self._buffer_updated.set()
         write_ack_msg = StreamWriteMessage.WriteResponse.WriteAck
         status = ack.message_write_status
         if isinstance(status, write_ack_msg.StatusSkipped):
@@ -650,12 +716,6 @@ class WriterAsyncIOReconnector:
         else:
             raise TopicWriterError("internal error - receive unexpected ack message.")
         message_future.set_result(result)
-        logger.debug(
-            "writer reconnector %s ack seqno=%s result=%s",
-            self._id,
-            ack.seq_no,
-            type(result).__name__,
-        )
 
     async def _send_loop(self, writer: "WriterAsyncIOStream"):
         try:
@@ -713,7 +773,9 @@ class WriterAsyncIOReconnector:
 
         for f in self._messages_future:
             f.set_exception(reason)
+            f.exception()  # mark as retrieved so asyncio does not log "Future exception was never retrieved"
 
+        self._buffer_updated.set()  # wake any tasks blocked in _acquire_buffer_space
         self._state_changed.set()
         logger.info("Stop topic writer %s: %s" % (self._id, reason))
 

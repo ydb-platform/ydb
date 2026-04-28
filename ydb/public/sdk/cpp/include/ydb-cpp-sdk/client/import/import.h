@@ -37,8 +37,8 @@ enum class EIndexPopulationMode {
 };
 
 struct TImportItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
+    uint32_t PartsTotal = 0;
+    uint32_t PartsCompleted = 0;
     TInstant StartTime;
     TInstant EndTime;
 };
@@ -79,7 +79,7 @@ class TImportFromS3Response : public TOperation {
 public:
     struct TMetadata {
         TImportFromS3Settings Settings;
-        EImportProgress Progress;
+        EImportProgress Progress = EImportProgress::Unspecified;
         std::vector<TImportItemProgress> ItemsProgress;
     };
 
@@ -162,10 +162,10 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
         // database path where to import data
         std::string Dst;
 
-        // Source path.
+        // Source path in database.
         // If the export contains the database objects list, you may specify the database object name,
         // and the FS path will be looked up in the database objects list by the import procedure
-        std::string SrcPath = {};
+        std::string SrcPathDb = {};
     };
 
     FLUENT_SETTING(std::string, BasePath);
@@ -184,7 +184,7 @@ class TImportFromFsResponse : public TOperation {
 public:
     struct TMetadata {
         TImportFromFsSettings Settings;
-        EImportProgress Progress;
+        EImportProgress Progress = EImportProgress::Unspecified;
         std::vector<TImportItemProgress> ItemsProgress;
     };
 

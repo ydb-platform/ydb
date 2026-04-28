@@ -1,13 +1,16 @@
 #include "long_tx_service.h"
 
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -27,7 +30,8 @@ namespace NLongTxService {
             return res;
         }
 
-        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard, ui32 nodeCount = 2) {
+        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard, size_t nodesCount = 2) {
+            TVector<TTenantTestConfig::TNodeConfig> nodes(nodesCount, {MakeDefaultTenantPoolConfig()});
             TTenantTestConfig res = {
                 // Domains {name, schemeshard {{ subdomain_names }}}
                 {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
@@ -40,13 +44,10 @@ namespace NLongTxService {
                 // CreateConsole
                 false,
                 // Nodes {tenant_pool_config}
-                {},
+                nodes,
                 // DataCenterCount
                 1
             };
-            for (ui32 i = 0; i < nodeCount; ++i) {
-                res.Nodes.push_back({MakeDefaultTenantPoolConfig()});
-            }
             return res;
         }
 
@@ -193,7 +194,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
             const auto* msg = ev->Get();
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
         }
 
         // Begin a new read-only transaction at node 1
@@ -354,6 +355,80 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         UNIT_ASSERT_GE(disconnectCount, 3);
     }
 
+    void RunSimpleSnapshotsTest(size_t nodesCount, bool hasTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(5);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+        }
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        // Sleep a little, so there's at least one plan step generated
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        const ::NKikimr::TTableId table(0, 1);
+        const ::NKikimr::TTableId otherTable(0, 2);
+
+        // Send an acquire read snapshot for node 1
+        NKqp::TSnapshotHandle handle;
+        TRowVersion snapshot;
+        {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<::NKikimr::TTableId>{table} : TVector<::NKikimr::TTableId>{})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+
+            handle = std::move(msg->SnapshotHandle);
+            snapshot = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(10));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == !hasTable);
+        }
+
+        handle.Reset();
+
+        SimulateSleep(runtime, TDuration::Seconds(10));
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SimpleSnapshotsSingleNode, HasTable) {
+        RunSimpleSnapshotsTest(1, HasTable);
+    }
+
+    Y_UNIT_TEST_TWIN(SimpleSnapshotsManyNodes, HasTable) {
+        RunSimpleSnapshotsTest(4, HasTable);
+    }
+
 } // Y_UNIT_TEST_SUITE(LongTxService)
 
 Y_UNIT_TEST_SUITE(LockWaitGraph) {
@@ -431,6 +506,11 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
             Y_ENSURE(edges.contains(reqId));
             edges.erase(reqId);
             SendToLongTx(new TEvLongTxService::TEvWaitingLockRemove(reqId));
+        }
+
+        template<class TEvent>
+        typename TEvent::TPtr GrabEvent(TDuration simTimeout = TDuration::Max()) {
+            return Runtime.GrabEdgeEventRethrow<TEvent>(ActorId, simTimeout);
         }
 
         ~TMockDatashard() {
@@ -549,8 +629,8 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(true, 4));
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
 
-        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
-        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1)));
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0), TInstant::Seconds(123456)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1), TInstant::Seconds(234567)));
 
         TMockDatashard ds1(runtime, /*nodeIdx=*/2);
         TMockDatashard ds2(runtime, /*nodeIdx=*/3);
@@ -561,10 +641,10 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         ds2.AddLock(lock2.Info);
 
         ds1.AddLock(lock2.Info);
-        ds1.AddWait(lock2.Info, lock1.Info);
+        const auto reqId = ds1.AddWait(lock2.Info, lock1.Info);
 
         ds2.AddLock(lock1.Info);
-        const auto reqId = ds2.AddWait(lock1.Info, lock2.Info);
+        ds2.AddWait(lock1.Info, lock2.Info);
 
         // Check that the wait graph is correctly instantiated on all nodes.
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
@@ -576,13 +656,16 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
                 "with nodeIdx: " << nodeIdx);
         }
 
+        auto deadlockEv = ds1.GrabEvent<TEvLongTxService::TEvWaitingLockDeadlock>();
+        UNIT_ASSERT_VALUES_EQUAL(deadlockEv->Get()->RequestId, reqId);
+
         // Break the deadlock and check that the removal is correctly propagated.
-        ds2.RemoveWait(lock1.Info, reqId);
+        ds1.RemoveWait(lock2.Info, reqId);
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
         for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 GetWaitGraphString(runtime, nodeIdx),
-                "234 -> 123\n",
+                "123 -> 234\n",
                 "with nodeIdx: " << nodeIdx);
         }
     }

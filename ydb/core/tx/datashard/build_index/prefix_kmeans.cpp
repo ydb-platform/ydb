@@ -7,7 +7,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -73,6 +72,8 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 InvalidEmbeddingRows = 0;
+    ui64 InvalidEmbeddingRowsInPrefix = 0;
 
     TBatchRowsUploader Uploader;
 
@@ -237,6 +238,13 @@ public:
 
         Uploader.Finish(record, status);
 
+        if (InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix > 0) {
+            auto* issue = record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_WARNING);
+            issue->set_message(TStringBuilder()
+                << InvalidEmbeddingRows + InvalidEmbeddingRowsInPrefix << " row(s) with invalid vector format were skipped during index build");
+        }
+
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
         } else {
@@ -300,13 +308,6 @@ public:
 
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
-
-            // write {Prefix..., Parent} row to PrefixBuf:
-            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
-            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
-            pk.push_back(TCell::Make(Parent));
-
-            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
@@ -400,6 +401,8 @@ protected:
     }
 
     void StartNewPrefix() {
+        InvalidEmbeddingRows += InvalidEmbeddingRowsInPrefix;
+        InvalidEmbeddingRowsInPrefix = 0;
         Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
@@ -471,6 +474,12 @@ protected:
                 // lets make single centroid for it
                 rows.resize(1);
             }
+            // Now we know that the prefix is correct, write {Prefix..., Parent} row to PrefixBuf
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+            PrefixBuf->AddRow(pk, {});
+            // Set clusters
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
             Clusters->SetRound(1);
@@ -519,6 +528,7 @@ protected:
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedFormat(embedding)) {
+            ++InvalidEmbeddingRowsInPrefix;
             return;
         }
 
@@ -537,6 +547,9 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
+        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
+            return;
+        }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
         if (OutForeign) {
             bool foreign = false;

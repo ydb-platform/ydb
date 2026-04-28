@@ -37,6 +37,7 @@ RECURSE_FOR_TESTS(
     ut_index_build_reboots
     ut_login
     ut_login_large
+    ut_metrics
     ut_move
     ut_move_reboots
     ut_olap
@@ -118,7 +119,6 @@ SRCS(
     schemeshard__operation_alter_external_table.cpp
     schemeshard__operation_alter_extsubdomain.cpp
     schemeshard__operation_alter_fs.cpp
-    schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
@@ -131,7 +131,6 @@ SRCS(
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
     schemeshard__operation_alter_user_attrs.cpp
-    schemeshard__operation_apply_build_index.cpp
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
     schemeshard__operation_backup_incremental_backup_collection.cpp
@@ -154,15 +153,12 @@ SRCS(
     schemeshard__operation_create_backup.cpp
     schemeshard__operation_create_backup_collection.cpp
     schemeshard__operation_create_bsv.cpp
-    schemeshard__operation_create_build_index.cpp
     schemeshard__operation_create_cdc_stream.cpp
     schemeshard__operation_create_continuous_backup.cpp
     schemeshard__operation_create_external_data_source.cpp
     schemeshard__operation_create_external_table.cpp
     schemeshard__operation_create_extsubdomain.cpp
     schemeshard__operation_create_fs.cpp
-    schemeshard__operation_create_index.cpp
-    schemeshard__operation_create_indexed_table.cpp
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_pq.cpp
@@ -189,8 +185,6 @@ SRCS(
     schemeshard__operation_drop_external_table.cpp
     schemeshard__operation_drop_extsubdomain.cpp
     schemeshard__operation_drop_fs.cpp
-    schemeshard__operation_drop_index.cpp
-    schemeshard__operation_drop_indexed_table.cpp
     schemeshard__operation_drop_kesus.cpp
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_pq.cpp
@@ -205,20 +199,15 @@ SRCS(
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
-    schemeshard__operation_finalize_build_index.cpp
-    schemeshard__operation_initiate_build_index.cpp
     schemeshard__operation_just_reject.cpp
     schemeshard__operation_memory_changes.cpp
     schemeshard__operation_mkdir.cpp
     schemeshard__operation_modify_acl.cpp
-    schemeshard__operation_move_index.cpp
     schemeshard__operation_move_sequence.cpp
     schemeshard__operation_move_table.cpp
-    schemeshard__operation_move_table_index.cpp
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
-    schemeshard__operation_prepare_index_validation.cpp
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_rotate_cdc_stream.cpp
@@ -259,15 +248,6 @@ SRCS(
     schemeshard_restore_incremental__list.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
-    schemeshard_build_index.cpp
-    schemeshard_build_index_helpers.cpp
-    schemeshard_build_index__cancel.cpp
-    schemeshard_build_index__create.cpp
-    schemeshard_build_index__forget.cpp
-    schemeshard_build_index__get.cpp
-    schemeshard_build_index__list.cpp
-    schemeshard_build_index__progress.cpp
-    schemeshard_build_index_tx_base.cpp
     schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp
@@ -298,10 +278,6 @@ SRCS(
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
     schemeshard_import_scheme_query_executor.cpp
-    schemeshard_index_build_info.cpp
-    schemeshard_index_build_info.h
-    schemeshard_index_utils.cpp
-    schemeshard_index_utils.h
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_login_helper.cpp
@@ -341,8 +317,6 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
-GENERATE_ENUM_SERIALIZATION(schemeshard_index_build_info.h)
-
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
@@ -351,6 +325,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
+    library/cpp/iterator
     library/cpp/json
     library/cpp/protobuf/json
     library/cpp/regex/pcre
@@ -388,6 +363,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
+    ydb/core/tx/schemeshard/index
     ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client

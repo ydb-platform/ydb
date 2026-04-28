@@ -28,7 +28,7 @@ NKikimrConfig::TAppConfig YamlToProto(
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, /*phase=*/ nullptr, /*relaxed=*/ true);
 
     return yamlProtoConfig;
 }
@@ -90,7 +90,7 @@ void ResolveAndParseYamlConfig(
         appConfig.SetYamlConfigEnabled(true);
     }
 
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

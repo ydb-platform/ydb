@@ -91,6 +91,8 @@ public:
     ) = 0;
 
     virtual TAdvanceStageResult AdvanceToNextStage() = 0;
+
+    virtual std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const = 0;
 };
 
 } // namespace NYql::NFmr

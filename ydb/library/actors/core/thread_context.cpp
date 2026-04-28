@@ -175,4 +175,40 @@ namespace NActors {
     void TThreadContext::ResetOverwrittenTimePerMailboxTs() {
         ExecutionContext.OverwrittenTimePerMailboxTs = TimePerMailboxTs();
     }
+
+    NHPTimer::STime TThreadContext::MailboxScheduledTimestampTs() const {
+        return MailboxContext.ScheduledTimestamp;
+    }
+
+    void TThreadContext::SetMailboxScheduledTimestampTs(NHPTimer::STime value) {
+        MailboxContext.ScheduledTimestamp = value;
+    }
+
+    NHPTimer::STime TThreadContext::EventEnqueuedTimestampTs() const {
+        return MailboxContext.EventEnqueuedTimestamp;
+    }
+
+    void TThreadContext::SetEventEnqueuedTimestampTs(NHPTimer::STime value) {
+        MailboxContext.EventEnqueuedTimestamp = value;
+    }
+
+    ui64 TThreadContext::ActivationTimeUs() const {
+        return MailboxContext.ActivationTimeUs;
+    }
+
+    void TThreadContext::SetActivationTimeUs(ui64 value) {
+        MailboxContext.ActivationTimeUs = value;
+    }
+
+    ui64 TThreadContext::EventDeliveryTimeUs() const {
+        return MailboxContext.EventDeliveryTimeUs;
+    }
+
+    void TThreadContext::SetEventDeliveryTimeUs(ui64 value) {
+        MailboxContext.EventDeliveryTimeUs = value;
+    }
+
+    void TThreadContext::ResetMailboxContext() {
+        MailboxContext = {};
+    }
 }

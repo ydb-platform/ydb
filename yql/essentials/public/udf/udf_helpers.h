@@ -9,6 +9,8 @@
 #include "udf_version.h"
 #include "udf_type_printer.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -26,6 +28,7 @@ template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgsWithVersion);
 
 public:
     using TTypeAwareMarker = bool;
@@ -46,6 +49,29 @@ public:
         Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
         return TActualUDF::Name();
     }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+    static TString BuildPolyArgs() {
+        if constexpr (THasBuildPolyArgsWithVersion<TActualUDF>::value) {
+            Y_ENSURE(THasBuildPolyArgsWithVersion<TLegacyUDF>::value);
+            TStringBuilder builder;
+            builder << "[";
+            builder << TActualUDF::BuildPolyArgsWithVersion(V, false);
+            builder << TLegacyUDF::BuildPolyArgsWithVersion(0, true);
+            builder << "]";
+            return builder;
+        } else {
+            TStringBuilder builder;
+            auto verStr = *FormatLangVersion(V);
+            builder << "[[{cmd=ver;value=\"";
+            builder << verStr;
+            builder << "\"};{ver=\"";
+            builder << verStr;
+            builder << "\"}];[[];{}]]";
+            return builder;
+        }
+    }
+#endif
 
     static bool DeclareSignature(
         const TStringRef& name, TType* userType,
@@ -387,12 +413,45 @@ public:
 
         return true;
     }
+
+    static TString BuildPolyArgs() {
+        TStringBuilder sb;
+        sb << "[";
+        AppendPolyArgsItem<TUserTypes...>(sb, true);
+        sb << "]";
+        return sb;
+    }
+
+private:
+    template <typename THead, typename... TTail>
+    static void AppendPolyArgsItem(TStringBuilder& sb, bool isFirst) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if (!isFirst) {
+            sb << ";";
+        }
+        if constexpr (sizeof...(TTail) > 0) {
+            if constexpr (CheckOptional) {
+                sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
+                   << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
+                   << "]]}]};{args=[[DataType;" << typeName << "]]}]";
+            } else {
+                sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
+                   << "]};{args=[[DataType;" << typeName << "]]}]";
+            }
+            AppendPolyArgsItem<TTail...>(sb, false);
+        } else {
+            sb << "[[];{args=[[DataType;" << typeName << "]]}]";
+        }
+    }
 };
 
 template <CUDF... TUdfs>
 class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgs);
 
 public:
     void CleanupOnTerminate() const override {
@@ -404,6 +463,15 @@ public:
         if (THasTTypeAwareMarker<TUdfType>::value) {
             r->SetTypeAwareness();
         }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+        if constexpr (THasBuildPolyArgs<TUdfType>::value) {
+            auto str = TUdfType::BuildPolyArgs();
+            if (str.size() > 0) {
+                r->SetPolyArgs(str);
+            }
+        }
+#endif
 
         if constexpr (THasTBlockType<TUdfType>::value) {
             if constexpr (!std::is_same_v<typename TUdfType::TBlockType, void>) {

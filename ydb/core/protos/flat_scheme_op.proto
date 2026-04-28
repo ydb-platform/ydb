@@ -28,6 +28,7 @@ import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -208,7 +209,13 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
-    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
+    reserved 26; // deprecated -> ByKeyFilterPrefixes
+    repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+}
+
+message TByKeyFilterPrefix {
+    optional uint32 PrefixLength = 1;           // Number of leading key columns
+    optional double FalsePositiveProbability = 2; // Bloom filter FPP (default 0.0001 when absent)
 }
 
 message TSplitBoundary {
@@ -268,6 +275,69 @@ message TTTLSettings {
     }
 
     reserved 3;
+}
+
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message TTableDetailedMetricsSettings {
+    /**
+     * The level at which detailed metrics are aggregated and reported.
+     */
+    enum EMetricsLevel {
+        /**
+         * The detailed metrics level is not specified.
+         */
+        MetricsLevelUnspecified = 0;
+
+        /**
+         * All detailed metrics are disabled for the given table.
+         */
+        MetricsLevelDisabled = 1;
+
+        /**
+         * Detailed metrics are aggregated and reported for the entire table.
+         */
+        MetricsLevelTable = 2;
+
+        /**
+         * Detailed metrics are aggregated and reported for individual partitions.
+         */
+        MetricsLevelPartition = 3;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly configured.
+     */
+    message TConfigured {
+        /**
+         * The level at which detailed metrics are aggregated and reported.
+         */
+        optional EMetricsLevel MetricsLevel = 1;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly removed.
+     */
+    message TNotConfigured {
+    }
+
+    oneof Status {
+        /**
+         * Set, if the detailed metrics settings are explicitly configured.
+         */
+        TConfigured Configured = 1;
+
+        /**
+         * Set, if the detailed metrics settings are explicitly removed.
+         *
+         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
+         *       which are currently configured for the given table. If the detailed metrics
+         *       settings are not configured, the corresponding DetailedMetricsSettings field
+         *       in the table description will not be set.
+         */
+        TNotConfigured NotConfigured = 2;
+    }
 }
 
 message TTableReplicationConfig {
@@ -359,6 +429,35 @@ message TTableDescription {
     optional TDropCdcStream DropSrcCdcStream = 48;
     // Coordinated schema version for backup operations - persisted with AlterData
     optional uint64 CoordinatedSchemaVersion = 49;
+
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 50;
+
+    /**
+     * The detailed metrics settings for the given table.
+     *
+     * @note When returning the description for an existing table, this field
+     *       will be populated, if the detailed metrics settings are explicitly configured
+     *       for the given table. If the detailed metrics settings are not configured,
+     *       this field will not be populated in the table description.
+     *
+     * @note When used for ALTER TABLE requests, this field should be left unset
+     *       to keep the current detailed metrics settings for the given table.
+     *       To configure/change the detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.Configured field set to the desired settings.
+     *       To remove the current detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.NotConfigured field set.
+     *
+     * @note If the detailed metrics settings are not configured for a table,
+     *       the default metrics settings from the parent database are used instead
+     *       (by default, no detailed metrics settings are configured at the database
+     *       level). Setting the detailed metrics level to TABLE/PARTITION for a table,
+     *       enables detailed metrics for the given table regardless of the detailed
+     *       metrics settings at the database level. Setting the detailed metrics
+     *       level to DISABLED for a table, disables detailed metrics for the given table
+     *       regardless of the detailed metrics settings at the database level.
+     */
+    optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 }
 
 message TCompressionOptions {
@@ -436,7 +535,7 @@ message TSkipIndexBitSetStorage {
 }
 
 message TRequestedBloomFilter {
-    optional double FalsePositiveProbability = 1 [default = 0.1];
+    optional double FalsePositiveProbability = 1;
     repeated string ColumnNames = 3;
     optional TIndexDataExtractor DataExtractor = 4;
     optional TSkipIndexBitSetStorage BitsStorage = 5;
@@ -450,7 +549,8 @@ message TRequestedBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
-    optional bool CaseSensitive = 8 [default = true];
+    optional bool CaseSensitive = 8;
+    optional double FalsePositiveProbability = 9;
 }
 
 message TRequestedMaxIndex {
@@ -483,9 +583,15 @@ message TOlapIndexRequested {
     }
 }
 
+message TOlapMoveIndex {
+    optional string SourceName = 1;
+    optional string DestinationName = 2;
+    optional bool ReplaceDestination = 3 [default = false];
+}
+
 message TBloomFilter {
-    optional double FalsePositiveProbability = 1 [default = 0.1];
-    optional uint64 MaxBytesCount = 2 [default = 8196];
+    optional double FalsePositiveProbability = 1;
+    optional uint64 MaxBytesCount = 2;
     repeated uint32 ColumnIds = 3;
     optional TIndexDataExtractor DataExtractor = 4;
     optional TSkipIndexBitSetStorage BitsStorage = 5;
@@ -499,7 +605,8 @@ message TBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
-    optional bool CaseSensitive = 8 [default = true];
+    optional bool CaseSensitive = 8;
+    optional double FalsePositiveProbability = 9;
 }
 
 message TMaxIndex {
@@ -716,6 +823,7 @@ message TAlterColumnTableSchema {
     optional TColumnTableRequestedOptions Options = 12;
     repeated TFamilyDescription AddColumnFamily = 13;
     repeated TFamilyDescription AlterColumnFamily = 14;
+    repeated TOlapMoveIndex MoveIndex = 15;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -978,18 +1086,18 @@ message TReshardColumnTable {
 
 message TLoginCreateUser {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
     optional bool IsHashedPassword = 4 [default = false, deprecated = true];
-    optional string HashedPassword = 5;
+    optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
     optional bool IsHashedPassword = 4 [default = false, deprecated = true];
-    optional string HashedPassword = 5;
+    optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
 message TLoginRemoveUser {
@@ -1080,6 +1188,7 @@ message TCdcStreamDescription {
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
+    optional bool TraceIds = 14;
 }
 
 message TCreateCdcStream {
@@ -1341,7 +1450,7 @@ message TConsistentTableCopyingConfig {
 message TYTSettings {
     optional string Host = 1;
     optional string TablePattern = 2;
-    optional string Token = 3;
+    optional string Token = 3 [(Ydb.sensitive) = true];
     optional uint32 Port = 4 [default = 80];
 
     reserved 5; // YSONasText
@@ -1445,6 +1554,7 @@ message TPersQueueGroupAllocate {
         optional NKikimrPQ.ETopicPartitionStatus Status = 6;
         repeated uint32 ParentPartitionIds = 7;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
+        optional uint64 CreationTimestampSeconds = 11;
     }
 
     optional string Name = 1;
@@ -1475,6 +1585,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.ETopicPartitionStatus Status = 4;
         repeated uint32 ParentPartitionIds = 5;
         repeated uint32 ChildPartitionIds = 6;
+        optional uint64 CreationTimestampSeconds = 7;
     }
 
     optional string Name = 1; // mandatory
@@ -1551,7 +1662,7 @@ message TBlockStoreVolumeDescription {
     repeated TPartition Partitions = 4; // do not set
     optional uint64 VolumeTabletId = 5; // do not set
     optional uint64 AlterVersion = 6; // do not set
-    optional string MountToken = 7; // do not set
+    optional string MountToken = 7 [(Ydb.sensitive) = true]; // do not set
     optional uint64 TokenVersion = 8; // do not set
 }
 
@@ -1616,7 +1727,7 @@ message TAlterSolomonVolume {
 
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
-    optional string NewMountToken = 2; // unset to unassign
+    optional string NewMountToken = 2 [(Ydb.sensitive) = true]; // unset to unassign
     optional uint64 TokenVersion = 3;
 }
 
@@ -2271,6 +2382,12 @@ message TToken {
     optional string TokenSecretName = 2;
 }
 
+message TIamImpersonate {
+    optional string ServiceAccountId = 1;
+    optional string InitialTokenSecretName = 2;
+    optional string ResourceId = 3;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -2278,7 +2395,8 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
-        TToken Token = 8;
+        TToken Token = 8 [(Ydb.sensitive) = true];
+        TIamImpersonate Iam = 9;
     }
 }
 
@@ -2422,13 +2540,13 @@ message TChangePathState {
 
 message TSecretDescription {
     optional string Name = 1;
-    optional string Value = 2; // original, unencrypted value
+    optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
     optional uint64 Version = 3;
 }
 
 message TSecretSchemaOp {
     optional string Name = 1;
-    optional string Value = 2; // original, unencrypted value
+    optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
     optional bool InheritPermissions = 3;
     // The following field is needed at KQP for sending between the prepare и execute phases.
     // However, this field is supposed to be resolved at KQP to the actual value and be cleared.

@@ -15,6 +15,15 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+constexpr std::string_view WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX = "track_producer_id_in_tx";
+
+TWriteSessionSettings& TWriteSessionSettings::SetTrackProducerIdInTx(bool value)
+{
+    const auto& key = WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
+    return AppendSessionMeta({key.data(), key.size()},
+                             value ? "true" : "false");
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
 

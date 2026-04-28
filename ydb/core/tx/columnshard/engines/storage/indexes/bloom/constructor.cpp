@@ -1,6 +1,7 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -13,10 +14,29 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         errors.AddError("no column with name " + GetColumnName());
         return nullptr;
     }
+
+    if (auto c = ValidateRequest(Request); c.IsFail()) {
+        errors.AddError(c.GetErrorMessage());
+        return nullptr;
+    }
+
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        GetInheritPortionStorage().value_or(false), columnId,
+        Request,
+        std::make_shared<TDefaultDataExtractor>(),
         TBase::GetBitsStorageConstructor());
+}
+
+std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+    const IIndexMeta& existingMeta) const {
+    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(
+        indexId, indexName, currentSchema, errors, existingMeta);
+}
+
+TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
+    return ValidateRequest(Request);
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -26,14 +46,13 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
             return conclusion;
         }
     }
-    if (!jsonInfo["false_positive_probability"].IsDouble()) {
+
+    if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
-    FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
-    if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval [0.01, 1)");
-    }
-    return TConclusionStatus::Success();
+
+    Request.FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
+    return ValidateValues();
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
@@ -42,26 +61,24 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
-    auto& bFilter = proto.GetBloomFilter();
+
+    const auto& bFilter = proto.GetBloomFilter();
+
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
             return conclusion;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
-    if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
-        const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
-        return TConclusionStatus::Fail(errorMessage);
-    }
-    return TConclusionStatus::Success();
+
+    Request = TRequestSettings::FromProtoFilter(bFilter);
+    return ValidateValues();
 }
 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
-    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    Request.SerializeToProtoFilter(*filterProto);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

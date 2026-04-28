@@ -298,6 +298,8 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 0];
 };
 
 message TPartitionKeyRange {
@@ -356,7 +358,8 @@ message TPQTabletConfig {
     optional bool RequireAuthWrite = 7 [default = false];
     optional bool RequireAuthRead = 8 [default = false];
     optional string Producer = 9;
-    optional string Ident = 10;
+    reserved 10; // optional string Ident = 10;
+    reserved "Ident";
     optional string Topic = 11;
     optional string DC = 12;
 
@@ -442,6 +445,7 @@ message TPQTabletConfig {
         repeated uint32 ChildPartitionIds = 5;
         optional uint64 CreateVersion = 6;
         optional uint64 TabletId = 7;
+        optional uint64 CreationTimestampSeconds = 8;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 

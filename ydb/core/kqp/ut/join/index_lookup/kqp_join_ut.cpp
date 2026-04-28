@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -2042,6 +2043,162 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         UNIT_ASSERT_C(leftTableChecked, "No reads found for /Root/TableLeft");
         UNIT_ASSERT_C(rightTableChecked, "No reads found for /Root/TableRight");
+    }
+
+    Y_UNIT_TEST(StreamLookupJoinOverloadDeadlock) {
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        auto* retrySettings = serverSettings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxShardRetries(100);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetMaxRowsProcessingStreamLookup(1);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
+
+        auto savedReadSettings = NKqp::GetDefaultReadSettings();
+        auto savedReadAckSettings = NKqp::GetDefaultReadAckSettings();
+        Y_DEFER {
+            NKqp::SetDefaultReadSettings(savedReadSettings->Record);
+            NKqp::SetDefaultReadAckSettings(savedReadAckSettings->Record);
+        };
+
+        // Limit rows per read response to force incremental result production.
+        {
+            NKikimrTxDataShard::TEvRead evread;
+            evread.SetMaxRows(1);
+            NKqp::SetDefaultReadSettings(evread);
+
+            NKikimrTxDataShard::TEvReadAck evreadack;
+            evreadack.SetMaxRows(1);
+            NKqp::SetDefaultReadAckSettings(evreadack);
+        }
+
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            // ta: left table, scanned
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/ta`(a Int64 NOT NULL, fk Int64, PRIMARY KEY(a));
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            // tb: right table with a secondary index on fk.
+            // Multiple tb rows share the same fk → one-to-many join via index.
+            // The index lookup + main table lookup creates the triplet chain.
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/tb`(
+                    b Int64 NOT NULL,
+                    fk Int64,
+                    bval Int64,
+                    PRIMARY KEY(b),
+                    INDEX idx_fk GLOBAL ON (fk)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            // ta: multiple rows sharing fk=1 → interleaved output from index lookup
+            // tb: multiple rows with fk=1 → one-to-many join
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/ta`(a, fk) VALUES
+                    (1, 1), (2, 1), (3, 1), (4, 1), (5, 1),
+                    (6, 1), (7, 1), (8, 1), (9, 1), (10, 1);
+                UPSERT INTO `/Root/tb`(b, fk, bval) VALUES
+                    (101, 1, 10), (102, 1, 20), (103, 1, 30);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            // 10 ta rows × 3 tb matches = 30 expected results.
+            // The join uses the secondary index idx_fk on tb.
+            // With the bug, the main table stream lookup hangs on overload.
+            auto result = db.ExecuteQuery(R"(
+                SELECT ta.a, tb.bval
+                FROM `/Root/ta` AS ta
+                INNER JOIN `/Root/tb` VIEW idx_fk AS tb ON ta.fk = tb.fk
+                ORDER BY ta.a, tb.bval;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            ui64 totalCount = 0;
+            for(size_t i = 0; i < result.GetResultSets().size(); i++) {
+                totalCount += result.GetResultSet(i).RowsCount();
+                UNIT_ASSERT(!result.GetResultSet(i).Truncated());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(totalCount, 30);
+        }
+    }
+
+    Y_UNIT_TEST(RightSidePredicateWithNonKeyMember) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+            `a` String NOT NULL,
+            `b` Bool NOT NULL,
+            `c` Decimal(7, 0) NOT NULL,
+            `d` String NOT NULL,
+            `pk` Utf8 NOT NULL,
+            INDEX `t1_index_c_a` GLOBAL UNIQUE ON (`c`, `a`),
+            PRIMARY KEY (`pk`)
+        );
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+       res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t2` (
+            `a` String NOT NULL,
+            `b` Bool NOT NULL,
+            `c` Decimal(7, 0) NOT NULL,
+            `pk` Utf8 NOT NULL,
+            INDEX `t2_index_c_a` GLOBAL UNIQUE ON (`c`, `a`),
+            PRIMARY KEY (`pk`)
+        );
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        TVector<TString> queries = {
+            R"(
+                SELECT COUNT(`t1`.`a`)
+                FROM `/Root/t1` AS `t1`
+                INNER JOIN (
+                    SELECT *
+                    FROM `/Root/t2` AS `t2`
+                    where (`t2`.`c` = 1)
+                    AND (Not(`t2`.`b`))
+                ) AS `t2`
+                    ON (`t1`.`d` = `t2`.`a`)
+                WHERE (`t1`.`d` != 'aa')
+                AND (Not(`t1`.`b`))
+                AND (`t1`.`c` = 2)
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result = session2
+                              .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                              .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result =
+                session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
     }
 }
 

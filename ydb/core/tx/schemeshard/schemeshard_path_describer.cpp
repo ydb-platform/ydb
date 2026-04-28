@@ -691,6 +691,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 for (const auto child : desc.Info->ChildPartitionIds) {
                     partition.AddChildPartitionIds(child);
                 }
+                if (desc.Info->CreationTimestamp) {
+                    partition.SetCreationTimestampSeconds(desc.Info->CreationTimestamp.Seconds());
+                }
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription);
@@ -728,6 +731,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     }
                     if (pq->KeyRange) {
                         pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
+                    }
+                    if (pq->CreationTimestamp) {
+                        partition->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
                     }
                 }
             }
@@ -1406,6 +1412,11 @@ void TSchemeShard::DescribeTable(
 
     if (tableInfo.HasTTLSettings()) {
         entry->MutableTTLSettings()->CopyFrom(tableInfo.TTLSettings());
+    }
+
+    if (tableInfo.HasDetailedMetricsSettings()) {
+        entry->MutableDetailedMetricsSettings()->MutableConfigured()
+            ->CopyFrom(tableInfo.GetDetailedMetricsSettings());
     }
 
     if (tableInfo.HasReplicationConfig()) {

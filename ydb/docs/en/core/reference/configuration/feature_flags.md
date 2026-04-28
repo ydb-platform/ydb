@@ -11,7 +11,7 @@ feature_flags:
 
 | Flag          | Feature |
 |---------------------------| ----------------------------------------------------|
-| `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
+| `enable_fulltext_index`                                   | [Fulltext index](../../dev/fulltext-indexes.md) for fulltext search |
 | `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
 | `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |

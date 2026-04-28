@@ -1,13 +1,15 @@
 #include "sql_select_yql.h"
 
 #include "antlr_token.h"
-#include "sql_expression.h"
 #include "select_yql.h"
+#include "sql_expression.h"
+#include "sql_select_window.h"
 #include "sql_select.h"
 
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 
 #include <util/generic/overloaded.h>
+#include <util/generic/scope.h>
 
 namespace NSQLTranslationV1 {
 
@@ -376,12 +378,6 @@ private:
             return Unsupported("opt_set_quantifier");
         }
 
-        if (auto result = BuildProjection(rule)) {
-            setItem.Projection = std::move(*result);
-        } else {
-            return std::unexpected(result.error());
-        }
-
         if (rule.HasBlock8()) {
             Token(rule.GetBlock8().GetToken1());
             return Unsupported("WITHOUT (IF EXISTS)? without_column_list");
@@ -429,16 +425,40 @@ private:
             }
         }
 
-        if (rule.HasBlock13()) {
-            return Unsupported("window_clause");
-        }
-
         if (rule.HasBlock14()) {
             if (auto result = Build(rule.GetBlock14().GetRule_ext_order_by_clause1())) {
                 setItem.OrderBy = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
+        }
+
+        TWinSpecs windows;
+        Ctx_.WinSpecsScopes.push_back(std::ref(windows));
+        Y_DEFER {
+            Ctx_.WinSpecsScopes.pop_back();
+        };
+
+        if (rule.HasBlock13()) {
+            const auto& w = rule.GetBlock13().GetRule_window_clause1();
+            if (!TSqlWindow(*this).Build(w, windows)) {
+                return std::unexpected(ESQLError::Basic);
+            }
+        }
+
+        if (auto result = BuildProjection(rule)) {
+            setItem.Projection = std::move(*result);
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& [name, w] : windows) {
+            auto window = Build(*w);
+            if (!window) {
+                return std::unexpected(window.error());
+            }
+
+            setItem.Windows[name] = std::move(*window);
         }
 
         if (setItem.Source && 1 < setItem.Source->Sources.size() &&
@@ -526,6 +546,30 @@ private:
         }
 
         return expr;
+    }
+
+    TSQLResult<TWindow> Build(const TWindowSpecification& legacy) {
+        TWindow window;
+
+        window.Name = *legacy.ExistingWindowName.OrElse("");
+
+        window.PartitionBy = legacy.Partitions;
+
+        if (legacy.IsCompact) {
+            return Unsupported("window_compact");
+        }
+
+        if (!legacy.OrderBy.empty()) {
+            window.OrderBy = TOrderBy{.Keys = legacy.OrderBy};
+        }
+
+        if (legacy.Session) {
+            return Unsupported("window_session");
+        }
+
+        window.Frame = legacy.Frame;
+
+        return window;
     }
 
     TSQLResult<TYqlJoin> Build(const TRule_join_source& rule) {
@@ -1110,7 +1154,7 @@ private:
         }
 
         bool isAscending;
-        if (direction == "") {
+        if (direction.empty()) {
             isAscending = true;
         } else if (direction == "asc") {
             isAscending = true;

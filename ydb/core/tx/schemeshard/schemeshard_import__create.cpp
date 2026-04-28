@@ -1,6 +1,5 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
@@ -9,6 +8,7 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -19,6 +19,7 @@
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -49,6 +50,19 @@ template <typename T>
 concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
+
+bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
+    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+        return false;
+    }
+
+    while (item.NextIndexIdx < item.Table->indexes_size() &&
+           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
+        ++item.NextIndexIdx;
+    }
+
+    return item.NextIndexIdx < item.Table->indexes_size();
+}
 
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
@@ -432,7 +446,7 @@ private:
             if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
                 item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
-                item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePath(settings, itemIdx));
+                item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePathDb(settings, itemIdx));
             }
         }
 
@@ -1864,8 +1878,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
-                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&

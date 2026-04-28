@@ -2,6 +2,8 @@
 
 #include "direct_block_group.h"
 
+#include <ydb/core/mind/bscontroller/types.h>
+
 #include <ydb/library/pdisk_io/sector_map.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -44,14 +46,14 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
@@ -59,20 +61,20 @@ public:
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
         ui8 pbufferHostIndex,
         ui8 ddiskHostIndex,
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         const TVector<TPBufferSegment>& segments,
-        NWilson::TTraceId traceId) override;
+        const NWilson::TTraceId& traceId) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

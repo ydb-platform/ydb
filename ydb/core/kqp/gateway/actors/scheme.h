@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "kqp_ic_gateway_actors.h"
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -134,6 +134,30 @@ public:
                         response.GetSchemeShardReason(), {}));
                     this->Die(ctx);
                 }
+                return;
+            }
+
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
+                NYql::TIssues issues;
+                if (!response.GetIssues().empty()) {
+                    NYql::IssuesFromMessage(response.GetIssues(), issues);
+                }
+
+                Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                    "Bad scheme request", issues));
+                this->Die(ctx);
+                return;
+            }
+
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed: {
+                NYql::TIssues issues;
+                if (!response.GetIssues().empty()) {
+                    NYql::IssuesFromMessage(response.GetIssues(), issues);
+                }
+
+                Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    "", issues));
+                this->Die(ctx);
                 return;
             }
 

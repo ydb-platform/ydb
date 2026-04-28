@@ -6,7 +6,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-void DFS(ui32 vertex, TVector<ui32> &sortedStages, THashSet<ui32> &visited, const THashMap<ui32, TVector<ui32>> &stageInputs) {
+void DFS(ui32 vertex, TList<ui32>& sortedStages, THashSet<ui32>& visited, const THashMap<ui32, TVector<ui32>>& stageInputs) {
     visited.emplace(vertex);
 
     for (auto u : stageInputs.at(vertex)) {
@@ -189,7 +189,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32
 }
 
 void TStageGraph::TopologicalSort() {
-    TVector<ui32> sortedStages;
+    TList<ui32> sortedStages;
     THashSet<ui32> visited;
 
     for (auto id : StageIds) {
@@ -198,7 +198,7 @@ void TStageGraph::TopologicalSort() {
         }
     }
 
-    StageIds = sortedStages;
+    StageIds.swap(sortedStages);
 }
 
 }

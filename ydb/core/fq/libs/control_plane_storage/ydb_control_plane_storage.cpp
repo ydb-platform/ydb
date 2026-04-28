@@ -411,9 +411,7 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
         });
     };
 
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
-    return {promise.GetFuture(), resultSet};
+    return {ExecDbRequest(DbPool, handler), resultSet};
 }
 
 TAsyncStatus TDbRequester::Validate(
@@ -515,13 +513,11 @@ TAsyncStatus TDbRequester::Write(
             }
         });
     };
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
-    return promise.GetFuture();
+    return ExecDbRequest(DbPool, handler);
 }
 
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
-    TDbPool::TPtr dbPool,
+    TDbPoolPtr dbPool,
     const TPickTaskParams& taskParams,
     const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
@@ -540,7 +536,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 }
 
 TAsyncStatus TDbRequester::ReadModifyWrite(
-    TDbPool::TPtr dbPool,
+    TDbPoolPtr dbPool,
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -662,9 +658,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
             }
         });
     };
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(dbPool, promise, handler));
-    return promise.GetFuture();
+    return ExecDbRequest(dbPool, handler);
 }
 
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(

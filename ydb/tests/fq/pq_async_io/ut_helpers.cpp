@@ -17,7 +17,8 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod,
     TDuration lateArrivalDelay,
-    bool idlePartitionsEnabled)
+    bool idlePartitionsEnabled,
+    bool streamingMode)
 {
     NYql::NPq::NProto::TDqPqTopicSource settings;
     settings.SetTopicPath(topic);
@@ -36,10 +37,16 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     }
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
+    settings.SetStopAtCurrentEndOffsets(!streamingMode);
 
-    auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
-    disposition->set_seconds(0);
-    disposition->set_nanos(0);
+    if (streamingMode) {
+        auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
+        disposition->set_seconds(0);
+        disposition->set_nanos(0);
+    } else {
+        settings.mutable_disposition()->mutable_oldest();
+    }
+
 
     return settings;
 }
@@ -123,19 +130,20 @@ void PQWrite(
         .SetDatabase(GetDefaultPqDatabase())
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(config);
-    NYdb::NTopic::TTopicClient client(driver);
+    {
+        NYdb::NTopic::TTopicClient client(driver);
 
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(topic)
-        .MessageGroupId("src_id")
-        .Codec(NYdb::NTopic::ECodec::RAW);
-    auto session = client.CreateSimpleBlockingWriteSession(settings);
-    for (const auto& message : messages) {
-        UNIT_ASSERT_C(session->Write(message), "Failed to write message with body \"" << message << "\" to topic " << topic);
-        Cerr << "Message '" << message << "' was written into topic '" << topic << "'" << Endl;
+        auto settings = NYdb::NTopic::TWriteSessionSettings()
+            .Path(topic)
+            .MessageGroupId("src_id")
+            .Codec(NYdb::NTopic::ECodec::RAW);
+        auto session = client.CreateSimpleBlockingWriteSession(settings);
+        for (const auto& message : messages) {
+            UNIT_ASSERT_C(session->Write(message), "Failed to write message with body \"" << message << "\" to topic " << topic);
+            Cerr << "Message '" << message << "' was written into topic '" << topic << "'" << Endl;
+        }
+        session->Close(); // Wait until all data would be written into PQ.
     }
-
-    session->Close(); // Wait until all data would be written into PQ.
     driver.Stop(true);
 }
 
@@ -150,28 +158,29 @@ std::vector<TString> PQReadUntil(
     cfg.SetDatabase(GetDefaultPqDatabase());
     cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
-    NYdb::NTopic::TTopicClient client(driver);
-    NYdb::NTopic::TReadSessionSettings sessionSettings;
-    sessionSettings
-        .AppendTopics(std::string{topic})
-        .ConsumerName(DefaultPqConsumer);
-
-    auto promise = NThreading::NewPromise();
     std::vector<TString> result;
+    {
+        NYdb::NTopic::TTopicClient client(driver);
+        NYdb::NTopic::TReadSessionSettings sessionSettings;
+        sessionSettings
+            .AppendTopics(std::string{topic})
+            .ConsumerName(DefaultPqConsumer);
 
-    sessionSettings.EventHandlers_.SimpleDataHandlers([&](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
-        for (const auto& message : ev.GetMessages()) {
-            result.emplace_back(message.GetData());
-        }
-        if (result.size() >= size) {
-            promise.SetValue();
-        }
-    }, false, false);
+        auto promise = NThreading::NewPromise();
 
-    std::shared_ptr<NYdb::NTopic::IReadSession> session = client.CreateReadSession(sessionSettings);
-    UNIT_ASSERT(promise.GetFuture().Wait(timeout));
-    session->Close(TDuration::Zero());
-    session = nullptr;
+        sessionSettings.EventHandlers_.SimpleDataHandlers([&](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
+            for (const auto& message : ev.GetMessages()) {
+                result.emplace_back(message.GetData());
+            }
+            if (result.size() >= size) {
+                promise.SetValue();
+            }
+        }, false, false);
+
+        auto session = client.CreateReadSession(sessionSettings);
+        UNIT_ASSERT(promise.GetFuture().Wait(timeout));
+        session->Close(TDuration::Zero());
+    }
     driver.Stop(true);
     return result;
 }
@@ -183,16 +192,16 @@ void PQCreateStream(const TString& streamName)
     cfg.SetDatabase(GetDefaultPqDatabase());
     cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
+    {
+        NYdb::NDataStreams::V1::TDataStreamsClient client(
+            driver,
+            NYdb::TCommonClientSettings().Database(GetDefaultPqDatabase()));
 
-    NYdb::NDataStreams::V1::TDataStreamsClient client = NYdb::NDataStreams::V1::TDataStreamsClient(
-        driver,
-        NYdb::TCommonClientSettings().Database(GetDefaultPqDatabase()));
-
-    auto result = client.CreateStream(streamName,
-        NYdb::NDataStreams::V1::TCreateStreamSettings().ShardCount(1).RetentionPeriodHours(1)).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-
+        auto result = client.CreateStream(streamName,
+            NYdb::NDataStreams::V1::TCreateStreamSettings().ShardCount(1).RetentionPeriodHours(1)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+    }
     AddReadRule(driver, streamName);
     driver.Stop(true);
 }
@@ -200,15 +209,27 @@ void PQCreateStream(const TString& streamName)
 void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
     NYdb::NTopic::TTopicClient client(driver);
 
-   auto alterTopicSettings =
+    auto alterTopicSettings =
         NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer(DefaultPqConsumer)
-            .SetSupportedCodecs(
-                {
-                    NYdb::NTopic::ECodec::RAW
-                })
+            .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
             .EndAddConsumer();
     auto result = client.AlterTopic(streamName, alterTopicSettings).ExtractValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+}
+
+void ChangePartitionCount(const TString& streamName, ui32 partitionCount) {
+    NYdb::TDriverConfig cfg;
+    cfg.SetEndpoint(GetDefaultPqEndpoint());
+    cfg.SetDatabase(GetDefaultPqDatabase());
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
+    NYdb::TDriver driver(cfg);
+    NYdb::NTopic::TTopicClient client(driver);
+
+    auto result = client.AlterTopic(streamName, NYdb::NTopic::TAlterTopicSettings()
+        .AlterPartitioningSettings(partitionCount, partitionCount)).ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);

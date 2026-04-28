@@ -1,5 +1,10 @@
 items:
-- name: YDB SDK and frameworks
+- name: Backup collections recipes
+  href: backup-collections/index.md
+  include:
+    mode: link
+    path: backup-collections/toc_p.yaml
+- name: YDB SDK
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml
@@ -12,15 +17,20 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
-- name: AI
+- name: Vector search
   href: vector-search/index.md
   include:
     mode: link
     path: vector-search/toc_p.yaml
+- name: Fulltext search
+  href: fulltext-search/index.md
+  include:
+    mode: link
+    path: fulltext-search/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:
     mode: link
     path: transfer/toc_p.yaml
-- name: Import and export for column tables
+- name: Import and export data to column tables
   href: import-export-column-tables.md

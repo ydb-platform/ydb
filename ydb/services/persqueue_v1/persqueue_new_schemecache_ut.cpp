@@ -550,7 +550,7 @@ namespace NKikimr::NPersQueueTests {
                 TTestServer server(false);
                 server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
                 server.StartServer();
-                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER});
 
                 const TString topicName{"account2/topic2"};
                 const TString fullTopicName{"/Root/account2/topic2"};
@@ -596,7 +596,7 @@ namespace NKikimr::NPersQueueTests {
                         .EndAddConsumer()
                     );
                     res.Wait();
-                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                    UNIT_ASSERT_C(res.GetValue().IsSuccess(), res.GetValue().GetIssues().ToString());
                 }
 
                 auto checkCounters =
@@ -828,7 +828,8 @@ namespace NKikimr::NPersQueueTests {
             TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
-                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
+                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
                 res.Wait();
                 Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());
@@ -918,7 +919,8 @@ namespace NKikimr::NPersQueueTests {
             {
                 grpc::ClientContext grpcContext;
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                UNIT_ASSERT_VALUES_EQUAL_C(addRuleResponse.operation().status(), Ydb::StatusIds::ALREADY_EXISTS, status.error_message());
             }
 
             Ydb::PersQueue::V1::RemoveReadRuleRequest removeRuleRequest;

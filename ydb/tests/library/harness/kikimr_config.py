@@ -603,6 +603,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["bridge_config"] = bridge_config
 
         if enable_nbs:
+            # vchunk_size must match pdisk chunk size
+            # in-mem pdisks have 32 mb chunks, default is 128 mb
+            vchunk_size = 32 * (1 << 20) if self.__use_in_memory_pdisks else 128 * (1 << 20)
             self.yaml_config["nbs_config"] = {
                 "enabled": True,
                 "nbs_storage_config": {
@@ -615,6 +618,7 @@ class KikimrConfigGenerator(object):
                     "pipe_client_min_retry_time": 1,
                     "pipe_client_max_retry_time": 10,
                     "sync_requests_batch_size": 3,
+                    "vchunk_size": vchunk_size,
                 }
             }
 
@@ -811,6 +815,10 @@ class KikimrConfigGenerator(object):
     @property
     def http_proxy_enabled(self):
         return self.yaml_config.get('http_proxy_config', {}).get('enabled')
+
+    @property
+    def kafka_proxy_enabled(self):
+        return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
     @property
     def working_dir(self):

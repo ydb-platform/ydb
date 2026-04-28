@@ -1,4 +1,68 @@
-$window_days = 365;
+-- Mart slice: how far back ``tests_monitor.date_window`` is included (not ``mute_config.json``).
+$mart_history_days = 365;
+
+-- Mart filter: branch/build_type slice for this dashboard (not necessarily all CI matrix branches).
+$mart_branch = 'main';
+$stable_branches_ge_26_re = '^stable-(2[6-9]|[3-9][0-9])(-.+)?$';
+
+-- Must match ``manual_unmute_ttl_calendar_days`` in ``.github/config/mute_config.json`` (fast-unmute deadline).
+$manual_unmute_ttl_calendar_days = 3;
+
+$normalize = ($raw_area) -> {
+    $parts = String::SplitToList(Cast($raw_area AS String), '/');
+    RETURN Cast(
+        IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
+    AS Utf8);
+};
+
+$area_fallback = (
+    SELECT owner_team AS owner_team, MIN($normalize(area)) AS area
+    FROM `test_results/analytics/area_to_owner_mapping`
+    GROUP BY owner_team
+);
+
+$gim_latest = (
+    SELECT
+        full_name AS full_name,
+        branch AS branch,
+        build_type AS build_type,
+        github_issue_url AS github_issue_url,
+        github_issue_number AS github_issue_number,
+        github_issue_state AS github_issue_state,
+        github_issue_created_at AS github_issue_created_at,
+        area_override AS area_override,
+        area_override_since AS area_override_since
+    FROM (
+        SELECT
+            g.full_name AS full_name,
+            g.branch AS branch,
+            g.build_type AS build_type,
+            g.github_issue_url AS github_issue_url,
+            g.github_issue_number AS github_issue_number,
+            g.github_issue_state AS github_issue_state,
+            g.github_issue_created_at AS github_issue_created_at,
+            g.area_override AS area_override,
+            g.area_override_since AS area_override_since,
+            ROW_NUMBER() OVER (
+                PARTITION BY g.full_name, g.branch, g.build_type
+                ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
+            ) AS rn
+        FROM `test_results/analytics/github_issue_mapping` AS g
+    ) AS g_rnk
+    WHERE g_rnk.rn = 1
+);
+
+$mfu = (
+    SELECT
+        full_name AS full_name,
+        branch AS branch,
+        build_type AS build_type,
+        github_issue_number AS mfu_issue_number,
+        requested_at AS mfu_since,
+        window_days AS mfu_window_days,
+        requested_at + $manual_unmute_ttl_calendar_days * Interval("P1D") AS mfu_expires_at
+    FROM `test_mute/fast_unmute_active`
+);
 
 SELECT
     tm.state_filtered AS state_filtered,
@@ -26,45 +90,40 @@ SELECT
     tm.previous_state_filtered AS previous_state_filtered,
     tm.state_change_date_filtered AS state_change_date_filtered,
     tm.days_in_state_filtered AS days_in_state_filtered,
-    tm.owner_team_key AS owner_team,
-    Coalesce(om.area, 'area/-') AS area,
+    Coalesce(
+        tm.effective_owner_team,
+        Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8))
+    ) AS owner_team,
+    Coalesce(tm.effective_area, $normalize(Coalesce(af.area, 'area/-'))) AS area,
+    tm.previous_effective_owner_team AS previous_effective_owner_team,
+    tm.effective_owner_team_changed_date AS effective_owner_team_changed_date,
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
-    gim.github_issue_created_at AS github_issue_created_at
-FROM (
-    SELECT
-        t.*,
-        Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
-    FROM `test_results/analytics/tests_monitor` AS t
-    WHERE
-      t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
-      and t.branch = 'main'
-      and t.build_type = 'relwithdebinfo'
-        and t.is_test_chunk = 0
-        AND t.is_muted = 1
-        and t.state != 'Skipped'
-
-) AS tm
-LEFT JOIN (
-    SELECT owner_team AS owner_team, MIN(area) AS area
-    FROM `test_results/analytics/area_to_owner_mapping`
-    GROUP BY owner_team
-) AS om ON tm.owner_team_key = om.owner_team
-LEFT JOIN (
-    SELECT
-        full_name AS full_name,
-        branch AS branch,
-        github_issue_url AS github_issue_url,
-        github_issue_number AS github_issue_number,
-        github_issue_state AS github_issue_state,
-        github_issue_created_at AS github_issue_created_at
-    FROM (
-        SELECT
-            g.*,
-            ROW_NUMBER() OVER (PARTITION BY g.full_name, g.branch ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC) AS rn
-        FROM `test_results/analytics/github_issue_mapping` AS g
-    )
-    WHERE rn = 1
-) AS gim ON tm.full_name = gim.full_name
+    gim.github_issue_created_at AS github_issue_created_at,
+    gim.area_override AS area_override,
+    gim.area_override_since AS area_override_since,
+    CAST(CASE WHEN mfu.full_name IS NOT NULL THEN 1 ELSE 0 END AS Uint8) AS is_manual_fast_unmute,
+    mfu.mfu_since AS manual_fast_unmute_since,
+    mfu.mfu_window_days AS manual_fast_unmute_window_days,
+    mfu.mfu_expires_at AS manual_fast_unmute_expires_at,
+    mfu.mfu_issue_number AS manual_fast_unmute_issue_number
+FROM `test_results/analytics/tests_monitor` AS tm
+LEFT JOIN $area_fallback AS af
+    ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
+LEFT JOIN $gim_latest AS gim
+    ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
+    AND tm.build_type = gim.build_type
+LEFT JOIN $mfu AS mfu
+    ON tm.full_name = mfu.full_name
+    AND tm.branch = mfu.branch
+    AND tm.build_type = mfu.build_type
+WHERE tm.date_window >= CurrentUtcDate() - $mart_history_days * Interval("P1D")
+    AND (
+        tm.branch = $mart_branch
+        OR Re2::Match($stable_branches_ge_26_re)(CAST(tm.branch AS String))
+    )
+    AND tm.is_test_chunk = 0
+    AND tm.is_muted = 1
+    AND tm.state != 'Skipped';

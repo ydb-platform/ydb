@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: importlib_metadata
-Version: 8.7.1
+Version: 9.0.0
 Summary: Read metadata from Python packages
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: Apache-2.0
@@ -9,16 +9,14 @@ Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Provides-Extra: test
 Requires-Dist: pytest!=8.1.*,>=6; extra == "test"
 Requires-Dist: packaging; extra == "test"
 Requires-Dist: pyfakefs; extra == "test"
-Requires-Dist: flufl.flake8; extra == "test"
 Requires-Dist: pytest-perf>=0.9.2; extra == "test"
-Requires-Dist: jaraco.test>=5.4; extra == "test"
 Provides-Extra: doc
 Requires-Dist: sphinx>=3.5; extra == "doc"
 Requires-Dist: jaraco.packaging>=9.3; extra == "doc"
@@ -29,15 +27,14 @@ Requires-Dist: jaraco.tidelift>=1.4; extra == "doc"
 Provides-Extra: perf
 Requires-Dist: ipython; extra == "perf"
 Provides-Extra: check
-Requires-Dist: pytest-checkdocs>=2.4; extra == "check"
+Requires-Dist: pytest-checkdocs>=2.14; extra == "check"
 Requires-Dist: pytest-ruff>=0.2.1; sys_platform != "cygwin" and extra == "check"
 Provides-Extra: cover
 Requires-Dist: pytest-cov; extra == "cover"
 Provides-Extra: enabler
 Requires-Dist: pytest-enabler>=3.4; extra == "enabler"
 Provides-Extra: type
-Requires-Dist: pytest-mypy>=1.0.1; extra == "type"
-Requires-Dist: mypy<1.19; platform_python_implementation == "PyPy" and extra == "type"
+Requires-Dist: pytest-mypy>=1.0.1; platform_python_implementation != "PyPy" and extra == "type"
 Dynamic: license-file
 
 .. image:: https://img.shields.io/pypi/v/importlib_metadata.svg

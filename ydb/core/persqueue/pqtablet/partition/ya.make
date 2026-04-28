@@ -2,8 +2,8 @@ LIBRARY()
 
 SRCS(
     autopartitioning_manager.cpp
-    partitioning_keys_manager.cpp
     consumer_offset_tracker.cpp
+    deduplication_write_queue.cpp
     message_id_deduplicator.cpp
     offload_actor.cpp
     ownerinfo.cpp
@@ -48,6 +48,8 @@ PEERDIR(
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
 )
+
+GENERATE_ENUM_SERIALIZATION(deduplication_write_queue.h)
 
 END()
 

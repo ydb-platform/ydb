@@ -1,6 +1,7 @@
 #include "mlp_dlq_mover.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -19,7 +20,30 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 
 void TDLQMoverActor::Bootstrap() {
     Become(&TDLQMoverActor::StateDescribe);
-    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { Settings.DestinationTopic }));
+    if (Settings.DestinationTopic.StartsWith("sqs://")) {
+        auto tokensStr = Settings.DestinationTopic.substr("sqs://"sv.size());
+        auto tokens = StringSplitter(tokensStr).Split('/').ToList<TString>();
+        if (tokens.size() != 3) {
+            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected SQS destination topic format: " << Settings.DestinationTopic);
+        }
+
+        SQSUserName = tokens[0];
+        SQSFolderId = tokens[1];
+        SQSQueueName = tokens[2];
+
+        this->Send(NSQS::MakeSqsServiceID(this->SelfId().NodeId()),
+            MakeHolder<NSQS::TSqsEvents::TEvGetConfiguration>(
+                TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << SelfId(),
+                SQSUserName,
+                SQSQueueName,
+                SQSFolderId,
+                false,
+                0)
+        );
+    } else {
+        TopicName = Settings.DestinationTopic;
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
+    }
     LOG_D("QUEUE: " << Queue.size() << " " << JoinRange(", ", Queue.begin(), Queue.end()));
 }
 
@@ -46,7 +70,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected describe result");
     }
 
-    auto& topic = topics[Settings.DestinationTopic];
+    auto& topic = topics[TopicName];
 
     switch (topic.Status) {
         case NDescriber::EStatus::SUCCESS:
@@ -57,6 +81,25 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             LOG_D(NDescriber::Description(Settings.DestinationTopic, topic.Status));
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
+}
+
+void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
+    LOG_D("Handle NSQS::TSqsEvents::TEvConfiguration");
+    const auto& result = *ev->Get();
+    if (!result.UserExists || !result.QueueExists) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not exist");
+    }
+
+    if (!result.TopicCreated) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue is not initialized");
+    }
+
+    auto queueName = result.QueueName;
+    auto queueVersion = result.QueueVersion;
+
+    TopicName = Join("/", AppData()->SqsConfig.GetRoot(), SQSUserName, queueName, TStringBuilder() << "v" << queueVersion, "streamImpl");
+    LOG_D("SQS topic name: " << TopicName);
+    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
 }
 
 void TDLQMoverActor::CreateWriter() {
@@ -202,6 +245,7 @@ void TDLQMoverActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
 STFUNC(TDLQMoverActor::StateDescribe) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+        hFunc(NSQS::TSqsEvents::TEvConfiguration, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateDescribe", ev));

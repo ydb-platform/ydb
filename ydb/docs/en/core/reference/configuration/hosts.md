@@ -45,16 +45,18 @@ hosts:
     rack: '1'
 ```
 
-### Bridge mode specifics {#hosts-bridge}
+## Bridge mode specifics {#hosts-bridge}
 
-In bridge mode, each host must be bound to one of the piles declared in [`bridge_config`](bridge_config.md). To do this, specify the `bridge_pile_name` field with the pile name in the `location` section. Example:
+In [bridge mode](../../concepts/bridge.md), each host must be bound to one of the piles declared in [`bridge_config`](bridge_config.md). Add `bridge_pile_name` under `location` with the pile name. Example:
 
 ```yaml
 hosts:
 - host: hostname1
   host_config_id: 1
   location:
-    ...
+    unit: '1'
+    data_center: '1'
+    rack: '1'
     bridge_pile_name: 'pile_1'
 ```
 

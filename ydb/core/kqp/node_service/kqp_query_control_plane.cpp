@@ -8,6 +8,8 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+
 namespace NKikimr::NKqp {
 
 template <class TTasksCollection>
@@ -33,12 +35,27 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvPoison, HandlePoison);
+            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleStart);
         }
     }
 
     void HandlePoison(NActors::TEvents::TEvPoison::TPtr&) {
         PassAway();
+    }
+
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        SendProfileStats();
+        Schedule(StatsReportPeriod, new TEvents::TEvWakeup());
+    }
+
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        switch (ev->Get()->SourceType) {
+            case NYql::NDq::TDqComputeEvents::EvNodeState:
+                PassAway();
+                break;
+        }
     }
 
     void HandleStart(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
@@ -49,6 +66,11 @@ public:
         const auto executerId = ev->Sender;
         auto& msg = ev->Get()->Record;
 
+        if (ExecuterId) {
+            YQL_ENSURE(ExecuterId == executerId);
+        } else {
+            ExecuterId = executerId;
+        }
         YQL_ENSURE(msg.GetStartAllOrFail()); // TODO: support partial start
         YQL_ENSURE(!msg.GetTasks().empty(), "TEvStartKqpTasksRequest with empty task list");
 
@@ -74,8 +96,7 @@ public:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-            addDatabaseEvent->Id = databaseId;
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.
@@ -108,7 +129,7 @@ public:
 
         ui64 taskCount = 0;
         if (!State_->UpdateRequest(executerId, txId, query, now, deadline, tasks, taskCount)) {
-            co_return ReplyError(executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
+            co_return ReplyError(msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR,
                 ev->Cookie, "Request was cancelled");
         }
 
@@ -118,15 +139,6 @@ public:
                 (tasks_count, tasks.size()),
                 (executer, executerId),
                 (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
-
-        NRm::EKqpMemoryPool memoryPool;
-        if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::SCAN) {
-            memoryPool = NRm::EKqpMemoryPool::ScanQuery;
-        } else if (msg.GetRuntimeSettings().GetExecType() == NYql::NDqProto::TComputeRuntimeSettings::DATA) {
-            memoryPool = NRm::EKqpMemoryPool::DataQuery;
-        } else {
-            memoryPool = NRm::EKqpMemoryPool::Unspecified;
-        }
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
@@ -142,10 +154,13 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
-            txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            poolId, msg.GetMemoryPoolPercent(),
-            msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        if (!TxInfo) {
+            TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                poolId, msg.GetMemoryPoolPercent(),
+                msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+        }
+
+        auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -158,14 +173,13 @@ public:
                 .LockNodeId = lockNodeId,
                 .LockMode = lockMode,
                 .Task = &dqTask,
-                .TxInfo = txInfo,
-                .ReportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings),
+                .TxInfo = TxInfo,
+                .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
                 .SerializedGUCSettings = serializedGUCSettings,
                 .NumberOfTasks = tasksCount,
                 .OutputChunkMaxSize = msg.GetOutputChunkMaxSize(),
-                .MemoryPool = memoryPool,
                 .WithSpilling = runtimeSettings.GetUseSpilling(),
                 .StatsMode = runtimeSettings.GetStatsMode(),
                 .WithProgressStats = runtimeSettings.GetWithProgressStats(),
@@ -186,7 +200,7 @@ public:
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
 
-                ReplyError(executerId, msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
+                ReplyError(msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
 
                 // TerminateTx(txId, executerId, rmResult->GetFailReason());
                 State_->MarkRequestAsCancelled(executerId);
@@ -241,10 +255,58 @@ public:
             }
         }
 
+        if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_NONE) {
+            StatsMode = runtimeSettings.GetStatsMode();
+            if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+                StatsReportPeriod = reportStatsSettings.MinInterval;
+
+                auto channelCounters = Counters_->GetChannelCounters();
+                InputBufferInflightBytes = channelCounters->GetCounter("InputBuffer/InflightBytes", false);
+                OutputBufferInflightBytes = channelCounters->GetCounter("OutputBuffer/InflightBytes", false);
+                OutputBufferWaiterBytes = channelCounters->GetCounter("OutputBuffer/WaiterBytes", false);
+                LocalBufferInflightBytes = channelCounters->GetCounter("LocalBuffer/InflightBytes", false);
+
+                SendProfileStats();
+                Schedule(StatsReportPeriod, new TEvents::TEvWakeup());
+            }
+        }
+
         Send(executerId, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
     }
 
-    void ReplyError(TActorId executerId, const NKikimrKqp::TEvStartKqpTasksRequest& request,
+    void SendProfileStats() {
+        auto ev = MakeHolder<NYql::NDq::TEvDqCompute::TEvNodeState>();
+
+        ev->Record.SetNodeId(SelfId().NodeId());
+
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.physical_memory_used"); p) {
+            ev->Record.SetMemPhysicalUsage(*p);
+        }
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.current_allocated_bytes"); p) {
+            ev->Record.SetMemSysAllocated(*p);
+        }
+        if (auto p = tcmalloc::MallocExtension::GetNumericProperty("generic.realized_fragmentation"); p) {
+            ev->Record.SetMemSysFragmented(*p);
+        }
+
+        ev->Record.SetMemArrowDefault(arrow::default_memory_pool()->bytes_allocated());
+        ev->Record.SetMemMkqlAllocated(GetTotalMmapedBytes<>());
+        ev->Record.SetMemMkqlFreeList(GetTotalFreeListBytes<>());
+
+        if (InputBufferInflightBytes) {
+            ev->Record.SetInputInflightBytes(InputBufferInflightBytes->Val());
+        }
+        if (OutputBufferInflightBytes && OutputBufferWaiterBytes) {
+            ev->Record.SetOutputInflightBytes(OutputBufferInflightBytes->Val() + OutputBufferWaiterBytes->Val());
+        }
+        if (LocalBufferInflightBytes) {
+            ev->Record.SetLocalInflightBytes(LocalBufferInflightBytes->Val());
+        }
+
+        Send(ExecuterId, ev.Release());
+    }
+
+    void ReplyError(const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
@@ -256,13 +318,21 @@ public:
             resp->SetMessage(message);
             resp->SetRequestId(requestId);
         }
-        Send(executerId, ev.Release());
+        Send(ExecuterId, ev.Release());
     }
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
+    TIntrusivePtr<NRm::TTxState> TxInfo;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
+    TActorId ExecuterId;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
+    TDuration StatsReportPeriod;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,

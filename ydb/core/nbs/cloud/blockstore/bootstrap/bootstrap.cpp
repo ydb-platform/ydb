@@ -2,6 +2,7 @@
 
 #include "nbs_service.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_simple.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
@@ -33,6 +34,9 @@ NVhost::TServerConfig CreateDefaultVhostServerConfig()
 
 TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     : Config(config)
+    , StorageConfig(
+          std::make_shared<TStorageConfig>(Config.GetNbsStorageConfig()))
+    , ExecutorPool(StorageConfig->GetThreadPoolSize())
     , Timer(CreateWallClockTimer())
     , Scheduler(CreateScheduler(Timer))
 {

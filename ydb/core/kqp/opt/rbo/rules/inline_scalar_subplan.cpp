@@ -41,6 +41,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto uncorrSubplan = addDeps->GetInput();
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TExpression> joinFilters;
 
         TVector<TMapElement> mappings;
         mappings.push_back(TMapElement(subplanResIU, subplanResIU, filter->Pos, &ctx.ExprCtx, &props));
@@ -51,11 +52,12 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto conjuncts = filter->FilterExpr.SplitConjunct();
 
         for (const auto & conj : conjuncts) {
-            if (!conj.MaybeJoinCondition()) {
+            if (!conj.MaybeEquiJoinCondition()) {
+                joinFilters.push_back(conj);
                 continue;
             }
 
-            TJoinCondition jc(conj);
+            TEquiJoinCondition jc(conj);
             TInfoUnit leftKey = jc.GetLeftIU();
             TInfoUnit rightKey = jc.GetRightIU();
 
@@ -81,7 +83,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
         }
 
-        auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
+        auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
@@ -113,7 +115,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::NotDefined);
+        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);

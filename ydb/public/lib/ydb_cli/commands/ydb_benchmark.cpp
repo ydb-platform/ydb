@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/duration.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -19,6 +20,7 @@ namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommandBase(workload.CommandName, params, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description, workload.Type)
     {
+        Aliases = workload.Aliases;
         RetrySettings.MaxRetries(0);
     }
 
@@ -106,7 +108,19 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
 
     config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
-        .RequiredArgument("STRING").StoreResult(&TxMode).DefaultValue(TxMode);
+        .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
+
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode")
+        .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
+            StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
+            if (StatsMode < NQuery::EStatsMode::Full) {
+                throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
+            }
+        })
+        .ChoicesWithCompletion({
+            {"full", "Full"},
+            {"profile", "Profile"},
+        });
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -649,6 +663,7 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
     result.TxMode = TxMode;
+    result.StatsMode = StatsMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;

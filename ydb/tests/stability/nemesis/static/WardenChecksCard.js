@@ -5,16 +5,20 @@ export default {
   },
   emits: ['run-checks'],
   setup(props, { emit }) {
-    const { computed, ref, onMounted } = Vue
+    const { computed, ref } = Vue
 
     // Modal state
     const showModal = ref(false)
     const modalCheck = ref(null)
     const activeTab = ref(0)  // Index of active tab (host)
-    
-    // Available checks state
-    const availableChecks = ref([])
-    const isLoadingChecks = ref(false)
+
+    /** Worst status wins (for aggregating the same check across hosts). */
+    function maxSafetyStatus(prev, next) {
+      const rank = { ok: 0, pending: 1, violation: 2, error: 3, idle: -1 }
+      const a = rank[prev] ?? 0
+      const b = rank[next] ?? 0
+      return b > a ? next : prev
+    }
 
     const hasResults = computed(() => {
       if (!props.wardenResults || Object.keys(props.wardenResults).length === 0) {
@@ -60,36 +64,6 @@ export default {
       return count
     })
 
-    // Convert available checks to the same format as aggregatedResults (for display before running)
-    const availableChecksAsResults = computed(() => {
-      if (availableChecks.value.length === 0) {
-        return { liveness: [], safety: [], totalAgents: 0, completedAgents: 0 }
-      }
-      
-      const liveness = []
-      const safety = []
-      
-      for (const check of availableChecks.value) {
-        if (check.category === 'liveness') {
-          liveness.push({
-            name: check.name,
-            status: 'idle',
-            host: 'master'
-          })
-        } else if (check.category === 'safety') {
-          safety.push({
-            name: check.name,
-            status: 'idle',
-            isOrchestratorCheck: check.location === 'master',
-            completedHosts: [],
-            issues: []
-          })
-        }
-      }
-      
-      return { liveness, safety, totalAgents: 0, completedAgents: 0 }
-    })
-
     const aggregatedResults = computed(() => {
       if (!hasResults.value) return { liveness: [], safety: [], totalAgents: 0, completedAgents: 0 }
       
@@ -99,7 +73,7 @@ export default {
       // Liveness checks come from orchestrator
       if (orchestratorResult.value && orchestratorResult.value.liveness_checks) {
         for (const check of orchestratorResult.value.liveness_checks) {
-          liveness.push({ ...check, host: 'master' })
+          liveness.push({ ...check, host: 'orchestrator' })
         }
       }
       
@@ -115,21 +89,20 @@ export default {
               name: baseName,
               status: 'ok',
               isOrchestratorCheck: true,  // Mark as orchestrator-only check
-              completedHosts: [],
+              completedHostsSet: new Set(),
               issues: [],
               isAggregated: isAggregatedVerifyFailed,
               affectedHosts: check.affected_hosts || []
             })
           }
           const agg = safetyMap.get(baseName)
-          agg.completedHosts.push('master')
-          
-          if (check.status === 'error') agg.status = 'error'
-          else if (check.status === 'violation' && agg.status !== 'error') agg.status = 'violation'
-          
+          agg.completedHostsSet.add('orchestrator')
+
+          agg.status = maxSafetyStatus(agg.status, check.status)
+
           if (check.status !== 'ok') {
             agg.issues.push({
-              host: isAggregatedVerifyFailed ? 'aggregated' : 'master',
+              host: isAggregatedVerifyFailed ? 'aggregated' : 'orchestrator',
               violations: check.violations,
               error_message: check.error_message,
               affectedHosts: check.affected_hosts || []
@@ -148,20 +121,19 @@ export default {
                 name: baseName,
                 status: 'ok',
                 isOrchestratorCheck: false,  // This is an agent check
-                completedHosts: [],
+                completedHostsSet: new Set(),
                 issues: []
               })
             }
             const agg = safetyMap.get(baseName)
-            // Mark as completed if the agent has finished
-            if (result.status === 'completed' || result.status === 'error') {
-              agg.completedHosts.push(host)
+            // Per-check progress: host counts when this slot is not a placeholder (pending)
+            if (check.status !== 'pending') {
+              agg.completedHostsSet.add(host)
             }
-            
-            if (check.status === 'error') agg.status = 'error'
-            else if (check.status === 'violation' && agg.status !== 'error') agg.status = 'violation'
-            
-            if (check.status !== 'ok') {
+
+            agg.status = maxSafetyStatus(agg.status, check.status)
+
+            if (check.status !== 'ok' && check.status !== 'pending') {
               agg.issues.push({
                 host: host,
                 violations: check.violations,
@@ -172,33 +144,24 @@ export default {
         }
       }
       
+      const safety = Array.from(safetyMap.values()).map((row) => {
+        const { completedHostsSet, ...rest } = row
+        return {
+          ...rest,
+          completedHosts: completedHostsSet ? Array.from(completedHostsSet) : []
+        }
+      })
+
       return {
         liveness,
-        safety: Array.from(safetyMap.values()),
+        safety,
         totalAgents: totalAgentCount.value,
         completedAgents: completedAgentCount.value,
-        completedAt: orchestratorResult.value.completed_at
+        completedAt: orchestratorResult.value?.completed_at
       }
     })
 
-    // Display results - use available checks format before running, actual results after
-    // If aggregatedResults has empty fields, fill them from availableChecksAsResults
-    const displayResults = computed(() => {
-      if (!hasResults.value) {
-        return availableChecksAsResults.value
-      }
-      
-      const agg = aggregatedResults.value
-      const avail = availableChecksAsResults.value
-      
-      return {
-        liveness: agg.liveness.length > 0 ? agg.liveness : avail.liveness,
-        safety: agg.safety.length > 0 ? agg.safety : avail.safety,
-        totalAgents: agg.totalAgents,
-        completedAgents: agg.completedAgents,
-        completedAt: agg.completedAt
-      }
-    })
+    const displayResults = computed(() => aggregatedResults.value)
 
     const overallStatus = computed(() => {
       if (!hasResults.value) return 'idle'
@@ -255,34 +218,17 @@ export default {
         case 'ok': return '✓'
         case 'violation': return '⚠'
         case 'error': return '✗'
+        case 'pending': return '⋯'
         default: return '?'
       }
     }
 
-    async function fetchAvailableChecks() {
-      isLoadingChecks.value = true
-      try {
-        const response = await fetch('/api/warden/checks')
-        if (response.ok) {
-          availableChecks.value = await response.json()
-        }
-      } catch (error) {
-        console.error('Failed to fetch available checks:', error)
-      } finally {
-        isLoadingChecks.value = false
-      }
-    }
-    
     function runChecks() {
       emit('run-checks')
     }
-    
-    onMounted(() => {
-      fetchAvailableChecks()
-    })
 
     function formatHost(host) {
-      if (host === 'master') return 'master'
+      if (host === 'orchestrator') return 'orchestrator'
       return host.split('.')[0]
     }
 
@@ -340,8 +286,6 @@ export default {
       getErrorHostCount,
       getCheckProgress,
       getCheckProgressPercent,
-      availableChecks,
-      isLoadingChecks,
       activeTab,
       setActiveTab
     }
@@ -365,10 +309,7 @@ export default {
           </button>
         </div>
 
-        <div v-if="isLoadingChecks" class="text-center py-4 opacity-50">
-          Loading available checks...
-        </div>
-        <div v-else-if="displayResults.liveness.length === 0 && displayResults.safety.length === 0" class="text-center py-4 opacity-50">
+        <div v-if="displayResults.liveness.length === 0 && displayResults.safety.length === 0" class="text-center py-4 opacity-50">
           No warden check results yet. Click "Run Checks" to start.
         </div>
         <div v-else class="space-y-4">
@@ -433,7 +374,7 @@ export default {
                     </td>
                   </tr>
                   <tr v-if="displayResults.liveness.length === 0">
-                    <td v-if="displayResults.status === 'error'" colspan="3" class="text-center opacity-50">Error</td>
+                    <td v-if="overallStatus === 'error'" colspan="3" class="text-center opacity-50">Error</td>
                     <td v-else colspan="3" class="text-center opacity-50">No liveness checks</td>
                   </tr>
                 </tbody>
@@ -471,6 +412,12 @@ export default {
                         class="badge badge-ghost badge-sm gap-1"
                       >
                         <span>?</span> Idle
+                      </span>
+                      <span
+                        v-else-if="check.status === 'pending'"
+                        class="badge badge-info badge-sm gap-1"
+                      >
+                        <span>⋯</span> Running
                       </span>
                       <span
                         v-else

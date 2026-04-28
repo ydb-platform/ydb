@@ -123,11 +123,11 @@ public:
     }
 
     template <class... As>
-    void RunAndClear(As&&... args)
+    void RunAndClear(const As&... args)
     {
         for (const auto& callback : Callbacks_) {
             if (callback) {
-                RunFutureHandler(callback, std::forward<As>(args)...);
+                RunFutureHandler(callback, args...);
             }
         }
         Callbacks_.clear();
@@ -161,7 +161,7 @@ public:
         , CancelableRefCount_(cancelableRefCount)
     { }
 
-    virtual ~TCancelableStateBase() noexcept = default;
+    ~TCancelableStateBase() noexcept override = default;
 
     virtual bool Cancel(const TError& error) noexcept = 0;
 

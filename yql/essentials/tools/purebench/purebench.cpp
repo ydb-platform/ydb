@@ -176,6 +176,7 @@ public:
                 stream->Write(&len, sizeof(len));
                 stream->Write(buf.Data(), len);
             }
+            Worker_->CheckState(true);
         }
     }
 
@@ -263,6 +264,103 @@ struct TOutputSpecTraits<TPrintOutputSpec> {
     }
 };
 
+template <bool SupportsBlocks>
+struct TNopOutputSpec: public TOutputSpecBase {
+    explicit TNopOutputSpec(NYT::TNode schema)
+        : Schema(std::move(schema))
+    {
+    }
+
+    const NYT::TNode& GetSchema() const final {
+        return Schema;
+    }
+
+    bool AcceptsBlocks() const override {
+        return SupportsBlocks;
+    }
+
+    const NYT::TNode Schema;
+};
+
+class TNopScalarOutputHandle final: public TStreamOutputHandle {
+public:
+    explicit TNopScalarOutputHandle(TWorkerHolder<IPullListWorker> worker)
+        : Worker_(std::move(worker))
+    {
+    }
+
+    NKikimr::NMiniKQL::TType* GetOutputType() const final {
+        return const_cast<NKikimr::NMiniKQL::TType*>(Worker_->GetOutputType());
+    }
+
+    void Run(IOutputStream* stream) final {
+        Y_UNUSED(stream);
+        Y_ENSURE(
+            Worker_->GetOutputType()->IsStruct(),
+            "Run(IOutputStream*) cannot be used with multi-output programs");
+
+        TBindTerminator bind(Worker_->GetGraph().GetTerminator());
+
+        with_lock (Worker_->GetScopedAlloc()) {
+            const auto outputIterator = Worker_->GetOutputIterator();
+
+            TUnboxedValue value;
+            while (outputIterator.Next(value)) {
+            }
+            Worker_->CheckState(true);
+        }
+    }
+
+private:
+    TWorkerHolder<IPullListWorker> Worker_;
+};
+
+class TNopBlockOutputHandle final: public IStream<arrow::compute::ExecBatch*> {
+public:
+    explicit TNopBlockOutputHandle(TWorkerHolder<IPullListWorker> worker)
+        : Worker_(std::move(worker))
+    {
+    }
+
+    arrow::compute::ExecBatch* Fetch() override {
+        TBindTerminator bind(Worker_->GetGraph().GetTerminator());
+
+        with_lock (Worker_->GetScopedAlloc()) {
+            const auto outputIterator = Worker_->GetOutputIterator();
+
+            TUnboxedValue value;
+            if (outputIterator.Next(value)) {
+                return &ExecBatchStub_;
+            }
+            Worker_->CheckState(true);
+            return nullptr;
+        }
+    }
+
+private:
+    TWorkerHolder<IPullListWorker> Worker_;
+    arrow::compute::ExecBatch ExecBatchStub_;
+};
+
+template <bool SupportsBlocks>
+struct TOutputSpecTraits<TNopOutputSpec<SupportsBlocks>> {
+    static const constexpr bool IsPartial = false;
+
+    static const constexpr bool SupportPullStreamMode = false;
+    static const constexpr bool SupportPullListMode = true;
+    static const constexpr bool SupportPushStreamMode = false;
+
+    using TPullListReturnType = std::conditional_t<SupportsBlocks, THolder<TNopBlockOutputHandle>, THolder<TNopScalarOutputHandle>>;
+
+    static TPullListReturnType ConvertPullListWorkerToOutputType(const TNopOutputSpec<SupportsBlocks>&, TWorkerHolder<IPullListWorker> worker) {
+        if constexpr (SupportsBlocks) {
+            return MakeHolder<TNopBlockOutputHandle>(std::move(worker));
+        } else {
+            return MakeHolder<TNopScalarOutputHandle>(std::move(worker));
+        }
+    }
+};
+
 TStringStream MakeGenInput(ui64 count) {
     TStringStream stream;
     TScopedAlloc alloc(__LOCATION__);
@@ -288,16 +386,13 @@ TStringStream MakeGenInput(ui64 count) {
     return stream;
 }
 
-template <typename TInputSpec, typename TOutputSpec>
-using TRunCallable = std::function<void(const THolder<TPullListProgram<TInputSpec, TOutputSpec>>&)>;
-
-template <typename TOutputSpec>
+template <typename TOutputSpec, typename TRunProgram>
 NYT::TNode RunGenSql(
     const IProgramFactoryPtr factory,
     const TVector<NYT::TNode>& inputSchema,
     const TString& sql,
     ETranslationMode isPg,
-    TRunCallable<TPickleInputSpec, TOutputSpec> runCallable) {
+    const TRunProgram& runCallable) {
     auto inputSpec = TPickleInputSpec(inputSchema);
     auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
     auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
@@ -329,41 +424,84 @@ void ShowResults(
     Cerr << "\n";
 }
 
-template <typename TInputSpec, typename TOutputSpec>
-double RunBenchmarks(
-    const IProgramFactoryPtr factory,
+void DropOutliers(TVector<TDuration>& times, size_t portion) {
+    Sort(times);
+    times.erase(times.end() - times.size() / portion, times.end());
+}
+
+double Score(TVector<TDuration> times) {
+    double sum = std::transform_reduce(times.cbegin(), times.cend(), 0.0, std::plus{},
+                                       [](auto t) { return std::log(t.MicroSeconds()); });
+    return std::exp(sum / times.size()) / 1000;
+}
+
+double CV(const TVector<TDuration>& times) {
+    TVector<ui64> microseconds(times.size());
+    std::transform(times.cbegin(), times.cend(), microseconds.begin(),
+                   [](auto t) { return t.MicroSeconds(); });
+    double sum = std::accumulate(microseconds.cbegin(), microseconds.cend(), 0.0);
+    double mean = sum / microseconds.size();
+    double sqDiff = std::transform_reduce(microseconds.cbegin(), microseconds.cend(), 0.0, std::plus{},
+                                          [mean](auto t) { return std::pow(t - mean, 2); });
+    return std::sqrt(sqDiff / microseconds.size()) / mean * 100.0;
+}
+
+template <typename TInputSpec, typename TOutputSpec, typename TNopOutputSpec, typename TRunProgram>
+std::tuple<double, double, double> RunBenchmarks(
+    const IProgramFactoryPtr testFactory,
+    const IProgramFactoryPtr benchFactory,
     const TVector<NYT::TNode>& inputSchema,
     const TString& sql,
     ETranslationMode isPg,
-    ui32 repeats,
-    TRunCallable<TInputSpec, TOutputSpec> runCallable) {
+    ui32 benchmarkRuns,
+    ui32 calibrationRuns,
+    TDuration benchmarkTime,
+    TDuration calibrationTime,
+    const TRunProgram& runCallable) {
     auto inputSpec = TInputSpec(inputSchema);
     auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
-    auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
+    auto nopSpec = TNopOutputSpec({NYT::TNode::CreateEntity()});
 
     Cerr << "Dry run of test sql...\n";
 
-    runCallable(program);
+    auto testProgram = testFactory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
+
+    runCallable(testProgram);
 
     Cerr << "Run benchmark...\n";
 
-    TVector<TDuration> times;
-    TSimpleTimer allTimer;
-    for (ui32 i = 0; i < repeats; ++i) {
+    auto benchProgram = benchFactory->MakePullListProgram(inputSpec, nopSpec, sql, isPg);
+
+    ui32 benchmarks = 0;
+    TVector<TDuration> benchTimes;
+    TSimpleTimer benchTimer;
+    while (++benchmarks < benchmarkRuns || benchTimer.Get() < benchmarkTime) {
         TSimpleTimer timer;
-        runCallable(program);
-        times.push_back(timer.Get());
+        runCallable(benchProgram);
+        benchTimes.push_back(timer.Get());
     }
 
-    Cout << "Elapsed: " << allTimer.Get() << "\n";
+    Cout << "Benchmark completed: " << benchmarks << " iterations for " << benchTimer.Get() << "\n";
 
-    Sort(times);
-    times.erase(times.end() - times.size() / 3, times.end());
+    Cerr << "Score calibration...\n";
 
-    double sum = std::transform_reduce(times.cbegin(), times.cend(),
-                                       .0, std::plus{}, [](auto t) { return std::log(t.MicroSeconds()); });
+    auto calibrationProgram = benchFactory->MakePullListProgram(inputSpec, nopSpec, "SELECT * FROM Input", isPg);
 
-    return std::exp(sum / times.size());
+    ui32 calibrations = 0;
+    TVector<TDuration> calibrationTimes;
+    TSimpleTimer calibrationTimer;
+    while (++calibrations < calibrationRuns || calibrationTimer.Get() < calibrationTime) {
+        TSimpleTimer timer;
+        runCallable(calibrationProgram);
+        calibrationTimes.push_back(timer.Get());
+    }
+
+    Cerr << "Calibration completed: " << calibrations << " iterations for " << calibrationTimer.Get() << "\n";
+
+    DropOutliers(benchTimes, 3);
+    DropOutliers(calibrationTimes, 3);
+
+    return {Score(benchTimes) - Score(calibrationTimes), Score(benchTimes), CV(benchTimes)};
 }
 
 int Main(int argc, const char** argv)
@@ -372,8 +510,13 @@ int Main(int argc, const char** argv)
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
     ui64 count;
-    ui32 repeats;
-    TString genSql, testSql;
+    ui32 benchmarkRuns;
+    ui32 calibrationRuns;
+    TDuration benchmarkSeconds;
+    TDuration calibrationSeconds;
+    const auto secondsFromString = [](const TString& str) { return TDuration::Seconds(std::stoul(str)); };
+    TString genSql;
+    TString testSql;
     bool showResults;
     TString udfsDir;
     TString LLVMSettings;
@@ -386,7 +529,8 @@ int Main(int argc, const char** argv)
     opts.AddLongOption('c', "count", "count of input rows").StoreResult(&count).DefaultValue(1000000);
     opts.AddLongOption('g', "gen-sql", "SQL query to generate data").StoreResult(&genSql).DefaultValue("select index from Input");
     opts.AddLongOption('t', "test-sql", "SQL query to test").StoreResult(&testSql).DefaultValue("select count(*) as count from Input");
-    opts.AddLongOption('r', "repeats", "number of iterations").StoreResult(&repeats).DefaultValue(10);
+    opts.AddLongOption('r', "repeats", "number of iterations").StoreResult(&benchmarkRuns).DefaultValue(10);
+    opts.AddLongOption('R', "repeat-time", "total time running benchmark").StoreMappedResultT<TString, TDuration>(&benchmarkSeconds, secondsFromString).DefaultValue(1);
     opts.AddLongOption('w', "show-results", "show results of test SQL").StoreResult(&showResults).DefaultValue(true);
     opts.AddLongOption("pg", "use PG syntax for generate query").NoArgument();
     opts.AddLongOption("pt", "use PG syntax for test query").NoArgument();
@@ -394,6 +538,8 @@ int Main(int argc, const char** argv)
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
     opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
     opts.AddLongOption("expr-file", "print AST to that file instead of stdout").StoreResult(&exprFile);
+    opts.AddLongOption("calibrate", "number of calibrating iterations").StoreResult(&calibrationRuns).DefaultValue(3);
+    opts.AddLongOption("calibrate-time", "number of calibrating iterations").StoreMappedResultT<TString, TDuration>(&calibrationSeconds, secondsFromString).DefaultValue(1);
     opts.AddLongOption("langver", "Set current language version").RequiredArgument("VER").Handler1T<TString>([&langVer](const TString& str) {
         if (str == "unknown") {
             langVer = UnknownLangVersion;
@@ -410,6 +556,8 @@ int Main(int argc, const char** argv)
     factoryOptions.SetBlockEngineSettings(blockEngineSettings);
     factoryOptions.SetLanguageVersion(langVer);
 
+    auto benchFactory = MakeProgramFactory(factoryOptions);
+
     IOutputStream* exprOut = nullptr;
     THolder<TFixedBufferFileOutput> exprFileHolder;
     if (res.Has("print-expr")) {
@@ -420,7 +568,7 @@ int Main(int argc, const char** argv)
     }
     factoryOptions.SetExprOutputStream(exprOut);
 
-    auto factory = MakeProgramFactory(factoryOptions);
+    auto testFactory = MakeProgramFactory(factoryOptions);
 
     NYT::TNode members{NYT::TNode::CreateList()};
     auto typeNode = NYT::TNode::CreateList()
@@ -439,13 +587,12 @@ int Main(int argc, const char** argv)
     Cerr << "Input data size: " << inputGenStream.Size() << "\n";
     ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
     ETranslationMode isPgTest = res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL;
-    double normalizedTime;
-    size_t inputBenchSize;
+    std::tuple<double, double, double> score;
 
     if (blockEngineSettings == "disable") {
         TStringStream outputGenStream;
         auto outputGenSchema = RunGenSql<TPickleOutputSpec>(
-            factory, inputGenSchema, genSql, isPgGen,
+            testFactory, inputGenSchema, genSql, isPgGen,
             [&](const auto& program) {
                 auto handle = program->Apply(&inputGenStream);
                 handle->Run(&outputGenStream);
@@ -455,12 +602,12 @@ int Main(int argc, const char** argv)
         if (showResults) {
             auto inputResStream = TStringStream(outputGenStream);
             ShowResults<TPickleInputSpec>(
-                factory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
+                benchFactory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
         }
 
-        inputBenchSize = outputGenStream.Size();
-        normalizedTime = RunBenchmarks<TPickleInputSpec, TPickleOutputSpec>(
-            factory, {outputGenSchema}, testSql, isPgTest, repeats,
+        score = RunBenchmarks<TPickleInputSpec, TPickleOutputSpec, TNopOutputSpec<false>>(
+            testFactory, benchFactory, {outputGenSchema}, testSql, isPgTest,
+            benchmarkRuns, calibrationRuns, benchmarkSeconds, calibrationSeconds,
             [&](const auto& program) {
                 auto inputBorrowed = TStringStream(outputGenStream);
                 auto handle = program->Apply(&inputBorrowed);
@@ -477,7 +624,7 @@ int Main(int argc, const char** argv)
         // allocator. Hence, the program (i.e. worker) object should be created
         // at the very beginning of the block, or at least prior to all the
         // temporary batch storages (mind outputGenStream below).
-        auto program = factory->MakePullListProgram(
+        auto program = testFactory->MakePullListProgram(
             inputGenSpec, outputGenSpec, genSql, isPgGen);
 
         auto handle = program->Apply(&inputGenStream);
@@ -500,12 +647,12 @@ int Main(int argc, const char** argv)
             auto inputResStreamHolder = StreamFromVector(outputGenStream);
             auto inputResStream = inputResStreamHolder.Get();
             ShowResults<TArrowInputSpec>(
-                factory, {outputGenSchema}, testSql, isPgTest, inputResStream);
+                benchFactory, {outputGenSchema}, testSql, isPgTest, inputResStream);
         }
 
-        inputBenchSize = outputGenSize;
-        normalizedTime = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec>(
-            factory, {outputGenSchema}, testSql, isPgTest, repeats,
+        score = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec, TNopOutputSpec<true>>(
+            testFactory, benchFactory, {outputGenSchema}, testSql, isPgTest,
+            benchmarkRuns, calibrationRuns, benchmarkSeconds, calibrationSeconds,
             [&](const auto& program) {
                 auto handle = program->Apply(StreamFromVector(outputGenStream));
                 while (/* arrow::compute::ExecBatch* batch = */ handle->Fetch()) {
@@ -513,7 +660,13 @@ int Main(int argc, const char** argv)
             });
     }
 
-    Cout << "Bench score: " << Prec(inputBenchSize / normalizedTime, 4) << "\n";
+    Cout << "Bench score: "
+         << Prec(std::get<0>(score), 4)
+         << "ms (mean wall clock: "
+         << Prec(std::get<1>(score), 4)
+         << "ms, cv: "
+         << Prec(std::get<2>(score), 4)
+         << "%)\n";
 
     NLog::CleanupLogger();
     return 0;

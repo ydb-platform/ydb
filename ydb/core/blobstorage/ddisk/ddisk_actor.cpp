@@ -63,6 +63,7 @@ namespace {
         , IsPersistentBufferActor(isPersistentBufferActor)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
         if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
@@ -177,6 +178,7 @@ namespace {
 
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         if (IsPersistentBufferActor) {
+            InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
             StartRestorePersistentBuffer();
@@ -277,6 +279,7 @@ namespace {
             hFunc(TEvErasePersistentBuffer, Handle)
             hFunc(TEvBatchErasePersistentBuffer, Handle)
             hFunc(TEvListPersistentBuffer, Handle)
+            hFunc(TEvGetPersistentBufferInfo, Handle)
 
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)

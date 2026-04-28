@@ -34,6 +34,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/security/util.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
@@ -349,19 +350,22 @@ public:
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
-        NScheduler::TOptions schedulerOptions {
-            .Counters = Counters,
-            .DelayParams = {
-                .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-            },
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
-        };
-        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
-        TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
+        // A lot of tests create ProxyService but don't create KqpServiceInitializer
+        if (!TActivationContext::ActorSystem()->LookupLocalService(MakeKqpSchedulerServiceId(SelfId().NodeId()))) {
+            NScheduler::TOptions schedulerOptions {
+                .DelayParams = {
+                    .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                    .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                    .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                    .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+                },
+                .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
+            };
+
+            KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
+            TActivationContext::ActorSystem()->RegisterLocalService(
+                MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
+        }
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -480,7 +484,9 @@ public:
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
-        Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
+        if (KqpComputeSchedulerService) {
+            Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
+        }
         Send(KqpQueryTextCacheService, new TEvents::TEvPoison());
         if (RowDispatcherService) {
             Send(RowDispatcherService, new TEvents::TEvPoison());
@@ -589,8 +595,10 @@ public:
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
             if (sessionInfo.AttachedRpcId) {
-                Send(sessionInfo.AttachedRpcId,
-                    CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId).release());
+                auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
+                    ? CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId)
+                    : CreateEvCloseSessionResponse(sessionInfo.SessionId);
+                Send(sessionInfo.AttachedRpcId, ev.release());
             }
         }
     }
@@ -680,8 +688,7 @@ public:
         }
 
         // TODO: not the best place for adding database.
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-        addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
+        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
 
         const TString& database = ev->Get()->GetDatabase();
@@ -763,7 +770,7 @@ public:
                 return;
             }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
-            
+
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
@@ -1072,7 +1079,7 @@ public:
             for (const auto& resource : PeerProxyNodeResources) {
                 nodeIds.push_back(resource.GetNodeId());
             }
-            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
+            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size()
                 << " proxy nodes, starting warmup");
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
@@ -1167,8 +1174,10 @@ public:
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         if (sessionInfo->AttachedRpcId) {
-            Send(sessionInfo->AttachedRpcId,
-                CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId).release());
+            auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
+                ? CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId)
+                : CreateEvCloseSessionResponse(sessionInfo->SessionId);
+            Send(sessionInfo->AttachedRpcId, ev.release());
         }
     }
 
@@ -1503,7 +1512,8 @@ private:
 
         IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpConfig,
             KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
-            KqpTempTablesAgentActor, ChannelService, clientSid);
+            KqpTempTablesAgentActor, ChannelService, NACLib::TUserContextBuilder().WithUserSID(clientSid).Build());
+
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
@@ -1847,6 +1857,11 @@ private:
                 }
             }
 
+            if (NKikimr::IsQueryWithSensitiveInfo(sessionInfo->QueryText)) {
+                ++startIt;
+                continue;
+            }
+
             auto* sessionProto = result->Record.AddSessions();
             sessionInfo->SerializeTo(sessionProto, fieldsMap);
             freeSpace -= sessionProto->ByteSizeLong();
@@ -1913,6 +1928,8 @@ private:
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
+        auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
+
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
@@ -1920,11 +1937,11 @@ private:
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
             AppData()->TenantName,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+            counters,
             pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
-            Counters->GetKqpCounters(),
+            Counters->GetRootCounters(),
             {},
             FeatureFlags.GetEnableStreamingQueriesCounters());
 

@@ -1381,7 +1381,8 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
             auto payloadType = dictType->GetPayloadType();
             TExprNode::TListType items;
             items.emplace_back(ExpandType(pos, *type, ctx));
-            NUdf::TUnboxedValue keyValue, payloadValue;
+            NUdf::TUnboxedValue keyValue;
+            NUdf::TUnboxedValue payloadValue;
             for (auto iter = value.GetDictIterator(); iter.NextPair(keyValue, payloadValue);) {
                 auto pair = ctx.NewList(pos, {ValueToExprLiteral(keyType, keyValue, ctx, pos),
                                               ValueToExprLiteral(payloadType, payloadValue, ctx, pos)});

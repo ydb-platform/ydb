@@ -51,6 +51,7 @@ TExecContextBase::TExecContextBase(
     , DisableAnonymousClusterAccess_(services->DisableAnonymousClusterAccess)
     , Hidden(session->SessionId_.EndsWith("_hidden"))
     , Metrics(std::move(metrics))
+    , YtAccessProvider(services->YtAccessProvider)
 {
 }
 

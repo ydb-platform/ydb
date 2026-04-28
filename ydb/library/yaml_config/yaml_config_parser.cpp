@@ -1496,7 +1496,7 @@ endDiskTypeCheck:   ;
             return;
         }
 
-        if (relaxed && (!ephemeralConfig.HasSystemTablets() || !ephemeralConfig.HasStaticErasure())) {
+        if (relaxed && !ephemeralConfig.HasSystemTablets()) {
             return;
         }
 
@@ -1637,35 +1637,57 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
-    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
+               bool transform, EParsePhase* phase, bool relaxed) {
+        auto runPhase = [phase](EParsePhase value, auto&& func) {
+            try {
+                func();
+            } catch (const yexception&) {
+                if (phase) {
+                    *phase = value;
+                }
+                throw;
+            }
+        };
+
         auto jsonNode = json;
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
 
-        if (json.Has("metadata")) {
-            ValidateMetadata(json["metadata"]);
+        runPhase(EParsePhase::Preprocess, [&] {
+            if (json.Has("metadata")) {
+                ValidateMetadata(json["metadata"]);
 
-            Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
-                       "'config' must be an object when 'metadata' is present");
+                Y_ENSURE_BT(json.Has("config") && json["config"].IsMap(),
+                           "'config' must be an object when 'metadata' is present");
 
-            config.SetYamlConfigEnabled(true);
+                config.SetYamlConfigEnabled(true);
 
-            jsonNode = json["config"];
-        }
+                jsonNode = json["config"];
+            }
+
+            if (transform) {
+                ExtractExtraFields(jsonNode, ctx);
+            }
+        });
 
         if (transform) {
-            ExtractExtraFields(jsonNode, ctx);
-
             NJson::TJsonValue ephemeralJsonNode = jsonNode;
             ClearNonEphemeralFields(ephemeralJsonNode);
-            NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            runPhase(EParsePhase::JsonToProto, [&] {
+                NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, convertConfig);
+            });
             ClearEphemeralFields(jsonNode);
         }
 
-        NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        runPhase(EParsePhase::JsonToProto, [&] {
+            NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
+        });
 
         if (transform) {
-            TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            runPhase(EParsePhase::Transform, [&] {
+                TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);
+            });
         }
     }
 

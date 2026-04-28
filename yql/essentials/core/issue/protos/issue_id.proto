@@ -166,6 +166,7 @@ message TIssuesIds {
 // yql parser errors
         YQL_NOT_ALLOWED_IN_DISCOVERY = 4600;
         YQL_DISABLED_BINDINGS = 4601;
+        YQL_NO_STATEMENTS = 4603;
 
 // jsonpath errors
         JSONPATH_PARSE_ERROR = 4700;

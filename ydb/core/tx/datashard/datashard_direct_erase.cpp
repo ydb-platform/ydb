@@ -139,23 +139,26 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         }
 
+        TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
         if (breakWriteConflicts) {
-            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, uniqueKey, volatileDependencies)) {
                 pageFault = true;
             }
         }
 
         if (auto collector = params.GetChangeCollector()) {
+            auto userCtx = NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_TTL).Build();
             if (!volatileDependencies.empty()) {
                 if (!params.GlobalTxId) {
                     throw TNeedGlobalTxId();
                 }
 
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, BUILTIN_ACL_CDC_TTL)) {
+                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, userCtx)) {
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, BUILTIN_ACL_CDC_TTL)) {
+                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, userCtx)) {
                     pageFault = true;
                 }
             }
@@ -165,7 +168,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             continue;
         }
 
-        self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+        self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
 
         if (!volatileDependencies.empty()) {
             if (!params.GlobalTxId) {

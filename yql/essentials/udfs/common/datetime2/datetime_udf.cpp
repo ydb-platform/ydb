@@ -62,6 +62,81 @@ extern const char TM64ResourceName[] = "DateTime2.TM64";
 
 namespace {
 
+void AddBoundaryResourcePolyArgs(bool first, TStringBuilder& sb, TStringBuf argResourceName, TStringBuf intervalType) {
+    if (!first) {
+        sb << ';';
+    }
+
+    sb << "[{cmd=or;value=[";
+    sb << "    {arg=T0;cmd=type;value=[ResourceType;" << argResourceName << "]};";
+    sb << "    {arg=T0;cmd=type;value=[OptionalType;[ResourceType;" << argResourceName << "]]}";
+    sb << "]};{args=[[ResourceType;" << argResourceName << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+void AddBoundaryDatePolyArgs(bool last, TStringBuilder& sb, TStringBuf dateType, TStringBuf intervalType) {
+    sb << ';';
+
+    if (last) {
+        sb << "[[];";
+    } else {
+        sb << "[{cmd=or;value=[";
+        sb << "    {arg=T0;cmd=type;value=[DataType;" << dateType << "]};";
+        sb << "    {arg=T0;cmd=type;value=[OptionalType;[DataType;" << dateType << "]]}";
+        sb << "]};";
+    }
+
+    sb << "{args=[[DataType;" << dateType << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+enum class ESecondPolyArg {
+    None,
+    Interval,
+    Shift
+};
+
+TStringBuf GetSecondPolyArgType(ESecondPolyArg secondArg, bool wide) {
+    switch (secondArg) {
+        case ESecondPolyArg::None:
+            return {};
+        case ESecondPolyArg::Interval:
+            return wide ? "Interval64" : "Interval";
+        case ESecondPolyArg::Shift:
+            return "Int32";
+    }
+}
+
+TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
+    TStringBuilder sb;
+    sb << "[";
+    AddBoundaryResourcePolyArgs(true, sb, TMResourceName, GetSecondPolyArgType(secondArg, false));
+    AddBoundaryResourcePolyArgs(false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, true));
+    TVector<std::pair<TStringBuf, TStringBuf>> plainDates;
+    for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+        if (DataTypeInfos[i].Features & NUdf::ExtDateType) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, true)));
+        }
+
+        if (DataTypeInfos[i].Features & (NUdf::DateType | NUdf::TzDateType)) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, false)));
+        }
+    }
+
+    for (ui32 i = 0; i < plainDates.size(); ++i) {
+        AddBoundaryDatePolyArgs(i == plainDates.size() - 1, sb, plainDates[i].first, plainDates[i].second);
+    }
+
+    sb << "]";
+    return sb;
+}
+
 template <typename Type>
 static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
                                   ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
@@ -198,6 +273,52 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, false);
+    }
+
+    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool lastVer) {
+        TStringBuilder sb;
+        if (!langver && !lastVer) {
+            sb << "[";
+        }
+
+        TVector<TStringBuf> plainTypes;
+        for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+            if (DataTypeInfos[i].Features & (NUdf::ExtDateType | NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
+                plainTypes.emplace_back(DataTypeInfos[i].Name);
+            }
+        }
+
+        for (ui32 i = 0; i < plainTypes.size(); ++i) {
+            AddPolyArgs(i == plainTypes.size() - 1, sb, plainTypes[i], langver, lastVer);
+        }
+
+        if (!langver && !lastVer) {
+            sb << "]";
+        }
+
+        return sb;
+    }
+
+    static void AddPolyArgs(bool last, TStringBuilder& sb, TStringBuf dataType, NYql::TLangVersion langver, bool lastVer) {
+        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
+        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
+        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[DataType;" << dataType << "]}];{" << langverAction << "args=[[DataType;" << dataType << "]]}];";
+
+        if (last && !langver) {
+            sb << "[[];";
+        } else {
+            sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
+        }
+
+        sb << "{" << langverAction << "args=[[OptionalType;[DataType;" << dataType << "]]]}]";
+        if (!last || !lastVer) {
+            sb << ';';
+        }
     }
 
     template <typename TTzDate, typename TOutput>
@@ -389,6 +510,10 @@ struct TGetTimeComponent {
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1291,6 +1416,10 @@ public:
         return Name;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
+    }
+
     static bool DeclareSignature(
         const ::NYql::NUdf::TStringRef& name,
         ::NYql::NUdf::TType* userType,
@@ -1400,6 +1529,10 @@ public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1624,6 +1757,10 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Update");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1861,6 +1998,19 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=or;value=[
+                   {cmd=type;arg=T0;value=[DataType;Interval64]};
+                   {cmd=type;arg=T0;value=[OptionalType;[DataType;Interval64]]}
+                ]};{args=[[DataType;Interval64]]}];
+               [[];{args=[[DataType;Interval]]}]
+            ])");
+
+        return Config;
+    }
+
     static bool DeclareSignature(
         const TStringRef& name,
         TType* userType,
@@ -2061,6 +2211,10 @@ public:
 
         SetUnexpectedTagError(builder, resource.GetTag());
         return true;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
 private:
@@ -2347,7 +2501,7 @@ public:
         TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
         Y_ENSURE(argsTuple, "Tuple with args expected");
         if (argsTuple.GetElementsCount() != 2) {
-            builder.SetError("Single argument expected");
+            builder.SetError("Two arguments expected");
             return true;
         }
 
@@ -2393,6 +2547,10 @@ public:
         return true;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Interval);
+    }
+
 private:
     template <auto Func>
     class TImpl: public TBoxedValue {
@@ -2436,6 +2594,10 @@ public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef::Of("TimeOfDay");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -2563,6 +2725,10 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Shift);
     }
 
     static bool DeclareSignature(
@@ -2744,6 +2910,16 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Format");
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=ver;value="2025.05"};{ver="2025.05"}];
+               [[];{}]
+            ])");
+
+        return Config;
     }
 
     static bool DeclareSignature(

@@ -57,7 +57,7 @@ void TPartitionActor::CompleteInitSchema(
         NKikimrServices::NBS_PARTITION,
         "PartitionDirect schema initialized");
 
-    ExecuteTx(ctx, CreateTx<TReadWriteMeta>("BARKOVBG"));
+    ExecuteTx(ctx, CreateTx<TLoadState>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

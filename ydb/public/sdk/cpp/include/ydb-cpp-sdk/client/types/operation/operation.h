@@ -6,7 +6,6 @@
 
 #include <library/cpp/threading/future/future.h>
 
-#include <google/protobuf/stubs/status.h>
 #include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/util/json_util.h>
 

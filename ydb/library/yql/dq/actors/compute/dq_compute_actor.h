@@ -21,6 +21,7 @@ namespace NDq {
 
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
+    struct TEvNodeState : public NActors::TEventPB<TEvNodeState, NDqProto::TEvNodeState, TDqComputeEvents::EvNodeState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
@@ -254,12 +255,6 @@ struct TComputeRuntimeSettings {
     TMaybe<TDuration> Timeout;
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     TMaybe<TReportStatsSettings> ReportStatsSettings;
-
-    // see kqp_rm.h
-    // 0 - disable extra memory allocation
-    // 1 - allocate via memory pool ScanQuery
-    // 2 - allocate via memory pool DataQuery
-    ui32 ExtraMemoryAllocationPool = 0;
 
     bool FailOnUndelivery = true;
     bool UseSpilling = false;

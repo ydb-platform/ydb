@@ -98,6 +98,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 SkipJsonErrors = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("csvdelimiter")) {
+                CsvDelimiter = readSettings->Child(i);
+                continue;
+            }
             if (readSettings->Child(i)->Head().IsAtom("streaming")) {
                 StreamingTopicRead = readSettings->Child(i);
                 continue;

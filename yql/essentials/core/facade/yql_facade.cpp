@@ -909,10 +909,10 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
         return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
     },
-                                    /*typeParser=*/{})
+                                    /*typeParser=*/{}, /*typeWriter=*/{})
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);
@@ -1891,6 +1891,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
                 writer.OnBeginMap();
                 writer.OnKeyedItem("count");
                 writer.OnInt64Scalar(TypeCtx_->LineageStats.Duration);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Version > 0) {
+                writer.OnKeyedItem("Version");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Version);
                 writer.OnEndMap();
             }
         writer.OnEndMap();

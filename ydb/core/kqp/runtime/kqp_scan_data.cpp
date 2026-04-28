@@ -807,10 +807,10 @@ TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const {
 
 class TKqpTableReader : public IKqpTableReader {
 public:
-    TKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, bool& inputConsumed)
+    TKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, ui64& inputsConsumed)
         : ScanData(scanData)
         , StartTs(startTs)
-        , InputConsumed(inputConsumed)
+        , InputsConsumed(inputsConsumed)
     {}
 
     NUdf::EFetchStatus Next(NUdf::TUnboxedValue& /*result*/) override {
@@ -842,18 +842,18 @@ public:
         if (Y_UNLIKELY(!StartTs)) {
             StartTs = Now();
         }
-        InputConsumed = true;
+        ++InputsConsumed;
         return EFetchResult::One;
     }
 
 private:
     TKqpScanComputeContext::TScanData& ScanData;
     TInstant& StartTs;
-    bool& InputConsumed;
+    ui64& InputsConsumed;
 };
 
-TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, bool& inputConsumed) {
-    return MakeIntrusive<TKqpTableReader>(scanData, startTs, inputConsumed);
+TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TScanData& scanData, TInstant& startTs, ui64& inputsConsumed) {
+    return MakeIntrusive<TKqpTableReader>(scanData, startTs, inputsConsumed);
 }
 
 } // namespace NMiniKQL

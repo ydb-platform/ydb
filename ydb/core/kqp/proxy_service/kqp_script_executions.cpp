@@ -3227,7 +3227,7 @@ private:
 
         if (const auto delay = RetryState->GetNextRetryDelay()) {
             KQP_PROXY_LOG_W("Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
-            Issues.AddIssues(std::move(issues));
+            Issues.AddIssues(issues);
             Schedule(*delay, new TEvents::TEvWakeup());
             WaitRetry = true;
             return true;
@@ -3241,7 +3241,7 @@ private:
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
-        Issues.AddIssues(std::move(issues));
+        Issues.AddIssues(issues);
 
         if (status == Ydb::StatusIds::SUCCESS) {
             KQP_PROXY_LOG_D("Reply success, issues: " << Issues.ToOneLineString());

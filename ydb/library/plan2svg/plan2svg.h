@@ -57,14 +57,16 @@ struct TMetricHistory {
     ui64 MaxValue = 0;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
+    ui64 AvgValue = 0;
 
-    void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime);
-    void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime);
+    void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // time + value
+    void Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // value only
+    void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime); // explicit
+    ui64 Integrate();
+    ui64 Average();
 };
 
-class TSingleMetric {
-
-public:
+struct TSingleMetric {
     TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJson::TJsonValue& node,
         ui64 minTime = 0, ui64 maxTime = 0,
         const NJson::TJsonValue* firstMessageNode = nullptr,
@@ -82,14 +84,21 @@ public:
     ui64 MaxTime = 0;
     TAggregation FirstMessage;
     TAggregation LastMessage;
+    bool MinMaxDistribution = true;
 };
 
-class TScalarMetric {
-public:
+struct TScalarMetric {
     TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
 
     std::shared_ptr<TSummaryMetric> Summary;
     ui64 Value = 0;
+};
+
+struct TMutableMetric : public TMetricHistory {
+    TMutableMetric(const TString& title, bool isLine = false) : Title(title), IsLine(isLine) {}
+    const TString Title;
+    const bool IsLine;
+    ui64 DisplayMaxValue = 0;
 };
 
 class TConnection {
@@ -179,6 +188,7 @@ public:
     std::shared_ptr<TSingleMetric> CpuTime;
     std::shared_ptr<TSingleMetric> WaitInputTime;
     std::shared_ptr<TSingleMetric> WaitOutputTime;
+    std::shared_ptr<TSingleMetric> MemoryUsage;
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> OutputBytes;
     std::shared_ptr<TSingleMetric> OutputRows;
@@ -211,6 +221,37 @@ public:
     bool External = false;
     TStringBuilder _Builder;
     TConnection* IngressConnection = nullptr;
+};
+
+class TClusterNode {
+public:
+    TClusterNode(ui32 nodeId)
+        : NodeId(nodeId), MemPhysicalUsage("RSS", true), MemSysAllocated("Allocated"), MemSysFragmented("Fragmented")
+        , MemArrowDefault("Arrow"), MemMkqlAllocated("MKQL Allocated"), MemMkqlFreeList("MKQL FreeList")
+        , OutputInflightBytes("Output"), LocalInflightBytes("Local"), InputInflightBytes("Input")
+    {
+    }
+    const ui32 NodeId;
+    ui32 Tasks = 0;
+    ui32 FinishedTasks = 0;
+    ui32 OffsetY = 0;
+    ui32 Height = 0;
+    std::shared_ptr<TSingleMetric> OutputBytes;
+    std::shared_ptr<TSingleMetric> MemoryUsage;
+    std::shared_ptr<TSingleMetric> MaxMemoryUsage;
+    std::shared_ptr<TSingleMetric> CpuTime;
+    std::shared_ptr<TSingleMetric> InputBytes;
+    std::shared_ptr<TSingleMetric> IngressBytes;
+
+    TMutableMetric MemPhysicalUsage;
+    TMutableMetric MemSysAllocated;
+    TMutableMetric MemSysFragmented;
+    TMutableMetric MemArrowDefault;
+    TMutableMetric MemMkqlAllocated;
+    TMutableMetric MemMkqlFreeList;
+    TMutableMetric OutputInflightBytes;
+    TMutableMetric LocalInflightBytes;
+    TMutableMetric InputInflightBytes;
 };
 
 struct TColorPalette {
@@ -249,6 +290,7 @@ struct TColorPalette {
     TString SpillingTimeDark;
     TString SpillingTimeMedium;
     TString SpillingTimeLight;
+    TString BlockLight;
     TString BlockMedium;
 };
 
@@ -280,6 +322,7 @@ public:
         ExternalCpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
         WaitOutputTime = std::make_shared<TSummaryMetric>();
+        MemoryUsage = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
         EgressBytes = std::make_shared<TSummaryMetric>();
         EgressRows = std::make_shared<TSummaryMetric>();
@@ -302,25 +345,34 @@ public:
         OperatorInputThroughput = std::make_shared<TSummaryMetric>();
         OperatorOutputThroughput = std::make_shared<TSummaryMetric>();
         StageInputThroughput = std::make_shared<TSummaryMetric>();
+        NodeOutputBytes = std::make_shared<TSummaryMetric>();
+        NodeCpuTime = std::make_shared<TSummaryMetric>();
+        NodeMemoryUsage = std::make_shared<TSummaryMetric>();
+        NodeMaxMemoryUsage = std::make_shared<TSummaryMetric>();
+        NodeInputBytes = std::make_shared<TSummaryMetric>();
+        NodeIngressBytes = std::make_shared<TSummaryMetric>();
     }
 
     void Load(const NJson::TJsonValue& node);
     void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
+    void LoadNode(const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
     void MarkLayout();
     void ResolveCteRefs();
     void ResolveOperatorInputs();
-    void PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor);
+    void PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor, bool closed = true);
     void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color, bool backgroundRect = false);
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TString>> history, ui64 scale, const TString& iconRef, const TString& iconColor, const TString& iconScale);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
-    void PrintSvg(TStringBuilder& builder);
+    void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
+    void PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
@@ -328,6 +380,7 @@ public:
     std::shared_ptr<TSummaryMetric> ExternalCpuTime;
     std::shared_ptr<TSummaryMetric> WaitInputTime;
     std::shared_ptr<TSummaryMetric> WaitOutputTime;
+    std::shared_ptr<TSummaryMetric> MemoryUsage;
     std::shared_ptr<TSummaryMetric> MaxMemoryUsage;
     std::shared_ptr<TSummaryMetric> EgressBytes;
     std::shared_ptr<TSummaryMetric> EgressRows;
@@ -350,6 +403,12 @@ public:
     std::shared_ptr<TSummaryMetric> OperatorInputThroughput;
     std::shared_ptr<TSummaryMetric> OperatorOutputThroughput;
     std::shared_ptr<TSummaryMetric> StageInputThroughput;
+    std::shared_ptr<TSummaryMetric> NodeOutputBytes;
+    std::shared_ptr<TSummaryMetric> NodeMemoryUsage;
+    std::shared_ptr<TSummaryMetric> NodeMaxMemoryUsage;
+    std::shared_ptr<TSummaryMetric> NodeCpuTime;
+    std::shared_ptr<TSummaryMetric> NodeInputBytes;
+    std::shared_ptr<TSummaryMetric> NodeIngressBytes;
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;
@@ -368,7 +427,10 @@ public:
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;
-    TStringBuilder _Builder;
+    TStringBuilder SummaryBuilder;
+    std::vector<std::shared_ptr<TClusterNode>> Nodes;
+    ui32 NodeOffsetY = 0;
+    ui32 NodeIndentY = 0;
 };
 
 class TPlanVisualizer {

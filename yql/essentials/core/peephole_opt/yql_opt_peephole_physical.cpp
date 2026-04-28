@@ -153,7 +153,8 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
         return {};
     }
 
-    TExprNode::TListType newArgs, newRoots;
+    TExprNode::TListType newArgs;
+    TExprNode::TListType newRoots;
     for (ui32 i = 0; i < lambda.Head().ChildrenSize(); ++i) {
         newArgs.push_back(ctx.NewArgument(lambda.Head().Child(i)->Pos(), "arg" + ToString(i)));
     }
@@ -721,11 +722,13 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     TExprNode::TListType keyMembers2;
     TVector<ui32> keyMembers2Inputs;
     GetKeys(joinLabels, *node.Child(2)->Child(4), ctx, keyMembers2, keyMembers2Inputs);
-    std::vector<std::string_view> lKeys(keyMembers1.size()), rKeys(keyMembers2.size());
+    std::vector<std::string_view> lKeys(keyMembers1.size());
+    std::vector<std::string_view> rKeys(keyMembers2.size());
 
     MKQL_ENSURE(keyMembers1.size() == keyMembers2.size(), "Expected same key sizes.");
 
-    bool optKey = false, badKey = false;
+    bool optKey = false;
+    bool badKey = false;
     const bool filter = joinKind == "Inner" || joinKind.ends_with("Semi");
     const bool leftKind = joinKind.starts_with("Left");
     const bool rightKind = joinKind.starts_with("Right");
@@ -775,7 +778,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     if (uniqueRight)
         flags.emplace_back(ctx.NewAtom(node.Pos(), "RightUnique", TNodeFlags::Default));
 
-    TExprNode::TListType payloads1, payloads2;
+    TExprNode::TListType payloads1;
+    TExprNode::TListType payloads2;
     for (const auto& rename : renames) {
         (std::get<bool>(rename) ? payloads1 : payloads2).emplace_back(std::get<0>(rename));
     }
@@ -1347,7 +1351,8 @@ TExprNode::TPtr ExpandCastOverVariant(const TExprNode::TPtr& input, TExprContext
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetUnderType = targetType->Cast<TVariantExprType>()->GetUnderlyingType();
     const auto sourceUnderType = sourceType->Cast<TVariantExprType>()->GetUnderlyingType();
-    TExprNode::TListType variants, types;
+    TExprNode::TListType variants;
+    TExprNode::TListType types;
     switch (targetUnderType->GetKind()) {
         case ETypeAnnotationKind::Tuple: {
             const auto sourceTupleType = sourceUnderType->Cast<TTupleExprType>();
@@ -1578,7 +1583,9 @@ TExprNode::TPtr ExpandCastOverOptionalTuple(const TExprNode::TPtr& input, TExprC
     const auto targetType = input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
     const auto& sourceItems = sourceType->Cast<TTupleExprType>()->GetItems();
     const auto& targetItems = targetType->Cast<TTupleExprType>()->GetItems();
-    TExprNode::TListType castedItems, filteredItems, optionalItems;
+    TExprNode::TListType castedItems;
+    TExprNode::TListType filteredItems;
+    TExprNode::TListType optionalItems;
     std::vector<size_t> optionalLevels;
     castedItems.reserve(targetItems.size());
     filteredItems.reserve(targetItems.size());
@@ -1679,7 +1686,9 @@ TExprNode::TPtr ExpandCastOverOptionalStruct(const TExprNode::TPtr& input, TExpr
         YQL_ENSURE(sourceNames.emplace(item->GetName(), item->GetItemType()).second);
     }
     const auto& targetItems = targetType->Cast<TStructExprType>()->GetItems();
-    TExprNode::TListType castedItems, filteredItems, optionalItems;
+    TExprNode::TListType castedItems;
+    TExprNode::TListType filteredItems;
+    TExprNode::TListType optionalItems;
     std::vector<size_t> optionalLevels;
     castedItems.reserve(targetItems.size());
     filteredItems.reserve(targetItems.size());
@@ -1789,7 +1798,8 @@ TExprNode::TPtr ExpandCastOverOptionalVariant(const TExprNode::TPtr& input, TExp
     const auto targetType = input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
     const auto sourceUnderType = sourceType->Cast<TVariantExprType>()->GetUnderlyingType();
     const auto targetUnderType = targetType->Cast<TVariantExprType>()->GetUnderlyingType();
-    TExprNode::TListType variants, types;
+    TExprNode::TListType variants;
+    TExprNode::TListType types;
     std::vector<std::optional<bool>> checks;
     std::vector<std::optional<ui32>> renumIndex;
     switch (targetUnderType->GetKind()) {
@@ -3200,7 +3210,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
     static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+    return !IsOptimizerDisabled<Flag>(types);
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
@@ -3732,7 +3742,11 @@ template<typename TRowType>
 std::pair<TExprNode::TPtr, TExprNode::TListType> MakeWideCommonJoinCore(const TExprNode& commonJoin, TExprNode::TPtr&& input, TExprContext& ctx) {
     const auto inStructType = GetSeqItemType(commonJoin.Head().GetTypeAnn())->Cast<TRowType>();
 
-    TExprNode::TListType leftColumns, rightColumns, requred, keys, outputColumns;
+    TExprNode::TListType leftColumns;
+    TExprNode::TListType rightColumns;
+    TExprNode::TListType requred;
+    TExprNode::TListType keys;
+    TExprNode::TListType outputColumns;
     outputColumns.reserve(commonJoin.Child(2)->ChildrenSize() + commonJoin.Child(3)->ChildrenSize());
 
     leftColumns.reserve(commonJoin.Child(2)->ChildrenSize());
@@ -3836,7 +3850,10 @@ TExprNode::TPtr ExpandFinalizeByKey(const TExprNode::TPtr& node, TExprContext& c
         inputFields.emplace_back(ctx.NewAtom(combine.PreMapLambda().Pos(), item->GetName()));
     }
 
-    TExprNode::TListType stateFields, init, update, outputFields;
+    TExprNode::TListType stateFields;
+    TExprNode::TListType init;
+    TExprNode::TListType update;
+    TExprNode::TListType outputFields;
     const auto stateWidth = CollectStateNodes(combine.InitHandlerLambda().Ref(), combine.UpdateHandlerLambda().Ref(), stateFields, init, update, ctx);
 
     auto output = combine.FinishHandlerLambda().Body().Ptr();
@@ -4045,7 +4062,8 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         auto outs = GetLambdaBody(node->Tail());
 
-        TExprNode::TListType args, body;
+        TExprNode::TListType args;
+        TExprNode::TListType body;
         args.reserve(outs.size() + 2U);
         body.reserve(outs.size() + 2U);
 
@@ -4257,7 +4275,12 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
                 YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
                 const auto inputWidth = inStructType->GetSize();
 
-                TExprNode::TListType inputFilelds, stateFields, outputFields, init, update, finish;
+                TExprNode::TListType inputFilelds;
+                TExprNode::TListType stateFields;
+                TExprNode::TListType outputFields;
+                TExprNode::TListType init;
+                TExprNode::TListType update;
+                TExprNode::TListType finish;
                 inputFilelds.reserve(inputWidth);
                 for (const auto& item : inStructType->GetItems()) {
                     inputFilelds.emplace_back(ctx.NewAtom(input.Pos(), item->GetName()));
@@ -4429,7 +4452,10 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
                 YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
 
                 const auto inputWidth = inStructType->GetSize();
-                TExprNode::TListType inputFilelds, stateFields, init, update;
+                TExprNode::TListType inputFilelds;
+                TExprNode::TListType stateFields;
+                TExprNode::TListType init;
+                TExprNode::TListType update;
                 inputFilelds.reserve(inputWidth);
                 for (const auto& item : inStructType->GetItems()) {
                     inputFilelds.emplace_back(ctx.NewAtom(input.Pos(), item->GetName()));
@@ -4648,7 +4674,9 @@ TExprNode::TPtr OptimizeCondense1(const TExprNode::TPtr& node, TExprContext& ctx
         ETypeAnnotationKind::Struct == node->Tail().Tail().GetTypeAnn()->GetKind()) {
 
         const auto inputWidth = node->Head().Tail().Head().ChildrenSize();
-        TExprNode::TListType fields, init, update;
+        TExprNode::TListType fields;
+        TExprNode::TListType init;
+        TExprNode::TListType update;
         const auto outputWidth = CollectStateNodes(*node->Child(1U), node->Tail(), fields, init, update, ctx);
         if (outputWidth > WideLimit) {
             return node;
@@ -4750,7 +4778,11 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
         }
 
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
-        TExprNode::TListType stateFields, outputFields, init, update, finish;
+        TExprNode::TListType stateFields;
+        TExprNode::TListType outputFields;
+        TExprNode::TListType init;
+        TExprNode::TListType update;
+        TExprNode::TListType finish;
         outputFields.reserve(outputWidth);
         finish.reserve(outputWidth);
 
@@ -5160,8 +5192,10 @@ std::array<std::optional<ui32>, 2U> GetExpandMapsForLambda(const TExprNode& lamb
     const auto original = lambda.ChildrenSize() - 1U;
     tupleExpndMap.resize(original);
 
-    bool hasTuple = false, hasStruct = false;
-    ui32 flatByTuple = 0U, flatByStruct = 0U;
+    bool hasTuple = false;
+    bool hasStruct = false;
+    ui32 flatByTuple = 0U;
+    ui32 flatByStruct = 0U;
 
     for (ui32 i = 0U; i < original; ++i) {
         switch (const auto child = lambda.Child(i + 1U); child->GetTypeAnn()->GetKind()) {
@@ -6180,7 +6214,8 @@ public:
         // clang-format on
 
         // calculate extra columns
-        TExprNode::TListType lambdaArgs, roots;
+        TExprNode::TListType lambdaArgs;
+        TExprNode::TListType roots;
         EnsureSameElements(lambda, rewrites, blockArgs);
         if (keepInputColumns) {
             // put original columns first
@@ -6244,7 +6279,8 @@ private:
     };
 
     TMaybe<std::tuple<TExprNode::TListType, TExprNode::TListType, TExprNode::TPtr>> GetBlockArgsForIfPresent(TIfPresentCallableView ifPresentView, const TRewritesMap& rewrites) {
-        TExprNode::TListType resultUnwrappedArgs, resultExistsArgs;
+        TExprNode::TListType resultUnwrappedArgs;
+        TExprNode::TListType resultExistsArgs;
         for (size_t i = 0; i < ifPresentView.ArgsSize(); ++i) {
             auto rewrited = GetBlockFuncArg(ifPresentView.Arg(i), rewrites);
             if (!rewrited) {
@@ -7088,11 +7124,11 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
     const auto& input = wideMap->Head();
     YQL_ENSURE(wideMap->IsCallable("WideMap") && input.IsCallable("ReplicateScalars"));
     auto inputTypes = input.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(inputTypes.size() > 0);
+    YQL_ENSURE(!inputTypes.empty());
 
     THashSet<ui32> replicatedInputIndexes;
     auto replicateScalarsInputTypes = input.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(replicateScalarsInputTypes.size() > 0);
+    YQL_ENSURE(!replicateScalarsInputTypes.empty());
     if (input.ChildrenSize() == 1) {
         for (ui32 i = 0; i + 1 < replicateScalarsInputTypes.size(); ++i) {
             if (replicateScalarsInputTypes[i]->IsScalar()) {
@@ -8605,7 +8641,8 @@ TExprNode::TPtr SqlCompareVariants(const TExprNode& node, TExprContext& ctx) {
     const auto rType = rhs->GetTypeAnn()->Cast<TVariantExprType>()->GetUnderlyingType();
 
     std::vector<std::pair<TExprNode::TPtr, std::optional<bool>>> variants;
-    bool swap, byStruct;
+    bool swap;
+    bool byStruct;
     switch (rType->GetKind()) {
         case ETypeAnnotationKind::Tuple: {
             byStruct = false;

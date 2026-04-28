@@ -606,11 +606,6 @@ namespace NKikimr {
                     VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk),
                     firstBlobId.TabletID(), ev->Get()->GetSumBlobSize());
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
-                ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
-                return;
-            }
-
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: race;"
                         << " Marker# BSVS06");
@@ -631,6 +626,12 @@ namespace NKikimr {
                     item.GetIgnoreBlock());
                 TVPutInfo &info = putsInfo.back();
                 const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
+                const bool isZeroEntry = item.GetIsZeroEntry();
+
+                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size())) {
+                    info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
+                    continue;
+                }
 
                 try {
                     info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinHugeBlobInBytes);
@@ -2037,6 +2038,7 @@ namespace NKikimr {
                     Db->LoggerID,
                     Db->LogCutterID,
                     Db->SkeletonID,
+                    Db->ChunkKeeperActorID,
                     Config->SyncLogMaxDiskAmount,
                     Config->SyncLogMaxEntryPointSize,
                     Config->SyncLogMaxMemAmount,
@@ -2044,6 +2046,7 @@ namespace NKikimr {
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
                     Config->EnablePhantomFlagStorage,
+                    Config->EnablePersistentPhantomFlagStorage,
                     Config->PhantomFlagStorageLimit);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever

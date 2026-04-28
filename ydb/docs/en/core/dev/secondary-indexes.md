@@ -8,7 +8,7 @@ To use a similar feature with any field or combination of fields, additional ind
 
 In transactional systems, indexes are used to limit or avoid performance degradation and increase of query cost as your data grows.
 
-This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/secondary_indexes.md) in the Concepts section.
+This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/query_execution/secondary_indexes.md) in the Concepts section.
 
 ## Creating secondary indexes {#create}
 
@@ -30,6 +30,12 @@ This index can't be used in the following queries:
 * `WHERE b = $var1`.
 * `WHERE a > $var1 AND b > $var2`, which is equivalent to `WHERE a > $var1` in terms of applying the index.
 * `WHERE b > $var1`.
+
+To effectively limit the result of a query using the [`LIMIT` command](../yql/reference/syntax/select/limit_offset.md), you must use one-way sorting in the [`ORDER BY` command](../yql/reference/syntax/select/order_by.md):
+
+- `WHERE a = $var1 AND b > $var2 ORDER BY a, b DESC LIMIT 1`, all index rows that match the filter conditions will be read;
+
+- `WHERE a = $var1 AND b > $var2 ORDER BY a DESC, b DESC LIMIT 1`, only one line will be read.
 
 Considering the above, there's no use in pre-indexing all possible combinations of table columns to speed up the execution of any query. An index is always a compromise between the lookup and write speed and the storage space occupied by the data. Indexes are created for specific queries and search criteria made by an app in the database.
 
@@ -99,7 +105,7 @@ Currently, deleting data is possible only using a synchronous secondary index. T
 
 ## Atomic replacement of a secondary index {#atomic-index-replacement}
 
-You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../concepts/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
+You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../concepts/query_execution/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
 
 To replace an existing index atomically, use the {{ ydb-short-name }} CLI command [{{ ydb-cli }} table index rename](../reference/ydb-cli/commands/secondary_index.md#rename) with the  `--replace` parameter.
 

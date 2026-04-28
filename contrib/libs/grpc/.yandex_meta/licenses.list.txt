@@ -304,23 +304,7 @@ THE POSSIBILITY OF SUCH DAMAGE.
 
 
 ====================COPYRIGHT====================
-// Copyright 2015 The gRPC Authors
-
-
-====================COPYRIGHT====================
-// Copyright 2016 The gRPC Authors
-
-
-====================COPYRIGHT====================
-// Copyright 2018 The gRPC Authors
-
-
-====================COPYRIGHT====================
 // Copyright 2019 gRPC authors.
-
-
-====================COPYRIGHT====================
-// Copyright 2020 The gRPC Authors
 
 
 ====================COPYRIGHT====================

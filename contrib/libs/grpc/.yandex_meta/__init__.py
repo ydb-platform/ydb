@@ -82,14 +82,14 @@ def post_install(self):
     # fix path for protos
     with self.yamakes["grpc++_reflection"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1alpha")
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/channelz")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     # fix induced deps
@@ -131,13 +131,10 @@ grpc = CMakeNinjaNixProject(
     license="Apache-2.0",
     keep_paths=[
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
-        # Keep original ya.make for now
-        "src/proto/grpc/core/ya.make",
         "src/proto/grpc/channelz/ya.make",
         "src/proto/grpc/health/v1/ya.make",
         "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -206,15 +203,10 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/windows/iocp.h",
         "src/core/lib/event_engine/socket_notifier.h",
         "src/core/lib/event_engine/poller.h",
-        # Copy all .proto files except for grpc/testing
+        # Copy necessary .proto files only
         "src/proto/grpc/channelz/**/*.proto",
-        "src/proto/grpc/core/**/*.proto",
-        "src/proto/grpc/gcp/**/*.proto",
         "src/proto/grpc/health/**/*.proto",
-        "src/proto/grpc/lb/**/*.proto",
-        "src/proto/grpc/lookup/**/*.proto",
         "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
     ],
     copy_sources_except=[
         # Proto library with testing services

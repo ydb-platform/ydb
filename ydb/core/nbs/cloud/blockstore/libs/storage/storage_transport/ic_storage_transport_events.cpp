@@ -19,6 +19,11 @@ TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
+TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
+
 TEvTransportPrivate::TEraseFromPBuffer::~TEraseFromPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());

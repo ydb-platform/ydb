@@ -8,6 +8,12 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <memory>
+
+namespace NLWTrace {
+class TOrbit;
+}
+
 namespace NKikimr::NOlap::NReader {
 class TReadDescription;
 }
@@ -67,6 +73,7 @@ public:
     private:
         const NOlap::IPathIdTranslator& PathIdTranslator;
         const IColumnEngine& Engine;
+        std::shared_ptr<NLWTrace::TOrbit> Orbit;
 
     public:
         const NOlap::IPathIdTranslator& GetPathIdTranslator() const {
@@ -75,10 +82,14 @@ public:
         const IColumnEngine& GetEngine() const {
             return Engine;
         }
+        const std::shared_ptr<NLWTrace::TOrbit>& GetOrbit() const {
+            return Orbit;
+        }
 
-        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine)
+        TSelectMetadataContext(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
             : PathIdTranslator(pathIdTranslator)
-            , Engine(engine) {
+            , Engine(engine)
+            , Orbit(orbit) {
         }
     };
 

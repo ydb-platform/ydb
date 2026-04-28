@@ -594,6 +594,10 @@ namespace NActors {
                     .WriteKey("revision")
                     .WriteInt(GetProgramSvnRevision());
 
+                if (Settings->AddLevelInJson) {
+                    j.WriteKey("levelStr").WriteString(PriorityToString(priority));
+                }
+
                 if (fileName) {
                     TStringBuilder location;
                     location << fileName << ":" << lineNumber;

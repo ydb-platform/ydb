@@ -121,7 +121,7 @@ bool TUdfIndex::CanonizeModule(TString& moduleName) const {
         return false;
     }
 
-    Y_ENSURE(p->size() > 0);
+    Y_ENSURE(!p->empty());
     if (p->size() > 1) {
         return false;
     }
@@ -144,7 +144,7 @@ TUdfIndex::EStatus TUdfIndex::ContainsModule(const TString& moduleName) const {
         return EStatus::NotFound;
     }
 
-    Y_ENSURE(p->size() > 0);
+    Y_ENSURE(!p->empty());
     return p->size() > 1 ? EStatus::Ambigious : EStatus::Found;
 }
 
@@ -166,7 +166,7 @@ TUdfIndex::EStatus TUdfIndex::FindFunction(const TString& moduleName, const TStr
             return EStatus::NotFound;
         }
 
-        Y_ENSURE(p->size() > 0);
+        Y_ENSURE(!p->empty());
         if (p->size() > 1) {
             return EStatus::Ambigious;
         }
@@ -186,7 +186,7 @@ TUdfIndex::EStatus TUdfIndex::FindFunction(const TString& moduleName, const TStr
             return EStatus::NotFound;
         }
 
-        Y_ENSURE(p->size() > 0);
+        Y_ENSURE(!p->empty());
         if (p->size() > 1) {
             return EStatus::Ambigious;
         }
@@ -211,7 +211,7 @@ TResourceInfo::TPtr TUdfIndex::FindResourceByModule(const TString& moduleName) c
             return nullptr;
         }
 
-        Y_ENSURE(n->size() > 0);
+        Y_ENSURE(!n->empty());
         if (n->size() > 1) {
             return nullptr;
         }

@@ -1,12 +1,15 @@
 #pragma once
 
-#include "direct_block_group.h"
-#include "vchunk.h"
+#include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -21,8 +24,11 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
-        TDuration writeHandoffDelay,
-        TDuration traceSamplePeriod);
+        ui64 vChunkSize,
+        TDuration writeHedgingDelay,
+        TDuration writeRequestTimeout,
+        TDuration traceSamplePeriod,
+        NMonitoring::TDynamicCounterPtr counters);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -33,7 +39,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 

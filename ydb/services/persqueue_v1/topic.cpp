@@ -5,7 +5,6 @@
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_table.h>
-#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
@@ -32,7 +31,7 @@ TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
 void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
 
-    ServicesInitializer(ActorSystem_, SchemeCache, Counters_, &ClustersCfgProvider).Execute();
+    ServicesInitializer(ActorSystem_, SchemeCache, Counters_).Execute();
 
     if (ActorSystem_->AppData<TAppData>()->PQConfig.GetEnabled()) {
         SetupIncomingRequests(std::move(logger));
@@ -112,7 +111,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_TOPIC_METHOD(CommitOffset, DoCommitOffsetRequest, RLSWITCH(Rps), TOPIC_COMMITOFFSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
     SETUP_TOPIC_METHOD(DropTopic, DoDropTopicRequest, RLSWITCH(Rps), TOPIC_DROPTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
-    SETUP_TOPIC_METHOD(CreateTopic, std::bind(DoCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_TOPIC_METHOD(CreateTopic, DoCreateTopicRequest, RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
     SETUP_TOPIC_METHOD(AlterTopic, DoAlterTopicRequest, RLSWITCH(Rps), TOPIC_ALTERTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
     SETUP_TOPIC_METHOD(DescribeTopic, DoDescribeTopicRequest, RLSWITCH(Rps), TOPIC_DESCRIBETOPIC, TAuditMode::NonModifying(), nullptr);
     SETUP_TOPIC_METHOD(DescribeConsumer, DoDescribeConsumerRequest, RLSWITCH(Rps), TOPIC_DESCRIBECONSUMER, TAuditMode::NonModifying(), nullptr);

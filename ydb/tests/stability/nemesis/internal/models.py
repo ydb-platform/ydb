@@ -1,46 +1,98 @@
 """
-Data models and validation helpers for Nemesis App.
-
-This module provides documentation of expected data structures and validation
-helper functions for manual request validation in Flask endpoints.
+UI-oriented dataclasses and request validation helpers for the Nemesis app.
 """
 
+from __future__ import annotations
 
-# Data structure documentation (for reference)
-# These are not used for validation anymore, but document the expected structures
+from dataclasses import asdict, dataclass, field
+from typing import Any, List, Optional
 
+
+# --- API / UI payloads ---------------------------------------------------------
+
+
+@dataclass
 class ProcessInfo:
-    """Process information structure"""
+    """Single nemesis process row as returned by GET /api/processes."""
 
-    def __init__(self, id: int, type: str, command: str, logs: str, ret_code: int, status: str):
-        self.id = id
-        self.type = type
-        self.command = command
-        self.logs = logs
-        self.ret_code = ret_code
-        self.status = status
+    id: int
+    type: str
+    command: str
+    logs: str
+    ret_code: Optional[int]
+    status: str
 
-
-class ProcessType:
-    """Process type structure"""
-
-    def __init__(self, name: str, command: str):
-        self.name = name
-        self.command = command
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
 
 
-# Validation helper functions
+@dataclass
+class ProcessTypeRow:
+    """Entry for GET /api/process_types."""
+
+    name: str
+    description: str
+    schedule: int = 60  # default interval (sec) from catalog.NEMESIS_TYPES
+
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ApiMessageResponse:
+    """Generic {status, message?} JSON."""
+
+    status: str
+    message: Optional[str] = None
+
+    def to_json(self) -> dict[str, Any]:
+        d = {"status": self.status}
+        if self.message is not None:
+            d["message"] = self.message
+        return d
+
+
+@dataclass
+class WardenCheckResult:
+    """Result of a single warden check (agent or orchestrator)."""
+
+    name: str
+    category: str  # 'liveness' or 'safety'
+    violations: List[str]
+    status: str  # 'ok', 'violation', 'error'
+    error_message: Optional[str] = None
+    affected_hosts: List[str] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class WardenCheckReport:
+    """Full warden report for API consumers."""
+
+    status: str  # 'idle', 'running', 'completed', 'error'
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    liveness_checks: List[WardenCheckResult] = field(default_factory=list)
+    safety_checks: List[WardenCheckResult] = field(default_factory=list)
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "liveness_checks": [c.to_json() for c in self.liveness_checks],
+            "safety_checks": [c.to_json() for c in self.safety_checks],
+            "error_message": self.error_message,
+        }
+
+
+# --- Validation helpers (unchanged contract) ---------------------------------
+
 
 def validate_create_process_request(data: dict) -> tuple:
-    """
-    Validate create process request data.
-
-    Args:
-        data: Request data dictionary
-
-    Returns:
-        tuple: (is_valid, error_message, validated_data)
-    """
     if not data:
         return False, "No data provided", None
 
@@ -52,22 +104,13 @@ def validate_create_process_request(data: dict) -> tuple:
 
     validated_data = {
         "type": process_type,
-        "action": action
+        "action": action,
     }
 
     return True, None, validated_data
 
 
 def validate_set_schedule_request(data: dict) -> tuple:
-    """
-    Validate set schedule request data.
-
-    Args:
-        data: Request data dictionary
-
-    Returns:
-        tuple: (is_valid, error_message, validated_data)
-    """
     if not data:
         return False, "No data provided", None
 
@@ -89,22 +132,13 @@ def validate_set_schedule_request(data: dict) -> tuple:
     validated_data = {
         "type": process_type,
         "enabled": enabled,
-        "interval": interval
+        "interval": interval,
     }
 
     return True, None, validated_data
 
 
 def validate_create_host_process_request(data: dict) -> tuple:
-    """
-    Validate create host process request data.
-
-    Args:
-        data: Request data dictionary
-
-    Returns:
-        tuple: (is_valid, error_message, validated_data)
-    """
     if not data:
         return False, "No data provided", None
 
@@ -121,7 +155,7 @@ def validate_create_host_process_request(data: dict) -> tuple:
     validated_data = {
         "host": host,
         "type": process_type,
-        "action": action
+        "action": action,
     }
 
     return True, None, validated_data

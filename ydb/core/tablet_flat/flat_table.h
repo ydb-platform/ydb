@@ -142,6 +142,10 @@ public:
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
+    TAutoPtr<TTableIter> Iterate(const TCelled& key, TTagsRef tags, IPages* env, ESeek seek,
+            TRowVersion snapshot,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableReverseIter> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
             TRowVersion snapshot,
             const ITransactionMapPtr& visible = nullptr,
@@ -163,6 +167,14 @@ public:
             const TCelled& key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
+    // Works in the same way as SelectRowVersion, but for a range specified
+    // by key prefix. Used to check row conflicts in unique indexes.
+    // Returns either the first locked row or any non-deleted committed row
+    // from the range if no rows are locked in range. Feeds uncommitted
+    // non-lock-only deltas to the specified observer.
+    TSelectRowVersionResult SelectRowVersionByKeyPrefix(
+            TArrayRef<const TCell> keyPrefix, IPages* env,
+            const ITransactionObserverPtr& observer) const;
 
     TPrechargeResult Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,

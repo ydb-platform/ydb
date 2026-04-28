@@ -1,6 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -8,6 +9,8 @@
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -582,9 +585,9 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 bloom->AddColumnIds(columnIdIt->second);
                 const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
-                if (settings.FalsePositiveProbability) {
-                    bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
-                }
+                const double fpp = settings.FalsePositiveProbability.value_or(
+                    NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                bloom->SetFalsePositiveProbability(fpp);
 
                 break;
             }
@@ -609,17 +612,25 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
 
                 ngram->SetColumnId(columnIdIt->second);
-                ngram->SetNGrammSize(settings.NgramSize);
-                ngram->SetHashesCount(settings.HashesCount);
-                ngram->SetFilterSizeBytes(settings.FilterSizeBytes);
-                ngram->SetRecordsCount(settings.RecordsCount);
-                ngram->SetCaseSensitive(settings.CaseSensitive);
+                if (settings.NgramSize) {
+                    ngram->SetNGrammSize(*settings.NgramSize);
+                }
+
+                if (settings.CaseSensitive) {
+                    ngram->SetCaseSensitive(*settings.CaseSensitive);
+                }
+
+                if (settings.FalsePositiveProbability) {
+                    ngram->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
+                }
+
                 break;
             }
             default:
                 break;
         }
     }
+
     return true;
 }
 
@@ -995,7 +1006,7 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
-                    TSet<ui32> bloomPrefixes;
+                    TMap<ui32, double> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
@@ -1011,8 +1022,22 @@ public:
                                 continue; // handled by OLAP path below
                             }
 
-                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
-                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
+                            // Row-store LocalBloomFilter: collect prefix lengths + FPP
+                            {
+                                ui32 prefix = static_cast<ui32>(index.KeyColumns.size());
+                                double fpp = NTable::DefaultBloomFilterFpp;
+                                if (auto* desc = std::get_if<TIndexDescription::TLocalBloomFilterDescription>(&index.SpecializedIndexDescription)) {
+                                    if (desc->FalsePositiveProbability) {
+                                        fpp = *desc->FalsePositiveProbability;
+                                        if (fpp <= 0.0 || fpp >= 1.0) {
+                                            tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                                "false_positive_probability must be in range (0, 1)"));
+                                            return;
+                                        }
+                                    }
+                                }
+                                bloomPrefixes[prefix] = fpp;
+                            }
                             continue;
                         }
 
@@ -1046,8 +1071,10 @@ public:
                                 break;
                         }
                     }
-                    for (ui32 prefix : bloomPrefixes) {
-                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
+                    for (const auto& [prefix, fpp] : bloomPrefixes) {
+                        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+                        entry->SetPrefixLength(prefix);
+                        entry->SetFalsePositiveProbability(fpp);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
@@ -1148,6 +1175,33 @@ public:
                 *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto &phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
+            // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
+            // handled by AlterColumnTable and never reaches this path.
+            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+
+            if (isLocalBloom) {
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+                if (!BuildAlterTableBloomFilterModifyScheme(&req, &modifyScheme, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    tablePromise.SetValue(errResult);
+                    return tablePromise.GetFuture();
+                }
+                phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
+                TGenericResult result;
+                result.SetSuccess();
+                tablePromise.SetValue(result);
+                return tablePromise.GetFuture();
+            }
+
             auto buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();
             Ydb::StatusIds::StatusCode code;
             TString error;
@@ -1455,7 +1509,7 @@ public:
 
                 } else {
                     result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
-                    result.AddIssues(modifySchemeResult.Issues);
+                    result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
                 }
                 alterPromise.SetValue(result);
             });
@@ -1467,7 +1521,7 @@ public:
 
     }
 
-    NThreading::TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
         return Gateway->AlterTopicPrepared(std::move(settings));
     }
 

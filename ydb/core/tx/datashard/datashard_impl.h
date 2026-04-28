@@ -3,6 +3,7 @@
 #include "datashard.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
+#include "build_index/build_index_scan_manager.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
@@ -242,6 +243,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleBuildIndexScanProgress;
     class TTxHandleSafeValidateUniqueIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
@@ -293,6 +295,7 @@ class TDataShard
     friend class TConflictsCache;
     friend class TCdcStreamScanManager;
     friend class TCdcStreamHeartbeatManager;
+    friend class TBuildIndexScanManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
     friend class TMultiTxIdManager;
@@ -851,9 +854,10 @@ class TDataShard
             struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :  Column<4, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :  Column<5, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<6, NScheme::NTypeIds::String> { using Type = TString; };
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<Order, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         struct ChangeSenders : Table<19> {
@@ -1000,9 +1004,10 @@ class TDataShard
             struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
+            struct UserTraceId :  Column<7, NScheme::NTypeIds::String> { using Type = TString; };
             
             using TKey = TableKey<LockId, LockOffset>;
-            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID, UserTraceId>;
         };
 
         // Maps [Order ... Order+N-1] change records in the shard order
@@ -1126,6 +1131,16 @@ class TDataShard
             using TKey = TableKey<EdgeId>;
             using TColumns = TableColumns<EdgeId, MultiTxId, NestedTxId, NestedLockMode>;
         };
+        struct IndexBuildScans : Table<39> {
+            struct BuildId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct SeqNoGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct SeqNoRound : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct ResponseType : Column<4, NScheme::NTypeIds::Uint32> {};
+            struct FinalProgressRecord : Column<5, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<BuildId, SeqNoGeneration, SeqNoRound>;
+            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord>;
+        };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
@@ -1135,7 +1150,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1371,6 +1386,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
@@ -1468,10 +1484,10 @@ class TDataShard
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
-    TDuration GetDataTxCompleteLag()
+    TDuration GetTxCompleteLag()
     {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
-        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime));
+        return TDuration::MilliSeconds(Pipeline.GetTxCompleteLag(mediatorTime));
     }
     TDuration GetScanTxCompleteLag()
     {
@@ -2049,6 +2065,7 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count = 1);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     ui64 GetNextChangeRecordLockOffset(ui64 lockId);
+    void FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     bool HasLockChangeRecords(ui64 lockId) const;
     void CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected);
@@ -2081,6 +2098,7 @@ public:
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
+    void SendPendingBuildIndexFinalResponses(const TActorContext& ctx);
 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
@@ -2099,6 +2117,13 @@ public:
 
     TCdcStreamScanManager& GetCdcStreamScanManager() { return CdcStreamScanManager; }
     const TCdcStreamScanManager& GetCdcStreamScanManager() const { return CdcStreamScanManager; }
+
+    TBuildIndexScanManager& GetBuildIndexScanManager() { return BuildIndexScanManager; }
+    const TBuildIndexScanManager& GetBuildIndexScanManager() const { return BuildIndexScanManager; }
+
+    void ClearPendingBuildIndexFinalResponse(ui64 buildId) {
+        PendingBuildIndexFinalResponses.erase(buildId);
+    }
 
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
@@ -2740,6 +2765,7 @@ private:
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
     TActorId SchemeShardPipe;   // For notifications about schema changes
     TActorId StateReportPipe;   // For notifications about shard state changes
+    TActorId BuildIndexPipe;   // For notifications about index build
     ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
     ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now
     ui64 LastKnownMediator;
@@ -2815,6 +2841,8 @@ private:
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
     TMultiTxIdManager MultiTxIdManager;
+    TBuildIndexScanManager BuildIndexScanManager;
+    THashMap<ui64, THolder<TEvDataShard::TEvBuildIndexProgressResponse>> PendingBuildIndexFinalResponses;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3361,6 +3389,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
@@ -3455,15 +3484,20 @@ protected:
 
     void Die(const TActorContext &ctx) override;
 
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+    template <class TEvent>
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, THolder<TEvent> event) {
         Y_ENSURE(tabletId);
         Y_ENSURE(CurrentSchemeShardId == tabletId);
 
-        if (!SchemeShardPipe) {
+        if (!pipe) {
             NTabletPipe::TClientConfig clientConfig;
-            SchemeShardPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+            pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         }
-        NTabletPipe::SendData(ctx, SchemeShardPipe, event.Release());
+        NTabletPipe::SendData(ctx, pipe, event.Release());
+    }
+
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+        SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
     }
 
     void ReportState(const TActorContext &ctx, ui32 state) {

@@ -4,6 +4,9 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -82,23 +85,26 @@ void TReadRequestExecutor::Run()
         "TReadRequestExecutor. Reading from location %s",
         ToString(*location).c_str());
 
+    auto onReadResponse = [self = shared_from_this()]   //
+        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
+    {
+        self->OnReadResponse(f.GetValue());
+    };
+
     auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
                                            VChunkConfig.VChunkIndex,
                                            VChunkConfig.GetHostIndex(*location),
                                            hint.VChunkRange,
                                            Request->Sglist,
-                                           NWilson::TTraceId(TraceId))
+                                           TraceId)
                                      : DirectBlockGroup->ReadBlocksFromPBuffer(
                                            VChunkConfig.VChunkIndex,
                                            VChunkConfig.GetHostIndex(*location),
                                            hint.Lsn,
                                            hint.VChunkRange,
                                            Request->Sglist,
-                                           NWilson::TTraceId(TraceId));
-
-    future.Subscribe([self = shared_from_this()]   //
-                     (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
-                     { self->OnReadResponse(f.GetValue()); });
+                                           TraceId);
+    future.Subscribe(std::move(onReadResponse));
 }
 
 NThreading::TFuture<TReadRequestExecutor::TResponse>

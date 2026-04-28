@@ -119,10 +119,10 @@ TUnboxedValuePod PeelDict(const ITypeInfoHelper* typeHelper, const TType* itemTy
             if (const auto size = x.GetDictLength()) {
                 TSmallVec<TPair, TStdAllocatorForUdf<TPair>> pairs;
                 pairs.reserve(size);
-                const auto it = x.GetDictIterator();
-                for (TUnboxedValue key, payload; it.NextPair(key, payload);) {
-                    if (const auto k = ConvertToString<Strict, AutoConvert, Utf8Keys>(key.Release(), valueBuilder, pos)) {
-                        if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, payload, valueBuilder, pos)) {
+                auto ptr = (const TPair*)x.GetResource();
+                for (ui64 i = 0; i < size; ++i) {
+                    if (const auto k = ConvertToString<Strict, AutoConvert, Utf8Keys>(ptr[i].first, valueBuilder, pos)) {
+                        if (const auto item = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, ptr[i].second, valueBuilder, pos)) {
                             pairs.emplace_back(std::move(k), item.GetOptionalValue());
                             continue;
                         }

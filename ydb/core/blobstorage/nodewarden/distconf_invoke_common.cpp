@@ -260,7 +260,10 @@ namespace NKikimr::NStorage {
         if (!Self->BridgeInfo) {
             throw TExError() << "Not in bridge mode";
         } else {
-            Self->ApplyCommittedStorageConfig(request.GetCommittedStorageConfig());
+            const auto& config = request.GetCommittedStorageConfig();
+            if (!Self->CommittedStorageConfig || Self->CommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                Self->ApplyCommittedStorageConfig(config);
+            }
             Finish(TResult::OK, std::nullopt);
         }
     }

@@ -61,6 +61,74 @@ TEST(TUnversionedOwningRowTest, ConstructFromUnversionedRow)
     ASSERT_GT(owningRow.GetSpaceUsed(), 0ull);
 }
 
+TEST(TUnversionedOwningRowTest, MakeUnversionedOwningRowEmpty)
+{
+    auto owningRow = MakeUnversionedOwningRow();
+
+    TUnversionedOwningRowBuilder builder(0);
+    auto builderRow = builder.FinishRow();
+
+    EXPECT_EQ(owningRow, builderRow);
+}
+
+TEST(TUnversionedOwningRowTest, MakeUnversionedOwningRowAllInline)
+{
+    auto owningRow = MakeUnversionedOwningRow(
+        std::nullopt,
+        i64(123),
+        ui64(456),
+        i32(789),
+        ui32(101112),
+        i16(1314),
+        ui16(1516),
+        i8(17),
+        ui8(18),
+        bool(true),
+        double(3.14),
+        TInstant::Seconds(12345),
+        TDuration::Seconds(67)
+    );
+
+    TUnversionedOwningRowBuilder builder(13);
+    builder.AddValue(MakeUnversionedNullValue(0));
+    builder.AddValue(MakeUnversionedInt64Value(123, 1));
+    builder.AddValue(MakeUnversionedUint64Value(456, 2));
+    builder.AddValue(MakeUnversionedInt64Value(789, 3));
+    builder.AddValue(MakeUnversionedUint64Value(101112, 4));
+    builder.AddValue(MakeUnversionedInt64Value(1314, 5));
+    builder.AddValue(MakeUnversionedUint64Value(1516, 6));
+    builder.AddValue(MakeUnversionedInt64Value(17, 7));
+    builder.AddValue(MakeUnversionedUint64Value(18, 8));
+    builder.AddValue(MakeUnversionedBooleanValue(true, 9));
+    builder.AddValue(MakeUnversionedDoubleValue(3.14, 10));
+    builder.AddValue(MakeUnversionedUint64Value(TInstant::Seconds(12345).MicroSeconds(), 11));
+    builder.AddValue(MakeUnversionedUint64Value(TDuration::Seconds(67).MicroSeconds(), 12));
+    auto builderRow = builder.FinishRow();
+
+    EXPECT_EQ(owningRow, builderRow);
+}
+
+TEST(TUnversionedOwningRowTest, MakeUnversionedOwningRowWithNonInline)
+{
+    auto owningRow = MakeUnversionedOwningRow(
+        i64(123),
+        TString("hello"),
+        ui64(456),
+        TStringBuf("world"),
+        bool(true)
+    );
+
+    TUnversionedOwningRowBuilder builder(5);
+    builder.AddValue(MakeUnversionedInt64Value(123, 0));
+    builder.AddValue(MakeUnversionedStringValue("hello", 1));
+    builder.AddValue(MakeUnversionedUint64Value(456, 2));
+    builder.AddValue(MakeUnversionedStringValue("world", 3));
+    builder.AddValue(MakeUnversionedBooleanValue(true, 4));
+    auto builderRow = builder.FinishRow();
+
+    EXPECT_EQ(owningRow, builderRow);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TToUnversionedCompositeValueTest

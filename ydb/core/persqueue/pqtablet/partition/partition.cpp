@@ -14,6 +14,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
+#include <ydb/core/persqueue/pqtablet/partition/deduplication_write_queue.h>
 #include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer_factory.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -689,6 +690,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
+    if (DeduplicationQueueActor) {
+        Send(DeduplicationQueueActor, new TEvents::TEvPoisonPill());
+    }
+
     Die(ctx);
 }
 
@@ -777,6 +782,19 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
+    }
+    if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
+        TCreateDeduplicationWriteQueueActorResult writeQueue = CreateDeduplicationWriteQueueActor(
+            this->TabletId,
+            this->TabletActorId,
+            ctx.SelfID,
+            TopicName(),
+            Partition.OriginalPartitionId,
+            PartitionGraph
+        );
+        if (writeQueue.RecentPartitionsCount != 0 && writeQueue.Actor) {
+            DeduplicationQueueActor = ctx.Register(writeQueue.Actor.Release());
+        }
     }
 
     ProcessMLPPendingEvents();
@@ -1537,7 +1555,12 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
     response->InputLags = std::move(SupportivePartitionTimeLag);
-    response->WrittenBytes = AutopartitioningManager->GetWrittenBytes();
+
+    auto amSnapshot = AutopartitioningManager->GetSnapshot();
+    response->WriteStats = TWriteStats{
+        .PerSourceMetrics = std::move(amSnapshot.PerSourceMetrics),
+        .PartitioningKeysManagers = std::move(amSnapshot.KeysManagers),
+    };
 
     LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
     ctx.Send(originalPartition, response);
@@ -2705,8 +2728,28 @@ void TPartition::RunPersist() {
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
 
-            for (auto& [sourceId, writtenBytes] : writeInfo->WrittenBytes) {
-                AutopartitioningManager->OnWrite(sourceId, writtenBytes);
+            std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
+            const auto& psm = writeInfo->WriteStats.PerSourceMetrics;
+            const size_t bytesIdx = static_cast<size_t>(ETag::BYTES);
+            const size_t messagesIdx = static_cast<size_t>(ETag::MESSAGES);
+            if (bytesIdx < psm.size()) {
+                for (const auto& [sourceId, writtenBytes] : psm[bytesIdx]) {
+                    perSourceMetrics[sourceId].first = writtenBytes;
+                }
+            }
+            if (messagesIdx < psm.size()) {
+                for (const auto& [sourceId, messagesWritten] : psm[messagesIdx]) {
+                    perSourceMetrics[sourceId].second = messagesWritten;
+                }
+            }
+            for (const auto& [sourceId, metrics] : perSourceMetrics) {
+                AutopartitioningManager->OnWrite(sourceId, metrics.first, metrics.second);
+            }
+            const auto& pkm = writeInfo->WriteStats.PartitioningKeysManagers;
+            for (size_t i = 0; i < pkm.size(); ++i) {
+                if (pkm[i]) {
+                    AutopartitioningManager->AddKeysStats(static_cast<ETag>(i), *pkm[i]);
+                }
             }
         }
         WriteInfosApplied.clear();
@@ -3567,7 +3610,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
         consumers.push_back(user);
     }
     affectedSourceIdsAndConsumers.ReadConsumers = std::move(consumers);
-    affectedSourceIdsAndConsumers.WriteKeysSize += consumers.size();
+    affectedSourceIdsAndConsumers.WriteKeysSize += affectedSourceIdsAndConsumers.ReadConsumers.size();
     return EProcessResult::Continue;
 }
 
@@ -3879,7 +3922,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
 void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                                            TUserInfoBase& userInfo,
-                                           const TActorContext&)
+                                           const TActorContext& ctx)
 {
     const TString& user = act.ClientId;
     ui64 offset = act.Offset;
@@ -3968,6 +4011,11 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
+        auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
+        if (userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset()) {
+            auto timestamps = GetTime(*userInfoFull, userInfo.Offset);
+            userInfoFull->UpdateReadOffset(userInfo.Offset - 1, timestamps.first, timestamps.second, ctx.Now(), true);
+        }
     }
 }
 
@@ -4691,6 +4739,42 @@ void TPartition::ResetDetailedMetrics() {
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer) {
     return consumer.GetImportant() || consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+}
+
+void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    const ui32 partitionId = record.GetPartitionId();
+    LOG_T("TEvCheckMessageDeduplicationRequest for partition " << partitionId
+        << ", deduplication IDs count: " << record.MessageDeduplicationIdSize()
+        << ". Topic: \"" << TopicName() << "\""
+        << ". Partition: " << Partition);
+   if (Partition.InternalPartitionId != partitionId) {
+        LOG_W("TEvCheckMessageDeduplicationRequest for wrong partition " << partitionId
+            << ". Topic: \"" << TopicName() << "\""
+            << ". Partition: " << Partition);
+        return;
+    }
+    auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+    response->Record.SetPartitionId(Partition.InternalPartitionId);
+    response->Record.SetGeneration(record.GetGeneration());
+    if (IsActive()) {
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    for (const auto& messageId : record.GetMessageDeduplicationId()) {
+        std::optional offset = MessageIdDeduplicator.CheckMessageId(messageId);
+        auto& result = (*response->Record.MutableResult())[messageId];
+        result.SetIsDuplicate(offset.has_value());
+        if (offset.has_value()) {
+            result.SetOffset(*offset);
+        }
+    }
+    response->Record.SetStatus(NKikimrPQ::EStatus::OK);
+    Send(ev->Sender, response.Release());
 }
 
 } // namespace NKikimr::NPQ

@@ -36,8 +36,7 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& tableContent,
     for (const auto& [groupName, cols] : columnGroupsSpec.ColumnGroups) {
         totalColumns += cols.size();
     }
-    const bool needDefaultGroup = !(columnGroupsSpec.DefaultColumnGroupName.empty() && !columnGroupsSpec.ColumnGroups.empty());
-    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + (needDefaultGroup ? 1 : 0);
+    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + 1;
 
     THashMap<TString, ui64> columnGroups; // Column name -> column group index (for non-default groups)
     columnGroups.reserve(totalColumns);
@@ -57,12 +56,9 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& tableContent,
     }
 
     const TString& defaultColumnGroupName = columnGroupsSpec.DefaultColumnGroupName;
-    // don't use default column group (#) if all columns are filled with explicit group names.
-    if (needDefaultGroup) {
-        columnGroupIndexes[columnGroupIndex] = defaultColumnGroupName;
-        splittedYsonByColumnGroups[defaultColumnGroupName] = TString();
-        ++columnGroupIndex;
-    }
+    columnGroupIndexes[columnGroupIndex] = defaultColumnGroupName;
+    splittedYsonByColumnGroups[defaultColumnGroupName] = TString();
+    ++columnGroupIndex;
 
     const ui64 columnGroupsNum = columnGroupIndex;
 
@@ -99,8 +95,7 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, 
         totalColumns += cols.size();
     }
 
-    const bool needDefaultGroup = !(columnGroupsSpec.DefaultColumnGroupName.empty() && !columnGroupsSpec.ColumnGroups.empty());
-    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + (needDefaultGroup ? 1 : 0);
+    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + 1;
 
     THashMap<TString, ui64> columnToGroupIndex;
     columnToGroupIndex.reserve(totalColumns);
@@ -118,15 +113,20 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, 
 
     TString defaultColumnGroupName = columnGroupsSpec.DefaultColumnGroupName;
     ui64 defaultGroupIndex = groupCount;
-    if (!(defaultColumnGroupName.empty() && groupCount > 0)) {
-        groupIndexToName[groupCount] = defaultColumnGroupName;
-        ++groupCount;
-    }
+    groupIndexToName[groupCount] = defaultColumnGroupName;
+    ++groupCount;
 
     TParserFragmentListIndex parser(tableContent);
     parser.Parse();
     const auto& rows = parser.GetAllColumnsRows();
     const ui64 numRows = rows.size();
+
+    if (numRows > 0) {
+        std::vector<TString> firstRowCols;
+        for (const auto& col : rows[0].Columns) {
+            firstRowCols.push_back(TString(col.Name));
+        }
+    }
 
     // Resolve group index for each column (one hash lookup per column),
     // compute exact byte sizes per group buffer.
@@ -293,6 +293,13 @@ TString GetNeededColumnsFromYsonData(const TString& ysonInputs, const std::vecto
 }
 
 TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<TString>& neededColumns) {
+    if (ysonInputs.empty()) {
+        return {};
+    }
+    if (ysonInputs.size() == 1 && neededColumns.empty()) {
+        return ysonInputs[0];
+    }
+
     TStringStream unionYsonStream;
     TBinaryYsonWriter writer(&unionYsonStream, NYson::EYsonType::ListFragment);
     NYT::NYson::IYsonConsumer* outputConsumer = &writer;
@@ -317,8 +324,8 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             if (isCurrentColumnNeeeded) {
                 outputConsumer->OnBeginList();
                 ++listDepth;
-                break;
             }
+            break;
 
         case NYsonPull::EEventType::EndList:
             if (isCurrentColumnNeeeded) {
@@ -352,7 +359,7 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
 
         case NYsonPull::EEventType::Key:
             if (mapDepth == 1) {
-                isCurrentColumnNeeeded = columnsToKeep.contains(event.AsString()) || columnsToKeep.empty(); // If columns to keep is not set, we add all columns.
+                isCurrentColumnNeeeded = columnsToKeep.contains(event.AsString()) || columnsToKeep.empty();
             }
             if (isCurrentColumnNeeeded) {
                 outputConsumer->OnKeyedItem(event.AsString());
@@ -366,7 +373,6 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             const auto& scalar = event.AsScalar();
             if (listDepth > 0) {
                 outputConsumer->OnListItem();
-                // YsonPull doesn't have OnListItem() method needed for sax parser, so call it manually.
             }
             switch (scalar.Type()) {
             case NYsonPull::EScalarType::Entity:
@@ -396,10 +402,10 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             break;
         }
 
-        case NYsonPull::EEventType::EndStream: {
+        case NYsonPull::EEventType::EndStream:
             ++finishedReadersNum;
             ++readerIndex;
-        }
+            break;
 
         case NYsonPull::EEventType::BeginAttributes:
         case NYsonPull::EEventType::EndAttributes:

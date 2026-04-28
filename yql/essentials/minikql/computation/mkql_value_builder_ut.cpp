@@ -340,7 +340,7 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(length, 5);
 
             std::array<ArrowArray, 2> arrs;
-            Builder_.ExportArrowBlock(val1, 0, &arrs[0]);
+            Builder_.ExportArrowBlock(val1, 0, arrs.data());
             Builder_.ExportArrowBlock(val1, 1, &arrs[1]);
             NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs.data(), 2, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();

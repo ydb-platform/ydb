@@ -39,7 +39,7 @@ TNameIndex BuildNameIndex(TVector<TString> originals, auto normalize) {
     return index;
 }
 
-const TVector<TStringBuf> FilteredByPrefix(
+TVector<TStringBuf> FilteredByPrefix(
     const TString& prefix,
     const TNameIndex& index Y_LIFETIME_BOUND,
     auto normalize) {

@@ -143,6 +143,7 @@ public:
         sink.Add(TFromString::Name());
         sink.Add(TSum::Name());
         sink.Add(TMul::Name());
+        sink.Add(TReturnNamedArgCallable::Name());
     }
 
     void BuildFunctionTypeInfo(

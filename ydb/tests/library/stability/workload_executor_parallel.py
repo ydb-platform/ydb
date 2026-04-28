@@ -36,15 +36,24 @@ class ParallelWorkloadTestBase:
     event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
     ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
     ydb_database = get_external_param('ydb-db', '/Root/db1').lstrip('/')
+    static_location = get_external_param('nemesis-static-location', None)
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self):
         binaries_deploy_path: str = (
             "/tmp/stress_binaries/"
         )
-        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
+        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location=self.static_location)
         yield deployer
-        deployer._manage_nemesis(False, [], 'teardown')
+        teardown_log: list[str] = []
+        deployer._manage_nemesis(False, [], 'teardown', teardown_log)
+        deployer._stop_nemesis_services(teardown_log)
+        if teardown_log:
+            allure.attach(
+                "\n".join(teardown_log),
+                "Nemesis Teardown Summary",
+                attachment_type=allure.attachment_type.TEXT,
+            )
 
     @pytest.fixture(autouse=True, scope="session")
     def health_checker_daemon(self, binary_deployer: StressUtilDeployer):

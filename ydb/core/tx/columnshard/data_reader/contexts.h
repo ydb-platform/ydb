@@ -256,12 +256,15 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
+    YDB_READONLY(ui64, TabletId, 0);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
-        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
+        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard, const ui64 tabletId);
+
+    TString DebugString() const;
 
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardVerified() const {
         AFL_VERIFY(MemoryProcessGuard);

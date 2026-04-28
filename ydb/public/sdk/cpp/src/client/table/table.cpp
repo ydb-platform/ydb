@@ -1412,7 +1412,7 @@ TTableBuilder& TTableBuilder::SetStorageSettings(const TStorageSettings& setting
 }
 
 TTableBuilder& TTableBuilder::AddColumnFamily(const TColumnFamilyDescription& desc) {
-    TableDescription_.AddColumnFamily(std::move(desc));
+    TableDescription_.AddColumnFamily(desc);
     return *this;
 }
 
@@ -2511,6 +2511,10 @@ uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
 }
 
+void TIndexDescription::SetParallel(uint32_t parallel) {
+    Parallel_ = parallel;
+}
+
 TIndexDescription TIndexDescription::CreateGlobalIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
@@ -3055,6 +3059,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
         result.SizeBytes_ = proto.size_bytes();
     }
+    if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndex>) {
+        result.Parallel_ = proto.parallel();
+    }
 
     return result;
 }
@@ -3066,6 +3073,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     }
 
     *proto.mutable_data_columns() = {DataColumns_.begin(), DataColumns_.end()};
+
+    proto.set_parallel(Parallel_);
 
     switch (IndexType_) {
     case EIndexType::GlobalSync: {
@@ -3275,6 +3284,11 @@ TChangefeedDescription& TChangefeedDescription::WithUserSIDs() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithTraceIds() {
+    TraceIds_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::AddAttribute(const std::string& key, const std::string& value) {
     Attributes_[key] = value;
     return *this;
@@ -3329,6 +3343,10 @@ bool TChangefeedDescription::GetInitialScan() const {
 
 bool TChangefeedDescription::GetUserSIDs() const {
     return UserSIDs_;
+}
+
+bool TChangefeedDescription::GetTraceIds() const {
+    return TraceIds_;
 }
 
 const std::unordered_map<std::string, std::string>& TChangefeedDescription::GetAttributes() const {
@@ -3393,6 +3411,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.user_sids()) {
         ret.WithUserSIDs();
     }
+    if (proto.trace_ids()) {
+        ret.WithTraceIds();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
@@ -3439,6 +3460,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
     proto.set_user_sids(UserSIDs_);
+    proto.set_trace_ids(TraceIds_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:

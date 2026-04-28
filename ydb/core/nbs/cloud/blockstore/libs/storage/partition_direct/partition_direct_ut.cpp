@@ -46,7 +46,8 @@ struct TScopedNbsService: TDisableCopyMove
 
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
-    EWriteMode writeMode)
+    EWriteMode writeMode,
+    TDuration writeHedgingDelay = TDuration::Seconds(1))
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -78,6 +79,8 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
+    storageConfig->SetVChunkSize(DefaultVChunkSize);
+    storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
 
     return TScopedNbsService(nbsConfig);
 }
@@ -93,7 +96,7 @@ NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
     return volumeConfig;
 }
 
-ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
+void WaitForTabletBoot(TEnvironmentSetup& env)
 {
     // Create tablet like in SetupTablet()
     env.Runtime->CreateTestBootstrapper(
@@ -113,6 +116,11 @@ ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
         [&] { return working; },
         [&](IEventHandle& event)
         { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
+}
+
+ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
+{
+    WaitForTabletBoot(env);
 
     // Send volume config update
     auto volumeConfig = CreateVolumeConfig(blockCount);
@@ -540,6 +548,47 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldCorrectlyAllocateDirectBlockGroups)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService =
+            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                UNIT_ASSERT_VALUES_EQUAL(msg->Record.QueriesSize(), 32);
+                for (size_t i = 0; i < 32; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        msg->Record.GetQueries(i).GetDirectBlockGroupId(),
+                        i);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        msg->Record.GetQueries(i).GetTargetNumVChunks(),
+                        5);
+                }
+            }
+
+            return true;
+        };
+
+        CreatePartitionTablet(
+            env,
+            4 * BlocksPerRegion + 1   // blockCount
+        );
+    }
+
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
         BasicWriteRead(EWriteMode::PBufferReplication);
@@ -710,7 +759,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
+        auto scopedService =
+            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
 
         auto partition = CreatePartitionTablet(env);
 
@@ -731,12 +781,6 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NDDisk::TEvWritePersistentBuffer::EventType)
             {
                 if (writeRequestsCount++ < 2) {
-                    runtime->Schedule(
-                        TDuration::Seconds(10),
-                        ev.release(),
-                        nullptr,
-                        nodeId);
-
                     return false;
                 }
             }
@@ -788,6 +832,92 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // Read written block from persistent buffer
         {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.SetBlocksCount(1);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                expectedData);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRestorePartitionAfterRestart)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
+
+        auto partition = CreatePartitionTablet(env);
+
+        auto expectedData = TString(1024, 'A') + TString(1024, 'B') +
+                            TString(1024, 'C') + TString(1024, 'D');
+
+        {
+            const TActorId& edge = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+
+            auto loadActorAdapter =
+                GetLoadActorAdapterActorId(env, partition, edge);
+
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        {
+            env.RestartNode(env.Settings.ControllerNodeId);
+            env.Sim(TDuration::Seconds(1));
+        }
+
+        WaitForTabletBoot(env);
+        // Wait for tablet to be restored
+        env.Sim(TDuration::Seconds(10));
+
+        {
+            const TActorId& edge = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+
+            auto loadActorAdapter =
+                GetLoadActorAdapterActorId(env, partition, edge);
+
             auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);

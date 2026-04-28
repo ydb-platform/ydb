@@ -74,6 +74,7 @@ TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
     EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("../some"));
     EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("a/../.."));
     EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("a/../../b"));
+    EXPECT_FALSE(NFS::IsPathRelativeAndInvolvesNoTraversal("./.."));
 }
 
 TEST(TFSTest, TestGetRelativePath)

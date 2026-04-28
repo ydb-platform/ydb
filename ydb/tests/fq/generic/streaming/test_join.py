@@ -741,6 +741,8 @@ TESTCASES = [
         ),
         "MultiGet",
         "true",
+        "MaxCachedRows",
+        "0",
     ),
     # 14
     (
@@ -867,6 +869,139 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+    ),
+    # 16
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            zd Int32
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, f, za, zd,
+                               is_odd, is_true, is_false,
+                               opt_odd, opt_true, opt_false, opt_null,
+                               CAST(ts AS String) AS tss, CAST(tsd AS String) AS tsds
+                               /*, CAST(dur AS String) AS durs -- NOT supported by fq_connector */
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"zd":101}',
+                    '''{
+                        "a":1,"b":"2","c":3,"d":4,"f":6,"za":1,"zd":101,
+                        "is_true":true,"is_false":false,"is_odd":true,
+                        "opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null,
+                        "tsds":"1970-01-05","tss":"1970-01-03T10:11:12Z"
+                    }''',
+                ),
+                (
+                    '{"id":2,"za":7,"zd":107}',
+                    '''{
+                        "a":7,"b":"8","c":9,"d":10,"f":12,"za":7,"zd":107,
+                        "is_true":true,"is_false":false,"is_odd":true,
+                        "opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null,
+                        "tsds":"1970-01-06","tss":"1970-01-03T10:11:13Z"
+                    }''',
+                ),
+                (
+                    '{"id":3,"za":33,"zd":133}',
+                    '''{
+                        "a":null,"b":null,"c":null,"d":null,"f":null,"za":33,"zd":133,
+                        "is_true":null,"is_false":null,"is_odd":null,
+                        "opt_true":null,"opt_false":null,"opt_odd":null,"opt_null":null,
+                        "tsds":null,"tss":null
+                    }''',
+                ),
+                (
+                    '{"id":2,"za":2,"zd":102}',
+                    '''{
+                        "a":2,"b":"3","c":6,"d":null,"f":9,"za":2,"zd":102,
+                        "is_true":true,"is_false":false,"is_odd":false,
+                        "opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null,
+                        "tsds":"1970-01-07","tss":"1970-01-03T10:11:14Z"
+                    }''',
+                ),
+                (
+                    '{"id":4,"za":4,"zd":104}',
+                    '''{
+                        "a":4,"b":"5","c":4,"d":15,"f":null,"za":4,"zd":104,
+                        "is_true":true,"is_false":false,"is_odd":false,
+                        "opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null,
+                        "tsds":"1970-01-08","tss":"1970-01-03T10:11:15Z"
+                    }''',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "1",
+    ),
+    # 17
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            zd Int32
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, f, za, zd,
+                               is_odd, is_true, is_false,
+                               opt_odd, opt_true, opt_false, opt_null
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"f":6,"za":1,"zd":101,"is_true":true,"is_false":false,"is_odd":true,"opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null}',
+                ),
+                (
+                    '{"id":2,"za":7,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"f":12,"za":7,"zd":107,"is_true":true,"is_false":false,"is_odd":true,"opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null}',
+                ),
+                (
+                    '{"id":3,"za":33,"zd":133}',
+                    '{"a":null,"b":null,"c":null,"d":null,"f":null,"za":33,"zd":133,"is_true":null,"is_false":null,"is_odd":null,"opt_true":null,"opt_false":null,"opt_odd":null,"opt_null":null}',
+                ),
+                (
+                    '{"id":2,"za":2,"zd":102}',
+                    '{"a":2,"b":"3","c":6,"d":null,"f":9,"za":2,"zd":102,"is_true":true,"is_false":false,"is_odd":false,"opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null}',
+                ),
+                (
+                    '{"id":4,"za":4,"zd":104}',
+                    '{"a":4,"b":"5","c":4,"d":15,"f":null,"za":4,"zd":104,"is_true":true,"is_false":false,"is_odd":false,"opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null}',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "1",
+        "MaxCachedRows",
+        "4",
     ),
 ]
 

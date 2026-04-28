@@ -300,6 +300,26 @@ NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJson
     return json;
 }
 
+
+NJson::TJsonMap THttpProxyTestMock::SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries) {
+    for (ui32 i = 0; i < retries; ++i) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
+        if (expectedHttpCode != 0 && res.HttpCode != expectedHttpCode) {
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        NJson::TJsonMap json;
+        if (NJson::ReadJsonTree(res.Body, &json)) {
+            return json;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_FAIL("SendJsonRequestWithRetries: failed to send request after " << retries << " retries");
+    return {};
+}
+
+
 void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
     WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
         for (const auto& [k, v] : attributes.GetMapSafe()) {
@@ -376,6 +396,9 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
         appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
     }
+    if (initParameters.EnableTopicPartitionSplitBasedOnMessages) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnMessages(true);
+    }
     if (initParameters.EnforceUserTokenRequirement) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
@@ -423,6 +446,7 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
                 settings.AuthConfig.SetAccessServiceEndpoint(AccessServiceEndpoint);
                 settings.AuthConfig.SetUseAccessService(true);
                 settings.AuthConfig.SetUseAccessServiceTLS(false);
+                settings.AppConfig->MutableSqsConfig()->SetUserSettingsUpdateTimeMs(100);
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);
@@ -440,7 +464,7 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
-    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_DLQ_MOVER, NLog::PRI_DEBUG);
 
     if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(

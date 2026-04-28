@@ -584,7 +584,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     settings.VisitChanges = true;
     settings.TrackFrames = true;
     static const char ReuseLambdaFlag[] = "EvalReuseLambda";
-    settings.ReuseLambda = IsOptimizerEnabled<ReuseLambdaFlag>(types) && !IsOptimizerDisabled<ReuseLambdaFlag>(types);
+    settings.ReuseLambda = !IsOptimizerDisabled<ReuseLambdaFlag>(types);
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
@@ -1040,7 +1040,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", {clonedArg});
         }
 
-        TString key, yson;
+        TString key;
+        TString yson;
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);

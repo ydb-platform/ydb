@@ -116,7 +116,7 @@ void TKqpCountersBase::Init() {
     QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
 
     QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards",
-        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999}));
+        NMonitoring::ExplicitHistogram({1, 2, 4, 8, 16, 64, 512, 1024}));
     QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets",
         NMonitoring::ExplicitHistogram({99, 999, 9999, 99999}));
     QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes",
@@ -929,6 +929,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
     BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
+}
+
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetRootCounters() const {
+    return Counters;
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

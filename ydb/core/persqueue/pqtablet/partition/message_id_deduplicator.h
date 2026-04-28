@@ -31,6 +31,7 @@ public:
     TDuration GetDeduplicationWindow() const;
 
     std::optional<ui64> AddMessage(const TString& deduplicationId, const ui64 offset);
+    std::optional<ui64> CheckMessageId(const TString& deduplicationId);
     size_t Compact();
 
     void Commit();

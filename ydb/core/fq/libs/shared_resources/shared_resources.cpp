@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/logger/actor.h>
 #include <ydb/library/services/services.pb.h>
 

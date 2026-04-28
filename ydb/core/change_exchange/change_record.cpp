@@ -1,8 +1,16 @@
 #include "change_record.h"
 
+#include <ydb/library/aclib/aclib.h>
+
 #include <util/stream/str.h>
 
 namespace NKikimr::NChangeExchange {
+
+TChangeRecordBase::~TChangeRecordBase() {}
+
+TIntrusivePtr<NACLib::TUserContext> TChangeRecordBase::GetUserCtx() const {
+    return UserCtx;
+}
 
 TString TChangeRecordBase::ToString() const {
     TString result;

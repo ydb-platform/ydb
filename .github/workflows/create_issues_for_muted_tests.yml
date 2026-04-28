@@ -8,36 +8,95 @@ on:
       - main
   workflow_dispatch:
     inputs:
-        pr_number: 
-            description: 'The pull request number'
+        pr_number:
+            description: 'The pull request number (for comment / append body)'
             required: true
             type: number
+        base_branch:
+            description: 'Branch for YDB scripts and create_issues --branch (PR runs use the merged PR base ref)'
+            required: false
+            type: string
+            default: main
+        build_type:
+            description: 'Optional single build type override (empty = use build types from mute_issue_and_digest_config.json)'
+            required: false
+            type: string
+            default: ''
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
-  BUILD_TYPE: relwithdebinfo
+  WORKFLOW_CHECKOUT_REF: ${{ github.ref_name }}
 
 jobs:
+  resolve-build-types:
+    runs-on: ubuntu-latest
+    outputs:
+      base_branch: ${{ steps.resolve.outputs.base_branch }}
+      matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+          sparse-checkout: |
+            .github/config/mute_issue_and_digest_config.json
+            .github/scripts/tests/mute/mute_helper.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve build types matrix
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BASE_BRANCH="${{ github.event.inputs.base_branch }}"
+          else
+            BASE_BRANCH="${{ github.event.pull_request.base.ref || github.base_ref }}"
+            if [ -z "$BASE_BRANCH" ]; then
+              echo "BASE_BRANCH is empty for pull_request event" >&2
+              exit 1
+            fi
+          fi
+          echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.build_type }}" ]; then
+            MATRIX_BUILD_TYPES='["${{ github.event.inputs.build_type }}"]'
+          else
+            MATRIX_BUILD_TYPES="$(python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
+              --profiles-config ".github/config/mute_issue_and_digest_config.json" \
+              --branch "$BASE_BRANCH")"
+          fi
+          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
+
   create-issues-for-muted-tests:
+    needs: resolve-build-types
     runs-on: ubuntu-latest
     if: |
-      ((github.event_name == 'pull_request' && 
-      github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
-      github.event.pull_request.base.ref == 'main') || 
-      github.event_name == 'workflow_dispatch')
+      ((github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
+       github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: ${{ fromJson(needs.resolve-build-types.outputs.matrix_build_types) }}
 
     steps:
       - name: Set environment variables for branches
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref || 'main' }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> $GITHUB_ENV
+          echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: main  # After merge, work with main branch
+            ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+
+      - name: Resolve and load muted YA from base branch
+        run: |
+          set -euo pipefail
+          MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ matrix.build_type }}")"
+          git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
+          git show "origin/${{ env.BASE_BRANCH }}:${MUTED_YA_RELATIVE}" > base_muted_ya.txt
+          echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/base_muted_ya.txt" >> "$GITHUB_ENV"
+          echo "Using base_branch=${{ env.BASE_BRANCH }} build_type=${{ matrix.build_type }} muted_ya_file=$MUTED_YA_RELATIVE"
 
       - name: Install dependencies
         run: |
@@ -53,14 +112,14 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }}
- 
+        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
+
       - name: Add issues to PR
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
-      
+
       - name: Comment PR
         uses: actions/github-script@v7
         with:
@@ -68,12 +127,12 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            
+
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
-      
+
             github.rest.issues.createComment({
               issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }},
               owner: context.repo.owner,
@@ -81,42 +140,13 @@ jobs:
               body: completeBody
             });
 
-      # IMPORTANT: First update muted tests information in DB
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }} --muted_ya_file="${{ env.MUTED_YA_FILE_PATH }}"
 
-      # Then update analytics that depends on muted tests
       - name: Collect test history data
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
+
       - name: Update test monitor
-        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
 
-      - name: Export GitHub issues
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
-
-      - name: Upload GitHub issue mapping table
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/github_issue_mapping.py
-
-      - name: Upload MUTED test monitor data mart with GitHub issue links
-        continue-on-error: true
-        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
-
-      - name: Send team-specific messages to Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
-        run: |
-          python .github/scripts/telegram/parse_and_send_team_issues.py \
-            --on-mute-change-update \
-            --file "${{ steps.create_issues.outputs.created_issues_file }}" \
-            --bot-token "$TELEGRAM_BOT_TOKEN" \
-            --team-channels "$TEAM_CHANNELS" \
-            --include-plots \
-            --delay 2
+      # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)

@@ -1,4 +1,9 @@
 items:
+- name: Рецепты коллекций резервных копий
+  href: backup-collections/index.md
+  include:
+    mode: link
+    path: backup-collections/toc_p.yaml
 - name: YDB SDK и фреймворки
   include:
     mode: link
@@ -12,11 +17,16 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
-- name: AI
+- name: Векторный поиск
   href: vector-search/index.md
   include:
     mode: link
     path: vector-search/toc_p.yaml
+- name: Полнотекстовый поиск
+  href: fulltext-search/index.md
+  include:
+    mode: link
+    path: fulltext-search/toc_p.yaml
 - name: Трансфер
   href: transfer/index.md
   include:

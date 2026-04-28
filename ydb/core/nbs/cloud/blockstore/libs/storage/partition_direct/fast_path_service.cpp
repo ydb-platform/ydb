@@ -2,13 +2,19 @@
 
 #include "range_translate.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
+
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <utility>
 
@@ -43,20 +49,27 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig)
+    const TStorageConfig& storageConfig,
+    NMonitoring::TDynamicCounterPtr counters)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
     TVector<std::shared_ptr<TRegion>> regions(regionsCount);
     for (size_t i = 0; i < regionsCount; i++) {
+        NMonitoring::TDynamicCounterPtr regionCounters =
+            counters->GetSubgroup("region", ToString(i));
+
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
             partitionDirectService,
             i,
             directBlockGroups,
-            storageConfig->GetSyncRequestsBatchSize(),
-            storageConfig->GetWriteHandoffDelay(),
-            storageConfig->GetTraceSamplePeriod());
+            storageConfig.GetSyncRequestsBatchSize(),
+            storageConfig.GetVChunkSize(),
+            storageConfig.GetWriteHedgingDelay(),
+            storageConfig.GetWriteRequestTimeout(),
+            storageConfig.GetTraceSamplePeriod(),
+            regionCounters);
     }
 
     return regions;
@@ -73,7 +86,7 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+    TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -86,7 +99,11 @@ TFastPathService::TFastPathService(
           blockCount,
           blockSize,
           std::move(directBlockGroups),
-          storageConfig))
+          *storageConfig,
+          MakeCountersChain(
+              counters,
+              storageConfig->GetDDiskPoolName(),
+              tabletId)))
     , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -96,13 +113,11 @@ TFastPathService::TFastPathService(
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig->GetStripeSize()}))
+          .BlocksPerStripe = storageConfig->GetStripeSize(),
+          .VChunkSize = storageConfig->GetVChunkSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
-    , PBufferReplyTimeoutMicroseconds(
-          storageConfig->GetPBufferReplyTimeoutMicroseconds())
-{
-    Y_UNUSED(ActorSystem);
-}
+    , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())
+{}
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
@@ -168,7 +183,7 @@ TFastPathService::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         WriteMode,
-        PBufferReplyTimeoutMicroseconds,
+        PBufferReplyTimeout,
         GenerateSequenceNumber(),
         span->GetTraceId());
 

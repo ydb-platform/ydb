@@ -111,6 +111,7 @@ message TPersQueuePartitionRequest {
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
 
         optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
+        optional string MessageDeduplicationId = 21; // Deduplication id for the message
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -270,7 +271,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5 [(Ydb.sensitive) = true];
-    optional string Ticket = 6; //if set, check for acl
+    optional string Ticket = 6 [(Ydb.sensitive) = true]; // if set, check for acl
 
     optional string RequestId = 100; //for logging
 }

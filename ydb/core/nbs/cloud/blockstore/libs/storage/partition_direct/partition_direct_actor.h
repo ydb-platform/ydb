@@ -1,15 +1,14 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include "direct_block_group.h"
+#include "part_counters.h"
+
+#include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/executor_pool.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_counters.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -24,18 +23,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDiskIds
-{
-    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
-    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
-};
-
-using TPartitionIds = TVector<TDiskIds>;
-
 class TPartitionActor
     : public NActors::TActor<TPartitionActor>
     , public TTabletBase<TPartitionActor>
 {
+    using TDirectBlockGroupsConnections =
+        ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+
     enum EState
     {
         STATE_BOOT,
@@ -46,14 +40,8 @@ class TPartitionActor
     };
 
 private:
-    TExecutorPool ExecutorPool{32};
-    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> StorageConfig;
+    TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-
-    TString DiskId;
-    ui32 BlockSize;
-    ui64 BlockCount;
-
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
@@ -110,17 +98,12 @@ private:
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
-    void Start(const NActors::TActorContext& ctx, TPartitionIds ids);
-
-    bool HaveStoredTabletInfo();
-
-    void LoadTabletInfo(const NActors::TActorContext& ctx, TPartitionIds& ids);
-
-    void StoreTabletInfo(
+    void Start(
         const NActors::TActorContext& ctx,
-        const TPartitionIds& ids);
+        TDirectBlockGroupsConnections directBlockGroupsConnections);
 
-    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
+        TDirectBlockGroupsConnections directBlockGroupsConnections);
 
     BLOCKSTORE_PARTITION_TRANSACTIONS(
         BLOCKSTORE_IMPLEMENT_TRANSACTION,

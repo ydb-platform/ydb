@@ -75,6 +75,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -124,5 +128,42 @@
       }
   }
   ```
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, NodeConfigBuilder, SessionOptionsBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .client()?;
+      client.wait().await?;
+
+      let mut coordination_client = client.coordination_client();
+      coordination_client
+          .create_node(
+              "/local/my_lock_node".into(),
+              NodeConfigBuilder::default().build()?,
+          )
+          .await?;
+
+      let session = coordination_client
+          .create_session(
+              "/local/my_lock_node".into(),
+              SessionOptionsBuilder::default().build()?,
+          )
+          .await?;
+
+      session.create_semaphore("resource", 1, vec![]).await?;
+      let _lease = session.acquire_semaphore("resource".into(), 1).await?;
+      // критическая секция
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

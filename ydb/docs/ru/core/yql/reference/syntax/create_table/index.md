@@ -15,10 +15,11 @@
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
+  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
-      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )
@@ -62,7 +63,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md) и [векторные индексы](vector_index.md).
+Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md) и [полнотекстовые индексы](fulltext_index.md).
 
 ### PRIMARY KEY
 
@@ -84,7 +85,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
-{ % note info % }
+{% note info %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -312,6 +313,7 @@ CREATE TABLE <table_name> (
 
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
+* [Полнотекстовый индекс](fulltext_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).

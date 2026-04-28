@@ -1938,9 +1938,9 @@ class TListener
     : public arrow20::ipc::Listener
 {
 public:
-    explicit TListener(IValueConsumer* valueConsumer, const TArrowParserOptions& options)
+    explicit TListener(IValueConsumer* valueConsumer, TArrowParserOptions options)
         : Consumer_(valueConsumer)
-        , Options_(options)
+        , Options_(std::move(options))
     { }
 
     arrow20::Status OnEOS() override
@@ -1965,18 +1965,17 @@ public:
         auto numColumns = batch->num_columns();
         auto numRows = batch->num_rows();
 
-        if (Options_.EnableMemoryLimit) {
+        if (Options_.MaxAllocationBytes) {
             // Guard against crafted Arrow IPC streams that claim a huge number of rows with
             // minimal body data (e.g. NullType columns have zero-size bodies).
             // Note: this is distinct from TLimitingArrowMemoryPool — that pool limits Arrow's
             // own internal allocations, while rowsValues below is our own allocation via C++ new,
             // which does not go through Arrow's memory pool.
-            constexpr ui64 MaxBatchAllocationBytes = 2_GB;
-            if (static_cast<ui64>(numRows) * static_cast<ui64>(numColumns) * sizeof(TUnversionedValue) > MaxBatchAllocationBytes) {
+            if (static_cast<ui64>(numRows) * static_cast<ui64>(std::max(numColumns, 1)) * sizeof(TUnversionedValue) > static_cast<ui64>(*Options_.MaxAllocationBytes)) {
                 THROW_ERROR_EXCEPTION("Arrow record batch is too large: %v columns x %v rows would allocate more than %v bytes",
                     numColumns,
                     numRows,
-                    MaxBatchAllocationBytes);
+                    *Options_.MaxAllocationBytes);
             }
         }
 
@@ -2114,11 +2113,10 @@ class TArrowParser
     : public IParser
 {
 public:
-    static constexpr i64 DefaultMaxAllocationBytes = 16_GB;
-
-    explicit TArrowParser(IValueConsumer* valueConsumer, const TArrowParserOptions& options = {})
+    explicit TArrowParser(IValueConsumer* valueConsumer, TArrowParserOptions options = {})
         : Listener_(std::make_shared<TListener>(valueConsumer, options))
-        , MemoryPool_(options.EnableMemoryLimit ? DefaultMaxAllocationBytes : std::numeric_limits<int64_t>::max())
+        , Options_(std::move(options))
+        , MemoryPool_(Options_.MaxAllocationBytes.value_or(std::numeric_limits<int64_t>::max()))
         , Decoder_(MakeDecoder())
     { }
 
@@ -2173,13 +2171,21 @@ public:
 private:
     std::shared_ptr<arrow20::ipc::StreamDecoder> MakeDecoder()
     {
-        arrow20::ipc::IpcReadOptions options;
-        options.memory_pool = &MemoryPool_;
-        return std::make_shared<arrow20::ipc::StreamDecoder>(Listener_, options);
+        arrow20::ipc::IpcReadOptions ipcOptions;
+        ipcOptions.memory_pool = &MemoryPool_;
+        if (Options_.MaxAllocationBytes) {
+            // Limit the number of variadic buffers per BinaryView column.
+            // A crafted IPC stream can declare a huge variadic_buffer_count, causing
+            // std::vector<shared_ptr<Buffer>>::resize() to allocate via operator new
+            // (not the memory pool). Cap at MaxAllocationBytes / sizeof(shared_ptr<Buffer>).
+            ipcOptions.max_variadic_buffer_count =
+                *Options_.MaxAllocationBytes / static_cast<int64_t>(sizeof(std::shared_ptr<arrow20::Buffer>));
+        }
+        return std::make_shared<arrow20::ipc::StreamDecoder>(Listener_, ipcOptions);
     }
 
     const std::shared_ptr<TListener> Listener_;
-
+    const TArrowParserOptions Options_;
     TLimitingArrowMemoryPool MemoryPool_;
     std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
     EListenerState LastState_ = EListenerState::Empty;
@@ -2191,7 +2197,7 @@ private:
 
 std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer, const TArrowParserOptions& options)
 {
-    return std::make_unique<TArrowParser>(consumer, options);
+    return std::make_unique<TArrowParser>(consumer, std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

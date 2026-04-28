@@ -781,10 +781,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        // We decided to turn off spilling in Sort nodes for now
-        // Because in current benchmarks we don't have huge amount of data to sort
-        // return !TlsAllocState->IsMemoryYellowZoneEnabled();
-        return true;
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsReadFromChannelFinished() const {

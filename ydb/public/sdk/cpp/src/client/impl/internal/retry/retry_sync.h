@@ -7,7 +7,9 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
+#include <exception>
 #include <memory>
+#include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Sync {
 
@@ -21,13 +23,27 @@ public:
         auto parentSpan = Client_.Impl_->CreateRetryRootSpan();
         auto parentScope = parentSpan ? parentSpan->Activate() : nullptr;
 
-        auto status = ExecuteImpl();
-
-        if (parentSpan) {
-            parentSpan->SetRetryCount(this->RetryNumber_);
-            parentSpan->End(status.GetStatus());
+        try {
+            auto status = ExecuteImpl();
+            if (parentSpan) {
+                parentSpan->SetRetryCount(this->RetryNumber_);
+                parentSpan->End(status.GetStatus());
+            }
+            return status;
+        } catch (...) {
+            if (parentSpan) {
+                parentSpan->SetRetryCount(this->RetryNumber_);
+                try {
+                    std::rethrow_exception(std::current_exception());
+                } catch (const std::exception& e) {
+                    parentSpan->RecordException(typeid(e).name(), e.what());
+                } catch (...) {
+                    parentSpan->RecordException("unknown", "unknown exception");
+                }
+                parentSpan->End(EStatus::CLIENT_INTERNAL_ERROR);
+            }
+            throw;
         }
-        return status;
     }
 
 protected:

@@ -91,15 +91,15 @@ cmake --build . --target otel_tracing_example -j$(nproc)
 В трейсах появятся:
 
 ```
-ydb.RunWithRetry            (INTERNAL)
-├── ydb.Try   attempt=0     (INTERNAL, backoff_ms=0)
+ydb.RunWithRetry                                                              (INTERNAL, ydb.retry.count=N)
+├── ydb.Try                                                                   (INTERNAL)              # первая попытка: ydb.retry.attempt и ydb.retry.backoff_ms отсутствуют
 │   ├── ydb.CreateSession
 │   ├── ydb.ExecuteQuery
-│   └── ydb.Commit          status=ABORTED, error.type=ABORTED, exception event
-├── ydb.Try   attempt=1     (INTERNAL, backoff_ms=...)
-│   └── ...                  status=ABORTED
-└── ydb.Try   attempt=N     (INTERNAL)
-    └── ...                  status=SUCCESS
+│   └── ydb.Commit            db.response.status_code=ABORTED, error.type=ydb_error, exception event
+├── ydb.Try   ydb.retry.attempt=1                                             (INTERNAL, ydb.retry.backoff_ms=...)
+│   └── ...                  db.response.status_code=ABORTED, error.type=ydb_error
+└── ydb.Try   ydb.retry.attempt=N                                             (INTERNAL, ydb.retry.backoff_ms=...)
+    └── ...                  db.response.status_code=SUCCESS
 ```
 
 Для усиления конфликтов поднимите воркеров и операций:

@@ -9,7 +9,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Async {
 
@@ -33,12 +35,27 @@ public:
 
         return this->Promise_.GetFuture().Apply(
             [parentSpan = std::move(parentSpan), self](const auto& f) mutable {
-                auto value = f.GetValue();
-                if (parentSpan) {
-                    parentSpan->SetRetryCount(self->RetryNumber_);
-                    parentSpan->End(value.GetStatus());
+                try {
+                    auto value = f.GetValue();
+                    if (parentSpan) {
+                        parentSpan->SetRetryCount(self->RetryNumber_);
+                        parentSpan->End(value.GetStatus());
+                    }
+                    return value;
+                } catch (...) {
+                    if (parentSpan) {
+                        parentSpan->SetRetryCount(self->RetryNumber_);
+                        try {
+                            std::rethrow_exception(std::current_exception());
+                        } catch (const std::exception& e) {
+                            parentSpan->RecordException(typeid(e).name(), e.what());
+                        } catch (...) {
+                            parentSpan->RecordException("unknown", "unknown exception");
+                        }
+                        parentSpan->End(EStatus::CLIENT_INTERNAL_ERROR);
+                    }
+                    throw;
                 }
-                return value;
             }
         );
     }

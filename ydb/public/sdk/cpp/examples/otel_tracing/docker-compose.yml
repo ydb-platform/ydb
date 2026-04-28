@@ -39,7 +39,7 @@ services:
       - otel-collector
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.110.0
     ports:
       - "4327:4317"
       - "4328:4318"
@@ -50,7 +50,7 @@ services:
       - jaeger
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     ports:
       - "3000:3000"
     environment:

@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category/error_category.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
 #include <util/string/cast.h>
 

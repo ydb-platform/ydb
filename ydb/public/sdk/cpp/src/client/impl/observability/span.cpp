@@ -2,6 +2,7 @@
 
 #include "operation_name.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category/error_category.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H

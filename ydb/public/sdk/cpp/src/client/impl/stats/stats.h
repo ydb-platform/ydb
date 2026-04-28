@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 
-#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category/error_category.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>

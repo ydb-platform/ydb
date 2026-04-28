@@ -1,6 +1,19 @@
 -- Sort Spilling Test: Sort orders by totalprice DESC, compute RANK
--- TPC-H scale 10000: ~150M rows in orders
+-- Uses status filter to reduce to ~1/3 of orders (~50M rows at scale 10000)
 -- RANK() forces full sort by totalprice.
+
+$filtered = (
+select
+    o_orderkey,
+    o_custkey,
+    o_totalprice,
+    o_orderdate,
+    o_orderpriority
+from
+    `column/tpch/s10000/orders`
+where
+    o_orderstatus = 'F'
+);
 
 $ranked = (
 select
@@ -10,33 +23,18 @@ select
     o_orderdate,
     o_orderpriority,
     rank() over (order by o_totalprice desc) as price_rank
-from
-    `column/tpch/s10000/orders`
+from $filtered
 );
 
--- Get top-100 and bottom-100 by rank
-select * from (
-    select
-        o_orderkey,
-        o_custkey,
-        o_totalprice,
-        o_orderdate,
-        o_orderpriority,
-        price_rank
-    from $ranked
-    where price_rank <= 100
-    
-    union all
-    
-    select
-        o_orderkey,
-        o_custkey,
-        o_totalprice,
-        o_orderdate,
-        o_orderpriority,
-        price_rank
-    from $ranked
-    where price_rank > 150000000 - 100  -- bottom 100 for scale 10000
-)
+-- Get top-100 and sample every Nth row
+select
+    o_orderkey,
+    o_custkey,
+    o_totalprice,
+    o_orderdate,
+    o_orderpriority,
+    price_rank
+from $ranked
+where price_rank <= 100 or price_rank % 500000 = 1
 order by price_rank
-limit 200;
+limit 300;

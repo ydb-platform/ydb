@@ -1,17 +1,14 @@
--- Sort Spilling Test: Join lineitem with orders, sort, compute window aggregate
--- TPC-H scale 10000: join produces ~100M+ rows (filtered by date range)
--- Tests sort spilling after a large join.
+-- Sort Spilling Test: Join lineitem with orders, sort, assign row numbers
+-- Date filter reduces to ~1/7 of lineitem. Tests sort spilling after a join.
 
 $joined = (
 select
     l.l_orderkey as l_orderkey,
     l.l_extendedprice as l_extendedprice,
-    l.l_discount as l_discount,
     l.l_shipdate as l_shipdate,
     o.o_orderdate as o_orderdate,
     o.o_totalprice as o_totalprice,
-    o.o_orderpriority as o_orderpriority,
-    sum(l.l_extendedprice * (CAST(1 AS Decimal(12,2)) - l.l_discount)) over w as running_revenue
+    o.o_orderpriority as o_orderpriority
 from
     `column/tpch/s10000/lineitem` as l
 join
@@ -21,15 +18,29 @@ on
 where
     l.l_shipdate >= Date('1995-01-01')
     and l.l_shipdate < Date('1996-01-01')
-window w as (order by o.o_totalprice desc, l.l_shipdate asc
-             rows between unbounded preceding and current row)
 );
 
+$numbered = (
 select
+    l_orderkey,
+    l_extendedprice,
+    l_shipdate,
+    o_orderdate,
+    o_totalprice,
     o_orderpriority,
-    count(*) as cnt,
-    sum(l_extendedprice) as total_price,
-    max(running_revenue) as max_running_revenue
+    row_number() over (order by o_totalprice desc, l_shipdate asc) as rn
 from $joined
-group by o_orderpriority
-order by o_orderpriority;
+);
+
+-- Sample to verify sort order
+select
+    rn,
+    l_orderkey,
+    l_extendedprice,
+    l_shipdate,
+    o_totalprice,
+    o_orderpriority
+from $numbered
+where rn % 1000000 = 1
+order by rn
+limit 200;

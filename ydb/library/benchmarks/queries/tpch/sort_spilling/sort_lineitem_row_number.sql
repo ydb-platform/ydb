@@ -1,6 +1,18 @@
 -- Sort Spilling Test: Sort lineitem by extendedprice DESC, assign row numbers
--- TPC-H scale 10000: ~600M rows in lineitem
+-- Uses returnflag filter to reduce dataset to ~1/3 (~200M rows at scale 10000)
 -- ROW_NUMBER() forces full sort. We then filter to get percentile boundaries.
+
+$filtered = (
+select
+    l_orderkey,
+    l_partkey,
+    l_extendedprice,
+    l_shipdate
+from
+    `column/tpch/s10000/lineitem`
+where
+    l_returnflag = 'R'
+);
 
 $numbered = (
 select
@@ -9,11 +21,10 @@ select
     l_extendedprice,
     l_shipdate,
     row_number() over (order by l_extendedprice desc) as rn
-from
-    `column/tpch/s10000/lineitem`
+from $filtered
 );
 
--- Extract percentile boundaries (every 1% of data)
+-- Extract percentile boundaries
 select
     rn,
     l_orderkey,
@@ -21,6 +32,6 @@ select
     l_extendedprice,
     l_shipdate
 from $numbered
-where rn % 6000000 = 1  -- ~100 rows for scale 10000 (600M / 6M)
+where rn % 2000000 = 1
 order by rn
 limit 200;

@@ -1,6 +1,21 @@
 -- Sort Spilling Test: Sort lineitem by returnflag+shipdate, compute DENSE_RANK
--- TPC-H scale 10000: ~600M rows in lineitem
+-- Uses date filter to reduce to ~1/7 of lineitem.
 -- Tests dense ranking over large dataset with composite sort key.
+
+$filtered = (
+select
+    l_orderkey,
+    l_returnflag,
+    l_linestatus,
+    l_shipdate,
+    l_extendedprice,
+    l_quantity
+from
+    `column/tpch/s10000/lineitem`
+where
+    l_shipdate >= Date('1996-01-01')
+    and l_shipdate < Date('1997-01-01')
+);
 
 $with_rank = (
 select
@@ -11,8 +26,7 @@ select
     l_extendedprice,
     l_quantity,
     dense_rank() over (order by l_returnflag asc, l_shipdate asc) as date_rank
-from
-    `column/tpch/s10000/lineitem`
+from $filtered
 );
 
 -- Aggregate by rank to get daily statistics per returnflag

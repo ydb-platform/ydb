@@ -19,6 +19,10 @@ namespace NMiniKQL {
 
 namespace {
 
+static const TStatKey Sort_Spill_Count("Sort_Spill_Count", true);
+static const TStatKey Sort_Spill_Rows("Sort_Spill_Rows", true);
+static const TStatKey Sort_Spill_Bytes("Sort_Spill_Bytes", true);
+
 struct TKeyInfo {
     NUdf::EDataSlot Slot;
     bool IsOptional;
@@ -737,6 +741,8 @@ public:
             UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
 
             SwitchMode(EOperatingMode::Spilling);
+            MKQL_INC_STAT(Ctx.Stats, Sort_Spill_Count);
+            MKQL_SET_MAX_STAT(Ctx.Stats, Sort_Spill_Bytes, static_cast<i64>(used));
         }
     }
 
@@ -819,6 +825,7 @@ private:
             lastSpilledState.AsyncWriteOperation = std::nullopt;
         } else {
             SealInMemory();
+            MKQL_ADD_STAT(Ctx.Stats, Sort_Spill_Rows, static_cast<i64>(Full.size()));
             if (Full.empty()) {
                 // Nothing to spill
                 SpilledStates.pop_back();

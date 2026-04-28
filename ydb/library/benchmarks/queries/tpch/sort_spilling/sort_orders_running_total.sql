@@ -1,25 +1,25 @@
--- Sort Spilling Test: Sort orders by orderdate, compute running total
--- TPC-H scale 10000: ~150M rows in orders
--- Window function forces full sort by orderdate.
+-- Sort Spilling Test: Sort orders by orderdate, assign row numbers
+-- ~150M rows at scale 10000. ROW_NUMBER forces full sort.
 
-$with_running = (
+$numbered = (
 select
+    o_orderkey,
     o_orderdate,
     o_totalprice,
     o_orderstatus,
-    sum(o_totalprice) over w as running_total
+    row_number() over (order by o_orderdate, o_orderkey) as rn
 from
     `column/tpch/s10000/orders`
-window w as (order by o_orderdate rows between unbounded preceding and current row)
 );
 
--- Aggregate by date to get daily running totals
+-- Sample every Nth row to verify sort order
 select
+    rn,
+    o_orderkey,
     o_orderdate,
-    count(*) as order_count,
-    sum(o_totalprice) as daily_total,
-    max(running_total) as cumulative_total
-from $with_running
-group by o_orderdate
-order by o_orderdate
-limit 100;
+    o_totalprice,
+    o_orderstatus
+from $numbered
+where rn % 1500000 = 1
+order by rn
+limit 200;

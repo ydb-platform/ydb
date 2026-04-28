@@ -1,6 +1,5 @@
 -- Sort Spilling Test: Aggregate lineitem by orderkey, sort by revenue, compute NTILE
--- TPC-H scale 10000: ~150M groups (one per order)
--- Tests sort spilling after aggregation.
+-- ~150M groups (one per order). Tests sort spilling after aggregation.
 
 $agg = (
 select

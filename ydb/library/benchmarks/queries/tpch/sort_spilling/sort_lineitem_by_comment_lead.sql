@@ -1,7 +1,20 @@
 -- Sort Spilling Test: Sort lineitem by comment (string), compute LEAD
--- TPC-H scale 10000: ~600M rows in lineitem
+-- Uses date filter to reduce to ~1/7 of lineitem.
 -- Tests spilling with variable-length string sort keys.
--- l_comment is up to 44 characters.
+-- LEAD only needs 1 next row, so memory usage is bounded.
+
+$filtered = (
+select
+    l_orderkey,
+    l_linenumber,
+    l_comment,
+    l_extendedprice
+from
+    `column/tpch/s10000/lineitem`
+where
+    l_shipdate >= Date('1997-01-01')
+    and l_shipdate < Date('1998-01-01')
+);
 
 $with_lead = (
 select
@@ -11,8 +24,7 @@ select
     l_extendedprice,
     lead(l_extendedprice) over w as next_price,
     lead(l_comment) over w as next_comment
-from
-    `column/tpch/s10000/lineitem`
+from $filtered
 window w as (order by l_comment asc)
 );
 

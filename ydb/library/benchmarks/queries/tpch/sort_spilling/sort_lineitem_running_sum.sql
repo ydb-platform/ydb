@@ -1,26 +1,38 @@
--- Sort Spilling Test: Sort lineitem by shipdate, compute running sum
--- TPC-H scale 10000: ~600M rows in lineitem
+-- Sort Spilling Test: Sort lineitem subset by shipdate, compute running sum
+-- Uses a date filter to reduce dataset to ~1/7 of lineitem (~85M rows at scale 10000)
 -- The window function forces a full WideSort that cannot be replaced with TopSort.
--- After sorting, we aggregate the windowed results to produce a small output.
+
+$filtered = (
+select
+    l_orderkey,
+    l_shipdate,
+    l_quantity,
+    l_extendedprice
+from
+    `column/tpch/s10000/lineitem`
+where
+    l_shipdate >= Date('1997-01-01')
+    and l_shipdate < Date('1998-01-01')
+);
 
 $sorted = (
 select
+    l_orderkey,
     l_shipdate,
     l_quantity,
     l_extendedprice,
-    sum(l_quantity) over w as running_qty,
-    sum(l_extendedprice) over w as running_price
-from
-    `column/tpch/s10000/lineitem`
-window w as (order by l_shipdate rows between unbounded preceding and current row)
+    row_number() over (order by l_shipdate, l_orderkey) as rn
+from $filtered
 );
 
+-- Sample every Nth row to verify sort order without materializing everything
 select
+    rn,
+    l_orderkey,
     l_shipdate,
-    max(running_qty) as max_running_qty,
-    max(running_price) as max_running_price,
-    count(*) as cnt
+    l_quantity,
+    l_extendedprice
 from $sorted
-group by l_shipdate
-order by l_shipdate
-limit 100;
+where rn % 1000000 = 1
+order by rn
+limit 200;

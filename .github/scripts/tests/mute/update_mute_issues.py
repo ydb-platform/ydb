@@ -416,6 +416,17 @@ def generate_github_issue_title_and_body(test_data):
     )
 
 
+def _issue_body_has_mute_list_marker(body: str) -> bool:
+    """Mute workflow issues embed this marker; used when GitHub omits ``stateReason`` on close."""
+    return bool(body) and '<!--mute_list_start-->' in body
+
+
+def _muted_issue_reservation_sort_key(entry: dict):
+    """Prefer **OPEN** over **CLOSED**; then newest by ``createdAt`` (ISO-8601 string from GraphQL)."""
+    open_rank = 1 if entry.get('state') == 'OPEN' else 0
+    created = entry.get('createdAt') or ''
+    return (open_rank, created)
+
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     """Project items → issue index.
@@ -426,6 +437,8 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     - GitHub label ``manual-fast-unmute`` is present (fast-unmute tracking without reopening), or
     - ``stateReason`` is ``COMPLETED`` (manual close as done — still the canonical mute issue until
       closed as not planned or reopened).
+    - ``stateReason`` is empty but the body has the mute list marker (GraphQL sometimes omits
+      ``stateReason`` briefly — same reservation as COMPLETED).
 
     Other closed cards (e.g. ``NOT_PLANNED``) are skipped so mute tooling no longer matches them.
     """
@@ -435,6 +448,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             state = content.get('state')
+            body = content.get('body') or ''
             state_reason = (content.get('stateReason') or '').strip().upper()
             label_nodes = (content.get('labels') or {}).get('nodes') or []
             label_names = [n['name'] for n in label_nodes if n and n.get('name')]
@@ -443,10 +457,11 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
                     pass
                 elif state_reason == 'COMPLETED':
                     pass
+                elif not state_reason and _issue_body_has_mute_list_marker(body):
+                    pass
                 else:
                     continue
 
-            body = content['body']
             parsed = parse_body(body)
 
             status = 'N/A'
@@ -486,6 +501,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['branches'] = parsed.branches
             all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
             all_issues_with_contet[content['id']]['labels'] = label_names
+            all_issues_with_contet[content['id']]['has_mute_body'] = _issue_body_has_mute_list_marker(body)
 
             for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
@@ -528,8 +544,12 @@ def get_muted_tests_from_issues(issues_dict=None):
 
         # Open issues: reserve (test, build_type) for mute/issue automation.
         # Closed as COMPLETED (with or without manual-fast-unmute label yet): same — do not open a duplicate.
+        # Empty stateReason + mute body: treat like COMPLETED (see get_issues_and_tests_from_project).
         if state == 'CLOSED':
-            if state_reason != 'COMPLETED':
+            closed_ok = state_reason == 'COMPLETED' or (
+                not state_reason and info.get('has_mute_body')
+            )
+            if not closed_ok:
                 continue
             for test in info['tests']:
                 key = (test, bt)
@@ -569,14 +589,13 @@ def get_muted_tests_from_issues(issues_dict=None):
                 }
             )
     
-    # Then, for each test, keep only the latest issue (by createdAt)
+    # Then, for each test, keep one issue: prefer OPEN over CLOSED, then newest createdAt.
     for test in muted_tests:
         if len(muted_tests[test]) > 1:
-            # Sort by createdAt (most recent first) and keep only the first one
             muted_tests[test] = sorted(
-                muted_tests[test], 
-                key=lambda x: x['createdAt'], 
-                reverse=True
+                muted_tests[test],
+                key=_muted_issue_reservation_sort_key,
+                reverse=True,
             )[:1]
 
     return muted_tests

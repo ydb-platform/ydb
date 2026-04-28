@@ -38,6 +38,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          fetch-tags: false
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -67,6 +70,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          fetch-tags: false
 
       - name: Setup YDB access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

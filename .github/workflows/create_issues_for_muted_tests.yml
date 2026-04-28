@@ -38,6 +38,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+          fetch-depth: 1
+          fetch-tags: false
           sparse-checkout: |
             .github/config/mute_issue_and_digest_config.json
             .github/scripts/tests/mute/mute_helper.py
@@ -88,6 +90,8 @@ jobs:
         uses: actions/checkout@v4
         with:
             ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+            fetch-depth: 1
+            fetch-tags: false
 
       - name: Resolve and load muted YA from base branch
         run: |

@@ -1,5 +1,6 @@
 #include "abstract.h"
 #include "default.h"
+#include "sub_column.h"
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -31,6 +32,10 @@ bool TReadDataExtractorContainer::DeserializeFromProto(const IReadDataExtractor:
     } else {
         return TBase::DeserializeFromProto(data);
     }
+}
+
+bool TReadDataExtractorContainer::HasSubColumn() const {
+    return Object && Object->GetClassName() == TSubColumnDataExtractor::GetClassNameStatic();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

@@ -21,6 +21,11 @@ items:
   include:
     mode: link
     path: primary-key/toc_p.yaml
+- name: Работа с таблицами
+  href: tables/index.md
+  include:
+    mode: link
+    path: tables/toc_p.yaml
 - name: Вторичные индексы
   href: secondary-indexes.md
 - name: Векторные индексы

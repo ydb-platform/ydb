@@ -93,10 +93,11 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
 
 TRuntimeNode TDqProgramBuilder::DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor,
                                               const TBinaryWideLambda& init, const TTernaryWideLambda& update,
-                                              const TBinaryWideLambda& finish)
+                                              const TBinaryWideLambda& finish, [[maybe_unused]] const TString& guid)
 {
     TRuntimeNode::TList operatorParamsList;
     operatorParamsList.push_back(NewDataLiteral<ui64>(memLimit));
+    operatorParamsList.push_back(NewDataLiteral<NUdf::EDataSlot::String>(guid));
     TRuntimeNode operatorParams = NewTuple(operatorParamsList);
 
     TCallableBuilder callableBuilder =
@@ -107,10 +108,11 @@ TRuntimeNode TDqProgramBuilder::DqHashCombine(TRuntimeNode flow, ui64 memLimit, 
 
 TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool spilling, const TWideLambda& keyExtractor,
                                                 const TBinaryWideLambda& init, const TTernaryWideLambda& update,
-                                                const TBinaryWideLambda& finish)
+                                                const TBinaryWideLambda& finish, [[maybe_unused]] const TString& guid)
 {
     TRuntimeNode::TList operatorParamsList;
     operatorParamsList.push_back(NewDataLiteral<bool>(spilling));
+    operatorParamsList.push_back(NewDataLiteral<NUdf::EDataSlot::String>(guid));
     TRuntimeNode operatorParams = NewTuple(operatorParamsList);
 
     TCallableBuilder callableBuilder =

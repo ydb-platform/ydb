@@ -13,10 +13,10 @@ class TDqProgramBuilder : public TProgramBuilder {
 
     TRuntimeNode DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor,
                                const TBinaryWideLambda& init, const TTernaryWideLambda& update,
-                               const TBinaryWideLambda& finish);
+                               const TBinaryWideLambda& finish, const TString& guid = {});
     TRuntimeNode DqHashAggregate(TRuntimeNode flow, const bool spilling, const TWideLambda& keyExtractor,
                                  const TBinaryWideLambda& init, const TTernaryWideLambda& update,
-                                 const TBinaryWideLambda& finish);
+                                 const TBinaryWideLambda& finish, const TString& guid = {});
 
     TRuntimeNode DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns,

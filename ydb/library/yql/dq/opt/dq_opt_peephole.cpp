@@ -11,6 +11,8 @@
 #include <util/generic/size_literals.h>
 #include <util/generic/bitmap.h>
 
+#include <util/generic/guid.h>
+
 namespace NYql::NDq {
 
 using namespace NYql::NNodes;
@@ -1142,10 +1144,14 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(
 
         auto children = dest.Ptr()->ChildrenList();
         TExprNode::TListType typeInfos;
+        TGUID guid = TGUID::CreateTimebased();
+        TString guidStr = guid.AsGuidString();
+
         typeInfos.push_back(expandTypeAnnFromNode(input));
         typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.KeyExtractor()));
         typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.InitHandler()));
-        typeInfos.push_back(expandTypeAnnFromNode(dest));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.FinishHandler()));
+        typeInfos.push_back(ctx.NewAtom(node.Pos(), guidStr));
         children.push_back(ctx.NewList(node.Pos(), std::move(typeInfos)));
         dest.Ptr()->ChangeChildrenInplace(std::move(children));
     };

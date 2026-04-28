@@ -266,23 +266,28 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         double ErasePB(ui64 lsn = 0, ui32 tabletIdx = 0) {
             if (lsn == 0) {
-                std::vector<ui64> lsns;
-                lsns.reserve(PersistentBuffers.size());
+                std::set<ui64> lsns;
                 for (ui64 lsn : PersistentBuffers | std::views::keys) {
-                    lsns.push_back(lsn);
+                    lsns.insert(lsn);
                 }
                 if (lsns.empty()) {
                     return -1;
                 }
-                const size_t index = RandomNumber(lsns.size());
-                lsn = lsns[index];
+                auto it = lsns.begin();
+                if (it != lsns.end()) {
+                    lsn = *it;
+                    it++;
+                }
+                for (; it != lsns.end() && RandomNumber(2u); it++) {
+                    lsn = *it;
+                }
             }
 
             auto testErase = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
                 Cerr << "erase persistent buffer lsn# " << lsn << "\n";
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds[tabletIdx], lsn, PBCreds[tabletIdx].Generation)),
+                    PBCreds[tabletIdx], lsn)),
                     Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);

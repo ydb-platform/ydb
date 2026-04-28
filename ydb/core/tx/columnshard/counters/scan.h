@@ -161,6 +161,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
+    std::shared_ptr<TSimpleDuplicateFilteringCounters> SimpleDuplicateFilteringCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
 
@@ -175,6 +176,11 @@ public:
     const std::shared_ptr<TDuplicateFilteringCounters>& GetDuplicateFilteringCounters() const {
         AFL_VERIFY(DuplicateFilteringCounters);
         return DuplicateFilteringCounters;
+    }
+
+    const std::shared_ptr<TSimpleDuplicateFilteringCounters>& GetSimpleDuplicateFilteringCounters() const {
+        AFL_VERIFY(SimpleDuplicateFilteringCounters);
+        return SimpleDuplicateFilteringCounters;
     }
 
     void OnNoIndexBlobs(const ui32 recordsCount) const {

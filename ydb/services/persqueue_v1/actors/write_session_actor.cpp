@@ -1247,6 +1247,13 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
         } else {
             w->SetDisableDeduplication(true);
+            if (writeRequest.has_tx()) {
+                const auto sourceId = TStringBuilder()
+                    << "SessionId=" << writeRequest.tx().session()
+                    << "#"
+                    << "TxId=" << writeRequest.tx().id();
+                w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
+            }
         }
         w->SetSeqNo(msg.seq_no());
         w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));

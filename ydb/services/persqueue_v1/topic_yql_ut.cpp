@@ -317,8 +317,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 1000);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED));
             UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "");

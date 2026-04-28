@@ -487,7 +487,7 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
         return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
     }
 
-    return TCollectResult(TIssue("Comparison is not allowed between literals on both sides"));
+    return TCollectResult(TIssue("Comparison is not allowed between literals/variables on both sides"));
 }
 
 TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EMode mode) {

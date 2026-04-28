@@ -188,6 +188,7 @@ ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithBody
 ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithLargeResponseBody
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotApplied
+ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk

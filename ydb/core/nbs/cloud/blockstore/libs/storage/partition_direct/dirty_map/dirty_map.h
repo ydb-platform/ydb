@@ -244,6 +244,7 @@ public:
     // Debug purposes
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToFlush() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;

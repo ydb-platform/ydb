@@ -23,6 +23,27 @@ TString GenerateRandomString(size_t size)
     return result;
 }
 
+void TBaseFixture::AddReadPromise(
+    NThreading::TPromise<TDBGReadBlocksResponse> promise)
+{
+    TGuard<TMutex> guard(ReadMutex);
+    ReadPromises.push_back(std::move(promise));
+}
+
+void TBaseFixture::SetReadResult(TDBGReadBlocksResponse response)
+{
+    TGuard<TMutex> guard(ReadMutex);
+    for (auto& promise: ReadPromises) {
+        promise.SetValue(std::move(response));
+    }
+}
+
+void TBaseFixture::ClearReadPromises()
+{
+    TGuard<TMutex> guard(ReadMutex);
+    ReadPromises.clear();
+}
+
 void TBaseFixture::Init()
 {
     Runtime = std::make_unique<NActors::TTestActorRuntime>();
@@ -52,26 +73,13 @@ void TBaseFixture::Init()
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
-
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
 
-        // TODO сделать полноценную проверку range'ей
-        // range может быть подзапросом (подмножеством) ExpectedRange
-        UNIT_ASSERT_C(
-            ExpectedRange.Contains(range),
-            TStringBuilder() << "range " << range.Print()
-                             << " is not contained in ExpectedRange "
-                             << ExpectedRange.Print());
-
-        // Генерируем данные для всего ExpectedRange один раз (при смене range —
-        // заново)
-        if (!LastGeneratedRange || *LastGeneratedRange != ExpectedRange) {
+        if (RangeData.empty()) {
             RangeData = GenerateRandomString(CopyRangeSize);
-            LastGeneratedRange = ExpectedRange;
         }
 
-        // Копируем только часть данных, соответствующую range
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
         const ui64 sizeBytes = range.Size() * BlockSize;
@@ -79,7 +87,10 @@ void TBaseFixture::Init()
             TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
             guardedSglist.Acquire().Get());
 
-        return ReadPromise.GetFuture();
+        auto readPromise = NewPromise<TDBGReadBlocksResponse>();
+        auto res = readPromise.GetFuture();
+        AddReadPromise(std::move(readPromise));
+        return res;
     };
 
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
@@ -90,34 +101,23 @@ void TBaseFixture::Init()
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(vChunkIndex);
-        Y_UNUSED(hostIndex);
         Y_UNUSED(lsn);
         Y_UNUSED(traceId);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
 
-        // range может быть подзапросом (подмножеством) ExpectedRange
-        UNIT_ASSERT_C(
-            ExpectedRange.Contains(range),
-            TStringBuilder() << "PBuffer range " << range.Print()
-                             << " is not contained in ExpectedRange "
-                             << ExpectedRange.Print());
-
-        // Генерируем данные для всего ExpectedRange один раз (при смене range —
-        // заново)
-        if (!LastGeneratedRange || *LastGeneratedRange != ExpectedRange) {
-            RangeData = GenerateRandomString(CopyRangeSize);
-            LastGeneratedRange = ExpectedRange;
-        }
-
-        // Копируем только часть данных, соответствующую range
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
         const ui64 sizeBytes = range.Size() * BlockSize;
+
         SgListCopy(
             TBlockDataRef{RangeData.data() + offsetBytes, sizeBytes},
             guardedSglist.Acquire().Get());
 
-        return ReadPromise.GetFuture();
+        auto readPromise = NewPromise<TDBGReadBlocksResponse>();
+        auto res = readPromise.GetFuture();
+        AddReadPromise(std::move(readPromise));
+        return res;
     };
 
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
@@ -139,7 +139,12 @@ void TBaseFixture::Init()
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
-        UNIT_ASSERT_VALUES_EQUAL(RangeData, copiedData);
+        const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
+        const ui64 offsetBytes = offsetBlocks * BlockSize;
+        const ui64 sizeBytes = range.Size() * BlockSize;
+        TString expectedData =
+            TString(RangeData.data() + offsetBytes, sizeBytes);
+        UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
 
         return WritePromise.GetFuture();
     };

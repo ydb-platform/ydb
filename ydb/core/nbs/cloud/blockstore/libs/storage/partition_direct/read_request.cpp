@@ -280,7 +280,18 @@ TReadSingleLocationRequestExecutor::GetFuture() const
 void TReadSingleLocationRequestExecutor::OnReadResponse(
     const TDBGReadBlocksResponse& response)
 {
-    if (!HasError(response.Error)) {
+    bool retriesLimitReached = TryNumber == 3;
+    if (!HasError(response.Error) || retriesLimitReached) {
+        if (retriesLimitReached) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TReadSingleLocationRequestExecutor: read failed for range %s",
+                ReadHint.DebugPrint().c_str(),
+                "Error: %s",
+                FormatError(response.Error).c_str());
+        }
+
         Reply(response.Error);
         return;
     }
@@ -288,9 +299,11 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadSingleLocationRequestExecutor: OnReadResponse failed %d trying. "
+        "TReadSingleLocationRequestExecutor: OnReadResponse failed %d trying "
+        "for range %s. "
         "Error: %s",
         TryNumber,
+        ReadHint.DebugPrint().c_str(),
         FormatError(response.Error).c_str());
 
     ++TryNumber;

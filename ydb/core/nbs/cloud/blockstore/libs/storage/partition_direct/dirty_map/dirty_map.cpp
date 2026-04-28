@@ -764,6 +764,15 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
     return result;
 }
 
+TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
+{
+    TStringBuilder result;
+    for (auto lsn: ReadyToFlush) {
+        result << ToString(lsn) << "; ";
+    }
+    return result;
+}
+
 TLocationMask TBlocksDirtyMap::FilterLocations(
     TLocationMask mask,
     TBlockRange64 range) const

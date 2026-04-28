@@ -66,9 +66,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
                 DirtyMap.DebugPrintLockedDDiskRanges());
 
             // Complete reading and rea-arm.
-            ReadPromise.SetValue(
-                TDBGReadBlocksResponse{.Error = MakeError(S_OK)});
-            ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+            SetReadResult({.Error = MakeError(S_OK)});
+            ClearReadPromises();
 
             // expectedRange should be locked for copying.
             UNIT_ASSERT_VALUES_EQUAL(
@@ -192,7 +191,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Read range - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)});
 
         // Data copying should be completed with error.
         UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
@@ -226,8 +225,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
 
         // Read range #0 - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
-        ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+        SetReadResult({.Error = MakeError(S_OK)});
+        ClearReadPromises();
 
         // Stop data copy
         auto stopped = Copier->Stop();
@@ -261,8 +260,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
 
         // Read range #1 - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
-        ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+        SetReadResult({.Error = MakeError(S_OK)});
+        ClearReadPromises();
 
         // Stop data copy
         stopped = Copier->Stop();
@@ -303,7 +302,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         auto complete = Copier->Start();
 
         // Read range - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)});
 
         // Stop after one range
         Copier->Stop();
@@ -332,6 +331,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
     Y_UNIT_TEST_F(ShouldCopyWithWrites, TFixture)
     {
         Init();
+        RangeData = GenerateRandomString(CopyRangeSize * 3);
 
         // Mark DDisk#1 completely fresh.
         DirtyMap.MarkFresh(FreshDDisk, 0);
@@ -368,8 +368,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #0 - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
-        ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+        SetReadResult({.Error = MakeError(S_OK)});
+        ClearReadPromises();
 
         // The reading of range #1 will begin immediately after writing to range
         // #0.
@@ -392,8 +392,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #1 - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
-        ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+        SetReadResult({.Error = MakeError(S_OK)});
+        ClearReadPromises();
 
         // The reading of range #2 will begin immediately after writing to range
         // #1.
@@ -415,8 +415,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             flushHints.DebugPrint());
 
         // Read range #2 - OK.
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
-        ReadPromise = NewPromise<TDBGReadBlocksResponse>();
+        SetReadResult({.Error = MakeError(S_OK)});
+        ClearReadPromises();
 
         // Will stop after writing range #2.
         Copier->Stop();

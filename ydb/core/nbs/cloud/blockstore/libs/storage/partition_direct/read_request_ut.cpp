@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
@@ -61,6 +61,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         const TBlockRange64 range = TBlockRange64::WithLength(10, 100);
         ExpectedRange = range;
+        RangeData = GenerateRandomString(ExpectedRange.Size() * BlockSize);
 
         auto readHint = DirtyMap.MakeReadHint(range);
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
@@ -68,6 +69,10 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest = std::make_shared<TReadBlocksLocalRequest>(
             TRequestHeaders{.RequestId = 1, .Range = range});
+        TSgList sglist;
+        TString readBuffer(RangeData.size(), '\0');
+        sglist.push_back(TBlockDataRef{readBuffer.data(), readBuffer.size()});
+        originalRequest->Sglist = TGuardedSgList(std::move(sglist));
 
         auto readRequest = std::make_shared<TReadRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -81,10 +86,12 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        ReadPromise.SetValue({.Error = MakeError(S_OK)});
+        SetReadResult({.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        UNIT_ASSERT_VALUES_EQUAL(RangeData, readBuffer);
     }
 }
 

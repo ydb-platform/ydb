@@ -110,6 +110,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/dq
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto

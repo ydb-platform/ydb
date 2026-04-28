@@ -24,7 +24,7 @@ using NYql::NDq::BuildAtom;
 /*
  * Collects EquiJoin inputs with statistics for cost based optimization
  */
-bool DqCollectJoinRelationsWithStats(
+bool KqpCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TKqpStatsStore& kqpStats,
     const TCoEquiJoin& equiJoin,
@@ -502,12 +502,10 @@ private:
                     }
                 }
 
-                if (!lhsShuffled) {
-                    joinNode->ShuffleLeftSideByOrderingIdx = leftJoinKeysOrderingIdx;
-                }
-                if (!rhsShuffled) {
-                    joinNode->ShuffleRightSideByOrderingIdx = rightJoinKeysOrderingIdx;
-                }
+                joinNode->ShuffleLeftSideByOrderingIdx = lhsShuffled
+                    ? TJoinOptimizerNodeInternal::DontShuffle : leftJoinKeysOrderingIdx;
+                joinNode->ShuffleRightSideByOrderingIdx = rhsShuffled
+                    ? TJoinOptimizerNodeInternal::DontShuffle : rightJoinKeysOrderingIdx;
 
                 joinNode->Stats.LogicalOrderings.SetOrdering(leftJoinKeysOrderingIdx);
 
@@ -630,7 +628,7 @@ void CollectInterestingOrderingsFromJoinTree(
     YQL_CLOG(TRACE, CoreDq) << "Collected EquiJoin interesting ordering idxes: " << JoinSeq(", ", interestingOrderingIdxes);
 }
 
-TExprBase DqOptimizeEquiJoinWithCosts(
+TExprBase KqpOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
@@ -643,7 +641,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
 ) {
     int dummyEquiJoinCounter = 0;
-    return DqOptimizeEquiJoinWithCosts(
+    return KqpOptimizeEquiJoinWithCosts(
         node,
         ctx,
         typesCtx,
@@ -658,7 +656,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     );
 }
 
-TExprBase DqOptimizeEquiJoinWithCosts(
+TExprBase KqpOptimizeEquiJoinWithCosts(
     const TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
@@ -698,7 +696,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // The arguments of the EquiJoin are 1..n-2, n-2 is the  join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
-    if (!DqCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, providerCollect)){
+    if (!KqpCollectJoinRelationsWithStats(rels, kqpStats, equiJoin, providerCollect)){
         ctx.AddWarning(
             YqlIssue(ctx.GetPosition(equiJoin.Pos()), TIssuesIds::CBO_MISSING_TABLE_STATS,
             "Cost Based Optimizer could not be applied to this query: couldn't load statistics"

@@ -233,6 +233,12 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
             return config->RetryInterval;
         }
     }
+
+    // Temporary workaround
+    if (errorResponse.GetError().ContainsText("Cannot resolve multiproxy target cluster")) {
+        return TDuration::Seconds(60);
+    }
+
     return Nothing();
 }
 
@@ -250,6 +256,8 @@ bool IsRetriable(const TErrorResponse& errorResponse)
 bool IsRetriable(const std::exception& ex)
 {
     if (dynamic_cast<const TRequestRetriesTimeout*>(&ex)) {
+        return false;
+    } else if (dynamic_cast<const TInputStreamAbortedError*>(&ex)) {
         return false;
     }
     return true;

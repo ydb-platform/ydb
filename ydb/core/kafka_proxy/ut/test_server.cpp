@@ -47,8 +47,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     }
 
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(settings.EnableQuoting);
-    if (!settings.EnableQuoting)
+    if (!settings.EnableQuoting) {
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableReadQuoting(false);
+    }
 
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
     appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(settings.EnableQuoting);
@@ -79,10 +80,14 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     MeteringFile = MakeHolder<TTempFileHandle>();
     appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
+    auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
     if (secure) {
         appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        securityConfig.SetEnforceUserTokenRequirement(true);
     }
+
+    securityConfig.SetHideAuthenticationFailureReasons(settings.HideAuthenticationFailureReasons);
+
     KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
     KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);

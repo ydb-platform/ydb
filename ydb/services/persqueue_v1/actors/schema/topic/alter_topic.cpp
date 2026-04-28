@@ -6,7 +6,9 @@
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
-class TAlterTopicActor : public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest> {
+namespace {
+
+class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest> {
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
 
 public:
@@ -34,10 +36,9 @@ public:
 private:
     void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
+            ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::AlterTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::AlterTopicResponse());
         }
     }
 
@@ -49,6 +50,8 @@ private:
         }
     }
 };
+
+} // namespace
     
 NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request) {
     return new TAlterTopicActor(request);

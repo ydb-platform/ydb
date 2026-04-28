@@ -190,8 +190,38 @@ namespace NKikimr::NStorage {
         auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
-                NDDisk::TDDiskConfig{}, AppData()->Counters));
+            NDDisk::TDDiskConfig ddiskConfig{};
+            NDDisk::TPersistentBufferFormat pbufferFormat{};
+            if (Cfg->DDiskConfig) {
+                if (Cfg->DDiskConfig->HasUseSQPoll()) {
+                    ddiskConfig.UseSQPoll = Cfg->DDiskConfig->GetUseSQPoll();
+                }
+                if (Cfg->DDiskConfig->HasUseIOPoll()) {
+                    ddiskConfig.UseIOPoll = Cfg->DDiskConfig->GetUseIOPoll();
+                }
+                if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
+                    ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
+                }
+            }
+            if (Cfg->PBufferConfig) {
+                if (Cfg->PBufferConfig->HasInitChunks()) {
+                    pbufferFormat.InitChunks = Cfg->PBufferConfig->GetInitChunks();
+                }
+                if (Cfg->PBufferConfig->HasMaxInMemoryCache()) {
+                    pbufferFormat.MaxInMemoryCache = Cfg->PBufferConfig->GetMaxInMemoryCache();
+                }
+                if (Cfg->PBufferConfig->HasMaxChunkRestoreInflight()) {
+                    pbufferFormat.MaxChunkRestoreInflight = Cfg->PBufferConfig->GetMaxChunkRestoreInflight();
+                }
+                if (Cfg->PBufferConfig->HasUpdateFreeSpaceInfoMilliseconds()) {
+                    pbufferFormat.UpdateFreeSpaceInfoMilliseconds = Cfg->PBufferConfig->GetUpdateFreeSpaceInfoMilliseconds();
+                }
+                if (Cfg->PBufferConfig->HasPerTabletStorageLimit()) {
+                    pbufferFormat.PerTabletStorageLimit = Cfg->PBufferConfig->GetPerTabletStorageLimit();
+                }
+            }
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
+                std::move(ddiskConfig), AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -219,6 +249,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+            vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
@@ -245,6 +276,7 @@ namespace NKikimr::NStorage {
 
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
+            vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 

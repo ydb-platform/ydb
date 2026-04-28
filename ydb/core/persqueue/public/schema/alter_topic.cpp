@@ -1,11 +1,11 @@
-#include "schema_int.h"
+#include "alter_topic_operation.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -239,7 +239,7 @@ TResult ApplyChangesInt(
     pqTabletConfig->ClearConsumers();
 
     for (const auto& rr : consumers) {
-        auto result = ProcessAddConsumer(
+        auto result = AddConsumer(
             pqTabletConfig,
             rr.second,
             supportedClientServiceTypes,
@@ -260,7 +260,7 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
+    return {};
 }
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
@@ -343,8 +343,10 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
 
     return TResult();
 }
-    
-struct TAlterTopicStrategy : public ITopicAltererStrategy {
+
+namespace {
+
+struct TAlterTopicStrategy: public IAlterTopicStrategy {
     TAlterTopicStrategy(Ydb::Topic::AlterTopicRequest&& request)
         : Request(std::move(request))
     {
@@ -355,26 +357,29 @@ struct TAlterTopicStrategy : public ITopicAltererStrategy {
     }
 
     TResult ApplyChanges(
+        const NDescriber::TTopicInfo& topicInfo,
+        NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        return ApplyChangesInt(Request, targetConfig, isCdcStream);
+        CopyConfig(targetConfig, sourceConfig);
+
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
     }
 
     Ydb::Topic::AlterTopicRequest Request;
 };
 
+} // namespace
+
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
-    return CreateTopicAlterer(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC, TTopicAltererSettings{
-        .ParentId = parentId,
+    return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,
-        .IsCdcStreamCompatible = true,
     });
 }
 

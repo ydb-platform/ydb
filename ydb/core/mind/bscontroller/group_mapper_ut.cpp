@@ -1341,6 +1341,82 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         }
     }
 
+    Y_UNIT_TEST(ManualTargetPDiskConstraint) {
+        TTestContext context(1, 1, 12, 1, 2);
+        const auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block);
+
+        TGroupMapper mapper(geometry);
+        context.PopulateGroupMapper(mapper, 8);
+
+        TGroupMapper::TGroupDefinition group;
+        const ui32 groupId = context.AllocateGroup(mapper, group);
+
+        struct TPlacement {
+            TVDiskIdShort VDisk;
+            TPDiskId PDisk;
+        };
+
+        TVector<TPlacement> placements;
+        TSet<ui32> usedNodes;
+        TGroupMapper::Traverse(group, [&](TVDiskIdShort vdiskId, TPDiskId pdiskId) {
+            placements.push_back({vdiskId, pdiskId});
+            usedNodes.insert(pdiskId.NodeId);
+        });
+
+        const size_t expectedSlots = geometry.GetNumFailRealms()
+            * geometry.GetNumFailDomainsPerFailRealm()
+            * geometry.GetNumVDisksPerFailDomain();
+        UNIT_ASSERT_VALUES_EQUAL(placements.size(), expectedSlots);
+
+        const auto source = placements.front();
+        const auto conflicting = placements[1];
+
+        std::optional<TPDiskId> invalidTarget;
+        std::optional<TPDiskId> validTarget;
+        context.IteratePDisks([&](const TPDiskId& pdiskId, const auto&) {
+            if (!invalidTarget && pdiskId.NodeId == conflicting.PDisk.NodeId && pdiskId != conflicting.PDisk) {
+                invalidTarget = pdiskId;
+            }
+            if (!validTarget && !usedNodes.count(pdiskId.NodeId)) {
+                validTarget = pdiskId;
+            }
+        });
+
+        UNIT_ASSERT(invalidTarget);
+        UNIT_ASSERT(validTarget);
+
+        auto allocateWithTarget = [&](TPDiskId target) {
+            TGroupMapper localMapper(geometry);
+            context.PopulateGroupMapper(localMapper, 8);
+
+            auto candidate = group;
+            candidate[source.VDisk.FailRealm][source.VDisk.FailDomain][source.VDisk.VDisk] = TPDiskId();
+
+            TGroupMapper::TGroupConstraintsDefinition constraints;
+            UNIT_ASSERT(geometry.ResizeGroup(constraints));
+            constraints[source.VDisk.FailRealm][source.VDisk.FailDomain][source.VDisk.VDisk].PDiskId = target;
+
+            THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
+            replacedDisks.emplace(source.VDisk, source.PDisk);
+
+            TGroupMapperError error;
+            const bool success = localMapper.AllocateGroup(groupId, candidate, constraints, replacedDisks, {}, 0, 0, false,
+                TBridgePileId(), error);
+            return std::make_pair(success, candidate);
+        };
+
+        {
+            auto [success, candidate] = allocateWithTarget(*validTarget);
+            UNIT_ASSERT_C(success, "expected exact target PDisk to be allocatable");
+            UNIT_ASSERT_VALUES_EQUAL(candidate[source.VDisk.FailRealm][source.VDisk.FailDomain][source.VDisk.VDisk], *validTarget);
+        }
+
+        {
+            auto [success, candidate] = allocateWithTarget(*invalidTarget);
+            UNIT_ASSERT_C(!success, "target on an already occupied node must be rejected");
+        }
+    }
+
     Y_UNIT_TEST(SanitizeGroupTest3dc) {
         const ui32 numDataCenters = 3;
         const ui32 numRacks = 5;

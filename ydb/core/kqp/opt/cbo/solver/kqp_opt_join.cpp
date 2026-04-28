@@ -53,7 +53,7 @@ NYql::NDq::TEquiJoinCallbacks MakeCallbacks(TKqpStatsStore& kqpStats, const TOpt
 
 } // namespace
 
-NYql::NNodes::TExprBase DqRewriteEquiJoin(
+NYql::NNodes::TExprBase KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     EHashJoinMode mode,
     bool useCBO,
@@ -63,10 +63,10 @@ NYql::NNodes::TExprBase DqRewriteEquiJoin(
     const TOptimizerHints& kqpHints)
 {
     int dummyJoinCounter = 0;
-    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, kqpStats, dummyJoinCounter, kqpHints);
+    return KqpRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, kqpStats, dummyJoinCounter, kqpHints);
 }
 
-NYql::NNodes::TExprBase DqRewriteEquiJoin(
+NYql::NNodes::TExprBase KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     EHashJoinMode mode,
     bool useCBO,

@@ -2,6 +2,7 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 #include "sql_group_by.h"
+#include "sql_select_window.h"
 #include "sql_values.h"
 #include "sql_match_recognize.h"
 
@@ -1130,7 +1131,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
             Ctx_.Error() << "WINDOW is not allowed in streaming queries";
             return nullptr;
         }
-        if (!WindowClause(node.GetBlock13().GetRule_window_clause1(), windowSpec)) {
+        if (!TSqlWindow(*this).Build(node.GetBlock13().GetRule_window_clause1(), windowSpec)) {
             return nullptr;
         }
         Ctx_.IncrementMonCounter("sql_features", "WindowClause");
@@ -1198,33 +1199,6 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
     return BuildSelectCore(Ctx_, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy, having,
                            std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
-}
-
-bool TSqlSelect::WindowDefinition(const TRule_window_definition& rule, TWinSpecs& winSpecs) {
-    const TString windowName = Id(rule.GetRule_new_window_name1().GetRule_window_name1().GetRule_an_id_window1(), *this);
-    if (winSpecs.contains(windowName)) {
-        Ctx_.Error() << "Unable to declare window with same name: " << windowName;
-        return false;
-    }
-    auto windowSpec = WindowSpecification(rule.GetRule_window_specification3().GetRule_window_specification_details2());
-    if (!windowSpec) {
-        return false;
-    }
-    winSpecs.emplace(windowName, std::move(windowSpec));
-    return true;
-}
-
-bool TSqlSelect::WindowClause(const TRule_window_clause& rule, TWinSpecs& winSpecs) {
-    auto windowList = rule.GetRule_window_definition_list2();
-    if (!WindowDefinition(windowList.GetRule_window_definition1(), winSpecs)) {
-        return false;
-    }
-    for (auto& block : windowList.GetBlock2()) {
-        if (!WindowDefinition(block.GetRule_window_definition2(), winSpecs)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy) {

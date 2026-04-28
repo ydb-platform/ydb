@@ -65,6 +65,15 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
+
 {% endlist %}
 
 ## Working with sessions {#session}
@@ -133,6 +142,15 @@ To start working with coordination nodes, a client must establish a session with
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
 {% endlist %}
 
 ### Session control {#session-control}
@@ -152,6 +170,12 @@ It's important for the client application to monitor the session state, as it ca
 - Python
 
   In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster after failures. Use a context manager (`with` or `async with`) to ensure the session is closed when leaving the block. When working with semaphores through a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is released automatically when leaving the block, and the session is closed when the context exits.
+
+- JavaScript
+
+  In the JavaScript SDK, you can use `session.signal` to monitor session lifetime: it is aborted when the session is closed or expires. The SDK handles transport-level errors and reconnects to the service, attempting to restore the session when possible. This means the client only needs to watch the session signal and avoid any operations once the session is closed or expired.
+
+  For long-running applications, the JavaScript SDK provides a recommended pattern to automatically obtain a new session when the previous one is lost: `for await (session of client.openSession()) { session.signal }`
 
 {% endlist %}
 
@@ -226,6 +250,16 @@ When creating a semaphore, you can specify its limit. The limit determines the m
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
 
 {% endlist %}
 
@@ -320,6 +354,15 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
 {% endlist %}
 
 The taken value of an acquired semaphore can be decreased (but not increased) by calling the `AcquireSemaphore` method again with a smaller value.
@@ -378,6 +421,16 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
 
 {% endlist %}
 
@@ -464,6 +517,16 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
 {% endlist %}
 
 ### Releasing a semaphore {#release-semaphore}
@@ -522,6 +585,14 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  To release a semaphore acquired within a session, call `release()` on the `Lease` object. If you use `await using`, the lease is released automatically when leaving the scope.
+
+  ```javascript
+  await lease.release();
+  ```
 
 {% endlist %}
 

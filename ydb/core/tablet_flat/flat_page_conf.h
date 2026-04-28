@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bloom_filter_defaults.h"
 #include "flat_page_iface.h"
 #include "flat_row_eggs.h"
 
@@ -88,7 +89,11 @@ namespace NPage {
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
         ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */
-        TVector<ui32> ByKeyFilterPrefixes; /* Bloom filters on PK prefixes of these lengths */
+        struct TByKeyFilterPrefix {
+            ui32 PrefixLength = 0;
+            double FalsePositiveProbability = DefaultBloomFilterFpp;
+        };
+        TVector<TByKeyFilterPrefix> ByKeyFilterPrefixes;
         ui64 MaxRows = 0;               /* Used to set up bloom filter size */
         ui64 SliceSize = Max<ui64>();   /* Data size for slice creation */
         ui64 MainPageCollectionEdge = Max<ui64>();

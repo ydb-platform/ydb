@@ -48,6 +48,7 @@ struct TStorageGroupInfo {
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
     NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;
+    EGroupState Status = EGroupState::Active;
 
     TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStorageGroupId id);
     TStorageGroupInfo(const TStorageGroupInfo&) = delete;
@@ -67,6 +68,7 @@ struct TStorageGroupInfo {
     bool IsBalanceByIOPS() const;
     bool IsBalanceByThroughput() const;
     bool IsBalanceBySize() const;
+    bool IsActive() const;
 };
 
 }

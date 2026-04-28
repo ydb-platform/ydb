@@ -109,7 +109,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     activities.SetLastCompletedStep(Pipeline.GetLastCompleteTx().Step);
     activities.SetUtmostCompletedTx(Pipeline.GetUtmostCompleteTx().TxId);
     activities.SetUtmostCompletedStep(Pipeline.GetUtmostCompleteTx().Step);
-    activities.SetDataTxCompleteLag(GetDataTxCompleteLag().MilliSeconds());
+    activities.SetDataTxCompleteLag(GetTxCompleteLag().MilliSeconds());
     activities.SetScanTxCompleteLag(GetScanTxCompleteLag().MilliSeconds());
 
     auto& pcfg = *response->Record.MutablePipelineConfig();

@@ -1,5 +1,6 @@
 #include "kqp_opt_impl.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 

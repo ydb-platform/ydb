@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -12,13 +13,24 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
+void TPredicateFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(PredicateFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), filteredRows, source->GetReservedMemory());
+}
+
+TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
             true));
+    const ui32 filteredRows = filter.GetFilteredCount().value_or(source->GetRecordsCount());
     source->MutableStageData().AddFilter(filter);
+    ReportTracing(source, step, filteredRows);
     return true;
 }
 
@@ -56,16 +68,31 @@ void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& sourc
     AFL_VERIFY(source->GetRecordsCount() > 0)("error", "source has no records");
 }
 
+void TConflictDetector::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(ConflictDetector, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TConflictDetector::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     VerifyConflictingPortion(source);
     // it is not empty (not filtered everything out by other filters) and conflicting, so we must mark the conflict here
     AFL_VERIFY(source->AddTxConflict());
+    ReportTracing(source, step);
     return true;
 }
 
+void TSnapshotFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(SnapshotFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto filter =
         MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
                                std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
@@ -73,20 +100,31 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
             source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
+            ReportTracing(source, step);
             return true;
         }
     }
     source->MutableStageData().AddFilter(filter);
+    ReportTracing(source, step);
     return true;
 }
 
+void TDeletionFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(DeletionFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     if (!source->GetStageData().GetTable().HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
+        ReportTracing(source, step);
         return true;
     }
     auto filterTable = source->GetStageData().GetTable().ToTable(std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }));
     if (!filterTable) {
+        ReportTracing(source, step);
         return true;
     }
     AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
@@ -98,51 +136,72 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(
         }
     }
     source->MutableStageData().AddFilter(filter);
+    ReportTracing(source, step);
     return true;
 }
 
+void TShardingFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(ShardingFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TShardingFilter::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
     const std::set<ui32> ids = source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdsSetVerified(shardingInfo->GetColumnNames());
     auto filter =
         shardingInfo->GetFilter(source->GetStageData().GetTable().ToTable(ids, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
+    ReportTracing(source, step);
     return true;
+}
+
+void TFilterCutLimit::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(FilterCutLimit, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
+    ReportTracing(source, step);
     return true;
 }
 
-TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sacc"));
-    if (source->HasPortionAccessor()) {
-        return true;
-    }
-    return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
+void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes, const ui64 columnBlobBytes) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(DetectInMemFlag, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, columnBlobBytes, columnRawBytes, source->IsSourceInMemory(), source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     if (!source->NeedPortionData()) {
         source->SetSourceInMemory(true);
         source->MutableAs<IDataSource>()->InitUsedRawBytes();
     }
     if (source->HasSourceInMemoryFlag()) {
+        ReportTracing(source, step, 0UL, 0UL);
         return true;
     }
+    ui64 columnRawBytes = 0;
+    ui64 columnBlobBytes = 0;
     if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
         !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
+        columnRawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
+        columnBlobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
         source->SetSourceInMemory(
-            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+            columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }
+    ReportTracing(source, step, columnRawBytes, columnBlobBytes);
     return true;
 }
 
@@ -159,6 +218,10 @@ public:
         , Step(step) {
     }
 
+    virtual ui64 GetSourceId() const override {
+        return Source ? Source->GetDeprecatedPortionId() : 0;
+    }
+
     virtual bool DoApply(IDataReader& indexedDataRead) override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         Source->MutableAs<IDataSource>()->SetCursor(std::move(Step));
@@ -171,29 +234,60 @@ public:
 
 }   // namespace
 
+void TUpdateAggregatedMemoryStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(UpdateAggregatedMemory, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TUpdateAggregatedMemoryStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     if (auto* portionSource = source->MutableOptionalAs<TPortionDataSource>()) {
         portionSource->ActualizeAggregatedMemoryGuards();
     }
+    ReportTracing(source, step);
     return true;
+}
+
+void TInitializeSourceStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(InitializeSource, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TInitializeSourceStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto* simpleSource = source->MutableAs<IDataSource>();
     simpleSource->InitializeProcessing(source);
+    ReportTracing(source, step);
     return true;
+}
+
+void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     source->MutableAs<IDataSource>()->InitUsedRawBytes();
+    ReportTracing(source, step);
     return true;
 }
 
+void TStepAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(AggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     std::vector<std::unique_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
@@ -205,16 +299,25 @@ TConclusion<bool> TStepAggregationSources::DoExecuteInplace(
         return conclusion;
     }
     source->BuildStageResult(source);
+    ReportTracing(source, step);
     return true;
 }
 
+void TCleanAggregationSources::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(CleanAggregationSources, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
 TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     AFL_VERIFY(source->GetType() == IDataSource::EType::SimpleAggregation);
     auto* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
     for (auto&& i : aggrSource->GetSources()) {
         i->MutableAs<IDataSource>()->ClearResult();
     }
+    ReportTracing(source, step);
     return true;
 }
 
@@ -227,10 +330,29 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
     return false;
 }
 
+void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
+    const TDuration executionDurationMs) const {
+    if (!LWPROBE_ENABLED(BuildResult) && !NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
+        return;
+    }
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    ui32 pageFilteredRowsCount = RecordsCount;
+    const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
+    if (notAppliedFilter && !notAppliedFilter->IsTotalAllowFilter()) {
+        const auto pageFilter = notAppliedFilter->Slice(StartIndex, RecordsCount);
+        pageFilteredRowsCount = pageFilter.GetFilteredCount().value_or(RecordsCount);
+    }
+    LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, executionDurationMs, pageFilteredRowsCount, RecordsCount, source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
+}
+
 std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
     if (IsPageSkippedByFilter(source)) {
         return nullptr;
     }
+    auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
@@ -248,6 +370,7 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TMonotonic startExecution = TMonotonic::Now();
     auto context = source->GetContext();
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
@@ -259,14 +382,28 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
+    ReportTracing(source, step, TMonotonic::Now() - startExecution);
+    const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
-            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()));
+            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(),
+            blobBytes, sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(),
+            source->GetReservedMemory()));
     return false;
 }
 
+void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
+    const TDuration executionDurationMs) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, executionDurationMs, source->GetFilteredRowsCount(), source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
+}
+
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TMonotonic startExecution = TMonotonic::Now();
     const auto context = source->GetContext();
     NCommon::TFetchingScriptBuilder acc(*context);
     if (source->IsSourceInMemory()) {
@@ -289,12 +426,20 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
+    ReportTracing(source, step, TMonotonic::Now() - startExecution);
     if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
         return cursor.Execute(source);
     } else {
         return true;
     }
+}
+
+void TDuplicateFilter::TFilterSubscriber::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(Deduplication, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), Step.GetStepIndex(),
+            Step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
@@ -306,6 +451,9 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         }
         AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                          "source", source->GetRecordsCount());
+
+        ReportTracing(source);
+
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }

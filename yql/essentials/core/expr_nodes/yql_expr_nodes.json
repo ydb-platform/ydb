@@ -1581,6 +1581,15 @@
             "Match": {"Type": "Callable", "Name": "WinOnGroups"}
         },
         {
+            "Name": "TCoWinFilter",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinFilter"},
+            "Children": [
+                {"Index": 1, "Name": "ItemType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Predicate", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TCoCalcOverWindowBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},

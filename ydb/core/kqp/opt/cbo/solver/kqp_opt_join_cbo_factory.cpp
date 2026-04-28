@@ -6,7 +6,7 @@
 namespace NKikimr::NKqp {
 
 namespace {
-class TDqOptimizerFactory : public IOptimizerFactory {
+class TKqpOptimizerFactory : public IOptimizerFactory {
 public:
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, NYql::TExprContext& ectx, const TCBOSettings& settings) const override {
       return IOptimizerNew::TPtr(MakeNativeOptimizerNew(pctx, settings, ectx, false, nullptr));
@@ -19,7 +19,7 @@ public:
 }
 
 IOptimizerFactory::TPtr MakeCBOOptimizerFactory() {
-    return std::make_shared<TDqOptimizerFactory>();
+    return std::make_shared<TKqpOptimizerFactory>();
 }
 
 }

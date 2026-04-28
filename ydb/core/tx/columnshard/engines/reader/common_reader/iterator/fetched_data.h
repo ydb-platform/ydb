@@ -275,6 +275,13 @@ public:
         return !!ChunkToReply;
     }
 
+    ui32 GetResultChunkRowsCount() const {
+        if (!ChunkToReply || !ChunkToReply->HasData()) {
+            return 0;
+        }
+        return ChunkToReply->GetTable()->num_rows();
+    }
+
     std::optional<TSourceChunkToReply> ExtractResultChunk() {
         AFL_VERIFY(!!ChunkToReply);
         auto result = std::move(*ChunkToReply);

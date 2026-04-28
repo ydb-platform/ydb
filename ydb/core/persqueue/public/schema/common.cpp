@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -11,6 +12,25 @@
 #include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr::NPQ::NSchema {
+
+std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
+    try {
+        return NKikimr::NGRpcService::SplitPath(fullName);
+    } catch (const std::exception &ex) {
+        return {};
+    }
+}
+
+void CopyConfig(
+    NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+) {
+    targetConfig.CopyFrom(sourceConfig);
+
+    // keep previous values or set in ModifyPersqueueConfig
+    targetConfig.ClearTotalGroupCount();
+    targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+}
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
@@ -44,7 +64,7 @@ std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeri
 
 TResult FillMeteringMode(
     NKikimrPQ::TPQTabletConfig& config,
-    Ydb::Topic::MeteringMode mode, 
+    Ydb::Topic::MeteringMode mode,
     EOperation operation)
 {
     bool meteringEnabled = AppData()->PQConfig.GetBillingMeteringConfig().GetEnabled();
@@ -160,7 +180,7 @@ TResult ProcessTopicAttributes(
                     if (ms > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
                         return {Ydb::StatusIds::BAD_REQUEST,
                             TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << ms <<
-                            ") must be less then default limit for database " <<
+                            ") must be less than default limit for database " <<
                             DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS};
                     }
                     if (ms > 0) {
@@ -240,7 +260,7 @@ TClientServiceTypes GetSupportedClientServiceTypes() {
     return serviceTypes;
 }
 
-TResult ProcessAddConsumer(
+TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,
     const TClientServiceTypes& supportedClientServiceTypes,
@@ -256,6 +276,10 @@ TResult ProcessAddConsumer(
     }
     if (consumerName.empty()) {
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "consumer with empty name is forbidden"};
+    }
+    if (consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER && !config->GetEnableCompactification()) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot add service consumer '" << NPQ::CLIENTID_COMPACTION_CONSUMER 
+            << " to a topic without compactification enabled"};
     }
 
     ::NKikimrPQ::TPQTabletConfig_TConsumer* consumer = config->AddConsumers();
@@ -315,7 +339,7 @@ TResult ProcessAddConsumer(
         } else if (attrName == "_service_type") {
             if (!attrValue.empty()) {
                 if (!supportedClientServiceTypes.contains(attrValue)) {
-                    return {Ydb::StatusIds::BAD_REQUEST, 
+                    return {Ydb::StatusIds::BAD_REQUEST,
                         TStringBuilder() << "Unknown _service_type '" << attrValue << "' for consumer '" << consumerConfig.name() << "'"};
                 }
                 serviceType = attrValue;
@@ -387,5 +411,5 @@ TResult ProcessAddConsumer(
 
     return TResult();
 }
-    
+
 } // namespace NKikimr::NPQ::NSchema

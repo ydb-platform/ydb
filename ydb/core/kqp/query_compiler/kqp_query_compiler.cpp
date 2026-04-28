@@ -1589,10 +1589,8 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
-        // In runtime, number of tasks with Sources is limited by 2x of node count
-        // We prepare a lot of partitions and distribute them between these tasks
-        // Constraint of 1 task per partition is NOT valid anymore
-        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(0);    // 0 - unlimited
+
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;

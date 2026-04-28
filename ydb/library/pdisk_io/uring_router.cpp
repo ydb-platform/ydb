@@ -194,8 +194,14 @@ public:
                     // that MSAN cannot observe.  Mark the iov as initialized so that
                     // subsequent reads from the buffer do not trigger false
                     // use-of-uninitialized-value reports.
-                    if (op->OperationType == TUringOperationBase::EREAD && cqe->res > 0) {
-                        NSan::Unpoison(op->Iov.iov_base, static_cast<size_t>(cqe->res));
+                    if constexpr (NSan::MSanIsOn()) {
+                        if (op->OperationType == TUringOperationBase::EREAD && cqe->res > 0) {
+                            size_t unpoisonSize = static_cast<size_t>(cqe->res);
+                            if (unpoisonSize > op->Iov.iov_len) {
+                                unpoisonSize = op->Iov.iov_len;
+                            }
+                            NSan::Unpoison(op->Iov.iov_base, unpoisonSize);
+                        }
                     }
                     op->OnComplete(Owner.ActorSystem);
                 }

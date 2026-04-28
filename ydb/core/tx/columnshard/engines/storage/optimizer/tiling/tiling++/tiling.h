@@ -57,8 +57,10 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
     void DoAddPortion(typename TPortion::TConstPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
+                // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
+                return;
             case NPortion::INACTIVE:
-                AFL_VERIFY(false)("reason", "Unexpected portion type");
+                AFL_VERIFY(false)("reason", "Unexpected portion type")("type", "INACTIVE");
                 break;
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
@@ -109,6 +111,8 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
+                // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
+                return;
             case NPortion::INACTIVE:
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:

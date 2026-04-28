@@ -77,6 +77,7 @@ SRCS(
     yql_window_frames_collector_params_serializer.h
     yql_window_frame_settings_pg.cpp
     yql_window_frame_settings_pg.h
+    yql_yqlselect.cpp
 )
 
 PEERDIR(
@@ -108,6 +109,7 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)
@@ -135,6 +137,7 @@ RECURSE(
     minsketch
     pg_ext
     pg_settings
+    poly_args
     sql_types
     url_lister
     url_preprocessing

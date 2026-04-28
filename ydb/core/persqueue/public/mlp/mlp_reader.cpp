@@ -115,7 +115,8 @@ void TReaderActor::DoRead() {
         PartitionId,
         Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
         Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
-        Settings.MaxNumberOfMessage
+        Settings.MaxNumberOfMessage,
+        Settings.SkipMessageGroups
     );
     SendToTablet(PQTabletId, request);
 }

@@ -2310,4 +2310,32 @@ Y_UNIT_TEST(InlineSubquery) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(PgSyntax) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+            TrimIndent(R"sql(
+                --!syntax_pg
+                SELECT
+                    convert_from(a, 'UTF8')
+                FROM
+                    plato.x
+                WHERE
+                    convert_from(b, 'UTF8') !~ '^[0-9]+$';
+            )sql"),
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 // NOLINTEND(misc-definitions-in-headers)

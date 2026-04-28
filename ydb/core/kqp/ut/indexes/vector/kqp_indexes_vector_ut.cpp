@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1427,6 +1428,40 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         DoOnlyUpsertValuesIntoTable(session);
         DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
+
+    Y_UNIT_TEST(VectorIndexBuildParallelOne) {
+        auto serverSettings = TKikimrSettings()
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoOnlyCreateTableForVectorIndex(db); });
+
+        ui32 capturedParallel = 0;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSchemeShard::TEvIndexBuilder::TEvCreateRequest::EventType) {
+                capturedParallel = ev->Get<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>()
+                    ->Record.GetSettings().max_shards_in_flight();
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        const TString createIndex(Q_(R"(
+            ALTER TABLE `/Root/TestTable`
+                ADD INDEX index1
+                GLOBAL USING vector_kmeans_tree
+                ON (emb)
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=1);
+        )"));
+        auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(createIndex).ExtractValueSync(); });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 1);
     }
 }
 

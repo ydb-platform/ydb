@@ -14,7 +14,6 @@ namespace {
     struct TRecordWithNewline {
         ELogPriority Priority;
         TTempBuf Buf;
-        TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
 
         TRecordWithNewline(const TLogRecord& rec)
             : Priority(rec.Priority)
@@ -34,7 +33,6 @@ namespace {
     struct TRecordWithColorsAndNewline {
         ELogPriority Priority;
         TTempBuf Buf;
-        TMaybe<NKikimr::NStructLog::TStructuredMessage> StructMessage;
 
         TRecordWithColorsAndNewline(const TLogRecord& rec)
             : Priority(rec.Priority)

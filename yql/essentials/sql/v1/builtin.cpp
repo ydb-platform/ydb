@@ -1159,6 +1159,18 @@ class TYqlAtom final: public TYqlAtomBase<TYqlAtom, false> {
 class TFileYqlAtom final: public TYqlAtomBase<TFileYqlAtom, true> {
     using TBase = TYqlAtomBase<TFileYqlAtom, true>;
     using TBase::TBase;
+
+    bool IsLiteral() const override {
+        return false;
+    }
+
+    TString GetLiteralType() const override {
+        YQL_ENSURE(false, "TFileYqlAtom should not be evaluated to a literal value");
+    }
+
+    TString GetLiteralValue() const override {
+        YQL_ENSURE(false, "TFileYqlAtom should not be evaluated to a literal value");
+    }
 };
 
 class TTryMember final: public TCallNode {
@@ -4219,6 +4231,12 @@ TNodeResult BuildBuiltinFunc(
                 return std::unexpected(ESQLError::Basic);
             }
 #endif
+
+            if (isYqlSelect && funcInfo.Kind == "Window") {
+                return UnsupportedYqlSelect(
+                    ctx, TStringBuilder() << "Window function " << funcInfo.CanonicalSqlName);
+            }
+
             return Wrap(funcInfo.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {

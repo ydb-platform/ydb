@@ -2056,18 +2056,45 @@ void EnsureAllNodesTypeAnnotated(const TExprNode& root) {
 
 namespace {
 
+bool HasError(const TTypeAnnotationNode* type, TIssue* errIssue) {
+    if (errIssue) {
+        *errIssue = {};
+    }
+
+    if (!type) {
+        return false;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Error) {
+        if (errIssue) {
+            *errIssue = type->Cast<TErrorExprType>()->GetError();
+        }
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Type) {
+        return HasError(type->Cast<TTypeExprType>()->GetType(), errIssue);
+    }
+
+    return false;
+}
+
 bool IsPg(
     TPosition pos,
     const TTypeAnnotationNode* typeAnnotation,
     const TPgExprType*& pgType,
-    TIssue& err,
+    TIssue* err,
     bool& hasErrorType)
 {
-    err = {};
+    if (err) {
+        *err = {};
+    }
     hasErrorType = false;
 
     if (!typeAnnotation) {
-        err = TIssue(pos, TStringBuilder() << "Expected pg, but got lambda");
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected pg, but got lambda");
+        }
         return false;
     }
 
@@ -2077,7 +2104,9 @@ bool IsPg(
     }
 
     if (!HasError(typeAnnotation, err)) {
-        err = TIssue(pos, TStringBuilder() << "Expected pg, but got: " << *typeAnnotation);
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected pg, but got: " << *typeAnnotation);
+        }
     } else {
         hasErrorType = true;
     }
@@ -2085,16 +2114,21 @@ bool IsPg(
 }
 
 bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnotation, bool& isOptional,
-    const TDataExprType*& dataType, TIssue& err, bool& hasErrorType, bool* isUniversal = nullptr)
+    const TDataExprType*& dataType, TIssue* err, bool& hasErrorType, bool* isUniversal = nullptr)
 {
-    err = {};
+    if (err) {
+        *err = {};
+    }
+
     hasErrorType = false;
     if (isUniversal) {
         *isUniversal = false;
     }
 
     if (!typeAnnotation) {
-        err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got lambda");
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got lambda");
+        }
         return false;
     }
 
@@ -2111,7 +2145,9 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
                 return true;
             }
 
-            err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got: " << *typeAnnotation);
+            if (err) {
+                *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got: " << *typeAnnotation);
+            }
         } else {
             hasErrorType = true;
         }
@@ -2126,7 +2162,9 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
                 return true;
             }
 
-            err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got optional of: " << *itemType);
+            if (err) {
+                *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got optional of: " << *itemType);
+            }
         } else {
             hasErrorType = true;
         }
@@ -2138,13 +2176,12 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
     return true;
 }
 
-}
+} // anonymous namespace
 
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isOptional, const TDataExprType*& dataType)
 {
-    TIssue err;
     bool hasErrorType;
-    return IsDataOrOptionalOfData({}, typeAnnotation, isOptional, dataType, err, hasErrorType);
+    return IsDataOrOptionalOfData({}, typeAnnotation, isOptional, dataType, nullptr, hasErrorType);
 }
 
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
@@ -2154,9 +2191,8 @@ bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
 }
 
 bool IsPg(const TTypeAnnotationNode* typeAnnotation, const TPgExprType*& pgType) {
-    TIssue err;
     bool hasErrorType;
-    return IsPg({}, typeAnnotation, pgType, err, hasErrorType);
+    return IsPg({}, typeAnnotation, pgType, nullptr, hasErrorType);
 }
 
 bool IsDataOrOptionalOfDataOrPg(const TTypeAnnotationNode* typeAnnotation) {
@@ -3868,13 +3904,13 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
     TPosition pos = ctx.GetPosition(position);
     if (type.GetKind() == ETypeAnnotationKind::Tuple) {
         for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
-            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType);
+            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, &err, hasErrorType);
             if (!ok) {
                 break;
             }
         }
     } else {
-        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType);
+        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, &err, hasErrorType);
     }
 
     if (!ok) {
@@ -3898,7 +3934,7 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
     TPosition pos = ctx.GetPosition(position);
     if (type.GetKind() == ETypeAnnotationKind::Tuple) {
         for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
-            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType, &isUniversal);
+            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, &err, hasErrorType, &isUniversal);
             if (!ok) {
                 break;
             }
@@ -3907,7 +3943,7 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
             }
         }
     } else {
-        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType, &isUniversal);
+        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, &err, hasErrorType, &isUniversal);
         if (isUniversal) {
             return true;
         }
@@ -4077,7 +4113,7 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
 {
     TIssue err;
     bool hasErrorType;
-    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, err, hasErrorType)) {
+    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, &err, hasErrorType)) {
         ctx.AddError(err);
         return false;
     }
@@ -4095,7 +4131,7 @@ bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const T
 bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal) {
     TIssue err;
     bool hasErrorType;
-    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, err, hasErrorType, &isUniversal)) {
+    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, &err, hasErrorType, &isUniversal)) {
         ctx.AddError(err);
         return false;
     }
@@ -6074,22 +6110,7 @@ bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx) {
 }
 
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue) {
-    errIssue = {};
-
-    if (!type) {
-        return false;
-    }
-
-    if (type->GetKind() == ETypeAnnotationKind::Error) {
-        errIssue = type->Cast<TErrorExprType>()->GetError();
-        return true;
-    }
-
-    if (type->GetKind() == ETypeAnnotationKind::Type) {
-        return HasError(type->Cast<TTypeExprType>()->GetType(), errIssue);
-    }
-
-    return false;
+    return HasError(type, &errIssue);
 }
 
 bool IsNull(const TExprNode& node) {

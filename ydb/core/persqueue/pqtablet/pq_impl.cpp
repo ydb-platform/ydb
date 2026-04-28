@@ -30,7 +30,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <library/cpp/json/json_writer.h>

@@ -250,4 +250,6 @@ bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* type
 
 bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
 
+bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types);
+
 }

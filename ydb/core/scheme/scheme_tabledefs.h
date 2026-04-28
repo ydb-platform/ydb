@@ -726,12 +726,14 @@ public:
 
     static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
 private:
-    TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
+    TKeyDesc(const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 };
 
 class TPartitioning {
 public:
     TPartitioning() = default;
+
+    using TCPtr = std::shared_ptr<const TPartitioning>;
 
     explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions)
         : Partitions(std::move(partitions)) {}
@@ -746,15 +748,25 @@ public:
     const_iterator begin() const { return Partitions.begin(); }
     const_iterator end() const { return Partitions.end(); }
 
+    struct TIntersection {
+        ui64 ShardId;
+        TOwnedTableRange TableRange;
+    };
+
     // Escape hatch: returns raw sorted vector. Grep for this method name to find
     // callers that need migration when the data structure changes.
     const TVector<TKeyDesc::TPartitionInfo>& GetTablePartitioning() const {
         return Partitions;
     }
 
+    std::vector<TIntersection> GetIntersectionWithRange(const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TTableRange& range) const;
+
 private:
     TVector<TKeyDesc::TPartitionInfo> Partitions;
 };
+
+
+TTableRange Intersect(TConstArrayRef<NScheme::TTypeInfo> types, const TTableRange& first, const TTableRange& second);
 
 // Deferred inline definitions for TKeyDesc (require complete TPartitioning type)
 

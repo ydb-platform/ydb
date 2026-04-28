@@ -84,6 +84,11 @@ bool TClientReader::Retry(
     const TMaybe<ui64>& rowIndex,
     const std::exception_ptr& error)
 {
+    // We always stop retries if reader is aborted
+    if (IAbortableInputStream::IsAbortedError(error)) {
+        std::rethrow_exception(error);
+    }
+
     if (CurrentRequestRetryPolicy_) {
         TMaybe<TDuration> backoffDuration;
         try {
@@ -122,6 +127,16 @@ bool TClientReader::Retry(
 void TClientReader::ResetRetries()
 {
     CurrentRequestRetryPolicy_ = nullptr;
+}
+
+void TClientReader::Abort()
+{
+    Input_->Abort();
+}
+
+bool TClientReader::IsAborted() const
+{
+    return Input_->IsAborted();
 }
 
 size_t TClientReader::DoRead(void* buf, size_t len)
@@ -178,7 +193,7 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
         ranges->begin()->LowerLimit(TReadLimit().RowIndex(*rowIndex));
     }
 
-    Input_ = NDetail::RequestWithRetry<std::unique_ptr<IInputStream>>(
+    Input_ = NDetail::RequestWithRetry<std::unique_ptr<IAbortableInputStream>>(
         CurrentRequestRetryPolicy_,
         [this, &transactionId] (TMutationId /*mutationId*/) {
             return RawClient_->ReadTable(transactionId, Path_, Format_, Options_);

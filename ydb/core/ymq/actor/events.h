@@ -144,6 +144,15 @@ struct TSqsEvents {
         EvDeduplicateMessageBatch,
         EvDeduplicateMessageBatchResponse,
 
+        EvGetMessageGroups,
+        EvGetMessageGroupsResponse,
+
+        /// Periodic wakeup for deferred LogBroker topic creation (SQS service self-schedules).
+        EvPeriodicCreateTopic,
+
+        /// Result of deferred PersQueue topic creation (see deferred_create_topic.cpp).
+        EvDeferredTopicCreationResult,
+
         EvEnd,
     };
 
@@ -578,6 +587,15 @@ struct TSqsEvents {
     struct TEvQueueLeaderDecRef : public NActors::TEventLocal<TEvQueueLeaderDecRef, EvQueueLeaderDecRef> {
     };
 
+    struct TEvPeriodicCreateTopic : public NActors::TEventLocal<TEvPeriodicCreateTopic, EvPeriodicCreateTopic> {
+    };
+
+    struct TEvDeferredTopicCreationResult : public NActors::TEventLocal<TEvDeferredTopicCreationResult, EvDeferredTopicCreationResult> {
+        TString UserName;
+        TString QueueName;
+        bool Success = false;
+    };
+
     struct TEvGetQueueId : public NActors::TEventLocal<TEvGetQueueId, EvGetQueueId> {
         TString RequestId;
         TString UserName;
@@ -765,6 +783,32 @@ struct TSqsEvents {
             TString SenderId;
         };
         std::vector<TMessageResult> Messages;
+    };
+
+    struct TEvGetMessageGroups : public NActors::TEventLocal<TEvGetMessageGroups, EvGetMessageGroups> {
+        TEvGetMessageGroups(TString requestId)
+            : RequestId(std::move(requestId))
+        {
+        }
+
+        TString RequestId;
+    };
+
+    struct TEvGetMessageGroupsResponse : public NActors::TEventLocal<TEvGetMessageGroupsResponse, EvGetMessageGroupsResponse> {
+
+        TEvGetMessageGroupsResponse(std::vector<TString>&& messageGroups)
+            : StatusCode(Ydb::StatusIds::SUCCESS)
+            , MessageGroups(std::move(messageGroups))
+        {
+        }
+
+        TEvGetMessageGroupsResponse(Ydb::StatusIds::StatusCode statusCode)
+            : StatusCode(statusCode)
+        {
+        }
+
+        Ydb::StatusIds::StatusCode StatusCode;
+        std::vector<TString> MessageGroups;
     };
 
     struct TEvDeleteMessageBatch : public NActors::TEventLocal<TEvDeleteMessageBatch, EvDeleteMessageBatch> {

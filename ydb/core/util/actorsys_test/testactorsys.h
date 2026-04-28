@@ -106,6 +106,7 @@ class TTestActorSystem {
         std::unique_ptr<TActorSystem> ActorSystem;
         std::unique_ptr<TMailboxTable> MailboxTable;
         std::unique_ptr<TExecutorThread> ExecutorThread;
+        IExecutorPool* ExecutorPool = nullptr;
         std::unordered_map<ui32, TActorId> InterconnectProxy;
         TTestSchedulerThread *SchedulerThread;
         ui32 NextHint = 1;
@@ -328,6 +329,7 @@ public:
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
+        info.ExecutorPool = pool;
     }
 
     void StartNode(ui32 nodeId) {
@@ -713,11 +715,35 @@ public:
             }
         }
         if (actor) {
+            struct TThreadContextGuard {
+                TThreadContext* Previous = TlsThreadContext;
+
+                explicit TThreadContextGuard(TThreadContext* current) {
+                    TlsThreadContext = current;
+                }
+
+                ~TThreadContextGuard() {
+                    TlsThreadContext = Previous;
+                }
+            };
+
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
             // adjust clock for correct operation
             info->SchedulerThread->AdjustClock(Clock);
+
+            const auto nowTs = GetCycleCountFast();
+            TExecutorThreadStats executorThreadStats;
+            TExecutionStats executionStats;
+            executionStats.Switch(&executorThreadStats);
+            TThreadContext threadCtx(info->ExecutorThread->GetWorkerId(), info->ExecutorPool, nullptr);
+            threadCtx.ExecutionStats = &executionStats;
+            threadCtx.SetMailboxScheduledTimestampTs(nowTs);
+            threadCtx.SetEventEnqueuedTimestampTs(nowTs);
+            threadCtx.SetActivationTimeUs(0);
+            threadCtx.SetEventDeliveryTimeUs(0);
+            TThreadContextGuard threadContextGuard(&threadCtx);
 
             // allocate context and store its reference in TLS
             TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);

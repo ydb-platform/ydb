@@ -28,9 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       ((github.event_name == 'pull_request' &&
-      github.event.pull_request.merged == true &&
-      startsWith(github.event.pull_request.head.ref || github.head_ref, 'update-muted-ya')) ||
-      github.event_name == 'workflow_dispatch')
+        github.event.pull_request.merged == true ) ||
+       github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Check mute-unmute label via API
@@ -85,7 +84,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
+        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
 
       - name: Add issues to PR
         if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'

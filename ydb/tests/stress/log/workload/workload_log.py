@@ -68,7 +68,7 @@ class YdbLogWorkload(WorkloadBase):
             # import command
             self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator']) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
-            self.get_command_prefix(subcmds=['run', 'bulk_upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'bulk-upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
             # upsert workload
             self.get_command_prefix(subcmds=['run', 'upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],

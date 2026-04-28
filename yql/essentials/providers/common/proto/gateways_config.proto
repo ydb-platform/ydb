@@ -4,27 +4,10 @@ option java_package = "ru.yandex.yql.proto";
 import "yql/essentials/protos/clickhouse.proto";
 import "yql/essentials/protos/fmr.proto";
 import "yql/essentials/utils/fetch/proto/fetch_config.proto";
-
+import "yql/essentials/minikql/runtime_settings/proto/runtime_settings.proto";
+import "yql/essentials/providers/common/proto/activation/activation.proto";
 
 /////////////////////////////// common ///////////////////////////////
-
-message TActivationByHour {
-    required uint32 Hour = 1;
-    required uint32 Percentage = 2;
-}
-
-message TActivationPercentage {
-    optional uint32 Percentage = 1 [default = 0];
-    repeated TActivationByHour ByHour = 2;
-    repeated string IncludeUsers = 3;
-    repeated string ExcludeUsers = 4;
-    optional bool ExcludeRobots = 5 [default = true];
-    repeated string Tags = 6;
-    repeated string IncludeGroups = 7;
-    repeated string ExcludeGroups = 8;
-    repeated string IncludeRevisions = 9;
-    repeated string ExcludeRevisions = 10;
-}
 
 message TAttr {
     required string Name = 1;
@@ -283,6 +266,7 @@ message TClickHouseClusterConfig {
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
     optional bool JsonFormatHeader = 16 [default = false];
+    optional bool IdmOnlyAccess = 17 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -1023,6 +1007,7 @@ message TGatewaysConfig {
     optional TStatGatewayConfig Stat = 6;
     optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;
+
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;
     optional TPostgresqlGatewayConfig Postgresql = 11;
@@ -1041,4 +1026,5 @@ message TGatewaysConfig {
     optional TYtflowGatewayConfig Ytflow = 24;
     optional TFmrGatewayConfig Fmr = 25;
     optional TLayersConfig Layers = 26;
+    optional NProto.TRuntimeSettings RuntimeSettings = 27;
 }

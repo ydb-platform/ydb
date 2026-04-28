@@ -1268,7 +1268,8 @@ struct TIndexDescription {
         GlobalFulltextRelevance,
         LocalBloomFilter,
         LocalBloomNgramFilter,
-        GlobalJson
+        GlobalJson,
+        LocalMinMax
     };
 
     struct TIndexSetting {
@@ -1613,7 +1614,7 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
 TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
-TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
+TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call, bool isYqlSelect);
 TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
 
 TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
@@ -1678,13 +1679,13 @@ TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferred
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
 TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
-TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
-TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildAlterObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                    bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
-TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildDropObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                   bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::vector<std::pair<TString, TString>>&& targets,

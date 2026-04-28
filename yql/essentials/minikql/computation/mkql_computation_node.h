@@ -203,11 +203,6 @@ public:
     virtual TComputationExternalNodePtrSet GetUpvalues() const = 0;
     virtual ui32 GetDependentWeight() const = 0;
     virtual ui32 GetDependentsCount() const = 0;
-    // FIXME: Remove this method, when all the clients will be
-    // migrated to the renamed analogue GetDependentsCount.
-    ui32 GetDependencesCount() const {
-        return GetDependentsCount();
-    }
 
     virtual bool IsTemporaryValue() const = 0;
 

@@ -56,9 +56,6 @@ private:
     TSourcePtr SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
                           TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
 
-    bool WindowDefinition(const TRule_window_definition& node, TWinSpecs& winSpecs);
-    bool WindowClause(const TRule_window_clause& node, TWinSpecs& winSpecs);
-
     struct TSelectKindResult {
         TSourcePtr Source;
         TWriteSettings Settings;

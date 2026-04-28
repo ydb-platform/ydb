@@ -326,7 +326,11 @@ class TsConfig(object):
         return None
 
     def rel_to_module_path(self, p) -> Path:
-        path = self.get_config_dir().joinpath(p).resolve()
+        # Use normpath to normalize the path (resolve ../ patterns) without resolving symlinks
+        config_dir = self.get_config_dir()
+        joined_path = config_dir.joinpath(p)
+        normalized_path = os.path.normpath(str(joined_path))
+        path = Path(normalized_path)
 
         module_dir = self.get_module_dir()
         if module_dir is None:

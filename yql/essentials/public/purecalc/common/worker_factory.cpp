@@ -194,7 +194,6 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
 
     if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-        typeContext->OptimizerFlags.insert(to_lower(ToString("ExpandLMapOrShuffleByKeysViaBlock")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));

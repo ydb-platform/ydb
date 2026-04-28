@@ -29,7 +29,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         return TConclusionStatus::Success();
     }
 
-    ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
+    ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.Orbit);
     SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
 
     if (!SourcesConstructor) {

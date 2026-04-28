@@ -56,6 +56,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 InvalidEmbeddingRows = 0;
 
     TSampler Sampler;
 
@@ -141,7 +142,7 @@ public:
         ReadBytes += CountRowCellBytes(key, *row);
 
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            // Skip rows with invalid vector format
+            ++InvalidEmbeddingRows;
             return EScan::Feed;
         }
 
@@ -204,6 +205,11 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingRows > 0) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build")
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {

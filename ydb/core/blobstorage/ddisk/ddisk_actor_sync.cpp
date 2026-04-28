@@ -113,10 +113,12 @@ namespace NKikimr::NDDisk {
         }
 
         const ui64 syncId = NextSyncId++;
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("sync_id", static_cast<long>(syncId)));
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem());
+        NPrivate::AddMessageWaitAttributes(span);
+        span
+            .Attribute("tablet_id", static_cast<i64>(creds.TabletId))
+            .Attribute("sync_id", static_cast<i64>(syncId));
 
         syncIt = SyncsInFlight.emplace(syncId, TSyncInFlight{
             .Sender=ev->Sender,

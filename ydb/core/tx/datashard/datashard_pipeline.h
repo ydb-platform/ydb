@@ -153,7 +153,7 @@ public:
     TStepOrder GetUtmostCompleteTx() const { return UtmostCompleteTx; }
 
     ui64 GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const;
-    ui64 GetDataTxCompleteLag(ui64 timecastStep) const;
+    ui64 GetTxCompleteLag(ui64 timecastStep) const;
     ui64 GetScanTxCompleteLag(ui64 timecastStep) const;
 
     // schema ops

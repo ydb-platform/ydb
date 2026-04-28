@@ -216,6 +216,7 @@ public:
             (Where && !Where->GetRef().Init(ctx, src)) ||
             (GroupBy && !Init(ctx, src, *GroupBy)) ||
             (Having && !Having->GetRef().Init(ctx, src)) ||
+            !Init(ctx, src, Windows) ||
             !TYqlSelectLikeNode::Init(ctx, src, OrderBy) ||
             (Limit && !Limit->GetRef().Init(ctx, src)) ||
             (Offset && !Offset->GetRef().Init(ctx, src))) {
@@ -276,6 +277,10 @@ public:
 
         if (Having) {
             item->Add(Q(Y(Q("having"), BuildYqlWhere(*Having))));
+        }
+
+        if (!Windows.empty()) {
+            item->Add(Q(Y(Q("window"), BuildWindows(Windows))));
         }
 
         if (OrderBy) {
@@ -369,6 +374,27 @@ private:
         }
 
         return true;
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TMap<TString, TWindow>& windows) {
+        for (const auto& [_, window] : windows) {
+            if (!Init(ctx, src, window)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TWindow& window) {
+        return NSQLTranslationV1::Init(ctx, src, window.PartitionBy) &&
+               TYqlSelectLikeNode::Init(ctx, src, window.OrderBy) &&
+               Init(ctx, src, window.Frame->FrameBegin) &&
+               Init(ctx, src, window.Frame->FrameEnd);
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TFrameBoundPtr& bound) {
+        return !bound->Bound || bound->Bound->Init(ctx, src);
     }
 
     bool Init(TContext& ctx, ISource* src, const TGroupBy& groupBy) const {
@@ -575,6 +601,60 @@ private:
         return Y("YqlGroup", Y("Void"), Y("lambda", Q(Y()), std::move(node)));
     }
 
+    TNodePtr BuildWindows(const TMap<TString, TWindow>& windows) const {
+        TNodePtr xs = Y();
+        for (const auto& [name, w] : windows) {
+            xs = L(std::move(xs), BuildYqlWindow(name, w));
+        }
+        return Q(xs);
+    }
+
+    TNodePtr BuildYqlWindow(TString name, const TWindow& window) const {
+        return Y("YqlWindow", Q(std::move(name)), Q(""),
+                 Q(BuildYqlWindowGroups(window.PartitionBy)),
+                 Q(BuildSortSpecification(window.OrderBy.GetOrElse({}).Keys)),
+                 Q(BuildYqlWindowFrame(window.Frame)));
+    }
+
+    TNodePtr BuildYqlWindowGroups(const TVector<TNodePtr>& partitionBy) const {
+        TNodePtr xs = Y();
+        for (TNodePtr key : partitionBy) {
+            xs = L(std::move(xs), BuildYqlGroup(std::move(key)));
+        }
+        return xs;
+    }
+
+    TNodePtr BuildYqlWindowFrame(const TFrameSpecificationPtr& frame) const {
+        TNodePtr xs = Y();
+
+        xs = L(std::move(xs), Q(Y(Q("type"), Q(ToString(frame->FrameType)))));
+
+        xs = WithFrameBound(std::move(xs), "from", frame->FrameBegin);
+        xs = WithFrameBound(std::move(xs), "to", frame->FrameEnd);
+
+        if (auto x = ToString(frame->FrameExclusion)) {
+            xs = L(std::move(xs), Q(Y(Q("exclude"), Q(std::move(*x)))));
+        }
+
+        return xs;
+    }
+
+    TNodePtr WithFrameBound(TNodePtr xs, const TString& side, const TFrameBoundPtr& bound) const {
+        const bool isBound = static_cast<bool>(bound->Bound);
+
+        if (auto x = ToString(bound->Settings)) {
+            const bool isPrefixed = (isBound || bound->Settings == EFrameSettings::FrameCurrentRow);
+            TStringBuf prefix = isPrefixed ? "" : "u";
+            xs = L(std::move(xs), Q(Y(Q(side), Q(prefix + *x))));
+        }
+
+        if (isBound) {
+            xs = L(std::move(xs), Q(Y(Q(side + "_value"), Y("EvaluateExpr", bound->Bound))));
+        }
+
+        return xs;
+    }
+
     TNodePtr BuildYqlWhere(TNodePtr expr) const {
         return Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), std::move(expr)));
     }
@@ -589,6 +669,43 @@ private:
                 return "left";
             case EYqlJoinKind::Right:
                 return "right";
+        }
+    }
+
+    static TString ToString(EFrameType kind) {
+        switch (kind) {
+            case FrameByRows:
+                return "rows";
+            case FrameByRange:
+                return "range";
+            case FrameByGroups:
+                return "groups";
+        }
+    }
+
+    static TMaybe<TString> ToString(EFrameExclusions kind) {
+        switch (kind) {
+            case FrameExclNone:
+                return Nothing();
+            case FrameExclCurRow:
+                return "c";
+            case FrameExclGroup:
+                return "cp";
+            case FrameExclTies:
+                return "p";
+        }
+    }
+
+    static TMaybe<TString> ToString(EFrameSettings kind) {
+        switch (kind) {
+            case FrameUndefined:
+                return Nothing();
+            case FramePreceding:
+                return "p";
+            case FrameCurrentRow:
+                return "c";
+            case FrameFollowing:
+                return "f";
         }
     }
 

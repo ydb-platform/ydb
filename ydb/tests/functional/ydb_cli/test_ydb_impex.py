@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.oss.canonical import set_canondata_root
-from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
 
-import os
 import pytest
 import logging
 import pyarrow as pa
@@ -124,12 +121,6 @@ ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []
 BOM_UTF8 = b'\xEF\xBB\xBF'
 
 
-def ydb_bin():
-    if os.getenv("YDB_CLI_BINARY"):
-        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
-    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
-
-
 def create_table(session, path, table_type):
     partition_by = ""
     if table_type == "column":
@@ -150,49 +141,12 @@ def create_table(session, path, table_type):
     session.execute_scheme(query)
 
 
-class BaseTestTableService(object):
-    @classmethod
-    def setup_class(cls):
-        set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
-
-        cls.cluster = KiKiMR()
-        cls.cluster.start()
-        cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig(
-            database="/Root",
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
-        cls.driver = ydb.Driver(driver_config)
-        cls.driver.wait(timeout=4)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop()
-
-    @classmethod
-    def execute_ydb_cli_command(cls, args, stdin=None, stdout=None):
-        execution = yatest.common.execute(
-            [
-                ydb_bin(),
-                "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
-                "--database", cls.root_dir
-            ] +
-            args,
-            stdin=stdin,
-            stdout=stdout,
-        )
-
-        result = execution.std_out
-        logger.debug("std_out:\n" + result.decode('utf-8'))
-        return result
-
-
 @pytest.mark.parametrize("table_type", ["row", "column"])
-class TestImpex(BaseTestTableService):
+class TestImpex(BaseCliTestWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestTableService.setup_class()
+        super().setup_class()
         cls.session = cls.driver.table_client.session().create()
 
     def init_test(self, tmp_path, table_type, name):

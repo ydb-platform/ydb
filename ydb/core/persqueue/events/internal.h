@@ -1479,13 +1479,16 @@ struct TEvPQ {
     struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
         TEvMLPReadRequest() = default;
 
-        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages) {
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TDuration processingTimeout, ui32 maxNumberOfMessages, const std::vector<TString>& skipMessageGroups) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetWaitDeadlineMilliseconds(waitDeadline.MilliSeconds());
             Record.SetProcessingTimeoutMilliseconds(processingTimeout.MilliSeconds());
             Record.SetMaxNumberOfMessages(maxNumberOfMessages);
+            for (auto& messageGroup : skipMessageGroups) {
+                Record.AddSkipMessageGroup(messageGroup);
+            }
         }
 
         const TString& GetTopic() const {

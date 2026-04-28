@@ -10,7 +10,7 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams,
+    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams,
         NHdrf::NSnapshot::ELeafFairShare fairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT);
 
     void SetTotalCpuLimit(ui64 cpu);
@@ -42,7 +42,6 @@ private:
 using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;
 
 struct TOptions {
-    TIntrusivePtr<TKqpCounters> Counters;
     TDelayParams DelayParams;
     TDuration UpdateFairSharePeriod;
 };
@@ -60,7 +59,9 @@ struct TEvents {
 };
 
 struct TEvAddDatabase : public TEventLocal<TEvAddDatabase, TEvents::EvAddDatabase> {
-    TString Id;
+    explicit TEvAddDatabase(const TString& databaseId) : DatabaseId(databaseId) {}
+
+    TString DatabaseId;
     double Weight = 1.;
 };
 

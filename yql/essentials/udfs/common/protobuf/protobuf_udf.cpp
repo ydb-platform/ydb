@@ -74,10 +74,23 @@ public:
     void CleanupOnTerminate() const final {
     }
 
+    static void AddFunc(IFunctionsSink& sink, TStringBuf name, bool isTypeAware = false, TStringBuf polyArgs = {}) {
+        auto f = sink.Add(name);
+        if (isTypeAware) {
+            f->SetTypeAwareness();
+            if (polyArgs) {
+                f->SetPolyArgs(polyArgs);
+            }
+        }
+    }
+
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        sink.Add(TStringRef::Of("Parse"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("TryParse"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
+        AddFunc(sink, "Parse", true,
+                R"([[[];{type=["CallableType";[];[["UniversalStructType"]];[[["DataType";"String"];1u]]]}]])");
+        AddFunc(sink, "TryParse", true,
+                R"([[[];{type=["CallableType";[];[["OptionalType";["UniversalStructType"]]];[[["DataType";"String"];1u]]]}]])");
+        AddFunc(sink, "Serialize", true,
+                R"([[[];{type=["CallableType";[];[["DataType";"String"]];[[["UniversalStructType"];1u]]]}]])");
     }
 
     void BuildFunctionTypeInfo(

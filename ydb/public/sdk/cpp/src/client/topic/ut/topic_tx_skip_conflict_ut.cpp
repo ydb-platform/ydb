@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/txusage_fixture.h>
 
-#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/persqueue/constants.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -208,10 +208,9 @@ protected:
     }
 
     void AugmentWriteSessionSettings(NTopic::TWriteSessionSettings& options) override {
-        if constexpr (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True) {
-            options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "true");
-        } else if constexpr (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::False) {
-            options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "false");
+        if ((TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True) ||
+            (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::False)) {
+            options.SetTrackProducerIdInTx(TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True);
         }
     }
 };
@@ -284,7 +283,8 @@ Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit, TFixt
     options.ProducerId(TEST_MESSAGE_GROUP_ID);
     options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
     options.Codec(ECodec::RAW);
-    options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "not-a-bool");
+    const auto& key = ::NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
+    options.AppendSessionMeta({key.data(), key.size()}, "not-a-bool");
 
     auto ws = client.CreateWriteSession(options);
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit, TFixt
     UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");
     UNIT_ASSERT_VALUES_EQUAL(closed->GetStatus(), EStatus::BAD_REQUEST);
     const TString issues = closed->GetIssues().ToOneLineString();
-    UNIT_ASSERT_STRING_CONTAINS(issues, NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX);
+    UNIT_ASSERT_STRING_CONTAINS(issues, key);
     UNIT_ASSERT_STRING_CONTAINS(issues, "not-a-bool");
 
     ws->Close(TDuration::Seconds(5));

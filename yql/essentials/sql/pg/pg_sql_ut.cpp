@@ -1111,4 +1111,231 @@ Y_UNIT_TEST(OpClasses) {
     NPg::ImportExtensions(exported, true, nullptr);
     validate();
 }
+
 } // Y_UNIT_TEST_SUITE(PgExtensions)
+
+Y_UNIT_TEST_SUITE(PgWarningPragma) {
+
+Y_UNIT_TEST(WarningAsErrorLangver) {
+    TString query = R"sql(
+        SET warning = 'error', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, Warning pragma is not available before language version 2026.01", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningAsError) {
+    TString query = R"sql(
+        SET warning = 'error', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningDisable) {
+    TString query = R"sql(
+        SET warning = 'disable', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(WarningDefault) {
+    TString query = R"sql(
+        SET warning = 'default', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_WARNING);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningInvalidAction) {
+    TString query = R"sql(
+        SET warning = 'invalid_action', '*';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("unknown warning action 'invalid_action', expecting one of DEFAULT, ERROR, DISABLE", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningInvalidPattern) {
+    TString query = R"sql(
+        SET warning = 'error', 'invalid[pattern';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("unknown warning code 'invalid[pattern', expecting integer or '*'", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningMissingArguments) {
+    TString query = R"sql(
+        SET warning = 'error';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 1", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningTooManyArguments) {
+    TString query = R"sql(
+        SET warning = 'error', '*', 'extra';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 3", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningSpecificCode) {
+    TString query = R"sql(
+        SET warning = 'error', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningSpecificCodeDisable) {
+    TString query = R"sql(
+        SET warning = 'disable', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(WarningNonStringAction) {
+    TString query = R"sql(
+        SET warning = 123, '*';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected string literal for Warning action", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningNonStringPattern) {
+    TString query = R"sql(
+        SET warning = 'error', 123;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected string literal for Warning pattern", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningMultipleRules) {
+    TString query = R"sql(
+        SET warning = 'disable', '*';
+        SET warning = 'error', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningNoArguments) {
+    TString query = R"sql(
+        SET warning = '';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 1", issue.GetMessage());
+}
+
+} // Y_UNIT_TEST_SUITE(PgWarningPragma)

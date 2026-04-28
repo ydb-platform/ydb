@@ -2877,4 +2877,11 @@ bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
     return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 
+bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types)
+{
+    YQL_ENSURE(types);
+    static const char OptName[] = "PushdownFiltersOverWindow";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
+}
+
 }

@@ -408,6 +408,9 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

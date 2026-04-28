@@ -2454,6 +2454,26 @@ Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
             );
         )"
     );
+
+    // Custom false_positive_probability — should appear in SHOW CREATE output
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
+            );
+        )"
+    );
 }
 
 }

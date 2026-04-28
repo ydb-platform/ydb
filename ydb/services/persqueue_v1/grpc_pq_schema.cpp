@@ -3,6 +3,7 @@
 #include "actors/schema_actors.h"
 #include "actors/read_session_actor.h"
 
+#include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -121,7 +122,7 @@ void DoDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpc
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDropTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDropTopicActor(p));
 }
 
 void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f,
@@ -132,7 +133,7 @@ void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateCreateTopicActor(p, cfg->LocalCluster));
 }
 
 void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -185,7 +186,7 @@ void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQDropTopicActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateDropTopicActor(p));
 }
 
 void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
@@ -196,7 +197,7 @@ void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityP
     EnsureReq(p, cfg);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
 }
 
 void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
@@ -207,7 +208,7 @@ void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityPr
     EnsureReq(p, cfg);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQAlterTopicActor(p, cfg->LocalCluster));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAlterTopicActor(p, cfg->LocalCluster));
 }
 
 void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -225,7 +226,7 @@ void DoPQAddReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityP
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Add read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TAddReadRuleActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAddConsumerActor(p));
 }
 
 void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -234,7 +235,7 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Remove read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TRemoveReadRuleActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateRemoveConsumerActor(p));
 }
 
 #ifdef DECLARE_RPC

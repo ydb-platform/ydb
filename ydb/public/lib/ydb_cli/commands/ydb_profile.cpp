@@ -467,10 +467,10 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
             query << ")";
             if (AskYesNoFtxui(query, /* defaultAnswer */ true)) {
                 profileManager->SetActiveProfile(profileName);
-                Cout << "Profile \"" << profileName << "\" is now active." << Endl;
+                Cout << Endl << "Profile \"" << profileName << "\" is now active." << Endl;
             }
         }
-        Cout << "Profile \"" << profileName << "\" configured successfully." << Endl;
+        Cout << Endl << "Profile \"" << profileName << "\" configured successfully." << Endl;
     }
 }
 
@@ -513,7 +513,7 @@ void TCommandProfileCommon::SetupProfileSetting(const TString& name, const TStri
             }
             if (*input) {
                 profile->SetValue(name, *input);
-                Cout << "Saved " << name << " \"" << *input << "\" for profile \"" << profileName << "\"." << Endl;
+                Cout << Endl << "Saved " << name << " \"" << *input << "\" for profile \"" << profileName << "\"." << Endl;
             }
             break;
         }
@@ -568,7 +568,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
         options.push_back("Use metadata service on a virtual machine\t(use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm");
         actions.push_back([&profile, &profileName]() {
             PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
-            Cout << "Metadata service authentication enabled for profile \"" << profileName << "\"." << Endl;
+            Cout << Endl << "Metadata service authentication enabled for profile \"" << profileName << "\"." << Endl;
         });
 
         options.push_back("Use service account key file\t(sa-key-file) cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa");
@@ -586,7 +586,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
     options.push_back("Set anonymous authentication");
     actions.push_back([&profile, &profileName]() {
         PutAuthMethodWithoutPars(profile, "anonymous-auth");
-        Cout << "Anonymous authentication enabled for profile \"" << profileName << "\"." << Endl;
+        Cout << Endl << "Anonymous authentication enabled for profile \"" << profileName << "\"." << Endl;
     });
 
     options.push_back("Don't save authentication data\t(environment variables can be used)");

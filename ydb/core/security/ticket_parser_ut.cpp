@@ -2513,8 +2513,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             {{"something.read"}, {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}
         };
         runtime->Send(new IEventHandle(
-            MakeTicketParserID(), 
-            sender, 
+            MakeTicketParserID(),
+            sender,
             new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
         ), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2525,7 +2525,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
-                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
 
         accessServiceMock.CapturedXUserIP.clear();
@@ -2535,8 +2535,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             {{"something.write"}, {{"folder_id", "test_folder"}, {"database_id", "test_db"}}}
         };
         runtime->Send(new IEventHandle(
-            MakeTicketParserID(), 
-            sender, 
+            MakeTicketParserID(),
+            sender,
             new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
         ), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2546,7 +2546,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
-                                   "Expected x-user-ip header to be '" << testPeerName 
+                                   "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
     }
 
@@ -2560,6 +2560,371 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorization) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    TEvTicketParser::TEvAuthorizeTicketResult* RunPeernameQuery(
+        TTestActorRuntime* runtime,
+        const TString& peername) {
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(),
+            sender,
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user@builtin",
+                .Database = "",
+                .PeerName = peername,
+                .Entries = {},
+            })
+        ), 0);
+        return runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+    }
+
+    Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagEnabled) {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(false);
+
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        settings.FeatureFlags.SetEnableTicketParserErrorBasedOnPeernameFormat(true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        // IPv4
+        {
+            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+
+        // IPv6
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            UNIT_ASSERT(!res->HasError());
+        }
+
+        // Invalid peername formats
+        {
+            auto* res = RunPeernameQuery(runtime, "");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, ":::1");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime,  "ipv6:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            UNIT_ASSERT(res->HasError());
+            UNIT_ASSERT(!res->Error.Retryable);
+        }
+    }
+
+    Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagDisabled) {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(false);
+
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        settings.FeatureFlags.SetEnableTicketParserErrorBasedOnPeernameFormat(false);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        // IPv4
+        {
+            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+
+        // IPv6
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            UNIT_ASSERT(!res->HasError());
+        }
+
+        // Invalid peername formats
+        {
+            auto* res = RunPeernameQuery(runtime, "");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, ":::1");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            UNIT_ASSERT(!res->HasError());
+        }
+        {
+            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            UNIT_ASSERT(!res->HasError());
+        }
     }
 } // Test suite TTicketParserTest
 

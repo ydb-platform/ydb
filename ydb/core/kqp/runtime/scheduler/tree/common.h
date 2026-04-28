@@ -30,31 +30,32 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
     }
 
     struct TStaticAttributes {
-        std::optional<ui64> Limit;
-        std::optional<ui64> Guarantee;
         std::optional<double> Weight;
 
-        inline auto GetLimit() const {
-            return Limit.value_or(Infinity());
+        std::optional<ui64> CpuLimit;
+        std::optional<ui64> CpuGuarantee;
+
+        auto GetCpuLimit() const {
+            return CpuLimit.value_or(Infinity());
         }
 
-        inline auto GetGuarantee() const {
-            return Guarantee.value_or(0);
+        auto GetCpuGuarantee() const {
+            return CpuGuarantee.value_or(0);
         }
 
-        inline auto GetWeight() const {
+        auto GetWeight() const {
             return Weight.value_or(1);
         }
 
-        inline void Update(const TStaticAttributes& other) {
-            if (other.Limit) {
-                Limit = other.Limit;
-            }
-            if (other.Guarantee) {
-                Guarantee = other.Guarantee;
-            }
+        void Update(const TStaticAttributes& other) {
             if (other.Weight) {
                 Weight = other.Weight;
+            }
+            if (other.CpuLimit) {
+                CpuLimit = other.CpuLimit;
+            }
+            if (other.CpuGuarantee) {
+                CpuGuarantee = other.CpuGuarantee;
             }
         }
     };
@@ -71,7 +72,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         explicit TTreeElementBase(const TId& id, const TStaticAttributes& attrs = {}) : Id(id) { Update(attrs); }
         virtual ~TTreeElementBase() = default;
 
-        inline const TId& GetId() const {
+        const TId& GetId() const {
             return Id;
         }
 
@@ -87,16 +88,16 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             // Do not reset child's parent since child may concurrently still refer to parents' attributes.
         }
 
-        inline size_t ChildrenSize() const {
+        size_t ChildrenSize() const {
             return Children.size();
         }
 
         template <class T, class Fn>
-        void ForEachChild(Fn&& fn) const {
+        void ForEachChild(Fn fn) const {
             size_t i = 0;
 
             for (const auto& child : Children) {
-                T* ptr;
+                T* ptr = nullptr;
                 if constexpr (std::is_virtual_base_of_v<TTreeElementBase, T>) {
                     ptr = dynamic_cast<T*>(child.get());
                     Y_ASSERT(ptr);
@@ -114,17 +115,17 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         }
 
         // True for parentless and real root
-        virtual inline bool IsRoot() const {
+        virtual bool IsRoot() const {
             return !Parent;
         }
 
         // True for everything except queries
-        virtual inline bool IsPool() const {
+        virtual bool IsPool() const {
             return true;
         }
 
         // True for queries and leaf-pools
-        virtual inline bool IsLeaf() const {
+        virtual bool IsLeaf() const {
             return Children.empty();
         }
 
@@ -157,11 +158,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         void AddChild(const typename TBase::TPtr& element) = delete;
         void RemoveChild(const typename TBase::TPtr& element) = delete;
 
-        inline bool IsRoot() const final {
+        bool IsRoot() const final {
             return false;
         }
 
-        inline bool IsPool() const final {
+        bool IsPool() const final {
             return false;
         }
     };
@@ -179,8 +180,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
         NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
-        NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;
-        NMonitoring::TDynamicCounters::TCounterPtr UsageExtra;
         NMonitoring::THistogramPtr                 Delay;
     };
 
@@ -233,11 +232,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return it == Pools.end() ? nullptr : it->second;
         }
 
-        inline bool IsPool() const final {
+        bool IsPool() const final {
             return true;
         }
 
-        inline bool IsLeaf() const final {
+        bool IsLeaf() const final {
             return this->ChildrenSize() == 0 || !Queries.empty();
         }
 

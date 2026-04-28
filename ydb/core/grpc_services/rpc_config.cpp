@@ -605,12 +605,8 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
         }
 
         bool CheckAccess() {
-            if (Request().GetInternalToken()
-            && !(IsAdministrator(AppData(), Request().GetInternalToken().Get()) || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs))) {
-                return false;
-            }
-
-            return true;
+            return IsAdministrator(AppData(), Request().GetInternalToken().Get())
+                || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs);
         }
     };
 

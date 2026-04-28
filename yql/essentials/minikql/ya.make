@@ -106,6 +106,7 @@ RECURSE(
     jsonpath
     perf
     protobuf_udf
+    runtime_settings
 )
 
 RECURSE_FOR_TESTS(

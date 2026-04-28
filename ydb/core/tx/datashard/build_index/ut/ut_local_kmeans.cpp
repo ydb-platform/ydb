@@ -1196,6 +1196,130 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         UNIT_ASSERT(fullPosting.Contains("key = 1,"));
         UNIT_ASSERT(fullPosting.Contains("key = 4,"));
     }
+
+    // Helper: sends a single LocalKMeans request and checks the reply.
+    // Returns the parsed issues string.
+    static TString DoLocalKMeansCheckIssues(
+        Tests::TServer::TPtr server, TActorId sender)
+    {
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto& runtime = *server->GetRuntime();
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+
+        auto tid = datashards[0];
+        auto ev = std::make_unique<TEvDataShard::TEvLocalKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(tid);
+        tableId.PathId.ToProto(rec.MutablePathId());
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
+
+        rec.SetK(2);
+        rec.SetSeed(0);
+        rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING);
+        rec.SetNeedsRounds(300);
+        rec.SetParentFrom(0);
+        rec.SetParentTo(0);
+        rec.SetChild(1);
+        rec.SetEmbeddingColumn("embedding");
+        rec.AddDataColumns("data");
+        rec.SetDatabaseName(kDatabaseName);
+        rec.SetLevelName(kLevelTable);
+        rec.SetOutputName(kPostingTable);
+
+        runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(handle);
+        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
+            "Expected DONE status");
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        return issues.ToOneLineString();
+    }
+
+    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // 2 valid rows (with \x02 format byte), 3 invalid rows
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\"),"
+            "(3, \"invalid\", \"three\"),"
+            "(4, \"\", \"four\"),"
+            "(5, \"bad\", \"five\");");
+
+        CreateLevelTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        TString issuesStr = DoLocalKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+    }
+
+    Y_UNIT_TEST(AllInvalidEmbeddingsWarning) {
+        // When ALL rows have invalid embeddings, FeedSample discards them all.
+        // FinishPrefixImpl returns early (no valid samples), and FeedFinal is never called.
+        // This test verifies the warning is still emitted in that case (counter in FeedSample).
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // All rows have invalid embeddings (no \x02 format byte)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"invalid\", \"one\"),"
+            "(2, \"\", \"two\"),"
+            "(3, \"bad\", \"three\");");
+
+        CreateLevelTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        TString issuesStr = DoLocalKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+    }
 }
 
 }

@@ -782,6 +782,10 @@ struct TEvBlobStorage {
         EvChunkReadRaw,                                         // 268 636 350
         EvChunkWriteRaw,
         EvStartCompactionFromDefrag,
+        EvSyncerFullSyncFinished,
+        EvPhantomFlagStorageWriteItems,
+        EvPhantomFlagStorageCommitData,
+        EvPhantomFlagStorageDrop,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -22,7 +22,7 @@ using TEvRpcDropTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::DropTopicRe
 
 template<>
 IActor* TEvRpcCreateTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new NGRpcProxy::V1::TCreateTopicActor(msg);
+    return NGRpcProxy::V1::NTopic::CreateCreateTopicActor(msg, "");
 }
 
 template<>
@@ -37,7 +37,7 @@ IActor* TEvRpcAlterTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestO
 
 template<>
 IActor* TEvRpcDropTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new NGRpcProxy::V1::TDropTopicActor(msg);
+    return NGRpcProxy::V1::NTopic::CreateDropTopicActor(msg);
 }
 
 } // namespace NKikimr::NGRpcService

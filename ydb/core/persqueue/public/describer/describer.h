@@ -51,6 +51,7 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NACLib::EAccessRights AccessRights;
+    bool ForceSyncVersion = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

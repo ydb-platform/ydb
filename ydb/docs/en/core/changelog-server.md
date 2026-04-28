@@ -67,6 +67,9 @@ Release date: September 21, 2025.
 * Added [spilling](./concepts/query_execution/spilling.md?version=v25.2), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
 * Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb?version=v25.2) from 30 minutes to 2 hours.
 * Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Must be configured:
+
+  * [Node authentication and authorization](./devops/configuration-management/configuration-v1/node-authorization.md) for registering nodes in the cluster.
 * Enabled by default:
 
   * [vector index](./dev/vector-indexes.md?version=v25.2) for approximate vector similarity search,

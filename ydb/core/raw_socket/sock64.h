@@ -148,6 +148,7 @@ public:
         TSslHolder<X509> ServerCert;
         TSslHolder<EVP_PKEY> ServerPrivateKey;
         TSslHolder<X509> CACert;
+        bool AllowSelfSignedCerts = false;
     };
 
     TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
@@ -186,9 +187,12 @@ public:
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
                 return false;
             }
-            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
-
-            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
+            if (ServerCreds->AllowSelfSignedCerts) {
+                SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::VerifyAllowSelfSignedCerts);
+            } else {
+                SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            }
+            i32 retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
@@ -198,7 +202,7 @@ public:
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
             }
-            int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
+            i32 retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
             if (retPrivateKey != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
                 return false;
@@ -207,7 +211,6 @@ public:
             X509_STORE* store = SSL_CTX_get_cert_store(ctx);
             if (!store) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
-
                 return false;
             }
 
@@ -239,23 +242,6 @@ public:
         return false;
     }
 
-    TSslHolder<X509> GetServerCert(const TString& certificate) {
-        TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
-        if (bio) {
-            TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-            return cert;
-        }
-        return TSslHolder<X509>();
-    }
-
-     TSslHolder<EVP_PKEY> GetServerPrivateKey(const TString& privateKey) {
-        TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
-        if (bio) {
-            TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-            return pkey;
-        }
-        return TSslHolder<EVP_PKEY>();
-    }
 
     int ProcessResult(int res) {
         if (res <= 0) {
@@ -294,12 +280,9 @@ public:
         return TString();
     }
 
-    static int Verify(int preverify, X509_STORE_CTX *ctx) {
-        X509* current = X509_STORE_CTX_get_current_cert(ctx);
+    static int VerifyAllowSelfSignedCerts(int preverify, X509_STORE_CTX *ctx) {
         if (!preverify) {
             int err = X509_STORE_CTX_get_error(ctx);
-            char buffer[1024];
-            X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
             if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
                 // Allow self-signed certificates
                 preverify = 1;

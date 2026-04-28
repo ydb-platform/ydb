@@ -81,7 +81,7 @@ bool EquateDicts(const NUdf::TUnboxedValuePod x, const NUdf::TUnboxedValuePod y)
         // clone dict as attrnode
         if (xr && yr) {
             for (ui32 i = 0U; i < size; ++i) {
-                if (!EquateStrings(xr[i].first, yr[i].first)) {
+                if (!EquateStrings(ClearUtf8Mark(xr[i].first), ClearUtf8Mark(yr[i].first))) {
                     return false;
                 }
                 if (!EquateDoms(xr[i].second, yr[i].second)) {
@@ -117,7 +117,7 @@ THashType HashDom(const NUdf::TUnboxedValuePod x) {
         case ENodeType::Bool:
             return CombineHashes(THashType(type), std::hash<bool>()(x.Get<bool>()));
         case ENodeType::String:
-            return CombineHashes(THashType(type), GetStringHash(x));
+            return CombineHashes(THashType(type), GetStringHash(ClearUtf8Mark(x)));
         case ENodeType::Entity:
             return CombineHashes(THashType(type), THashType(~0ULL));
         case ENodeType::List:
@@ -141,7 +141,7 @@ bool EquateDoms(const NUdf::TUnboxedValuePod x, const NUdf::TUnboxedValuePod y) 
             case ENodeType::Bool:
                 return x.Get<bool>() == y.Get<bool>();
             case ENodeType::String:
-                return EquateStrings(x, y);
+                return EquateStrings(ClearUtf8Mark(x), ClearUtf8Mark(y));
             case ENodeType::Entity:
                 return true;
             case ENodeType::List:

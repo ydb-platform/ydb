@@ -739,7 +739,7 @@ template <class... TValidator>
 void FormatValue(TStringBuilderBase* builder, const TConstrainedRichYPath<TValidator...>& path, TStringBuf spec)
 {
     // NB: We intentionally use Text format since string-representation of rich ypath should be readable.
-    FormatValue(builder, ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Text), spec);
+    FormatValue(builder, ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Text), spec);
 }
 
 template <class... TValidator>
@@ -779,7 +779,7 @@ void Deserialize(TConstrainedRichYPath<TValidator...>& richPath, NYson::TYsonPul
 template <class... TValidator>
 void ToProto(TString* protoPath, const TConstrainedRichYPath<TValidator...>& path)
 {
-    *protoPath = ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
+    *protoPath = ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
 }
 
 template <class... TValidator>
@@ -791,7 +791,7 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const TString& protoP
 template <class... TValidator>
 void ToProto(std::string* protoPath, const TConstrainedRichYPath<TValidator...>& path)
 {
-    *protoPath = ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
+    *protoPath = ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
 }
 
 template <class... TValidator>
@@ -807,5 +807,5 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const std::string& pr
 template <class... TValidator>
 size_t THash<NYT::NYPath::TConstrainedRichYPath<TValidator...>>::operator()(const NYT::NYPath::TConstrainedRichYPath<TValidator...>& richYPath) const
 {
-    return ComputeHash(ToString(richYPath));
+    return ComputeHash(NYT::NYPath::ConvertToString(richYPath.GetPath(), richYPath.Attributes(), NYT::NYson::EYsonFormat::Text, /*sortAttributes*/ true));
 }

@@ -1299,7 +1299,7 @@ private:
     TAtomicIntrusivePtr<TLogManagerConfig> Config_;
 
     // Protects the section of members below.
-    NThreading::TForkAwareSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
     THashMap<TString, std::unique_ptr<TLoggingCategory>> NameToCategory_;
     THashMap<TString, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
 

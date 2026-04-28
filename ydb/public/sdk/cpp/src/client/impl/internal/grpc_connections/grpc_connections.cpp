@@ -38,6 +38,16 @@ std::string CreateSDKBuildInfo() {
     return std::string("ydb-cpp-sdk/") + GetSdkSemver();
 }
 
+std::string BuildFullBuildInfo(const IConnectionsParams& params) {
+    auto result = CreateSDKBuildInfo();
+    auto extra = params.GetBuildInfoExtra();
+    if (!extra.empty()) {
+        result += ';';
+        result += extra;
+    }
+    return result;
+}
+
 template<class TDerived>
 class TScheduledObject : public TThrRefBase {
     using TSelf = TScheduledObject<TDerived>;
@@ -158,6 +168,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , GRpcLoadBalancingPolicy_(params->GetGRpcLoadBalancingPolicy())
+    , GRpcCompressionAlgorithm_(params->GetGRpcCompressionAlgorithm())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
@@ -171,6 +182,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
+    , BuildInfo_(BuildFullBuildInfo(*params))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
@@ -338,6 +350,20 @@ void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config,
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = permitWithoutCalls ? 1 : 0;
 }
 
+void TGRpcConnectionsImpl::SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm) {
+    switch (algorithm) {
+        case EGrpcCompressionAlgorithm::None:
+            config.CompressionAlgorithm = GRPC_COMPRESS_NONE;
+            break;
+        case EGrpcCompressionAlgorithm::Deflate:
+            config.CompressionAlgorithm = GRPC_COMPRESS_DEFLATE;
+            break;
+        case EGrpcCompressionAlgorithm::Gzip:
+            config.CompressionAlgorithm = GRPC_COMPRESS_GZIP;
+            break;
+    }
+}
+
 TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr dbState) {
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
@@ -491,7 +517,7 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     static const std::string clientPid = GetClientPIDHeaderValue();
 
-    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, BuildInfo_});
     meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
     meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 

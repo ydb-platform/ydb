@@ -165,6 +165,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:
             return node.Q("localBloomNgramFilter");
+        case TIndexDescription::EType::LocalMinMax:
+            return node.Q("localMinMax");
     }
 }
 
@@ -356,12 +358,22 @@ INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsin
 
 INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    const auto& tableSettings = node.Y(
-        node.Q("tableSettings"),
-        node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
-    return node.Y(
-        node.Q(indexName),
-        node.Q(tableSettings));
+    auto alterIndexNode = node.Y(node.Q(indexName));
+    if (index.TableSettings.IsSet()) {
+        const auto& tableSettings = node.Y(
+            node.Q("tableSettings"),
+            node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(tableSettings));
+    }
+
+    if (index.IndexSettings) {
+        const auto& indexSettings = node.Y(
+            node.Q("indexSettings"),
+            node.Q(CreateIndexSettings(index.IndexSettings, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(indexSettings));
+    }
+
+    return alterIndexNode;
 }
 
 INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
@@ -2094,6 +2106,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2221,6 +2234,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2754,24 +2768,24 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
-TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
-TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildAlterObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                    bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
+    return new TAlterObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
-TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildDropObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                   bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
+    return new TDropObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {

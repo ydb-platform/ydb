@@ -31,4 +31,16 @@ private:
     const TString Description;
 };
 
+class TDatabaseToolBase : public TToolBase {
+    using TBase = TToolBase;
+
+public:
+    TDatabaseToolBase(const TString& database, const NJson::TJsonValue& parametersSchema, const TString& description);
+
+protected:
+    TString CanonizePath(const TString& path) const;
+
+    const TString Database;
+};
+
 } // namespace NYdb::NConsoleClient::NAi

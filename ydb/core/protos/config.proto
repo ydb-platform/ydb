@@ -306,6 +306,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinSecurity = 19;
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
+        optional bool HideAuthenticationFailureReasons = 22 [default = true];
     }
 
     repeated TDomain Domain = 1;
@@ -1700,6 +1701,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
+            MinValue: 0,
+            MaxValue: 100000,
+            DefaultValue: 2000 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1830,6 +1836,13 @@ message TImmediateControlsConfig {
 
         optional uint64 EnableChunkKeeper = 40 [(ControlOptions) = {
             Description: "Enable internal VDisk subsystem ChunkKeeper",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 EnablePersistentPhantomFlagStorage = 42 [(ControlOptions) = {
+            Description: "Enables Persistent Phantom Flag Storage",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0,
@@ -2898,6 +2911,7 @@ message TKafkaProxyConfig {
     optional string Cert = 8 [(Ydb.sensitive) = true];
     optional string Key = 9 [(Ydb.sensitive) = true];
     optional string CA = 17 [(Ydb.sensitive) = true];
+    optional bool EnableSelfSignedCerts = 19 [default = false];
     optional bool MtlsEnable = 18 [default = false];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];

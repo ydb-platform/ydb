@@ -14,7 +14,6 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>

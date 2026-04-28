@@ -2,6 +2,8 @@
 
 #include <yt/cpp/mapreduce/common/fwd.h>
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
+
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -37,6 +39,9 @@ public:
 
     bool HasRangeIndices() const override { return true; }
 
+    void Abort() override;
+    bool IsAborted() const override;
+
 protected:
     size_t DoRead(void* buf, size_t len) override;
 
@@ -53,7 +58,7 @@ private:
 
     std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
-    std::unique_ptr<IInputStream> Input_;
+    std::unique_ptr<IAbortableInputStream> Input_;
 
     IRequestRetryPolicyPtr CurrentRequestRetryPolicy_;
 

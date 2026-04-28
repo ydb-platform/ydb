@@ -238,6 +238,20 @@ void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TForsakeChaosShortcut::Register(TRegistrar registrar)
+{
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
+        registrar.Parameter("chaos_object_id", &TThis::ChaosObjectId_);
+}
+
+void TForsakeChaosShortcut::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->ForsakeChaosShortcut(CoordinatorCellId_, ChaosObjectId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TRemoveChaosCellMailbox::Register(TRegistrar registrar)
 {
     registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);

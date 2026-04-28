@@ -1,0 +1,97 @@
+name: Telegram scheduled notifications
+
+# Scheduled Telegram output: (1) mute-issue digests from YDB digest_queue via send_digest.py,
+# (2) stuck GitHub Actions queue alerts via alert_queued_jobs.py. Same cron; separate jobs.
+
+# Digest: new mute issues are written to YDB digest_queue by mute/create_new_muted_ya.py (not sent from mute PR workflows).
+# Job send-digest runs send_digest.py which dequeues unsent rows and sends Telegram, then sets sent_at.
+# Digest schedule: mute_issue_and_digest_config.json (schedule_utc_hours + schedule_weekdays).
+# send_digest.py checks UTC hour and ISO weekday (1=Mon … 7=Sun) — defaults to Mon–Fri if weekdays omitted.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force digest regardless of schedule hour"
+        type: boolean
+        default: false
+      profile:
+        description: "Digest: run only this profile ID (leave empty for all active)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Print messages without sending"
+        type: boolean
+        default: false
+
+concurrency:
+  group: telegram-scheduled-notifications
+  cancel-in-progress: false
+
+jobs:
+  check-queued-jobs:
+    name: CI queue Telegram alerts
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run queued jobs checker and send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+        run: |
+          python .github/scripts/telegram/alert_queued_jobs.py \
+            --chat-id 3017506311 \
+            --send-when-all-good \
+            --notify-on-api-errors \
+            --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
+
+  send-digest:
+    name: Mute digest to Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Install dependencies
+        run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
+
+      - name: Send digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+          YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ -n "${{ github.event.inputs.profile }}" ]; then
+            ARGS="$ARGS --profile ${{ github.event.inputs.profile }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 .github/scripts/telegram/send_digest.py \
+            --config .github/config/mute_issue_and_digest_config.json \
+            $ARGS

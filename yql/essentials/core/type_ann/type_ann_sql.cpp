@@ -3633,7 +3633,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool hasChanges = false;
                     for (ui32 i = 0; i < data.ChildrenSize(); ++i) {
                         auto x = data.ChildPtr(i);
-                        if (!x->IsCallable("PgWindow")) {
+                        if (!x->IsCallable({"PgWindow", "YqlWindow"})) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgWindow"));
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -4926,6 +4926,199 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus SqlWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (input->Child(1)->Content()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Window reference is not supported"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(2), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& x : input->Child(2)->Children()) {
+        if (!x->IsCallable({"YqlGroup", "PgGroup"})) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlGroup or PgGroup"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(3)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(3), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& x : input->Child(3)->Children()) {
+        if (!x->IsCallable({"YqlSort", "PgSort"})) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlSort or PgSort"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool hasType = false;
+    bool hasFrom = false;
+    bool hasTo = false;
+    bool hasFromValue = false;
+    bool hasToValue = false;
+    bool needFromValue = false;
+    bool needToValue = false;
+
+    for (const auto& x : input->Child(4)->Children()) {
+        if (!EnsureTupleMinSize(*x, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(x->Head(), ctx.Expr, isUniversal)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        auto optionName = x->Head().Content();
+        if (optionName == "exclude") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Excludes are not supported"));
+            return IGraphTransformer::TStatus::Error;
+        } else if (optionName == "from_value" || optionName == "to_value") {
+            hasFromValue = hasFromValue || (optionName == "from_value");
+            hasToValue = hasToValue || (optionName == "to_value");
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (x->Tail().GetTypeAnn() && x->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(x->Tail().GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            if (!x->Tail().IsCallable("Int32")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected Int32 as frame offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto val = FromString<i32>(x->Tail().Head().Content());
+            if (val < 0) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected non-negative value as frame offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (optionName == "type") {
+            hasType = true;
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(x->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto type = x->Tail().Content();
+            if (type != "rows") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unsupported frame type: " << type));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (optionName == "from" || optionName == "to") {
+            hasFrom = hasFrom || (optionName == "from");
+            hasTo = hasTo || (optionName == "to");
+            if (!EnsureTupleSize(*x, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(x->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto bound = x->Tail().Content();
+            if (!(bound == "up" || bound == "p" || bound == "c" || bound == "f" || bound == "uf")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unsupported frame bound: " << bound));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (bound == "p" || bound == "f") {
+                needFromValue = needFromValue || (optionName == "from");
+                needToValue = needToValue || (optionName == "to");
+            }
+
+            if (optionName == "from" && bound == "uf") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Unbounded following is unsupported as start offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (optionName == "to" && bound == "up") {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Unbounded preceding is unsupported as end offset"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unknown option: " << optionName));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (hasType) {
+        if (!hasFrom || !hasTo) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing offset specification in the frame"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    } else {
+        if (hasFrom || hasTo) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Unexpected offset specification in the frame"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (needFromValue != hasFromValue || needToValue != hasToValue) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Wrong offset value in the frame"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
     return IGraphTransformer::TStatus::Ok;
 }
 

@@ -918,7 +918,8 @@ namespace NKikimr::NPersQueueTests {
             {
                 grpc::ClientContext grpcContext;
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                UNIT_ASSERT_VALUES_EQUAL_C(addRuleResponse.operation().status(), Ydb::StatusIds::ALREADY_EXISTS, status.error_message());
             }
 
             Ydb::PersQueue::V1::RemoveReadRuleRequest removeRuleRequest;

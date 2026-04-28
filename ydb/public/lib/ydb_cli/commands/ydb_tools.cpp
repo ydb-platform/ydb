@@ -325,7 +325,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -397,7 +397,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(

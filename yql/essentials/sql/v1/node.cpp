@@ -1,4 +1,5 @@
 #include "node.h"
+#include "select_yql_aggregation.h"
 #include "source.h"
 #include "context.h"
 
@@ -3398,7 +3399,10 @@ protected:
     TNodePtr FuncNode_;
 };
 
-TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call) {
+TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call, bool isYqlSelect) {
+    if (isYqlSelect) {
+        return WrapYqlAggregationOverWindow(std::move(call), windowName);
+    }
     return new TCalcOverWindow(pos, windowName, call);
 }
 

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_data.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -113,5 +114,28 @@ namespace NKikimr {
                 , SyncedLsn(syncedLsn)
             {}
         };
+
+        struct TEvPhantomFlagStorageWriteItems
+                : public TEventLocal<TEvPhantomFlagStorageWriteItems,
+                                     TEvBlobStorage::EvPhantomFlagStorageWriteItems>
+        {
+            TEvPhantomFlagStorageWriteItems(std::vector<TPhantomFlagStorageItem>&& items);
+
+            std::vector<TPhantomFlagStorageItem> Items;
+        };
+
+        struct TEvPhantomFlagStorageCommitData
+                : public TEventLocal<TEvPhantomFlagStorageCommitData,
+                                     TEvBlobStorage::EvPhantomFlagStorageCommitData>
+        {
+            TEvPhantomFlagStorageCommitData(const std::optional<TPhantomFlagStorageData>& data);
+
+            std::optional<TPhantomFlagStorageData> Data;
+        };
+
+        struct TEvPhantomFlagStorageDrop
+                : public TEventLocal<TEvPhantomFlagStorageDrop,
+                                     TEvBlobStorage::EvPhantomFlagStorageDrop>
+        {};
     } // NSyncLog
 } // NKikimr

@@ -1234,13 +1234,6 @@ def on_ts_test_for_configure(
         unit.set_property(["DART_DATA", data])
 
 
-def on__ts_test_for_configure(unit: NotsUnitType) -> None:
-    # it has to be here because it uses TS_TEST_FOR_PATH that is set in plugin.
-    # if you call _SET_TS_TEST_FOR_INPUTS() directly
-    # from _TS_TEST_FOR_EPILOGUE(), TS_TEST_FOR_PATH is not set yet.
-    unit.on_set_ts_test_for_inputs()
-
-
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
@@ -1250,11 +1243,21 @@ def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) ->
 
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
+    forbid_rel = unit.get("_ALLOW_REL_FOR_PATH") == "no"
+
+    if forbid_rel and not is_arc_root:
+        arc_path = os.path.normpath(rootrel_arc_src(f"{root}/{for_mod}", unit))
+        ymake.report_configure_error(
+            "TS_TEST_FOR does not support RELATIVE path.\n"
+            f"Update your module to {COLORS.cyan}TS_TEST_FOR({arc_path}){COLORS.reset}\n"
+            "See more details in https://st.yandex-team.ru/FBP-3073"
+        )
+        return
 
     if is_arc_root and is_rel_for_mod:
         ymake.report_configure_error(
             "You are using a relative path for a module. "
-            + "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
+            "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
         )
 
 

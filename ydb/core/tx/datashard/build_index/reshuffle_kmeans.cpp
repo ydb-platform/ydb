@@ -64,6 +64,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 InvalidEmbeddingRows = 0;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedCellVec LastProcessedKey;
@@ -181,6 +182,13 @@ public:
         }
 
         Uploader.Finish(record, status);
+
+        if (InvalidEmbeddingRows > 0) {
+            auto* issue = record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_WARNING);
+            issue->set_message(TStringBuilder()
+                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build");
+        }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -347,6 +355,10 @@ protected:
     void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
+        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
+            ++InvalidEmbeddingRows;
+            return;
+        }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
         if (OutForeign) {
             bool foreign = false;

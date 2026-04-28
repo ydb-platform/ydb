@@ -354,8 +354,8 @@ class TestPqRowDispatcher(TestYdsBase):
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "nested": {"xyz": "key"}}',
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}']
-        filter = "time > 101;"
         expected = ['102']
+        filter = "time > 101;"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`time` > 101)')
         filter = 'data = "hello2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
@@ -383,6 +383,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -441,6 +445,12 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
+        filter = ' (data = "hello2") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` = \\"hello2\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data REGEXP ".*hello2.*") IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` REGEXP \\".*hello2.*\\") IS NOT DISTINCT FROM TRUE)')
+        filter = ' (data in ("hello2", "hello3")) IS NOT DISTINCT FROM true'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`data` IN (\\"hello2\\", \\"hello3\\")) IS NOT DISTINCT FROM TRUE)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

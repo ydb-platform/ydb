@@ -289,7 +289,7 @@ protected:
     }
 
     TString GetDatabaseName() const {
-        return Cfg().GetRoot();
+        return Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot();
     }
 
     TString GetTopicName() const {

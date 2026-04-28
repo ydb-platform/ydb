@@ -1,14 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 Y_UNIT_TEST_SUITE(DDisk) {
 
     struct TDDiskTestContext {
-        TEnvironmentSetup Env{{
-                .NodeCount = 8,
-                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            }};
+        TEnvironmentSetup Env;
 
         const ui32 BlockSize = 4096;
         ui32 SurfaceSize;
@@ -28,7 +27,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
         int LetterIndex = 0;
         const TString Letters = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TDDiskTestContext(ui32 surfaceSize = 64_KB) {
+        TDDiskTestContext(ui32 surfaceSize = 64_KB, ui64 inMemCache = 128_MB)
+            : Env({
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
+                    NYdb::NBS::NProto::TPBufferConfig pbCfg;
+                    pbCfg.SetMaxInMemoryCache(inMemCache);
+                    cfg.PBufferConfig = pbCfg;
+                }
+            }) {
             SurfaceSize = surfaceSize;
             SurfaceBlocks = SurfaceSize / BlockSize;
             Env.CreateBoxAndPool();
@@ -55,13 +63,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
         }
 
-        auto AllocateDDiskBlockGroup() {
+        auto AllocateDDiskBlockGroup(ui32 count = 8) {
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
             auto& r = ev->Record;
             r.SetDDiskPoolName("ddisk_pool");
             r.SetPersistentBufferDDiskPoolName("ddisk_pool");
             r.SetTabletId(1);
-            for (ui32 i = 0; i < 8; ++i) {
+            for (ui32 i = 0; i < count; ++i) {
                 auto *q = r.AddQueries();
                 q->SetDirectBlockGroupId(i + 1);
                 q->SetTargetNumVChunks(1);
@@ -69,7 +77,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             Env.Runtime->SendToPipe(MakeBSControllerID(), Edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Edge);
             auto& rr = response->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), count);
             auto responses = rr.GetResponses();
             return responses;
         }
@@ -579,4 +587,54 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     }
 
+    Y_UNIT_TEST(PersistentBufferCustomConfig) {
+        TDDiskTestContext f(1_MB, 1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 _ : xrange(100)) {
+            f.WritePB(0, 128);
+        }
+        ui32 cacheSize = f.GetPBInMemoryCacheSize();
+        UNIT_ASSERT(cacheSize == 1_MB);
+    }
+
+    Y_UNIT_TEST(PBAllocatedOnSameNodeButDifferentPDisk) {
+        TDDiskTestContext f;
+        auto r = f.AllocateDDiskBlockGroup(32);
+        std::unordered_map<TNodeId, ui32> ddisksCnt;
+        std::unordered_map<TNodeId, ui32> pbuffsCnt;
+        for (auto& item : r) {
+            Cerr << "DBG: " << item.GetDirectBlockGroupId() << Endl;
+            std::unordered_map<TNodeId, TPDiskId> ddisks;
+            std::unordered_map<TNodeId, TPDiskId> pbuffs;
+            UNIT_ASSERT(item.NodesSize() == 5);
+            for (auto& node : item.GetNodes()) {
+                TDDiskId ddid = node.GetDDiskId();
+                auto [_, inserted1] = ddisks.emplace(ddid.NodeId, ddid.ComprisingPDiskId());
+                UNIT_ASSERT(inserted1);
+                ddisksCnt[ddid.NodeId]++;
+                TDDiskId pbid = node.GetPersistentBufferDDiskId();
+                auto [__, inserted2] = pbuffs.emplace(pbid.NodeId, pbid.ComprisingPDiskId());
+                UNIT_ASSERT(inserted2);
+                pbuffsCnt[pbid.NodeId]++;
+                UNIT_ASSERT(ddid.NodeId == pbid.NodeId);
+                Cerr << "   DDisk: " << node.GetDDiskId() << Endl;
+                Cerr << "   PBuff: " << node.GetPersistentBufferDDiskId() << Endl;
+            }
+            for (auto& [nId, dd] : ddisks) {
+                auto& pb = pbuffs[nId];
+                UNIT_ASSERT(nId == 8 ? pb == dd : pb != dd);
+            }
+        }
+        UNIT_ASSERT(pbuffsCnt.size() == 8);
+        UNIT_ASSERT(ddisksCnt.size() == 8);
+        ui32 cnt = ddisksCnt.begin()->second;
+        for (auto [k, v] : ddisksCnt) {
+            UNIT_ASSERT(cnt == v);
+        }
+        for (auto [kd, v] : pbuffsCnt) {
+            UNIT_ASSERT(cnt == v);
+        }
+    }
 }

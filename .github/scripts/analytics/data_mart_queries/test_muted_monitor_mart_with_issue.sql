@@ -36,9 +36,11 @@ $gim_latest = (
         github_issue_url AS github_issue_url,
         github_issue_number AS github_issue_number,
         github_issue_state AS github_issue_state,
+        github_issue_state_reason AS github_issue_state_reason,
         github_issue_created_at AS github_issue_created_at,
         area_override AS area_override,
-        area_override_since AS area_override_since
+        area_override_since AS area_override_since,
+        info AS github_issue_info
     FROM (
         SELECT
             g.full_name AS full_name,
@@ -47,9 +49,11 @@ $gim_latest = (
             g.github_issue_url AS github_issue_url,
             g.github_issue_number AS github_issue_number,
             g.github_issue_state AS github_issue_state,
+            g.github_issue_state_reason AS github_issue_state_reason,
             g.github_issue_created_at AS github_issue_created_at,
             g.area_override AS area_override,
             g.area_override_since AS area_override_since,
+            g.info AS info,
             ROW_NUMBER() OVER (
                 PARTITION BY g.full_name, g.branch, g.build_type
                 ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
@@ -119,9 +123,11 @@ SELECT
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
+    gim.github_issue_state_reason AS github_issue_state_reason,
     gim.github_issue_created_at AS github_issue_created_at,
     gim.area_override AS area_override,
     gim.area_override_since AS area_override_since,
+    gim.github_issue_info AS github_issue_info,
     CAST(CASE WHEN mfu.full_name IS NOT NULL THEN 1 ELSE 0 END AS Uint8) AS is_manual_fast_unmute,
     mfu.mfu_since AS manual_fast_unmute_since,
     mfu.mfu_window_days AS manual_fast_unmute_window_days,

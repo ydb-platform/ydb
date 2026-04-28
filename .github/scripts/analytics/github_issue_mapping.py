@@ -26,6 +26,14 @@ First ``date_window`` for which datamarts apply ``area_override``. Set from the 
 unchanged override keeps the stored date. ``NULL`` on ``area_override_since`` means there is
 no lower bound: override applies for every ``date_window`` in the mart query (same as omitting
 the check in SQL).
+
+``github_issue_state_reason`` / ``info`` (Json)
+------------------------------------------------
+GitHub close reason (``COMPLETED``, ``NOT_PLANNED``, …) and a JSON snapshot with assignees,
+labels, milestone, project fields, and the export ``info`` blob — see
+:func:`github_issue_utils.build_github_issue_mapping_info_snapshot`.
+
+Add these columns in YDB manually (``ALTER TABLE``); ``CREATE TABLE`` below is for new installs only.
 """
 
 import datetime as dt
@@ -63,7 +71,17 @@ def get_github_issues_data(ydb_wrapper):
         body,
         created_at,
         updated_at,
-        info
+        info,
+        assignees,
+        labels,
+        milestone,
+        project_fields,
+        issue_type,
+        author_login,
+        repository_name,
+        project_status,
+        project_owner,
+        project_priority
     FROM `{issues_table}`
     WHERE body IS NOT NULL
     AND body != ''
@@ -247,10 +265,12 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_url`        Utf8,
         `github_issue_title`      Utf8,
         `github_issue_number`     Uint64     NOT NULL,
-        `github_issue_state`      Utf8,
-        `github_issue_created_at` Timestamp,
-        `area_override`           Utf8,
-        `area_override_since`     Date,
+        `github_issue_state`        Utf8,
+        `github_issue_state_reason` Utf8,
+        `github_issue_created_at`   Timestamp,
+        `area_override`             Utf8,
+        `area_override_since`       Date,
+        `info`                      Json,
         PRIMARY KEY (full_name, branch, build_type, github_issue_number)
     )
     PARTITION BY HASH(full_name)
@@ -279,6 +299,11 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                 by_build_type[bt] = issue
 
         for bt, latest_issue in by_build_type.items():
+            snap = dict(latest_issue.get('mapping_info') or {})
+            ao = latest_issue.get('area_override')
+            if ao:
+                snap['area_override'] = ao
+            info_json = json.dumps(snap, ensure_ascii=False)
             for branch in latest_issue['branches']:
                 table_data.append({
                     'full_name': test_name,
@@ -288,8 +313,10 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                     'github_issue_title': latest_issue['title'],
                     'github_issue_number': latest_issue['issue_number'],
                     'github_issue_state': latest_issue['state'],
+                    'github_issue_state_reason': latest_issue.get('state_reason'),
                     'github_issue_created_at': latest_issue.get('created_at'),
                     'area_override': latest_issue.get('area_override'),
+                    'info': info_json,
                 })
 
     return table_data
@@ -307,9 +334,13 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_title', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_number', ydb.PrimitiveType.Uint64)
     column_types.add_column('github_issue_state', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    column_types.add_column(
+        'github_issue_state_reason', ydb.OptionalType(ydb.PrimitiveType.Utf8)
+    )
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     column_types.add_column('area_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('area_override_since', ydb.OptionalType(ydb.PrimitiveType.Date))
+    column_types.add_column('info', ydb.OptionalType(ydb.PrimitiveType.Json))
 
     ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")

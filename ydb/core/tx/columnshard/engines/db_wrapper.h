@@ -91,7 +91,6 @@ public:
         const std::optional<TInternalPathId> pathId = std::nullopt,
         const std::optional<ui64> portionId = std::nullopt
     ) override;
-    std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard::TIndexPortionMeta> MakePortionInfoConstructor(const auto& rowset);
 
     void WriteColumn(
         const TPortionDataAccessor& acc, const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;

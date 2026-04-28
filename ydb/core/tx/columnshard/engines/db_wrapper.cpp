@@ -8,6 +8,51 @@
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
+namespace {
+
+std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard::TIndexPortionMeta> MakePortionInfoConstructor(
+    const auto& rowset) {
+    AFL_VERIFY(rowset.IsReady());
+    AFL_VERIFY(!rowset.EndOfSet());
+
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
+    std::unique_ptr<NOlap::TPortionInfoConstructor> portion;
+    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
+    const TString metadata = rowset.template GetValue<IndexPortions::Metadata>();
+    AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+
+    if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
+        auto portionImpl = std::make_unique<TWrittenPortionInfoConstructor>(
+            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
+            rowset.template GetValue<IndexPortions::PortionId>());
+        portionImpl->SetInsertWriteId((TInsertWriteId)rowset.template GetValue<IndexPortions::InsertWriteId>());
+        if (rowset.template GetValueOrDefault<IndexPortions::CommitPlanStep>(0)) {
+            portionImpl->SetCommitSnapshot(
+                TSnapshot(rowset.template GetValue<IndexPortions::CommitPlanStep>(), rowset.template GetValue<IndexPortions::CommitTxId>()));
+        } else {
+            AFL_VERIFY(!rowset.template GetValueOrDefault<IndexPortions::CommitTxId>(0));
+        }
+        portion.reset(portionImpl.release());
+    } else {
+        AFL_VERIFY(metaProto.HasCompactedPortion());
+        AFL_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
+        auto cPortion = std::make_unique<TCompactedPortionInfoConstructor>(
+            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
+            rowset.template GetValue<IndexPortions::PortionId>());
+        TSnapshot snapshot = TSnapshot::Zero();
+        snapshot.DeserializeFromProto(metaProto.GetCompactedPortion().GetAppearanceSnapshot()).Validate();
+        cPortion->SetAppearanceSnapshot(snapshot);
+        portion = std::move(cPortion);
+    }
+    portion->SetSchemaVersion(rowset.template GetValue<IndexPortions::SchemaVersion>());
+    if (rowset.template HaveValue<IndexPortions::ShardingVersion>() && rowset.template GetValue<IndexPortions::ShardingVersion>()) {
+        portion->SetShardingVersion(rowset.template GetValue<IndexPortions::ShardingVersion>());
+    }
+    portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
+    return std::make_pair(std::move(portion), std::move(metaProto));
+}
+
+}   // namespace
 
 void TDbWrapper::WriteColumn(
     const TPortionDataAccessor& acc, const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
@@ -122,47 +167,6 @@ bool TDbWrapper::LoadColumns(
         auto rowset = db.Table<IndexColumnsV2>().Select();
         return pred(rowset);
     }
-}
-
-std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard::TIndexPortionMeta> TDbWrapper::MakePortionInfoConstructor(const auto& rowset) {
-    AFL_VERIFY(rowset.IsReady());
-    AFL_VERIFY(!rowset.EndOfSet());
-
-    using IndexPortions = NColumnShard::Schema::IndexPortions;
-    std::unique_ptr<NOlap::TPortionInfoConstructor> portion;
-    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-    const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
-    AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
-
-    if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
-        auto portionImpl = std::make_unique<TWrittenPortionInfoConstructor>(
-            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
-            rowset.template GetValue<IndexPortions::PortionId>());
-        portionImpl->SetInsertWriteId((TInsertWriteId)rowset.template GetValue<IndexPortions::InsertWriteId>());
-        if (rowset.template GetValueOrDefault<IndexPortions::CommitPlanStep>(0)) {
-            portionImpl->SetCommitSnapshot(TSnapshot(
-                rowset.template GetValue<IndexPortions::CommitPlanStep>(), rowset.template GetValue<IndexPortions::CommitTxId>()));
-        } else {
-            AFL_VERIFY(!rowset.template GetValueOrDefault<IndexPortions::CommitTxId>(0));
-        }
-        portion.reset(portionImpl.release());
-    } else {
-        AFL_VERIFY(metaProto.HasCompactedPortion());
-        AFL_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
-        auto cPortion = std::make_unique<TCompactedPortionInfoConstructor>(
-            TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
-            rowset.template GetValue<IndexPortions::PortionId>());
-        TSnapshot snapshot = TSnapshot::Zero();
-        snapshot.DeserializeFromProto(metaProto.GetCompactedPortion().GetAppearanceSnapshot()).Validate();
-        cPortion->SetAppearanceSnapshot(snapshot);
-        portion = std::move(cPortion);
-    }
-    portion->SetSchemaVersion(rowset.template GetValue<IndexPortions::SchemaVersion>());
-    if (rowset.template HaveValue<IndexPortions::ShardingVersion>() && rowset.template GetValue<IndexPortions::ShardingVersion>()) {
-        portion->SetShardingVersion(rowset.template GetValue<IndexPortions::ShardingVersion>());
-    }
-    portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
-    return std::make_pair(std::move(portion), std::move(metaProto));
 }
 
 bool TDbWrapper::LoadPortions(

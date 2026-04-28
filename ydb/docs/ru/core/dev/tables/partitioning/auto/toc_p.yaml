@@ -1,0 +1,7 @@
+items:
+- name: По объёму (size-based)
+  href: by-size.md
+- name: По нагрузке (load-based)
+  href: by-load.md
+- name: Ограничения автошардирования
+  href: limits.md

@@ -1,0 +1,7 @@
+items:
+- name: Size-based
+  href: by-size.md
+- name: Load-based
+  href: by-load.md
+- name: Automatic sharding limits
+  href: limits.md

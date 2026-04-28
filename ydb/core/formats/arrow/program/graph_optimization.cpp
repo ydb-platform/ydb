@@ -1,6 +1,7 @@
 #include "assign_const.h"
 #include "assign_internal.h"
 #include "aggr_keys.h"
+#include "distinct.h"
 #include "filter.h"
 #include "graph_optimization.h"
 #include "header.h"
@@ -14,6 +15,7 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
+#include <memory>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -299,53 +301,59 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     return changed;
 }
 
-// Strict: only allow dictionary-only when the entire request needs exactly one data column,
-// and that column is an aggregation key used only in SOME (no filters on other columns, no other aggregates).
+// Strict: only allow dictionary-only when the entire request needs exactly one data column, and either:
+// - aggregation: that column is a group key and every aggregate is SOME(columnId), or
+// - distinct: TDistinctProcessor on that single column.
 TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds) {
-    if (!node->Is(EProcessorType::Aggregation)) {
-        return false;
-    }
-
-    const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
-    if (!aggrProc) {
-        return false;
-    }
-
     if (requiredDataColumnIds.size() != 1) {
         return false;
     }
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 
-    // True only if *all* aggregations are exactly SOME(columnId)
-    auto isKeyColumnOnlyUsedInSome = [aggrProc](const ui32 columnId) -> bool {
-        bool usedInAggr = false;
-        for (const auto& aggr : aggrProc->GetAggregations()) {
-            // Every aggregation must be SOME with exactly one input
-            if (aggr.GetAggregationId() != NAggregation::EAggregate::Some) {
-                return false;
-            }
-            const auto& inputs = aggr.GetInputs();
-            if (inputs.size() != 1) {
-                return false;
-            }
-            if (inputs[0].GetColumnId() != columnId) {
-                return false;
-            }
-            usedInAggr = true;
+    if (node->Is(EProcessorType::Filter)) {
+        const auto distinctProc = std::dynamic_pointer_cast<TDistinctProcessor>(node->GetProcessor());
+        if (!distinctProc || distinctProc->GetKeyColumnId() != columnId) {
+            return false;
         }
-        return usedInAggr;
-    };
+    } else if (node->Is(EProcessorType::Aggregation)) {
+        const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
+        if (!aggrProc) {
+            return false;
+        }
 
-    if (!isKeyColumnOnlyUsedInSome(columnId)) {
-        return false;
-    }
+        // True only if *all* aggregations are exactly SOME(columnId)
+        auto isKeyColumnOnlyUsedInSome = [aggrProc](const ui32 columnId) -> bool {
+            bool usedInAggr = false;
+            for (const auto& aggr : aggrProc->GetAggregations()) {
+                // Every aggregation must be SOME with exactly one input
+                if (aggr.GetAggregationId() != NAggregation::EAggregate::Some) {
+                    return false;
+                }
+                const auto& inputs = aggr.GetInputs();
+                if (inputs.size() != 1) {
+                    return false;
+                }
+                if (inputs[0].GetColumnId() != columnId) {
+                    return false;
+                }
+                usedInAggr = true;
+            }
+            return usedInAggr;
+        };
 
-    THashSet<ui32> keyIds;
-    for (const auto& k : aggrProc->GetAggregationKeys()) {
-        keyIds.insert(k.GetColumnId());
-    }
-    if (!keyIds.contains(columnId)) {
+        if (!isKeyColumnOnlyUsedInSome(columnId)) {
+            return false;
+        }
+
+        THashSet<ui32> keyIds;
+        for (const auto& k : aggrProc->GetAggregationKeys()) {
+            keyIds.insert(k.GetColumnId());
+        }
+        if (!keyIds.contains(columnId)) {
+            return false;
+        }
+    } else {
         return false;
     }
 

@@ -401,6 +401,74 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptGroupBySomeDictionary)).Execute(GetDictionarySettings());
     }
 
+    TString scriptDistinctDictionary = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            other Uint64,
+            PRIMARY KEY (pk, otherPk)
+        )
+        PARTITION BY HASH(pk, otherPk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, 'a', 4u),
+            (2u, 2u, 'b', 3u),
+            (3u, 3u, 'a', 2u),
+            (4u, 4u, 'c', 1u);
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` ORDER BY message;
+        EXPECTED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 3
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable` WHERE pk > 0 AND pk < 5;
+        EXPECTED_UNORDERED: [[["a"]];[["b"]];[["c"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 4
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message, pk FROM `/Root/ColumnTable` ORDER BY message, pk;
+        EXPECTED: [[["a"];1u];[["a"];3u];[["b"];2u];[["c"];4u]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 4
+    )";
+    Y_UNIT_TEST(DistinctDictionary) {
+        auto settings = GetDictionarySettings();
+        Variator::ToExecutor(Variator::SingleScript(scriptDistinctDictionary)).Execute(settings);
+    }
+
     TString scriptGroupBySomeDictionaryWithCompaction = R"(
         STOP_COMPACTION
         ------

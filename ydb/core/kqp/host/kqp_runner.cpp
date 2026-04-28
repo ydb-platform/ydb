@@ -171,7 +171,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, 
+        , Pctx(TKqpProviderContext(*OptimizeCtx,
             Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
             Config->UseBlockHashJoin.Get().GetOrElse(false)))
         , ActorSystem(actorSystem)
@@ -398,6 +398,7 @@ private:
                 "HashFuncPropagate"
             )
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Add(CreateKqpPushOlapDistinctOnPhysicalQueryTransformer(OptimizeCtx), "PushOlapDistinct")
             .Build(false);
 
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)

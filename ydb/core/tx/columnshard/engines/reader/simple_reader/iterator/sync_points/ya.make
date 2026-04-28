@@ -5,6 +5,7 @@ SRCS(
     result.cpp
     limit.cpp
     aggr.cpp
+    distinct_limit.cpp
 )
 
 PEERDIR(

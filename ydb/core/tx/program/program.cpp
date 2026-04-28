@@ -134,6 +134,13 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
                 }
                 break;
             }
+            case TId::kDistinct: {
+                auto status = programBuilder.ReadDistinct(cmd.GetDistinct());
+                if (status.IsFail()) {
+                    return status;
+                }
+                break;
+            }
             case TId::LINE_NOT_SET:
                 return TConclusionStatus::Fail("incorrect SSA line case");
         }

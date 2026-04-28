@@ -88,6 +88,10 @@ public:
         return Program.AddCommand()->MutableGroupBy();
     }
 
+    TProgram::TDistinct* CreateDistinct() {
+        return Program.AddCommand()->MutableDistinct();
+    }
+
     TProgram::TProjection* CreateProjection() {
         return Program.AddCommand()->MutableProjection();
     }
@@ -966,6 +970,11 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileDistinct(const TKqpOlapDistinct& distinctNode, TKqpOlapCompileContext& ctx) {
+    auto* distinct = ctx.CreateDistinct();
+    distinct->MutableKeyColumn()->SetId(GetOrCreateColumnId(distinctNode.Key(), ctx));
+}
+
 void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapCompileContext& ctx) {
     auto projections = projectionsNode.Projections();
     for (const auto& child : projections) {
@@ -1011,6 +1020,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeDistinct = operation.Maybe<TKqpOlapDistinct>()) {
+            CompileDistinct(maybeDistinct.Cast(), ctx);
         } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
             CompileProjections(maybeProjections.Cast(), ctx);
         }

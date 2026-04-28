@@ -1343,6 +1343,23 @@ private:
                     operatorId = currentOperatorId;
                 }
 
+                auto distinctPred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeDistinct = TMaybeNode<TKqpOlapDistinct>(n)) { return true; } return false;
+                };
+
+                if (auto maybeKqpOlapDistinct = FindNode(olapTable.Process().Body().Ptr(), distinctPred)) {
+                    auto kqpOlapDistinct = TExprBase(maybeKqpOlapDistinct).Cast<TKqpOlapDistinct>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Distinct";
+                    op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
+
+                    AddOptimizerEstimates(op, kqpOlapDistinct);
+                    currentOperatorId = AddOperator(planNode, "Distinct", std::move(op));
+                    operatorId = currentOperatorId;
+                }
+
                 auto pred = [](const TExprNode::TPtr& n) -> bool {
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };

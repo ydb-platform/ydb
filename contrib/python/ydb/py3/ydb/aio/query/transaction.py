@@ -72,7 +72,7 @@ class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
                 logger.warning("Failed to rollback leaked tx: %s", self._tx_state.tx_id)
             except BaseException:
                 logger.warning("Failed to rollback leaked tx: %s", self._tx_state.tx_id)
-                self.session._invalidate()
+                self.session._close_session(invalidate=True)
 
     async def _ensure_prev_stream_finished(self) -> None:
         if self._prev_stream is not None:

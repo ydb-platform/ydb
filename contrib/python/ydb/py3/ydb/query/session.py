@@ -56,7 +56,6 @@ def wrapper_delete_session(
 ) -> "BaseQuerySession":
     message = _ydb_query.DeleteSessionResponse.from_proto(response_pb)
     issues._process_response(message.status)
-    session._closed = True
     return session
 
 
@@ -71,6 +70,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     _session_id: Optional[str] = None
     _node_id: Optional[int] = None
     _closed: bool = False
+    _invalidated: bool = False
 
     def __init__(self, driver: DriverT, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
@@ -122,12 +122,18 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         return base.QueryClientSettings()
 
     def _check_session_ready_to_use(self) -> None:
-        if not self.is_active:
+        if self._session_id is None:
+            raise RuntimeError("Session is not initialized")
+        if self._invalidated:
+            raise issues.BadSession(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
+        if self._closed:
             raise RuntimeError(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
 
-    def _invalidate(self) -> None:
+    def _close_session(self, invalidate: bool = False) -> None:
         if self._closed:
             return
+        if invalidate:
+            self._invalidated = True
         self._closed = True
 
         if self._stream is not None:
@@ -161,9 +167,9 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
                     issues.Cancelled,
                 ),
             ):
-                self._invalidate()
+                self._close_session(invalidate=True)
         else:
-            self._invalidate()
+            self._close_session(invalidate=True)
 
     # Overloads for _create_call
     @overload
@@ -339,7 +345,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
             )
             issues._process_response(first_response)
         except Exception as e:
-            self._invalidate()
+            self._close_session(invalidate=True)
             raise e
 
         threading.Thread(
@@ -356,7 +362,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
             logger.debug("Attach stream closed, session_id: %s", self._session_id)
         except Exception as e:
             logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
-            self._invalidate()
+            self._close_session(invalidate=True)
 
     def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
@@ -372,7 +378,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
             except Exception:
                 pass
 
-        self._invalidate()
+        self._close_session()
 
     def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.

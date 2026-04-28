@@ -205,7 +205,7 @@ def bad_session_handler(func):
         try:
             return func(rpc_state, response_pb, session, *args, **kwargs)
         except issues.BadSession:
-            session._invalidate()
+            session._close_session(invalidate=True)
             raise
 
     return decorator

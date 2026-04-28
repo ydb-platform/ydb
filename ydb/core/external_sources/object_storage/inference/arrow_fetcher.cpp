@@ -16,6 +16,8 @@
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
 
+#include <optional>
+
 #include <ydb/core/external_sources/object_storage/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -116,8 +118,11 @@ public:
                 break;
             }
             case EFileFormat::Csv: {
-                auto withHeader = PrependSyntheticCsvHeader(data, Config_->CsvParseOpts);
-                file = CleanupCsvFile(withHeader, request, Config_->CsvParseOpts, ctx);
+                auto withHeader = PrependSyntheticCsvHeader(data, request, Config_->CsvParseOpts, ctx);
+                if (!withHeader) {
+                    return;
+                }
+                file = CleanupCsvFile(*withHeader, request, Config_->CsvParseOpts, ctx);
                 if (!file) {
                     return;
                 }
@@ -151,11 +156,7 @@ public:
         }
     }
 
-    // Determine the number of columns in the first CSV row by letting Arrow's
-    // CSV BlockParser parse a single row. This correctly handles quoted fields
-    // (which may legally contain delimiter characters) and any delimiter/escape
-    // configuration carried in `options`.
-    static size_t DetectCsvColumnCount(const TString& data, const arrow::csv::ParseOptions& options) {
+    static std::optional<size_t> DetectCsvColumnCount(const TString& data, const arrow::csv::ParseOptions& options, TString& parseError) {
         constexpr int32_t kSingleRow = 1;
         arrow::csv::BlockParser parser(options, /*num_cols=*/-1, /*first_row=*/-1, /*max_num_rows=*/kSingleRow);
 
@@ -163,17 +164,32 @@ public:
         uint32_t parsedBytes = 0;
         // ParseFinal tolerates a missing trailing newline on the last (in this case only) row.
         auto status = parser.ParseFinal(view, &parsedBytes);
-        if (!status.ok() || parser.num_cols() <= 0) {
-            return 1;
+        if (!status.ok()) {
+            parseError = status.ToString();
+            return std::nullopt;
+        }
+        if (parser.num_cols() <= 0) {
+            parseError = "first CSV row produced zero columns";
+            return std::nullopt;
         }
         return static_cast<size_t>(parser.num_cols());
     }
 
-    static TString PrependSyntheticCsvHeader(const TString& data, const arrow::csv::ParseOptions& options) {
-        const size_t columnCount = DetectCsvColumnCount(data, options);
+    std::optional<TString> PrependSyntheticCsvHeader(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
+        TString parseError;
+        auto columnCount = DetectCsvColumnCount(data, options, parseError);
+        if (!columnCount) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't determine column count for headerless CSV " << request.Path << ": " << parseError
+            );
+            SendError(ctx, error);
+            return std::nullopt;
+        }
 
         TStringBuilder header;
-        for (size_t i = 0; i < columnCount; ++i) {
+        for (size_t i = 0; i < *columnCount; ++i) {
             if (i > 0) {
                 header << options.delimiter;
             }

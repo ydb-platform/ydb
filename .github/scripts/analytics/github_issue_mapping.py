@@ -232,11 +232,19 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_area_override(body: str, info_raw, area_to_owner: dict):
+def resolve_area_override(body: str, info_raw, area_to_owner: dict, issue_state=None):
     """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
 
     Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
+
+    **Closed issues** never contribute an override: after automation unmutes (routine close or
+    fast-track completion) the mute issue is closed — routing falls back to TESTOWNERS until a
+    new open mute issue with ``area/`` applies again.
     """
+    st = (issue_state or "").strip().upper()
+    if st == "CLOSED":
+        return None
+
     area_label = (_extract_area_from_info(info_raw) or "").strip()
     if not area_label:
         return None
@@ -377,6 +385,7 @@ def main():
                         issue.get('body', ''),
                         issue.get('info'),
                         area_to_owner,
+                        issue.get('state'),
                     )
 
             print("Creating test-to-issue mapping...")

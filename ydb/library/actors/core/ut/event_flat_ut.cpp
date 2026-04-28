@@ -21,6 +21,7 @@ enum {
     EvFlatEmpty,
     EvFlatOptionalEmpty,
     EvFlatStrictArrayFields,
+    EvFlatStrictBytesFields,
 };
 
 struct TPoint {
@@ -334,6 +335,39 @@ struct TEvFlatStrictArrayFields : TEventFlat<TEvFlatStrictArrayFields, TEvFlatSt
     auto Numbers() { return this->template Array<TNumbersTag>(); }
     auto Numbers() const { return this->template Array<TNumbersTag>(); }
     size_t NumbersSize() const { return this->template GetSize<TNumbersTag>(); }
+};
+
+struct TEvFlatStrictBytesFields;
+struct TEvFlatStrictBytesFieldsScheme {
+    using TMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+    using TBlobTag = TFlatEventDefs::BytesField<1>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithStrictScheme,
+        TFlatEventDefs::WithPayloadType<ui8>, TMarkerTag, TBlobTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
+};
+
+struct TEvFlatStrictBytesFields : TEventFlat<TEvFlatStrictBytesFields, TEvFlatStrictBytesFieldsScheme> {
+    using TBase = TEventFlat<TEvFlatStrictBytesFields, TEvFlatStrictBytesFieldsScheme>;
+
+    static constexpr ui32 EventType = EvFlatStrictBytesFields;
+
+    using TScheme = TEvFlatStrictBytesFieldsScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TBlobTag = TScheme::TBlobTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
+
+    friend class TEventFlat<TEvFlatStrictBytesFields, TEvFlatStrictBytesFieldsScheme>;
+
+    static TEvFlatStrictBytesFields* Make() {
+        return TBase::MakeEvent();
+    }
+
+    auto Marker() { return this->template Field<TMarkerTag>(); }
+    auto Marker() const { return this->template Field<TMarkerTag>(); }
+
+    auto Blob() { return this->template Bytes<TBlobTag>(); }
+    auto Blob() const { return this->template Bytes<TBlobTag>(); }
+    size_t BlobSize() const { return this->template GetSize<TBlobTag>(); }
 };
 
 namespace {
@@ -967,6 +1001,48 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), std::size(values));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[0]), 21u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 55u);
+    }
+
+    Y_UNIT_TEST(BytesOnlyPayloadUsesDirectWirePayloads) {
+        THolder<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
+        ev->Marker() = 515;
+        ev->Blob().Append(TRope(TString("strict-bytes")));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
+        auto buffers = serializer->Release(ev->CreateSerializationInfo(false));
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatStrictBytesFields, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatStrictBytesFields* loaded = handle->Get<TEvFlatStrictBytesFields>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 515u);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->BlobSize(), TString("strict-bytes").size());
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), "strict-bytes");
+    }
+
+    Y_UNIT_TEST(StrictBytesPayloadUsesExtendedFormat) {
+        TString payload(4096, 'x');
+        payload[0] = 'a';
+        payload.back() = 'z';
+
+        THolder<TEvFlatStrictBytesFields> ev(TEvFlatStrictBytesFields::Make());
+        ev->Marker() = 616;
+        ev->Blob().Append(TRope(payload));
+
+        TEventSerializationInfo info = ev->CreateSerializationInfo(true);
+        UNIT_ASSERT(info.IsExtendedFormat);
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
+        auto buffers = serializer->Release(std::move(info));
+
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatStrictBytesFields, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatStrictBytesFields* loaded = handle->Get<TEvFlatStrictBytesFields>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 616u);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->BlobSize(), payload.size());
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Blob().Materialize(), payload);
     }
 
     Y_UNIT_TEST(ArrayPayloadAlignmentIsExposedInSerializationInfo) {

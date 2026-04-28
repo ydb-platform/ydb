@@ -552,6 +552,11 @@ namespace NActors {
 
         const auto logPrio = ::ELogPriority(ui16(priority));
 
+        TLogRecord::TMetaFlags metaFlags;
+        if (structMessage.Defined()) {
+            StructMetaWriter.Write(metaFlags, structMessage.GetRef());
+        }
+
         char buf[TimeBufSize];
         switch (Settings->Format) {
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
@@ -571,7 +576,7 @@ namespace NActors {
                 }
                 logRecord << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
@@ -580,7 +585,7 @@ namespace NActors {
                     << Settings->ComponentName(component)
                     << ": " << formatted;
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
@@ -638,7 +643,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
         }
 

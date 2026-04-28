@@ -2,7 +2,7 @@
 
 // KLL-based partitioning keys for split-by-load; used only by autopartitioning_manager in this module.
 
-#include <ydb/core/persqueue/common/last_counter.h>
+#include "last_counter.h"
 
 #include <util/datetime/base.h>
 #include <ydb/library/kll_median/dynamic_sketch.h>
@@ -14,11 +14,12 @@ namespace NKikimr::NPQ {
 using TUint128 = unsigned __int128;
 
 struct TPartitioningKeysManager {
-    TPartitioningKeysManager(size_t numSketches, TDuration windowSize);
-    void Add(TUint128 key, ui64 msgSize);
-    void Add(TUint128 key, ui64 msgSize, TInstant now);
+    TPartitioningKeysManager(size_t numSketches, TDuration windowSize, size_t initialWeight = DEFAULT_MIN_WEIGHT);
+    void Add(TUint128 key, ui64 weight);
+    void Add(TUint128 key, ui64 weight, TInstant now);
     TUint128 GetMedianKey();
     bool MoreThanOneKey(TInstant since);
+    void Merge(const TPartitioningKeysManager& other);
 
 private:
     void RemoveOldSketches(TInstant now);
@@ -38,6 +39,7 @@ private:
     TLastCounter<TUint128> KeysCounter;
 
     std::mt19937_64 Rng;
+    size_t InitialWeight;
 };
 
 } // namespace NKikimr::NPQ

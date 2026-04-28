@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/utils/cast.h>
 #include <yql/essentials/utils/log/log.h>
@@ -679,7 +680,8 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent,
+                          bool spillingAllowed = true)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -690,7 +692,7 @@ public:
         , Logger(logger)
         , LogComponent(logComponent)
     {
-        if (Ctx.SpillerFactory) {
+        if (spillingAllowed && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
         ResetFields();
@@ -737,10 +739,19 @@ public:
     void Put() {
         ResetFields();
         if (Ctx.SpillerFactory && !HasMemoryForProcessing()) {
+            // Count rows accumulated so far (Storage has Indexes.size() values per row,
+            // plus one placeholder for the next row added by ResetFields).
+            const size_t rowsInMemory = Storage.size() / Indexes.size();
+            if (rowsInMemory < MinSpillBatchRows) {
+                // Accumulate more rows before spilling to avoid creating
+                // thousands of tiny spilled runs which are very slow to merge.
+                return;
+            }
+
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
 
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit);
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit << ", rows in memory: " << rowsInMemory);
             UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
 
             SwitchMode(EOperatingMode::Spilling);
@@ -891,6 +902,10 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
+    // Minimum number of rows to accumulate before spilling.
+    // Prevents creating thousands of tiny spilled runs when the yellow zone
+    // is triggered early (e.g., by other stages consuming most of the memory).
+    static constexpr size_t MinSpillBatchRows = 64 * 1024;
     const NYql::NUdf::TLoggerPtr Logger;
     const NYql::NUdf::TLogComponentId LogComponent;
 };
@@ -905,7 +920,7 @@ class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapp
 
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType, bool spillingAllowed = true)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow(flow)
         , Directions(std::move(directions))
@@ -913,6 +928,7 @@ public:
         , Indexes(std::move(indexes))
         , Representations(std::move(representations))
         , TupleMultiType(tupleMultiType)
+        , SpillingAllowed(spillingAllowed)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -1129,11 +1145,11 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized, spillingAllowed=" << SpillingAllowed);
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent, SpillingAllowed);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent, SpillingAllowed);
 #endif
     }
 
@@ -1150,6 +1166,7 @@ private:
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
     TMultiType* const TupleMultiType;
+    const bool SpillingAllowed;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1244,13 +1261,15 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
 
+    const bool spillingAllowed = HasSpillingFlag(callable);
+
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
                                              std::move(indexes), std::move(representations));
         } else {
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                                        std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType, spillingAllowed);
         }
     }
 

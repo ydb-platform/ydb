@@ -29,6 +29,18 @@ public:
             };
         }
 
+        if (SpillingSettings.IsSortSpillingEnabled() && (name == "WideSort" || name == "WideTopSort")) {
+            return [](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                TCallableBuilder callableBuilder(env,
+                    TStringBuilder() << callable.GetType()->GetName() << "WithSpilling",
+                    callable.GetType()->GetReturnType(), false);
+                for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
+                return TRuntimeNode(callableBuilder.Build(), false);
+            };
+        }
+
         return TCallableVisitFunc();
     }
 

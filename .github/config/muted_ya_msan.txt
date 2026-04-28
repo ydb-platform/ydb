@@ -26,10 +26,13 @@ ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDead4Plus2BlockMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadActiveOneDeadInactiveMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit200_B
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3of4MemoryLimit10_KB
@@ -42,6 +45,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnly
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
+ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
@@ -456,3 +460,4 @@ ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompressio
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2

@@ -1,5 +1,6 @@
 #include "dirty_map.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <util/generic/map.h>
@@ -13,9 +14,9 @@ namespace {
 // help structure to sorting ranges in MakeRangeHints
 struct TOverlappingItem
 {
-    ui64 Key;
+    ui64 Key{};
     TBlockRange64 Range;
-    TInflightInfo* Value;
+    TInflightInfo* InflightInfo{};
 
     bool operator<(const TOverlappingItem& other) const
     {
@@ -336,100 +337,48 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    struct TBoundary
-    {
-        ui64 Offset{};
-        ui64 Lsn{};
-        bool Open{};
-
-        bool operator<(const TBoundary& rhs) const
-        {
-            return std::make_tuple(Offset, Open, Lsn) <
-                   std::make_tuple(rhs.Offset, rhs.Open, rhs.Lsn);
-        }
-    };
-
-    TVector<TBoundary> boundaries;
     TSet<TOverlappingItem> ranges;
     ui64 offsetBlocks{};
-    auto addItem = [&ranges,
-                    &offsetBlocks,
-                    &result,
-                    this](ui64 lsn, ui64 start, ui64 end) -> bool
+    auto addItem = [&ranges, &offsetBlocks, &result, this](
+                       ui64 lsn,
+                       TBlockRange64 range) -> bool
     {
-        const auto segmentRange = TBlockRange64::MakeClosedInterval(start, end);
         if (lsn == 0) {
-            auto hint = MakeReadRangeHint({}, 0, segmentRange, offsetBlocks);
+            auto hint = MakeReadRangeHint({}, 0, range, offsetBlocks);
             AddReadHint(result, std::move(hint));
         } else {
             auto bestItem = ranges.find({lsn, {}, {}});
-            const auto readMask = bestItem->Value->ReadMask();
+            const auto readMask = bestItem->InflightInfo->ReadMask();
             if (readMask.Empty()) {
-                result.WaitReady = bestItem->Value->GetQuorumReadyFuture();
+                result.WaitReady =
+                    bestItem->InflightInfo->GetQuorumReadyFuture();
                 result.RangeHints.clear();
                 return false;
             }
 
             const ui64 lsn = readMask.OnlyDDisk() ? 0 : bestItem->Key;
-            auto hint =
-                MakeReadRangeHint(readMask, lsn, segmentRange, offsetBlocks);
+            auto hint = MakeReadRangeHint(readMask, lsn, range, offsetBlocks);
             AddReadHint(result, std::move(hint));
         }
 
-        offsetBlocks += segmentRange.Size();
+        offsetBlocks += range.Size();
         return true;
     };
-
-    boundaries.push_back({range.Start, 0, true});
-    boundaries.push_back({range.End + 1, 0, false});
 
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
             ranges.insert({item.Key, item.Range, &item.Value});
-
-            const ui64 clippedStart = Max(item.Range.Start, range.Start);
-            const ui64 clippedEnd = Min(item.Range.End + 1, range.End + 1);
-
-            boundaries.push_back({clippedStart, item.Key, true});
-            boundaries.push_back({clippedEnd, item.Key, false});
-
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
-    Sort(boundaries.begin(), boundaries.end());
-    result.RangeHints.reserve(boundaries.size());
-
-    TSet<ui64, std::greater<ui64>> currentLsn;
-    currentLsn.insert(boundaries[0].Lsn);
-    ui64 segmentStartOffset = boundaries[0].Offset;
-    ui64 currentBestLsn = *currentLsn.begin();
-
-    for (ui64 i = 1; i < boundaries.size(); ++i) {
-        if (boundaries[i].Open) {
-            currentLsn.insert(boundaries[i].Lsn);
-        } else {
-            currentLsn.erase(boundaries[i].Lsn);
-        }
-
-        ui64 newBestLsn =
-            currentLsn.empty() ? 0 : *currentLsn.begin();
-        bool isLast = currentLsn.empty();
-        if (isLast) {
-            Y_ABORT_IF(i != boundaries.size() - 1);
-        }
-        if (newBestLsn != currentBestLsn || isLast) {
-            if (boundaries[i].Offset > segmentStartOffset) {
-                ui64 segmentEnd = boundaries[i].Offset - 1;
-                if (!addItem(currentBestLsn, segmentStartOffset, segmentEnd)) {
-                    return result;
-                }
-            }
-            segmentStartOffset = boundaries[i].Offset;
-            currentBestLsn = newBestLsn;
-        }
-    }
+    result.RangeHints.reserve(ranges.size());
+    SplitExecOnNonOverlappingRanges(
+        range.Start,
+        range.End,
+        ranges,
+        std::move(addItem));
 
     return result;
 }

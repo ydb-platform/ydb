@@ -2688,7 +2688,7 @@ public:
                             return SyncError();
                         }
 
-                        if (indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter && indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter ) {
+                        if (indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter && indexIter->GetImplementationCase() != NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter ) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                 TStringBuilder() << "Index " << alterIndexName << " is " << indexIter->GetClassName() << " index. "
                                  << "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));

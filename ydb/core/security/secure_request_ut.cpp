@@ -185,7 +185,6 @@ Y_UNIT_TEST(SecurityConfig1) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -291,7 +290,6 @@ Y_UNIT_TEST(SecurityConfig2) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -399,7 +397,6 @@ Y_UNIT_TEST(SecurityConfig3) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -525,7 +522,6 @@ Y_UNIT_TEST(SecurityConfig4) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -577,7 +573,6 @@ Y_UNIT_TEST(SecurityConfig5) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -629,7 +624,6 @@ Y_UNIT_TEST(SecurityConfig6) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -717,7 +711,6 @@ Y_UNIT_TEST(SecurityConfig7) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -807,7 +800,6 @@ Y_UNIT_TEST(SecurityConfig8) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -933,7 +925,6 @@ Y_UNIT_TEST(SecurityConfig9) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -985,7 +976,6 @@ Y_UNIT_TEST(SecurityConfig10) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -1035,7 +1025,6 @@ Y_UNIT_TEST(SecurityConfig11) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -1139,7 +1128,6 @@ Y_UNIT_TEST(SecurityConfig12) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -1263,7 +1251,6 @@ Y_UNIT_TEST(SecurityConfig13) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -1369,7 +1356,6 @@ Y_UNIT_TEST(SecurityConfig14) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));
@@ -1419,7 +1405,6 @@ Y_UNIT_TEST(SecurityConfig15) {
     auto* runtime = env.GetRuntime();
 
     const TActorId sender = runtime->AllocateEdgeActor();
-    TAutoPtr<IEventHandle> handle;
 
     // Anonymous request, admin access isn't required
     runtime->Register(CreateSecureRequestTestActor(sender, "", false));

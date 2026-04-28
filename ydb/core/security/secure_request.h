@@ -49,7 +49,7 @@ private:
         }
 
          // Acts in case of !EnforceUserTokenRequirement: If user specify token,
-         // it is checked and required to be valid for futher usage of YDB.
+         // it is checked and required to be valid for further usage of YDB.
          // If user doesn't specify token, no checks are made.
         if (GetEnforceUserTokenCheckRequirement() && IsTokenExists()) {
             return true;

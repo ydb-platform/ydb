@@ -773,7 +773,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildCondenseForAggregationOutputWi
     return MapCondenseOutput(input, traits, renameMap);
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) {
     const auto& aggregationTraitsList = Aggregate->GetAggregationTraits();
     const auto& keyColumns = Aggregate->GetKeyColumns();
     const TVector<TString> inputColumns = GetInputColumns(aggregationTraitsList, keyColumns);
@@ -782,8 +782,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     const auto* outputType = Aggregate->Type;
     const bool scalarAggregationResult = keyColumns.empty();
     const bool distinctAll = Aggregate->IsDistinctAll();
-    auto limitSetting = Aggregate->GetMemoryLimit();
-    TExprNode::TPtr memLimit = limitSetting.has_value() ? Ctx.NewAtom(Pos, ToString(*limitSetting)) : Ctx.NewAtom(Pos, "");
+    TExprNode::TPtr memoryLimit =
+        (memLimit.has_value() && Aggregate->AggregationPhase == EOpPhase::Intermediate) ? Ctx.NewAtom(Pos, ToString(*memLimit)) : Ctx.NewAtom(Pos, "");
 
     // The difference from the input column is that the agg columns are renamed to columns that do not have the same names for the key column and the input
     // columns.
@@ -804,7 +804,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     auto wideCombiner = Ctx.Builder(Pos)
         .Callable(PhysicalAggregationName)
             .Add(0, NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx))
-            .Add(1, memLimit)
+            .Add(1, memoryLimit)
             .Add(2, BuildKeyExtractorLambda(keyFields, inputColumns))
             .Add(3, BuildInitHandlerLambda(keyFields, inputFields, phyAggregationTraitsList))
             .Add(4, BuildUpdateHandlerLambda(keyFields, inputFields, phyAggregationTraitsList))

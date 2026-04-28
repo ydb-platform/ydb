@@ -198,6 +198,7 @@ public:
             TExprNode::TPtr emptyList = ctx.NewCallable(pqReadTopic.Pos(), "List", {
                 ExpandType(pqReadTopic.Pos(), *listType, ctx)
             });
+            TExprNode::TPtr emptyList2; 
 
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
@@ -213,6 +214,8 @@ public:
                     .Partitions(emptyList)
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .Predicate<TCoVoid>().Build()
+                    .CompareArgsEvaluate<TCoVoid>().Build()
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()

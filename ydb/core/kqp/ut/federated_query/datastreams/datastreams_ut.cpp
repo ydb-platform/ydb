@@ -1255,10 +1255,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         auto received = ReadTopicMessagesWithWriteTime(topic, 4, TInstant{}, true);
         UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
-        for (auto& [message, writeTime] : received) {
-            Cerr << "message " << message << " writeTime " << writeTime << Endl;
-        }
-
 
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
             TString text = fmt::format(R"(
@@ -1276,9 +1272,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CheckScriptResult(result[0], 3, rowCount, validator);
         };
 
+        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
         test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
         });
+        auto future = received[3].second + TDuration::Seconds(100);
+        test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
         
     }
 

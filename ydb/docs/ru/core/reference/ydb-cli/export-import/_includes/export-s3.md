@@ -17,6 +17,7 @@
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
 - [векторный индекс](../../../../concepts/glossary.md#vector-index);
 - [полнотекстовый индекс](../../../../concepts/glossary.md#fulltext-index);
+- [локальный Bloom skip индекс](../../../../concepts/glossary.md#local-bloom-skip-index);
 - [топик](../../../../concepts/datamodel/topic.md) (только схема);
 - [представление (view)](../../../../concepts/datamodel/view.md);
 - [асинхронная репликация](../../../../concepts/async-replication.md);

@@ -27,6 +27,11 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: Bloom skip indexes
+  href: bloom-skip-indexes/index.md
+  include:
+    mode: link
+    path: bloom-skip-indexes/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:

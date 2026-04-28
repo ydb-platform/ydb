@@ -226,12 +226,12 @@ CREATE TABLE article_column_table (
 WITH (STORE = COLUMN);
 ```
 
-Local Bloom skip indexes are compact value-based filters that speed up selective queries by allowing the system to skip data chunks that definitely do not contain the requested values. Such indexes can be defined using `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, and can be created either during [table creation](../../../yql/reference/syntax/create_table/secondary_index.md) or added later with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom-column).
+Local Bloom skip indexes are compact value-based filters that speed up selective queries by allowing the system to skip data fragments that definitely do not contain the requested values. Such indexes can be defined using `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, and can be created either during [table creation](../../../yql/reference/syntax/create_table/bloom_skip_index.md) or added later with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
 
 * Reading from replicas.
-* Secondary indexes.
+* Global secondary indexes.
 * Vector indexes.
 * Change Data Capture.
 * Custom table attributes.

@@ -29,3 +29,4 @@ Learn more:
 * [Fulltext indexes](../../dev/fulltext-indexes.md)
 * [Fulltext built-in functions](../../yql/reference/builtins/fulltext.md)
 * [VIEW (Fulltext index)](../../yql/reference/syntax/select/fulltext_index.md)
+* [Bloom skip indexes and filtering](bloom_skip_indexes.md) — selective filtering by values and substrings without an inverted fulltext index

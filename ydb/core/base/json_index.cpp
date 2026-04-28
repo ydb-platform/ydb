@@ -202,14 +202,16 @@ class TQueryCollector {
         Predicate = 2,
 
         // Comparison RHS: scalar literals (string, number, bool, null)
-        // Also supports unary arithmetic operations (+, -) for numbers
+        // Also supports unary arithmetic operations (+, -) for numbers and variables
         Literal = 3
     };
 
 public:
-    TQueryCollector(const TJsonPathPtr path, ECallableType callableType)
+    TQueryCollector(const TJsonPathPtr path, ECallableType callableType,
+                    const std::unordered_map<TString, TString>& variables)
         : Reader(path)
         , CallableType(callableType)
+        , Variables(variables)
     {
     }
 
@@ -253,12 +255,14 @@ private:
 private:
     TJsonPathReader Reader;
     ECallableType CallableType;
+    std::unordered_map<TString, TString> Variables;
     TVector<TString> FilterObjectPrefixes;
 };
 
 TCollectResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
     const bool isUnaryOp = item.Type == EJsonPathItemType::UnaryMinus || item.Type == EJsonPathItemType::UnaryPlus;
-    if (mode == EMode::Literal && !IsLiteralType(item.Type) && !isUnaryOp) {
+    const bool isVariable = item.Type == EJsonPathItemType::Variable;
+    if (mode == EMode::Literal && !(IsLiteralType(item.Type) || isUnaryOp || isVariable)) {
         return TCollectResult(TIssue("Expected a literal expression"));
     }
 
@@ -464,8 +468,10 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
-    const bool leftIsLiteral = IsLiteralType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value();
-    const bool rightIsLiteral = IsLiteralType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value();
+    const bool leftIsLiteral = IsLiteralType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value()
+        || leftItem.Type == EJsonPathItemType::Variable;
+    const bool rightIsLiteral = IsLiteralType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value()
+        || rightItem.Type == EJsonPathItemType::Variable;
 
     if (!leftIsLiteral && rightIsLiteral) {
         return CollectEqualOperands(leftItem, rightItem);
@@ -577,16 +583,25 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
 }
 
 TCollectResult TQueryCollector::CollectArithmeticOperand(const TJsonPathItem& item, EMode mode) {
-    if (IsLiteralType(item.Type) || EvaluteNumericLiteral(item).has_value()) {
+    if (IsLiteralType(item.Type) || EvaluteNumericLiteral(item).has_value()
+        || item.Type == EJsonPathItemType::Variable) {
         return TCollectResult(TCollectResult::TTokens{});
     }
     return Collect(item, mode);
 }
 
 TCollectResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) {
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TCollectResult(TIssue("Variables are not supported at the moment"));
+    if (mode != EMode::Literal) {
+        return TCollectResult(TIssue("Variables are not allowed in this context"));
+    }
+
+    TString name(item.GetString());
+    auto it = Variables.find(name);
+    if (it == Variables.end()) {
+        return TCollectResult(TIssue(TStringBuilder() << "Variable '$" << name
+            << "' is referenced in jsonpath but not provided in PASSING clause"));
+    }
+    return TCollectResult(TString(it->second));
 }
 
 std::optional<double> TQueryCollector::EvaluteNumericLiteral(const TJsonPathItem& item) {
@@ -775,8 +790,10 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
-TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
-    auto result = TQueryCollector(path, callableType).Collect();
+TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType,
+    const std::unordered_map<TString, TString>& variables)
+{
+    auto result = TQueryCollector(path, callableType, variables).Collect();
     if (!result.IsError()) {
         if (result.GetTokens().empty()) {
             result = TCollectResult(TIssue("Cannot collect tokens for the given JSON path"));

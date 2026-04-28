@@ -68,7 +68,7 @@ public:
         : TPhysicalOpBuilder(ctx, pos) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, const std::optional<i64> memLimit) = 0;
+    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) = 0;
 };
 
 template <typename TPhysicalBuilder, typename TOperator, typename... Args>

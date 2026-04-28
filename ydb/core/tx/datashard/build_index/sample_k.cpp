@@ -146,10 +146,12 @@ public:
         }
 
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            if (!row.Get(0).AsRef().empty()) {
+            if (!row.Get(0).AsRef().empty())
+            {
                 InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
+                return EScan::Final;
             }
-            return EScan::Final;
+            return EScan::Feed;
         }
 
         if (SkipForeign) {

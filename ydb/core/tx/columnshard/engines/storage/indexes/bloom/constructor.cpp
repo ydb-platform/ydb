@@ -17,7 +17,6 @@ bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
     switch (typeId) {
         case NScheme::NTypeIds::Yson:
         case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::JsonDocument:
             return false;
         default:
             return true;
@@ -53,7 +52,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId,
         Request,
-        std::make_shared<TDefaultDataExtractor>(),
+        GetDataExtractor(),
         TBase::GetBitsStorageConstructor());
 }
 

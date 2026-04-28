@@ -33,7 +33,7 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;
 
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
 public:

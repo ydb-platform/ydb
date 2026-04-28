@@ -5,35 +5,37 @@
 #include <util/generic/string.h>
 
 namespace NKikimr::NOlap::NIndexes {
-class TBitSetStorage: public IBitsStorageViewer {
+class TFixStringBitsStorage: public IBitsStorageViewer {
 private:
-    const TDynBitMap Bits;
+    const TString Data;
 
     virtual bool DoGet(const ui32 idx) const override;
     virtual ui32 DoGetBitsCount() const override {
-        return Bits.Size();
+        return Data.size() * 8;
     }
 
 public:
-    TBitSetStorage() = default;
+    TFixStringBitsStorage() = default;
 
-    TBitSetStorage(TDynBitMap&& bits)
-        : Bits(std::move(bits)) {
+    TFixStringBitsStorage(const TString& data)
+        : Data(data) {
     }
 };
 
-class TBitSetStorageConstructor: public IBitsStorageConstructor {
+class TFixStringBitsStorageConstructor: public IBitsStorageConstructor {
 public:
     static TString GetClassNameStatic() {
-        return "BITSET";
+        return "SIMPLE_STRING";
     }
 
 private:
     virtual TString DoSerializeToString(TDynBitMap&& bitsVector) const override;
     virtual TString DoSerializeToString(const TArrayPower2BitsStorage& storage) const override;
-    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override;
 
-    static inline const auto Registrator = TFactory::TRegistrator<TBitSetStorageConstructor>(GetClassNameStatic());
+    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override {
+        return std::make_shared<TFixStringBitsStorage>(data);
+    }
+    static inline const auto Registrator = TFactory::TRegistrator<TFixStringBitsStorageConstructor>(GetClassNameStatic());
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IBitsStorageConstructor, TString>;

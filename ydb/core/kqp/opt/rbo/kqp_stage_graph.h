@@ -196,6 +196,8 @@ struct TStageGraph {
 
     TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
 
+    TIntrusivePtr<TConnection> GetInputConnection(ui32 stageId, ui32 inputIndex) const;
+
     /**
      * Generate an expression for stage inputs
      * The complication is the special handling of Source stage due to limitation of data shard reader

@@ -9,6 +9,7 @@ namespace NKikimr {
 
 struct TTestEnvSettings {
     NKikimrProto::TAuthConfig AuthConfig = {};
+    TString MonitoringAllowOrigin = {};
     bool EnableLDAP = false;
     LdapMock::TLdapMockResponses LDAPResponses = {};
 };

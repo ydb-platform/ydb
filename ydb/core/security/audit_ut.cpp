@@ -33,7 +33,12 @@ void EatWholeString(NHttp::THttpIncomingRequestPtr request, const TString& data)
     request->Advance(size);
 }
 
-NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TString& password) {
+NHttp::THttpIncomingRequestPtr MakeLoginRequest(
+    const TString& user,
+    const TString& password,
+    TStringBuf origin = TStringBuf(),
+    TStringBuf host = TStringBuf("test.ydb"))
+{
     TString payload = [](const auto& user, const auto& password) {
         NJson::TJsonValue value;
         value["user"] = user;
@@ -42,11 +47,29 @@ NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TStri
     }(user, password);
     TStringBuilder text;
     text << "POST /login HTTP/1.1\r\n"
-        << "Host: test.ydb\r\n"
-        << "Content-Type: application/json\r\n"
+        << "Host: " << host << "\r\n";
+    if (origin) {
+        text << "Origin: " << origin << "\r\n";
+    }
+    text << "Content-Type: application/json\r\n"
         << "Content-Length: " << payload.size() << "\r\n"
         << "\r\n"
         << payload;
+    NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+    EatWholeString(request, text);
+    // WebLoginService will crash without address
+    request->Address = std::make_shared<TSockAddrInet>("127.0.0.1", 0);
+    return request;
+}
+
+NHttp::THttpIncomingRequestPtr MakeLoginOptionsRequest(TStringBuf origin = TStringBuf(), TStringBuf host = TStringBuf("test.ydb")) {
+    TStringBuilder text;
+    text << "OPTIONS /login HTTP/1.1\r\n"
+        << "Host: " << host << "\r\n";
+    if (origin) {
+        text << "Origin: " << origin << "\r\n";
+    }
+    text << "\r\n";
     NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
     EatWholeString(request, text);
     // WebLoginService will crash without address
@@ -588,7 +611,10 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
             {
                 NHttp::THeaders headers(responseEv->Response->Headers);
-                UNIT_ASSERT_STRINGS_EQUAL(headers["Set-Cookie"], "ydb_session_id=; Max-Age=0");
+                TStringBuf setCookie = headers["Set-Cookie"];
+                UNIT_ASSERT_STRING_CONTAINS(setCookie, "ydb_session_id=; Max-Age=0");
+                UNIT_ASSERT_STRING_CONTAINS(setCookie, "HttpOnly");
+                UNIT_ASSERT_STRING_CONTAINS(setCookie, "SameSite=Strict");
             }
 
             // After logout, we should have 1 additional audit log entry
@@ -604,6 +630,146 @@ Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
             UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
             UNIT_ASSERT(last.find("sanitized_token={none}") == std::string::npos);
         }
+    }
+
+    Y_UNIT_TEST(LoginCorsAllowsSameOrigin) {
+        TTestEnv env;
+        CreateUser(env, "user1", "password1");
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "http://test.ydb")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+        NHttp::THeaders headers(responseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Origin"], "http://test.ydb");
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Credentials"], "true");
+
+        TStringBuf setCookie = headers["Set-Cookie"];
+        UNIT_ASSERT_STRING_CONTAINS(setCookie, "HttpOnly");
+        UNIT_ASSERT_STRING_CONTAINS(setCookie, "SameSite=Strict");
+    }
+
+    Y_UNIT_TEST(LoginCorsRejectsCrossOrigin) {
+        TTestEnv env;
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "https://evil-attacker.com")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(responseEv->Response->Body, "Invalid CORS origin");
+    }
+
+    Y_UNIT_TEST(LoginCorsAllowsConfiguredOriginAllowlist) {
+        TTestEnvSettings settings;
+        settings.MonitoringAllowOrigin = "https://*.trusted.test";
+        TTestEnv env(settings);
+        CreateUser(env, "user1", "password1");
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "https://foo.trusted.test")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+        NHttp::THeaders headers(responseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Origin"], "https://foo.trusted.test");
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Credentials"], "true");
+    }
+
+    Y_UNIT_TEST(LoginCorsRejectsNullOrigin) {
+        TTestEnv env;
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "null")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(responseEv->Response->Body, "Invalid CORS origin");
+    }
+
+    Y_UNIT_TEST(LoginCorsAllowsSameOriginIpv6BracketedHost) {
+        TTestEnv env;
+        CreateUser(env, "user1", "password1");
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "http://[::1]", "[::1]")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+        NHttp::THeaders headers(responseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Origin"], "http://[::1]");
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Credentials"], "true");
+    }
+
+    Y_UNIT_TEST(LoginCorsAllowsSameOriginIpv6HostWithExplicitPort) {
+        TTestEnv env;
+        CreateUser(env, "user1", "password1");
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "http://[::1]:8443", "[::1]:8443")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+        NHttp::THeaders headers(responseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Origin"], "http://[::1]:8443");
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Credentials"], "true");
+    }
+
+    Y_UNIT_TEST(LoginCorsRejectsIpv6HostPortMismatch) {
+        TTestEnv env;
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginRequest("user1", "password1", "http://[::1]:8443", "[::1]:8444")
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "400");
+        UNIT_ASSERT_STRING_CONTAINS(responseEv->Response->Body, "Invalid CORS origin");
+    }
+
+    Y_UNIT_TEST(LoginCorsOptionsWithoutOriginDoesNotAllowCredentials) {
+        TTestEnv env;
+
+        const auto target = env.GetWebLoginService();
+        const auto edge = env.GetServer().GetRuntime()->AllocateEdgeActor();
+        env.GetServer().GetRuntime()->Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+            MakeLoginOptionsRequest()
+        )));
+
+        TAutoPtr<IEventHandle> handle;
+        auto responseEv = env.GetServer().GetRuntime()->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "204");
+        NHttp::THeaders headers(responseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(headers["Access-Control-Allow-Origin"], "*");
+        UNIT_ASSERT(!headers.Has("Access-Control-Allow-Credentials"));
     }
 
     Y_UNIT_TEST(AuditLogCreateModifyUser) {

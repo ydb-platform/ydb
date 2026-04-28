@@ -168,6 +168,74 @@ def merge_area_override_since(mapping_data: list, existing_by_key: dict, url_to_
             row["area_override_since"] = scan_to_utc_date(old.get("area_override_since"))
 
 
+def delete_stale_github_issue_mapping_rows(
+    ydb_wrapper, table_path: str, existing_by_key: dict, mapping_data: list
+) -> None:
+    """Delete rows not present in the current recomputed snapshot."""
+    new_keys = {
+        (
+            row["full_name"],
+            row["branch"],
+            row["build_type"],
+            row["github_issue_number"],
+        )
+        for row in mapping_data
+    }
+    stale_keys = [k for k in existing_by_key.keys() if k not in new_keys]
+    if not stale_keys:
+        return
+
+    chunk_size = 100
+    deleted = 0
+    for chunk_start in range(0, len(stale_keys), chunk_size):
+        chunk = stale_keys[chunk_start : chunk_start + chunk_size]
+        declare_lines = []
+        predicates = []
+        params = {}
+        for idx, (full_name, branch, build_type, github_issue_number) in enumerate(chunk):
+            p_full_name = f"$full_name_{idx}"
+            p_branch = f"$branch_{idx}"
+            p_build_type = f"$build_type_{idx}"
+            p_issue_number = f"$github_issue_number_{idx}"
+            declare_lines.extend(
+                [
+                    f"DECLARE {p_full_name} AS Utf8;",
+                    f"DECLARE {p_branch} AS Utf8;",
+                    f"DECLARE {p_build_type} AS Utf8;",
+                    f"DECLARE {p_issue_number} AS Uint64;",
+                ]
+            )
+            predicates.append(
+                "("
+                f"full_name = {p_full_name} "
+                f"AND branch = {p_branch} "
+                f"AND build_type = {p_build_type} "
+                f"AND github_issue_number = {p_issue_number}"
+                ")"
+            )
+            params[p_full_name] = full_name
+            params[p_branch] = branch
+            params[p_build_type] = build_type
+            params[p_issue_number] = ydb.TypedValue(
+                value=int(github_issue_number),
+                value_type=ydb.PrimitiveType.Uint64,
+            )
+
+        delete_query = f"""
+            {' '.join(declare_lines)}
+
+            DELETE FROM `{table_path}`
+            WHERE {' OR '.join(predicates)};
+        """
+        ydb_wrapper.execute_dml(
+            delete_query,
+            params,
+            query_name="github_issue_mapping_delete_stale_row",
+        )
+        deleted += len(chunk)
+    print(f"Deleted {deleted} stale github_issue_mapping row(s)")
+
+
 def get_area_to_owner_mapping(ydb_wrapper):
     """Load area -> owner_team mapping from YDB."""
     try:
@@ -452,6 +520,9 @@ def main():
                 bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
             else:
                 print("No mapping data to insert")
+            delete_stale_github_issue_mapping_rows(
+                ydb_wrapper, table_path, existing_by_key, mapping_data
+            )
 
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully, total time: {script_elapsed:.2f}s")

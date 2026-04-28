@@ -26,6 +26,7 @@ struct TJsonNodeParams {
     TString ColumnName;
     TString JsonPath;
     std::optional<EDataSlot> ReturningType;
+    std::unordered_map<TString, TString> Variables;
 };
 
 TPredicateCollectResult MakeCollectError(TExprContext& ctx, TPositionHandle pos, TStringBuf message) {
@@ -73,6 +74,124 @@ TExprBase UnwrapOptionalNodes(TExprBase node) {
     return node;
 }
 
+std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negative = false) {
+    static constexpr i64 maxSupportedInt = 9007199254740992;
+    TString value;
+
+    if (node.Maybe<TCoSafeCast>()) {
+        return EncodeValueToJsonPath(node.Cast<TCoSafeCast>().Value(), negative);
+    }
+
+    if (node.Maybe<TCoMinus>()) {
+        return EncodeValueToJsonPath(node.Cast<TCoMinus>().Arg(), !negative);
+    }
+
+    if (node.Maybe<TCoNull>()) {
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Null);
+        return value;
+    }
+
+    if (node.Maybe<TCoBool>()) {
+        auto boolValue = FromString<bool>(node.Cast<TCoBool>().Literal().Value());
+        AppendJsonIndexLiteral(value, boolValue
+            ? NBinaryJson::EEntryType::BoolTrue
+            : NBinaryJson::EEntryType::BoolFalse);
+        return value;
+    }
+
+    if (node.Maybe<TCoString>()) {
+        auto stringValue = node.Cast<TCoString>().Literal().Value();
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::String, stringValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoUtf8>()) {
+        auto utf8Value = node.Cast<TCoUtf8>().Literal().Value();
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::String, utf8Value);
+        return value;
+    }
+
+    if (node.Maybe<TCoFloat>()) {
+        double literalValue = static_cast<double>(FromString<float>(node.Cast<TCoFloat>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoDouble>()) {
+        double literalValue = FromString<double>(node.Cast<TCoDouble>().Literal().Value());
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoInt8>()) {
+        double literalValue = static_cast<double>(FromString<i8>(node.Cast<TCoInt8>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoInt16>()) {
+        double literalValue = static_cast<double>(FromString<i16>(node.Cast<TCoInt16>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoInt32>()) {
+        double literalValue = static_cast<double>(FromString<i32>(node.Cast<TCoInt32>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoInt64>()) {
+        auto intValue = FromString<i64>(node.Cast<TCoInt64>().Literal().Value());
+        if (intValue > maxSupportedInt || intValue < -maxSupportedInt) {
+            return std::nullopt;
+        }
+        double literalValue = static_cast<double>(intValue);
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoUint8>()) {
+        double literalValue = static_cast<double>(FromString<ui8>(node.Cast<TCoUint8>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoUint16>()) {
+        double literalValue = static_cast<double>(FromString<ui16>(node.Cast<TCoUint16>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoUint32>()) {
+        double literalValue = static_cast<double>(FromString<ui32>(node.Cast<TCoUint32>().Literal().Value()));
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    if (node.Maybe<TCoUint64>()) {
+        auto uintValue = FromString<ui64>(node.Cast<TCoUint64>().Literal().Value());
+        if (uintValue > static_cast<ui64>(maxSupportedInt)) {
+            return std::nullopt;
+        }
+        double literalValue = static_cast<double>(uintValue);
+        if (negative) literalValue = -literalValue;
+        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
+        return value;
+    }
+
+    return std::nullopt;
+}
+
 std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode) {
     if (!jsonNode.Json().Maybe<TCoMember>()) {
         if (jsonNode.Json().Maybe<TCoJsonQueryBase>()) {
@@ -85,8 +204,54 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         return std::unexpected("Expected JSON path as a string literal");
     }
 
-    const auto& variables = jsonNode.Variables().Ref();
-    if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
+    const auto& nodeVariables = jsonNode.Variables().Ref();
+    std::unordered_map<TString, TString> variables;
+
+    if (nodeVariables.IsCallable("AsDict")) {
+        for (ui32 i = 0; i < nodeVariables.ChildrenSize(); ++i) {
+            const auto& pair = *nodeVariables.ChildPtr(i);
+
+            auto keyExpr = TExprBase(pair.HeadPtr());
+            if (!keyExpr.Maybe<TCoUtf8>()) {
+                return std::unexpected("Expected Utf8 key in PASSING clause");
+            }
+
+            auto varName = TString(keyExpr.Cast<TCoUtf8>().Literal().Value());
+
+            auto applyExpr = TExprBase(pair.TailPtr());
+            if (!applyExpr.Maybe<TCoApply>()) {
+                return std::unexpected(TStringBuilder() << "Variable '" << varName
+                    << "' is bound to unsupported expression");
+            }
+
+            auto wrappedValue = TExprBase(applyExpr.Ref().ChildPtr(1));
+            if (wrappedValue.Maybe<TCoNothing>()) {
+                TString encoded;
+                AppendJsonIndexLiteral(encoded, NBinaryJson::EEntryType::Null);
+                variables.emplace(varName, encoded);
+                continue;
+            }
+
+            if (wrappedValue.Maybe<TCoJust>()) {
+                auto innerValue = TExprBase(wrappedValue.Cast<TCoJust>().Input());
+                if (innerValue.Maybe<TCoSafeCast>()) {
+                    innerValue = innerValue.Cast<TCoSafeCast>().Value();
+                }
+
+                auto encoded = EncodeValueToJsonPath(innerValue);
+                if (!encoded) {
+                    return std::unexpected(TStringBuilder() << "Variable '" << varName
+                        << "' is bound to unsupported expression");
+                }
+
+                variables.emplace(varName, *encoded);
+                continue;
+            }
+
+            return std::unexpected(TStringBuilder() << "Variable '" << varName
+                << "' is bound to unsupported expression");
+        }
+    } else if (!nodeVariables.GetTypeAnn() || nodeVariables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
         return std::unexpected("Expected empty dict as variables");
     }
 
@@ -126,7 +291,8 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
     return TJsonNodeParams{
         .ColumnName = jsonNode.Json().Cast<TCoMember>().Name().StringValue(),
         .JsonPath = jsonNode.JsonPath().Cast<TCoUtf8>().Literal().StringValue(),
-        .ReturningType = returningType
+        .ReturningType = returningType,
+        .Variables = std::move(variables)
     };
 }
 
@@ -184,110 +350,10 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
     Y_UNREACHABLE();
 }
 
-std::optional<TString> EncodeValueToJsonPath(const TExprBase& node) {
-    static constexpr i64 maxSupportedInt = 9007199254740992;
-    TString value;
-
-    if (node.Maybe<TCoNull>()) {
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Null);
-        return value;
-    }
-
-    if (node.Maybe<TCoBool>()) {
-        auto boolValue = FromString<bool>(node.Cast<TCoBool>().Literal().Value());
-        AppendJsonIndexLiteral(value, boolValue
-            ? NBinaryJson::EEntryType::BoolTrue
-            : NBinaryJson::EEntryType::BoolFalse);
-        return value;
-    }
-
-    if (node.Maybe<TCoString>()) {
-        auto stringValue = node.Cast<TCoString>().Literal().Value();
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::String, stringValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoUtf8>()) {
-        auto utf8Value = node.Cast<TCoUtf8>().Literal().Value();
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::String, utf8Value);
-        return value;
-    }
-
-    if (node.Maybe<TCoFloat>()) {
-        double literalValue = static_cast<double>(FromString<float>(node.Cast<TCoFloat>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoDouble>()) {
-        double literalValue = static_cast<double>(FromString<double>(node.Cast<TCoDouble>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoInt8>()) {
-        double literalValue = static_cast<double>(FromString<i8>(node.Cast<TCoInt8>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoInt16>()) {
-        double literalValue = static_cast<double>(FromString<i16>(node.Cast<TCoInt16>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoInt32>()) {
-        double literalValue = static_cast<double>(FromString<i32>(node.Cast<TCoInt32>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoInt64>()) {
-        auto intValue = FromString<i64>(node.Cast<TCoInt64>().Literal().Value());
-        if (intValue > maxSupportedInt || intValue < -maxSupportedInt) {
-            return std::nullopt;
-        }
-
-        double literalValue = static_cast<double>(intValue);
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoUint8>()) {
-        double literalValue = static_cast<double>(FromString<ui8>(node.Cast<TCoUint8>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoUint16>()) {
-        double literalValue = static_cast<double>(FromString<ui16>(node.Cast<TCoUint16>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoUint32>()) {
-        double literalValue = static_cast<double>(FromString<ui32>(node.Cast<TCoUint32>().Literal().Value()));
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    if (node.Maybe<TCoUint64>()) {
-        auto uintValue = FromString<ui64>(node.Cast<TCoUint64>().Literal().Value());
-        if (uintValue > static_cast<ui64>(maxSupportedInt)) {
-            return std::nullopt;
-        }
-
-        double literalValue = static_cast<double>(uintValue);
-        AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
-        return value;
-    }
-
-    return std::nullopt;
-}
-
 TPredicateCollectResult ParseAndCollectJson(const TString& columnName, const TString& jsonPath,
-    ECallableType callableType, std::optional<TExprBase> comparisonValue, TExprContext& ctx, TPositionHandle pos)
+    ECallableType callableType, std::optional<TExprBase> comparisonValue,
+    const std::unordered_map<TString, TString>& variables,
+    TExprContext& ctx, TPositionHandle pos)
 {
     NYql::TIssues parseIssues;
     const auto path = NYql::NJsonPath::ParseJsonPath(jsonPath, parseIssues, 1);
@@ -295,7 +361,7 @@ TPredicateCollectResult ParseAndCollectJson(const TString& columnName, const TSt
         return MakeCollectError(ctx, pos, "Failed to parse JSON path expression: " + parseIssues.ToOneLineString());
     }
 
-    auto collectResult = CollectJsonPath(path, callableType);
+    auto collectResult = CollectJsonPath(path, callableType, variables);
     if (collectResult.IsError()) {
         return TPredicateCollectResult{"", std::move(collectResult)};
     }
@@ -354,7 +420,7 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
     }
 
     auto leftResult = ParseAndCollectJson(leftParams->ColumnName, leftParams->JsonPath,
-        ECallableType::JsonValue, comparisonValue, ctx, left.Pos());
+        ECallableType::JsonValue, comparisonValue, leftParams->Variables, ctx, left.Pos());
 
     if (otherSide.Maybe<TCoJsonValue>()) {
         auto rightParams = VisitJsonNode(otherSide.Cast<TCoJsonValue>());
@@ -371,7 +437,7 @@ std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& 
         }
 
         auto rightResult = ParseAndCollectJson(rightParams->ColumnName, rightParams->JsonPath,
-            ECallableType::JsonValue, std::nullopt, ctx, otherSide.Pos());
+            ECallableType::JsonValue, std::nullopt, rightParams->Variables, ctx, otherSide.Pos());
         return MergePredicateResults(std::move(leftResult), std::move(rightResult),
             TCollectResult::ETokensMode::And, ctx, otherSide.Pos());
     }
@@ -387,7 +453,7 @@ std::optional<TPredicateCollectResult> VisitJsonExists(const TExprBase& node, TE
         }
 
         return ParseAndCollectJson(params->ColumnName, params->JsonPath,
-            ECallableType::JsonExists, std::nullopt, ctx, node.Pos());
+            ECallableType::JsonExists, std::nullopt, params->Variables, ctx, node.Pos());
     }
 
     return std::nullopt;
@@ -411,7 +477,7 @@ std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TEx
         }
 
         return ParseAndCollectJson(params->ColumnName, params->JsonPath,
-            ECallableType::JsonValue, comparisonValue, ctx, node.Pos());
+            ECallableType::JsonValue, comparisonValue, params->Variables, ctx, node.Pos());
     }
 
     return std::nullopt;

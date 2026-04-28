@@ -106,7 +106,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and is set to `ttl@system` if the record is deleted by the TTL process.
-* `traceId`: OpenTelemetry identifier. Present if the `TRACE_IDS` setting is enabled.
+* `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 Sample record of an update in `UPDATES` mode:
 
@@ -238,7 +238,7 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
   * `txId`: Unique transaction ID. Part of the [virtual timestamp](#virtual-timestamps).
   * `snapshot`: Whether the event is part of a snapshot.
   * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and equals `ttl@system` if the record is deleted by the TTL process.
-  * `traceId`: OpenTelemetry trace ID. Present if the `TRACE_IDS` setting is enabled.
+  * `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 When reading using Kafka API, the Debezium-compatible primary key of the modified row is specified as the message key:
 

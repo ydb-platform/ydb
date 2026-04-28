@@ -1,6 +1,8 @@
 -- Sort Spilling Test: Join lineitem with orders, sort, assign row numbers
 -- Date filter reduces to ~1/7 of lineitem. Tests sort spilling after a join.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $joined = (
 select
     l.l_orderkey as l_orderkey,

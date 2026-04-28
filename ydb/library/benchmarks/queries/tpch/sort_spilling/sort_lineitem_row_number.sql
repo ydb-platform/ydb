@@ -2,6 +2,8 @@
 -- Uses returnflag filter to reduce dataset to ~1/3 (~200M rows at scale 10000)
 -- ROW_NUMBER() forces full sort. We then filter to get percentile boundaries.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     l_orderkey,

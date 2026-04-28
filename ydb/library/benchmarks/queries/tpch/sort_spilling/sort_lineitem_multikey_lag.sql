@@ -2,6 +2,8 @@
 -- Uses date filter to reduce dataset. Multi-key sort (ASC/DESC mix) with LAG.
 -- LAG only needs to keep 1 previous row, so memory usage is bounded.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     l_orderkey,

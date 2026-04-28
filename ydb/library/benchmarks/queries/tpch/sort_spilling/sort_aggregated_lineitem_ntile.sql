@@ -1,6 +1,8 @@
 -- Sort Spilling Test: Aggregate lineitem by orderkey, sort by revenue, compute NTILE
 -- ~150M groups (one per order). Tests sort spilling after aggregation.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $agg = (
 select
     l_orderkey,

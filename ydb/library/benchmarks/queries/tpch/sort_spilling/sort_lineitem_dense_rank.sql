@@ -2,6 +2,8 @@
 -- Uses date filter to reduce to ~1/7 of lineitem.
 -- Tests dense ranking over large dataset with composite sort key.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     l_orderkey,

@@ -115,6 +115,9 @@ struct TSpilledData {
             if (AsyncReadOperation->HasValue()) {
                 Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
                 AsyncReadOperation = std::nullopt;
+                // Current item is now in buffer; don't start next read yet.
+                // The caller will process this item and call Read() again for the next one.
+                return std::nullopt;
             } else {
                 return AsyncReadOperation;
             }

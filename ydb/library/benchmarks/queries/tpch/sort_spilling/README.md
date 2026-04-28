@@ -12,6 +12,15 @@ sampled or aggregated to produce a small output that fits in memory.
 Some queries use date or status filters to reduce the working set to a
 manageable size (~50M-200M rows instead of the full 600M lineitem).
 
+**Important:** All queries include `PRAGMA ydb.DisableBlockExecution` to force
+the optimizer to use `WideSort` (row-based sort with spilling support from
+`mkql_wide_top_sort.cpp`) instead of `WideSortBlocks` (block-based sort from
+`mkql_block_top.cpp` which does NOT support spilling). Without this pragma,
+column table queries are automatically converted to block execution mode.
+The `DisableBlockExecution` setting is checked in `kqp_runner.cpp` and sets
+`BlockEngineMode = Disable`, which prevents the peephole optimization in
+`yql_opt_peephole_physical.cpp` from converting `WideSort` to `WideSortBlocks`.
+
 ## Usage
 
 Run on a cluster with TPC-H 10000 data loaded in column tables.

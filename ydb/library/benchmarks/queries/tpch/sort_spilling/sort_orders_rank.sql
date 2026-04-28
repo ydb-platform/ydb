@@ -2,6 +2,8 @@
 -- Uses status filter to reduce to ~1/3 of orders (~50M rows at scale 10000)
 -- RANK() forces full sort by totalprice.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     o_orderkey,

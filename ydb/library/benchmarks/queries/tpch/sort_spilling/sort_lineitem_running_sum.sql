@@ -2,6 +2,8 @@
 -- Uses a date filter to reduce dataset to ~1/7 of lineitem (~85M rows at scale 10000)
 -- The window function forces a full WideSort that cannot be replaced with TopSort.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     l_orderkey,

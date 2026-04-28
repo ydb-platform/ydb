@@ -1,6 +1,8 @@
 -- Sort Spilling Test: Sort orders by orderdate, assign row numbers
 -- ~150M rows at scale 10000. ROW_NUMBER forces full sort.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $numbered = (
 select
     o_orderkey,

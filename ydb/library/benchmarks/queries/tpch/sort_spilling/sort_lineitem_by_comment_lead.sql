@@ -3,6 +3,8 @@
 -- Tests spilling with variable-length string sort keys.
 -- LEAD only needs 1 next row, so memory usage is bounded.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $filtered = (
 select
     l_orderkey,

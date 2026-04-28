@@ -1,6 +1,8 @@
 -- Sort Spilling Test: Sort partsupp by multiple keys, assign row numbers
 -- ~80M rows at scale 10000. Tests multi-key sort on partsupp table.
 
+PRAGMA ydb.DisableBlockExecution;
+
 $numbered = (
 select
     ps_partkey,

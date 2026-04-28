@@ -16536,6 +16536,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
         ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
         ExtFunctions["YqlAggWin"] = &YqlAggWinWrapper;
+        ExtFunctions["YqlWin"] = &YqlWinWrapper;
         Functions["YqlWindow"] = &SqlWindowWrapper;
         Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 

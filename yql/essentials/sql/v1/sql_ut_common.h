@@ -14315,6 +14315,18 @@ Y_UNIT_TEST(WindowFrameRowsBetweenUnboundedPrecedingAndCurrentRowExcludeCurrentR
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Frame exclusion is not supported yet");
 }
 
+Y_UNIT_TEST(WindowBad) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT ListLength(a) OVER () FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:27: Error: Expected a YqlSelect-compatible window function, but got Length");
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {

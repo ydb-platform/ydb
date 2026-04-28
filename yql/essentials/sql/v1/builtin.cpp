@@ -5,6 +5,7 @@
 #include "list_builtin.h"
 #include "match_recognize.h"
 #include "select_yql_aggregation.h"
+#include "select_yql_window.h"
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -4216,8 +4217,12 @@ TNodeResult BuildBuiltinFunc(
         if (builtinCallback != builtinFuncs.end()) {
             const auto& funcInfo = builtinCallback->second;
             if (isYqlSelect && funcInfo.Kind == "Window") {
-                return UnsupportedYqlSelect(
-                    ctx, TStringBuilder() << "Window function " << funcInfo.CanonicalSqlName);
+                TYqlWindowArgs wargs = {
+                    .Name = std::move(normalizedName),
+                    .Args = std::move(args),
+                };
+
+                return Wrap(BuildYqlWindow(pos, std::move(wargs)));
             }
 
             return WrapWithLangVerProxy(

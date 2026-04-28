@@ -15,6 +15,4 @@ struct TYqlAggregationArgs {
 
 TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args);
 
-TNodePtr WrapYqlAggregationOverWindow(TNodePtr node, TString windowName);
-
 } // namespace NSQLTranslationV1

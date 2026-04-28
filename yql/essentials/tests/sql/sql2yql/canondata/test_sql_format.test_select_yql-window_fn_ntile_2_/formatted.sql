@@ -1,0 +1,21 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a,
+    NTile(2) OVER (
+        PARTITION BY
+            c
+        ORDER BY
+            a
+    )
+FROM (
+    VALUES
+        (1, 1, 1),
+        (2, 2, 1),
+        (3, 3, 1),
+        (4, 4, 1)
+) AS x (
+    a,
+    b,
+    c
+);

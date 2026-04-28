@@ -872,6 +872,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     }
 
     TOptimizeExprSettings optSettings(nullptr);
+    optSettings.VisitChanges = true;
     optSettings.VisitChecker = [](const TExprNode& node) {
         if (node.IsCallable({"PgSubLink", "YqlSubLink"})) {
             return false;
@@ -881,6 +882,18 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
     };
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        if (node->IsCallable("YqlAgg") && node->ChildrenSize() > 2U && node->Child(2U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 2U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlAggWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
+        if (node->IsCallable("YqlWin") && node->ChildrenSize() > 3U && node->Child(3U)->IsCallable("Void")) {
+            return ctx.Expr.ChangeChild(*node, 3U, TExprNode::TPtr(argNode));
+        }
+
         if (node->IsCallable({"YqlStar", "PgStar"})) {
             TVector<std::pair<TString, TString>> aliased;
             TExprNode::TListType orderAtoms;

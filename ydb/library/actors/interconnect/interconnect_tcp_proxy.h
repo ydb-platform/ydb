@@ -40,27 +40,27 @@ namespace NActors {
             TString State;
             TScopeId PeerScopeId;
             TInstant LastSessionDieTime;
-            ui64 TotalOutputQueueSize;
-            bool Connected;
-            bool ExternalDataChannel;
+            ui64 TotalOutputQueueSize = 0;
+            bool Connected = false;
+            bool ExternalDataChannel = false;
             TString Host;
-            ui16 Port;
+            ui16 Port = 0;
             TInstant LastErrorTimestamp;
             TString LastErrorKind;
             TString LastErrorExplanation;
             TDuration Ping;
-            i64 ClockSkew;
+            i64 ClockSkew = 0;
             TString Encryption;
             enum XDCFlags {
                 NONE = 0,
                 MSG_ZERO_COPY_SEND = 1,
                 RDMA_READ = 1 << 1,
             };
-            ui8 XDCFlags;
+            ui8 XDCFlags = NONE;
         };
 
         struct TEvStats : TEventLocal<TEvStats, EvStats> {
-            ui32 PeerNodeId;
+            ui32 PeerNodeId = 0;
             TProxyStats ProxyStats;
         };
 

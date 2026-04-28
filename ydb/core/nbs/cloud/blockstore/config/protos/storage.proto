@@ -39,6 +39,13 @@ message TPBufferConfig
 
     // Storage limit for one tablet in bytes, default 4TiB
     optional uint64 PerTabletStorageLimit = 5;
+
+    // Maximum number of sectors used for barrier erases
+    // One sector store 240 tablet barriers
+    optional uint32 MaxBarriersLimit = 6;
+
+    // Maximum number of chunks persistent buffer can allocate
+    optional uint32 MaxChunks = 7;
 }
 
 message TStorageServiceConfig
@@ -85,7 +92,7 @@ message TStorageServiceConfig
     optional uint32 PBufferReplyTimeoutMicroseconds = 15;
 
     // Delay (in microseconds) before writing to handoff persistent buffers.
-    optional uint32 WriteHandoffDelay = 16;
+    optional uint32 WriteHedgingDelay = 16;
 
     // Size of VChunk (in bytes). Default is 128 MB.
     optional uint64 VChunkSize = 17;
@@ -95,4 +102,7 @@ message TStorageServiceConfig
 
     optional TDDiskConfig GlobalDDiskConfig = 19;
     optional TPBufferConfig GlobalPBufferConfig = 20;
+
+    // Timeout (in milliseconds) for write request handlers.
+    optional uint32 WriteRequestTimeout = 21;
 }

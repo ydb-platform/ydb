@@ -302,23 +302,6 @@ namespace {
         return MakeSerializedData(std::move(payloads), std::move(header));
     }
 
-    const char* GetSinglePayloadData(const TRope& rope, size_t payloadBytes) {
-        auto it = rope.Begin();
-        UNIT_ASSERT(it.Valid());
-
-        TVector<TRope> payloads;
-        if (payloadBytes) {
-            payloads.push_back(TRope(TString::Uninitialized(payloadBytes)));
-        } else {
-            payloads.push_back(TRope{});
-        }
-        it += CalculateSerializedHeaderSizeImpl(payloads);
-
-        UNIT_ASSERT_C(it.ContiguousSize() >= payloadBytes,
-            "contiguous size# " << it.ContiguousSize() << " payload bytes# " << payloadBytes);
-        return it.ContiguousData();
-    }
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(TEventFlatTest) {
@@ -489,7 +472,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[1]), 8u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 15u);
-        UNIT_ASSERT(loaded->CreateSerializationInfo(true).Sections.size() == 1u);
+        UNIT_ASSERT(loaded->CreateSerializationInfo(true).Sections.empty());
     }
 
     Y_UNIT_TEST(FrontendForSingleVersionPayloadScheme) {
@@ -666,24 +649,111 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
     }
 
     Y_UNIT_TEST(ArrayPayloadPreservesAlignmentLocally) {
+        using TScheme = TEvFlatMessage::TSchemeV2;
+
         THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 11;
 
         ui32 values[] = {10, 20, 30, 40};
         std::memcpy(ev->Numbers().Init(std::size(values)), values, sizeof(values));
 
+        const ui32* localData = ev->ArrayData<TEvFlatMessage::TArrayFieldTag>();
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(localData) % alignof(ui32), 0u);
+
+        char varint[MaxNumberBytes];
+        const size_t payloadBytes = sizeof(values);
+        const size_t expectedWireSize = TScheme::HeaderSize
+            + SerializeNumberTo(varint, TScheme::HeaderSize)
+            + SerializeNumberTo(varint, payloadBytes)
+            + payloadBytes;
+        UNIT_ASSERT_VALUES_EQUAL(ev->CalculateSerializedSize(), expectedWireSize);
+        UNIT_ASSERT(ev->CreateSerializationInfo(true).Sections.empty());
+
         auto rope = ev->SerializeToRope(GetDefaultRcBufAllocator());
         UNIT_ASSERT(rope);
+        UNIT_ASSERT_VALUES_EQUAL(rope->GetSize(), expectedWireSize);
 
-        const char* payloadData = GetSinglePayloadData(*rope, sizeof(values));
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(payloadData) % alignof(ui32), 0u);
+        auto buffers = MakeIntrusive<TEventSerializedData>(std::move(*rope), TEventSerializationInfo{});
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatMessage, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatMessage* loaded = handle->Get<TEvFlatMessage>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(loaded->TabletId()), 11);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), std::size(values));
+        const ui32* loadedData = loaded->ArrayData<TEvFlatMessage::TArrayFieldTag>();
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(loadedData) % alignof(ui32), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(loadedData[0], 10u);
+        UNIT_ASSERT_VALUES_EQUAL(loadedData[3], 40u);
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(ev->SerializeToArcadiaStream(serializer.Get()));
+        auto arcadiaBuffers = serializer->Release(ev->CreateSerializationInfo(false));
+        UNIT_ASSERT_VALUES_EQUAL(arcadiaBuffers->GetSize(), expectedWireSize);
+
+        THolder<IEventHandle> arcadiaHandle(new IEventHandle(
+            EvFlatMessage, 0, TActorId(), TActorId(), arcadiaBuffers, 0));
+
+        TEvFlatMessage* arcadiaLoaded = arcadiaHandle->Get<TEvFlatMessage>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(arcadiaLoaded->TabletId()), 11);
+        UNIT_ASSERT_VALUES_EQUAL(arcadiaLoaded->NumbersSize(), std::size(values));
+        const ui32* arcadiaData = arcadiaLoaded->ArrayData<TEvFlatMessage::TArrayFieldTag>();
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(arcadiaData) % alignof(ui32), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(arcadiaData[0], 10u);
+        UNIT_ASSERT_VALUES_EQUAL(arcadiaData[3], 40u);
+    }
+
+    Y_UNIT_TEST(InlineArrayWireUsesActualHeaderSizePrefix) {
+        using TScheme = TEvFlatRepeatedFields::TSchemeV1;
+
+        constexpr size_t headerSize = TScheme::template GetPayloadRefOffset<TEvFlatRepeatedFields::TNumbersTag>()
+            + sizeof(typename TScheme::TPayloadRef);
+
+        TString header = TString::Uninitialized(headerSize);
+        char* ptr = header.Detach();
+        std::memset(ptr, 0, headerSize);
+        WriteUnaligned<ui8>(ptr + 0, 1);
+        WriteUnaligned<ui32>(ptr + TScheme::template GetFixedOffset<TEvFlatRepeatedFields::TMarkerTag>(), 123);
+        WriteUnaligned<TPoint>(
+            ptr + TScheme::template GetFixedOffset<TEvFlatRepeatedFields::TPointTag>(),
+            TPoint{.X = 7, .Y = 8});
+
+        ui32 values[] = {100, 200, 300};
+        char varint[MaxNumberBytes];
+        TString buffer = TString::Uninitialized(sizeof(ui8)
+            + SerializeNumberTo(varint, headerSize)
+            + headerSize - sizeof(ui8)
+            + SerializeNumberTo(varint, sizeof(values))
+            + sizeof(values));
+        ptr = buffer.Detach();
+        WriteUnaligned<ui8>(ptr, 1);
+        ptr += sizeof(ui8);
+        ptr += SerializeNumberTo(ptr, headerSize);
+        std::memcpy(ptr, header.data() + sizeof(ui8), headerSize - sizeof(ui8));
+        ptr += headerSize - sizeof(ui8);
+        ptr += SerializeNumberTo(ptr, sizeof(values));
+        std::memcpy(ptr, values, sizeof(values));
+
+        auto buffers = MakeIntrusive<TEventSerializedData>(TRope(std::move(buffer)), TEventSerializationInfo{});
+        THolder<IEventHandle> handle(new IEventHandle(
+            EvFlatRepeatedFields, 0, TActorId(), TActorId(), buffers, 0));
+
+        TEvFlatRepeatedFields* loaded = handle->Get<TEvFlatRepeatedFields>();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Marker()), 123u);
+        const TPoint loadedPoint = loaded->Point();
+        UNIT_ASSERT_VALUES_EQUAL(loadedPoint.X, 7u);
+        UNIT_ASSERT_VALUES_EQUAL(loadedPoint.Y, 8u);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->NumbersSize(), std::size(values));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[0]), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 300u);
+        UNIT_ASSERT(!loaded->HasField<TEvFlatRepeatedFields::TItemsTag>());
+        UNIT_ASSERT(!loaded->HasField<TEvFlatRepeatedFields::TEmptyItemsTag>());
     }
 
     Y_UNIT_TEST(ArrayPayloadAlignmentIsExposedInSerializationInfo) {
         THolder<TEvFlatMessage> ev(TEvFlatMessage::Make());
         ev->TabletId() = 42;
 
-        TVector<ui32> values(2048, 7);
+        TVector<ui32> values(4097, 7);
         std::memcpy(ev->Numbers().Init(values.size()), values.data(), values.size() * sizeof(ui32));
 
         const TEventSerializationInfo info = ev->CreateSerializationInfo(true);
@@ -725,10 +795,7 @@ Y_UNIT_TEST_SUITE(TEventFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[1]), 200u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(loaded->Numbers()[2]), 300u);
 
-        auto rope = loaded->SerializeToRope(GetDefaultRcBufAllocator());
-        UNIT_ASSERT(rope);
-
-        const char* payloadData = GetSinglePayloadData(*rope, payloadBytes);
+        const ui32* payloadData = loaded->ArrayData<TEvFlatMessage::TArrayFieldTag>();
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(payloadData) % alignof(ui32), 0u);
     }
 }

@@ -1,8 +1,10 @@
-#include "direct_block_group.h"
+#include "direct_block_group_impl.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/random/random.h>
+#include <array>
+#include <map>
+#include <vector>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -62,8 +64,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // being selected. We verify this by sampling a large number of times
         // and checking that every candidate appears at least once.
         const std::vector<ui8> hostIndexes = {1, 2, 4};
-
-        SetRandomSeed(42);
 
         std::map<ui8, size_t> counts;
         const size_t iterations = 3000;

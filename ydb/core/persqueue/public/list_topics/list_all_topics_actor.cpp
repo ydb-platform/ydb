@@ -1,3 +1,5 @@
+#include "list_all_topics_actor.h"
+
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

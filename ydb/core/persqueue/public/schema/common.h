@@ -2,6 +2,7 @@
 
 #include "schema.h"
 
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
@@ -53,6 +54,8 @@ void CopyConfig(
     const NKikimrSchemeOp::TPersQueueGroupDescription& source
 );
 
+TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList);
+TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList, const NKikimrPQ::TPQTabletConfig& config);
 
 struct TClientServiceType {
     TString Name;

@@ -20,6 +20,13 @@ namespace NLongTxService {
         TCounterPtr SnapshotsCollectionTimeMs;
         TCounterPtr SnapshotsPropagationTimeMs;
 
+        TCounterPtr RemoteLockSubscriptions;
+        TCounterPtr WaitGraphEdges;
+        TCounterPtr LocalWaitGraphEdges;
+        TCounterPtr WaitGraphEdgesSent;
+        TCounterPtr WaitGraphEdgesReceived;
+        TCounterPtr WaitGraphEdgesBroken;
+
         explicit TLongTxServiceCounters(const TGroupPtr& group);
     };
 

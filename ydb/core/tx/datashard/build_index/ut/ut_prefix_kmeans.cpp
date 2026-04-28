@@ -393,9 +393,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
-
-                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\2\n"
+                similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                ? "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
+                  "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\2\n"
+                : "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \xFF\xFF\2\n"
+                  "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = \xFF\xFF\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
@@ -463,13 +465,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 44\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \x80\x10\x02\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x21\xFF\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \xFF\x20\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \xFF\xFF\x02\n"
 
-                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \x0E\x0E\x02\n"
-                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x38\xFF\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \xFF\xE7\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \xFF\x20\x02\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
@@ -502,7 +504,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 9223372036854775855, key = 22, data = two\n"
                 "__ydb_parent = 9223372036854775855, key = 26, data = aaa\n"
                 "__ydb_parent = 9223372036854775855, key = 27, data = bbbb\n"
-                "__ydb_parent = 9223372036854775855, key = 30, data = eee\n"
             );
             recreate();
         }
@@ -640,9 +641,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
-
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\2\n"
+                similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                ? "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
+                  "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\2\n"
+                : "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \xFF\xFF\2\n"
+                  "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = \xFF\xFF\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
@@ -710,46 +713,45 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 44\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \x80\x10\x02\n"
-                "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x21\xFF\x02\n"
+                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \xFF\x20\x02\n"
+                "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = \xFF\xFF\x02\n"
 
-                "__ydb_parent = 44, __ydb_id = 45, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \x0E\x0E\x02\n"
-                "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 44, __ydb_id = 45, __ydb_centroid = \x38\xFF\x02\n"
+                "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \xFF\xE7\x02\n"
+                "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \xFF\x20\x02\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
-                "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
-                "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
+                "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 9.424325546e-06, embedding = \x10\x80\x02, data = one\n"
+                "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
                 "key = 3, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
-                "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
-                "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
-                "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
-                "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.717749399e-06, embedding = \x11\x81\x02, data = four\n"
+                "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 5.588689634e-06, embedding = \x11\x80\x02, data = five\n"
+                "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.915982998e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.032230893e-06, embedding = \x81\x10\x02, data = bbbb\n"
                 "key = 8, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
                 "key = 9, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
-                "key = 10, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
+                "key = 10, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.06483141742, embedding = \x11\x09\x02, data = eee\n"
                 "key = 10, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
-                "key = 11, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 11, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.0634715565, embedding = \x09\x11\x02, data = ffff\n"
                 "key = 11, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
                 "key = 12, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
                 "key = 13, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
 
-                "key = 21, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
-                "key = 22, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
-                "key = 23, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
-                "key = 24, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
-                "key = 25, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
-                "key = 26, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
-                "key = 27, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
-                "key = 28, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
-                "key = 29, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
-                "key = 30, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
-                "key = 30, __ydb_parent = 47, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
-                "key = 31, __ydb_parent = 45, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
-                "key = 31, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
-                "key = 32, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
-                "key = 33, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
+                "key = 21, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.004212607855, embedding = \x10\x80\x02, data = one\n"
+                "key = 22, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
+                "key = 23, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x10\x10\x02, data = three\n"
+                "key = 24, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.003622927127, embedding = \x11\x81\x02, data = four\n"
+                "key = 25, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.003537384457, embedding = \x11\x80\x02, data = five\n"
+                "key = 26, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.915982998e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 27, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.032230893e-06, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 28, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0001814242825, embedding = \x11\x10\x02, data = ccccc\n"
+                "key = 29, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.003169301984, embedding = \x10\x11\x02, data = dddd\n"
+                "key = 30, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.03087918828, embedding = \x11\x09\x02, data = eee\n"
+                "key = 31, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.0364222051, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 31, __ydb_parent = 46, __ydb_foreign = 1, __ydb_distance = 0.0598893529, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 32, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x09\x09\x02, data = ggggg\n"
+                "key = 33, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x11\x11\x02, data = hhhh\n"
             );
             recreate();
         }

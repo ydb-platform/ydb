@@ -158,7 +158,11 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// Any associative container (except TCompactFlatMap/TCompactSet).
+// Helper struct for serializing/deserializing keys of associative containers.
+template <class T>
+struct TAssociativeContainerKeyHelper;
+
+// Any associative container (except TCompactFlatMap/TCompactSet). Keys are serialized with TAssociativeContainerKeyHelper.
 template <NMpl::CAssociative TContainer>
 void Serialize(const TContainer& value, NYson::IYsonConsumer* consumer);
 
@@ -277,7 +281,7 @@ void Deserialize(std::array<T, N>& value, INodePtr node);
 template <class... T>
 void Deserialize(std::tuple<T...>& value, INodePtr node);
 
-// For any associative container.
+// For any associative container. Keys are serialized with TAssociativeContainerKeyHelper.
 template <NMpl::CAssociative TContainer>
 void Deserialize(TContainer& mapping, INodePtr node);
 

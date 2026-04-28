@@ -7,16 +7,23 @@ import re
 import sys
 import time
 import ydb
-from get_diff_lines_of_file import get_diff_lines_of_file
-from mute_utils import pattern_to_re
-from mute_check import YaMuteCheck
 
-# Add analytics directory to path for ydb_wrapper import
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+SCRIPT_DIR = os.path.dirname(__file__)
+TESTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
+ANALYTICS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'analytics'))
+
+# Keep imports working when this script is invoked directly.
+if TESTS_DIR not in sys.path:
+    sys.path.insert(0, TESTS_DIR)
+if ANALYTICS_DIR not in sys.path:
+    sys.path.insert(0, ANALYTICS_DIR)
+
+from get_diff_lines_of_file import get_diff_lines_of_file
+from mute.mute_utils import pattern_to_re
+from mute.mute_check import YaMuteCheck
 from ydb_wrapper import YDBWrapper
 
-dir = os.path.dirname(__file__)
-repo_path = f"{dir}/../../../"
+repo_path = f"{SCRIPT_DIR}/../../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 
 
@@ -40,6 +47,8 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         testowners_table = ydb_wrapper.get_table_path("testowners")
         
         if job_id and branch:  # extend all tests from main by new tests from pr
+            if not build_type:
+                raise ValueError("build_type is required when job_id and branch are set")
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
             print(f'   - job_id: {job_id}')
             print(f'   - branch: {branch}')
@@ -63,6 +72,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
+                and build_type = '{build_type}'
                 and run_timestamp >= CurrentUtcDate() - 30*Interval("P1D")
                 and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
         )
@@ -125,10 +135,11 @@ def create_tables(ydb_wrapper, table_path):
             `run_timestamp_last` Timestamp NOT NULL,
             `owners` Utf8,
             `branch` Utf8 NOT NULL,
+            `build_type` Utf8 NOT NULL,
             `is_muted` Uint32 ,
-            PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
+            PRIMARY KEY (`date`,branch,build_type, `test_name`, `suite_folder`, `full_name`)
         )
-            PARTITION BY HASH(date,branch)
+            PARTITION BY HASH(date,branch,build_type)
             WITH (STORE = COLUMN)
         """
     
@@ -169,6 +180,7 @@ def upload_muted_tests(tests):
             .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
             .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
@@ -219,6 +231,7 @@ def mute_applier(args):
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = args.branch
+            test['build_type'] = args.build_type
             is_muted = int(mute_check(testsuite, testcase))
             test['is_muted'] = is_muted
             
@@ -301,6 +314,14 @@ def mute_applier(args):
         print(f"Unmuted tests have been written to {unmuted_tests_file}.")
 
 
+def _add_muted_ya_file_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Mute list path (default: .github/config/muted_ya.txt)',
+    )
+
+
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
@@ -321,16 +342,12 @@ if __name__ == "__main__":
         'upload_muted_tests', help='apply mute rules for all tests in main and upload to database'
     )
     upload_muted_tests_parser.add_argument(
-        '--branch', required=True, default='main', help='branch for getting all tests'
+        '--branch', default='main', help='branch for getting all tests'
     )
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'
     )
-    upload_muted_tests_parser.add_argument(
-        '--muted_ya_file',
-        type=str,
-        help='Path to muted_ya.txt file (default: .github/config/muted_ya.txt)'
-    )
+    _add_muted_ya_file_arg(upload_muted_tests_parser)
 
     get_mute_details_parser = subparsers.add_parser(
         'get_mute_diff',
@@ -353,6 +370,7 @@ if __name__ == "__main__":
         required=True,
         help='build type for filtering tests',
     )
+    _add_muted_ya_file_arg(get_mute_details_parser)
     args = parser.parse_args()
     
     print(f'📋 Parsed arguments:')

@@ -1,3 +1,8 @@
+RECURSE(
+    lib
+    slow
+)
+
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -19,6 +24,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    ydb/tests/functional/secrets/lib
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/library/flavours

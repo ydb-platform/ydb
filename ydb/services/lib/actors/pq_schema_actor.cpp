@@ -439,7 +439,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             pqTabletConfig->SetDC(converter->GetCluster());
             pqTabletConfig->SetProducer(converter->GetLegacyProducer());
             pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-            pqTabletConfig->SetIdent(converter->GetLegacyProducer());
         }
 
 //        config->SetTopicName(name);

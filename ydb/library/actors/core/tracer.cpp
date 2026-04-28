@@ -66,8 +66,16 @@ namespace NActors::NTracing {
             }
         }
 
-        void RegisterEventTypeName(TThreadBuffer* buf, ui32 typeIndex, const TString& typeName) {
-            buf->EventNames.emplace(typeIndex, typeName);
+        void RegisterEventTypeName(TThreadBuffer* buf, const IEventHandle& event) {
+            if (!buf->EventNames.contains(event.Type)) {
+                buf->EventNames.emplace(event.Type, event.GetTypeName());
+            }
+        }
+
+        void RegisterEventTypeName(TThreadBuffer* buf, ui32 typeIndex, const IEventHandle& event) {
+            if (!buf->EventNames.contains(typeIndex)) {
+                buf->EventNames.emplace(typeIndex, event.GetTypeName());
+            }
         }
 
         TTraceChunk GetTraceChunk() {
@@ -198,7 +206,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = ts.CurrentActivityIndex;
             ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event);
         }
 
         void HandleReceive(IActor& recipient, IEventHandle& event) override {
@@ -217,7 +225,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = activityIndex;
             ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, event);
         }
 
         void HandleForward(ui64 oldHandlePtr, IEventHandle& event, ui32 originalType) override {
@@ -235,7 +243,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = ts.CurrentActivityIndex;
             ev.HandleHash = HashHandlePointer(oldHandlePtr);
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, originalType, event.GetTypeName());
+            TracerImpl.RegisterEventTypeName(ts.Buffer, originalType, event);
         }
 
         bool Start() override {

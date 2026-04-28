@@ -930,17 +930,21 @@ void FillColumnTableIndexesFromOlapColumnSchema(
             }
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
                 const auto& ngram = olapIndex.GetBloomNGrammFilter();
+                if (!ngram.HasColumnId()) {
+                    continue;
+                }
+
+                const auto it = idToName.find(ngram.GetColumnId());
+                if (it == idToName.end()) {
+                    continue;
+                }
+
                 auto* ydbIndex = out.add_indexes();
                 if constexpr (kSetDescribeIndexStatus) {
                     ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
                 }
                 ydbIndex->set_name(olapIndex.GetName());
-                if (ngram.HasColumnId()) {
-                    const auto it = idToName.find(ngram.GetColumnId());
-                    if (it != idToName.end()) {
-                        ydbIndex->add_index_columns(it->second);
-                    }
-                }
+                ydbIndex->add_index_columns(it->second);
 
                 auto* settings = ydbIndex->mutable_local_bloom_ngram_filter_index();
                 if (ngram.HasNGrammSize()) {

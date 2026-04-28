@@ -122,6 +122,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                     << "' because destination index already exists")};
             }
 
+
             // Get the source index configuration
             TPath srcIndexPath = tablePath.Child(sourceName);
             if (!srcIndexPath.IsResolved() || srcIndexPath.IsDeleted()) {
@@ -168,12 +169,6 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
                     TStringBuilder() << "Failed to convert index '" << sourceName << "' to creation config")};
             }
-
-            // Override the name with the destination name
-            indexConfig.SetName(destinationName);
-
-            validatedIndexConfigs.emplace_back(destinationName, std::move(indexConfig));
-            validatedDropIndexes.insert(sourceName);
         }
     }
 
@@ -181,6 +176,8 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
     result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
 
     if (hasAlterSchema) {
+        const auto& alterSchema = tx.GetAlterColumnTable().GetAlterSchema();
+
         // Create index operations for validated upsert indexes
         for (const auto& [indexName, indexConfig] : validatedIndexConfigs) {
             if (existingIndexNames.contains(indexName)) {
@@ -211,6 +208,23 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
             scheme.MutableDrop()->SetName(dropIdx);
 
             result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), scheme));
+        }
+
+        // Create move operations for validated move indexes
+        for (const auto& moveIdx : alterSchema.GetMoveIndex()) {
+            const TString& sourceName = moveIdx.GetSourceName();
+            const TString& destinationName = moveIdx.GetDestinationName();
+
+            auto scheme = TransactionTemplate(
+                parentPathStr + "/" + tableName,
+                NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+            scheme.SetInternal(true);
+            auto* moving = scheme.MutableMoveIndex();
+            moving->SetTablePath(parentPathStr + "/" + tableName);
+            moving->SetSrcPath(sourceName);
+            moving->SetDstPath(destinationName);
+
+            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), scheme));
         }
     }
 

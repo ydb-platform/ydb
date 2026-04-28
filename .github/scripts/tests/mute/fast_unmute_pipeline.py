@@ -5,7 +5,9 @@ import logging
 import os
 from collections import defaultdict
 
-from github_issue_utils import DEFAULT_BUILD_TYPE
+from github_issue_utils import (
+    DEFAULT_BUILD_TYPE,
+)
 
 from mute.constants import (
     get_manual_unmute_issue_closed_lookback_days,
@@ -51,9 +53,9 @@ from mute.fast_unmute_ydb import (
     upsert_rows,
 )
 from mute.update_mute_issues import (
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
-    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
     add_issue_comment,
+    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     parse_body,
 )
 

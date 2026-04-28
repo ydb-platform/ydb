@@ -7,16 +7,15 @@ from urllib.parse import quote_plus
 _scripts_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
-from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
+from github_issue_utils import (
+    DEFAULT_BUILD_TYPE,
+    parse_body,
+)
 
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = '45'
-# GitHub issue label set by ``mute/fast_unmute_github.py`` while fast-unmute rows exist.
-MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
-# GitHub issue label set once fast-unmute flow completed successfully.
-MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 
@@ -29,6 +28,8 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # project
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
+MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
+MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -275,6 +276,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                   title
                   url
                   state
+                  stateReason
                   body
                   createdAt
                   labels(first: 40) {
@@ -414,13 +416,29 @@ def generate_github_issue_title_and_body(test_data):
     )
 
 
+def _issue_body_has_mute_list_marker(body: str) -> bool:
+    """True when body uses the mute workflow markers (auto-created mute issues)."""
+    return bool(body) and '<!--mute_list_start-->' in body
+
+
+def _muted_issue_reservation_sort_key(entry: dict):
+    """Prefer **OPEN** over **CLOSED**; then newest ``createdAt`` (GraphQL ISO-8601 string)."""
+    open_rank = 1 if entry.get('state') == 'OPEN' else 0
+    created = entry.get('createdAt') or ''
+    return (open_rank, created)
+
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     """Project items → issue index.
 
-    Includes **open** issues and **closed** issues only when the GitHub label
-    ``manual-fast-unmute`` is present (fast-unmute without reopening the issue).
-    Other closed cards are skipped so downstream logic matches project 45 only.
+    Includes **open** issues.
+
+    Includes **closed** issues when either:
+    - GitHub label ``manual-fast-unmute`` is present (fast-unmute tracking without reopening), or
+    - ``stateReason`` is ``COMPLETED`` (manual close as done — canonical mute issue until reopened), or
+    - ``stateReason`` is empty and the body has the mute list marker (GraphQL/export may omit reason briefly).
+
+    Other closed cards (e.g. ``NOT_PLANNED``) are skipped.
     """
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     all_issues_with_contet = {}
@@ -428,12 +446,20 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             state = content.get('state')
+            body = content.get('body') or ''
+            state_reason = (content.get('stateReason') or '').strip().upper()
             label_nodes = (content.get('labels') or {}).get('nodes') or []
             label_names = [n['name'] for n in label_nodes if n and n.get('name')]
-            if state == 'CLOSED' and MANUAL_FAST_UNMUTE_GITHUB_LABEL not in label_names:
-                continue
+            if state == 'CLOSED':
+                if MANUAL_FAST_UNMUTE_GITHUB_LABEL in label_names:
+                    pass
+                elif state_reason == 'COMPLETED':
+                    pass
+                elif not state_reason and _issue_body_has_mute_list_marker(body):
+                    pass
+                else:
+                    continue
 
-            body = content['body']
             parsed = parse_body(body)
 
             status = 'N/A'
@@ -464,6 +490,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['title'] = content['title']
             all_issues_with_contet[content['id']]['url'] = content['url']
             all_issues_with_contet[content['id']]['state'] = content['state']
+            all_issues_with_contet[content['id']]['state_reason'] = content.get('stateReason') or ''
             all_issues_with_contet[content['id']]['createdAt'] = content['createdAt']
             all_issues_with_contet[content['id']]['status_updated'] = status_updated
             all_issues_with_contet[content['id']]['status'] = status
@@ -472,6 +499,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['branches'] = parsed.branches
             all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
             all_issues_with_contet[content['id']]['labels'] = label_names
+            all_issues_with_contet[content['id']]['has_mute_body'] = _issue_body_has_mute_list_marker(body)
 
             for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
@@ -507,33 +535,68 @@ def get_muted_tests_from_issues(issues_dict=None):
 
     # First, collect all issues for each (test, build_type) key
     for issue in issues_dict:
-        if issues_dict[issue]["state"] != 'CLOSED':
-            bt = issues_dict[issue].get('build_type') or DEFAULT_BUILD_TYPE
-            for test in issues_dict[issue]['tests']:
+        info = issues_dict[issue]
+        state = info['state']
+        state_reason = (info.get('state_reason') or '').strip().upper()
+        bt = info.get('build_type') or DEFAULT_BUILD_TYPE
+
+        # Open issues: reserve (test, build_type) for mute/issue automation.
+        # Closed issues with manual-fast-unmute label, COMPLETED reason, or empty reason + mute body:
+        # do not open a duplicate.
+        if state == 'CLOSED':
+            labels = info.get('labels') or []
+            closed_ok = (
+                MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
+                or state_reason == 'COMPLETED'
+                or (not state_reason and info.get('has_mute_body'))
+            )
+            if not closed_ok:
+                continue
+            for test in info['tests']:
                 key = (test, bt)
                 if key not in muted_tests:
                     muted_tests[key] = []
                 muted_tests[key].append(
                     {
-                        'url': issues_dict[issue]['url'],
-                        'createdAt': issues_dict[issue]['createdAt'],
-                        'status_updated': issues_dict[issue]['status_updated'],
-                        'status': issues_dict[issue]['status'],
-                        'state': issues_dict[issue]['state'],
-                        'branches': issues_dict[issue]['branches'],
+                        'url': info['url'],
+                        'createdAt': info['createdAt'],
+                        'status_updated': info['status_updated'],
+                        'status': info['status'],
+                        'state': state,
+                        'branches': info['branches'],
                         'build_type': bt,
                         'id': issue,
                     }
                 )
-    
-    # Then, for each test, keep only the latest issue (by createdAt)
+            continue
+
+        if state != 'OPEN':
+            continue
+
+        for test in info['tests']:
+            key = (test, bt)
+            if key not in muted_tests:
+                muted_tests[key] = []
+            muted_tests[key].append(
+                {
+                    'url': info['url'],
+                    'createdAt': info['createdAt'],
+                    'status_updated': info['status_updated'],
+                    'status': info['status'],
+                    'state': state,
+                    'branches': info['branches'],
+                    'build_type': bt,
+                    'id': issue,
+                }
+            )
+
+    # Then, for each test, keep one issue: prefer OPEN over CLOSED, then newest createdAt.
     for test in muted_tests:
         if len(muted_tests[test]) > 1:
-            # Sort by createdAt (most recent first) and keep only the first one
             muted_tests[test] = sorted(
-                muted_tests[test], 
-                key=lambda x: x['createdAt'], 
-                reverse=True
+                muted_tests[test],
+                key=_muted_issue_reservation_sort_key,
+                reverse=True,
             )[:1]
 
     return muted_tests

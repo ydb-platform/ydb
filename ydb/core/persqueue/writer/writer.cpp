@@ -589,7 +589,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         auto& partitionRequest = *record.MutablePartitionRequest();
-        const bool addInternalSourceIdForNoDedupTx = !Opts.UseDeduplication && static_cast<bool>(Opts.TxId);
+        const bool addInternalSourceIdForNoDedupTx = !Opts.UseDeduplication && !Opts.TxId.empty();
         if (addInternalSourceIdForNoDedupTx) {
             const TString internalSourceId = NPQ::NSourceIdEncoding::EncodeSimple(SourceId);
             for (auto& write : *partitionRequest.MutableCmdWrite()) {

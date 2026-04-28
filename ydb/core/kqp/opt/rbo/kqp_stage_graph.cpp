@@ -98,7 +98,7 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .KeyColumns()
             .Add(keyColumns)
         .Build()
-        .UseSpilling().Build(true)
+        .UseSpilling().Build(UseSpilling)
         .HashFunc().Build(ToString(HashFuncType))
     .Done().Ptr();
     // clang-format on

@@ -60,6 +60,7 @@ private:
             if (!TryAcceptSmallWeight(w, minWeight, Sketch_.Rng_)) return;
             placementWeight = minWeight;
         }
+<<<<<<< HEAD
     
         Sketch_.N_ += w;
         EnsureMaxWeightAtLeast(placementWeight);
@@ -69,6 +70,37 @@ private:
         while (Sketch_.Levels_.size() > MAX_LEVELS) {
             Sketch_.CompactLevel(0, true);
             Sketch_.Levels_.pop_front();
+=======
+
+        void Merge(const TDynamicKllSketch<T>& other) {
+            Sketch_.Merge(other.Sketch_);
+        }
+
+    private:
+        static constexpr size_t MAX_LEVELS = 30;
+
+        void AddPow2(const T& x, ui64 w) {
+            ui64 minWeight = Sketch_.Levels_.empty() ? Sketch_.CurrentWeight_
+                                                     : Sketch_.Levels_[0].Weight;
+
+            ui64 placementWeight = w;
+            if (w < minWeight) {
+                if (!TryAcceptSmallWeight(w, minWeight, Sketch_.Rng_)) {
+                    return;
+                }
+                placementWeight = minWeight;
+            }
+
+            Sketch_.N_ += w;
+            EnsureMaxWeightAtLeast(placementWeight);
+            size_t level = FindSuitableLevel(placementWeight);
+            Sketch_.AddToLevel(level, x);
+
+            while (Sketch_.Levels_.size() > MAX_LEVELS) {
+                Sketch_.CompactLevel(0, true);
+                Sketch_.Levels_.pop_front();
+            }
+>>>>>>> 78242e20f03 (LOGBROKER-10375 Add split by mps (#38551))
         }
     }
 

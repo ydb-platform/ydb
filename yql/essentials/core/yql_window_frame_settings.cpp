@@ -4,6 +4,7 @@
 #include <yql/essentials/core/sql_types/window_frames_collector_params.h>
 #include <yql/essentials/core/yql_window_frame_settings_pg.h>
 #include <yql/essentials/utils/parse_double.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/overloaded.h>
 
@@ -149,6 +150,18 @@ bool CmpGreaterNonInf(TExprNodeNumberAndDirection left, TExprNodeNumberAndDirect
     return l > r;
 }
 
+bool CmpGreaterNonInfDecimal(TExprNodeNumberAndDirection left, TExprNodeNumberAndDirection right) {
+    auto parseDecimalFromNode = [](const TExprNode::TPtr& node) -> NDecimal::TInt128 {
+        YQL_ENSURE(node->ChildrenSize() == 3, "Expected 3 children for Decimal callable");
+        ui8 precision = FromString<ui8>(node->Child(1)->Content());
+        ui8 scale = FromString<ui8>(node->Child(2)->Content());
+        return NDecimal::FromString(node->Head().Content(), precision, scale);
+    };
+    auto l = TNumberAndDirection<NDecimal::TInt128>(parseDecimalFromNode(left.GetUnderlyingValue()), left.GetDirection());
+    auto r = TNumberAndDirection<NDecimal::TInt128>(parseDecimalFromNode(right.GetUnderlyingValue()), right.GetDirection());
+    return l > r;
+}
+
 template <typename T>
 bool CompareWithRightCallable(TExprNodeNumberAndDirection left,
                               TExprNodeNumberAndDirection right) {
@@ -213,13 +226,13 @@ bool CompareCallablesNonInf(TExprNodeNumberAndDirection leftCallable, TExprNodeN
         return CompareWithRightCallable<NUdf::TDataType<NUdf::TInterval>::TLayout>(leftCallable, rightCallable);
     } else if (leftCallableName == "Interval64") {
         return CompareWithRightCallable<NUdf::TDataType<NUdf::TInterval64>::TLayout>(leftCallable, rightCallable);
+    } else if (leftCallableName == "Decimal") {
+        return CmpGreaterNonInfDecimal(leftCallable, rightCallable);
     }
     YQL_ENSURE(false, "Unexpected callable in comparasion.");
 }
 
-// Frame is always empty if left > right.
 bool CheckRangeFrameIsAlwaysEmpty(const TParseFrameBoundResult& left, const TParseFrameBoundResult& right) {
-    // If either bound is infinity, frame cannot be empty.
     if (left.GetBoundNode().IsInf() || right.GetBoundNode().IsInf() || left.IsZero() || right.IsZero()) {
         return false;
     }
@@ -351,6 +364,20 @@ std::expected<std::strong_ordering, TString> ParseCallable(const TExprNode::TPtr
     } else if (callableName == "Interval64") {
         NUdf::TDataType<NUdf::TInterval64>::TLayout value = FromString<NUdf::TDataType<NUdf::TInterval64>::TLayout>(valNode.Content());
         return value <=> static_cast<NUdf::TDataType<NUdf::TInterval64>::TLayout>(0);
+    } else if (callableName == "Decimal") {
+        if (callable->ChildrenSize() != 3) {
+            return std::unexpected(TString("Expected 3 children for Decimal callable"));
+        }
+        ui8 precision = FromString<ui8>(callable->Child(1)->Content());
+        ui8 scale = FromString<ui8>(callable->Child(2)->Content());
+        NDecimal::TInt128 value = NDecimal::FromString(valNode.Content(), precision, scale);
+        if (NDecimal::IsNan(value)) {
+            return std::unexpected(TString("NaN is not allowed for RANGE frame bounds"));
+        }
+        if (NDecimal::IsInf(value)) {
+            return std::unexpected(TString("Inf is not allowed for RANGE frame bounds"));
+        }
+        return value <=> NDecimal::TInt128(0);
     }
 
     return std::unexpected(TStringBuilder() << "Unsupported callable type for RANGE bound: " << callableName);
@@ -488,25 +515,26 @@ public:
             return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expecting unbounded, but got '" << boundValue->Content() << "'"));
         }
 
-        if constexpr (Type() != EType::NonNumeric) {
-            YQL_ENSURE(sortColumnType, "Sorted column expected");
+        if constexpr (Type() == EType::NonNumeric) {
+            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Offset specifing is not allowed here since that column type does not support for RANGE mode."));
         }
+        YQL_ENSURE(sortColumnType, "Sorted column expected");
+        auto message = TStringBuilder() << "Error while processing RANGE bound for column type: " << *sortColumnType << " and offset type: " << *boundValue->GetTypeAnn();
+        auto issue = TIssue(ctx.GetPosition(boundValue->Pos()), message);
         if constexpr (Type() == EType::YQL) {
             auto addAllowed = IsAddAllowedYqlTypes(sortColumnType, boundValue->GetTypeAnn(), ctx);
             if (!addAllowed.has_value()) {
-                auto message = TStringBuilder() << "Error while processing RANGE bound: " << addAllowed.error();
-                return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), message));
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), addAllowed.error())));
             }
 
             auto parseCallable = ParseCallable(boundValue);
             if (!parseCallable.has_value()) {
-                auto message = TStringBuilder() << "Error while processing RANGE bound: " << parseCallable.error();
-                return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), message));
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), parseCallable.error())));
             }
 
             auto parseCallableResult = parseCallable.value();
             if (parseCallableResult == std::strong_ordering::less) {
-                return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expected positive literal value"));
+                return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Expected positive literal value")));
             }
             auto node = TExprNodeNumberAndDirection(boundValue, direction);
             return TParseFrameBoundResult(
@@ -517,9 +545,6 @@ public:
                 /*isCurrentRow=*/false,
                 /*procId=*/Nothing());
         } else if constexpr (Type() == EType::PG) {
-            auto message = TStringBuilder() << "Error while processing RANGE bound for column type: " << *sortColumnType << " and offset type: " << *boundValue->GetTypeAnn();
-            auto issue = TIssue(ctx.GetPosition(boundValue->Pos()), message);
-
             auto sign = PgSign(boundValue);
             if (!sign.has_value()) {
                 return std::unexpected(issue.AddSubIssue(MakeIntrusive<TIssue>(ctx.GetPosition(boundValue->Pos()), sign.error())));
@@ -540,8 +565,6 @@ public:
                 /*isZero=*/sign.value() == std::strong_ordering::equal,
                 /*isCurrentRow=*/false,
                 /*procId=*/inRangeCasts->ProcId);
-        } else {
-            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Offset specifing is not allowed here since that column type does not support for RANGE mode."));
         }
     }
 
@@ -666,25 +689,15 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
     if (type->GetKind() == ETypeAnnotationKind::Data) {
         switch (type->Cast<TDataExprType>()->GetSlot()) {
             case NUdf::EDataSlot::Int8:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint8:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int16:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint16:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int32:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint32:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Int64:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Uint64:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Double:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Float:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Date:
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::Timestamp:
@@ -692,7 +705,6 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
             case NUdf::EDataSlot::TzDate:
             case NUdf::EDataSlot::TzDatetime:
             case NUdf::EDataSlot::TzTimestamp:
-                return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             case NUdf::EDataSlot::Date32:
             case NUdf::EDataSlot::Datetime64:
             case NUdf::EDataSlot::Timestamp64:
@@ -700,6 +712,7 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
             case NUdf::EDataSlot::TzDate32:
             case NUdf::EDataSlot::TzDatetime64:
             case NUdf::EDataSlot::TzTimestamp64:
+            case NUdf::EDataSlot::Decimal:
                 return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             default:
                 return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumericSingleColumn, ctx);
@@ -712,7 +725,7 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
     auto frameSpec = node.Child(0);
     bool isCompact = GetSettingByName(frameSpec->Children(), "compact") != nullptr;
 
-    if (node.IsCallable("WinOnRows")) {
+    if (node.IsCallable({"WinOnRows", "WinFilter"})) {
         if (!GetSettingByName(frameSpec->Children(), "begin") || !GetSettingByName(frameSpec->Children(), "end")) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
                                 TStringBuilder() << "Expected begin and end for row frames."));

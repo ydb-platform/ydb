@@ -10,6 +10,10 @@ namespace NActors::NInterconnect {
         THashMap<ui32, TActorId> Nodes;
 
     public:
+        explicit TSubscriptionManager(TActorIdentity selfId)
+            : SelfId(selfId)
+        {}
+
         ~TSubscriptionManager() {
             for (const auto& [nodeId, actorId] : Nodes) {
                 Y_ABORT_UNLESS(SelfId);

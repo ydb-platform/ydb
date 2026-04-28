@@ -76,8 +76,8 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
     for (const auto& conj : conjuncts) {
-        if (conj.MaybeJoinCondition()) {
-            TJoinCondition cond(conj);
+        if (conj.MaybeEquiJoinCondition()) {
+            TEquiJoinCondition cond(conj);
 
             if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
                 joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));

@@ -6,7 +6,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>

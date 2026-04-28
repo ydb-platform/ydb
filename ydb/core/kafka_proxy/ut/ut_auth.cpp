@@ -6,6 +6,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/login/sasl/scram.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/random/random.h>
 
@@ -13,8 +14,8 @@ using namespace NKafka;
 using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
-    // Test PLAIN message with empty username
-    Y_UNIT_TEST(EmptyUsername) {
+    // Test PLAIN message with unsupported characters in username
+    Y_UNIT_TEST(BadUsername) {
         TInsecureTestServer testServer("2");
         TKafkaTestClient client(testServer.Port);
 
@@ -24,13 +25,13 @@ Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
         auto handshakeMsg = client.SaslHandshake("PLAIN");
         UNIT_ASSERT_VALUES_EQUAL(handshakeMsg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-        auto response = client.SaslPlainAuthenticate("@/Root", "ourUserPassword");
+        auto response = client.SaslPlainAuthenticate("אouruser@/Root", "ourUserPassword");
 
         UNIT_ASSERT_VALUES_UNEQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. Unsupported characters in the authentication identity");
     }
 
     // Test PLAIN message with incorrect tokens count
@@ -95,8 +96,8 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
     }
 
     // Test first SCRAM message with non-existent user
-    Y_UNIT_TEST(FirstMsgNonExistentUser) {
-        TInsecureTestServer testServer("2");
+    Y_UNIT_TEST_TWIN(FirstMsgNonExistentUser, HideAuthenticationFailureReasons) {
+        TInsecureTestServer testServer({ .KafkaApiMode = "2", .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons});
         TKafkaTestClient client(testServer.Port);
 
         auto apiVersionsMsg = client.ApiVersions();
@@ -118,7 +119,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. ");
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure.");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. Cannot find user 'nonexistentuser'");
+        }
 
         UNIT_ASSERT(response->AuthBytes.has_value());
         std::string errorMessage(response->AuthBytes->data(), response->AuthBytes->size());
@@ -126,7 +131,12 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
         auto parseErrorResult = NLogin::NSasl::ParseFinalServerMsg(errorMessage, errorMsg);
         UNIT_ASSERT_C(parseErrorResult == NLogin::NSasl::EParseMsgReturnCodes::Success, "Failed to parse error message");
         UNIT_ASSERT_C(!errorMsg.Error.empty(), "Error field should not be empty");
-        UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "unknown-user");
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "other-error");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "unknown-user");
+        }
     }
 
     // Test first SCRAM message with empty username
@@ -153,7 +163,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. Malformed SASL SCRAM first client message");
 
         // Check error message
         UNIT_ASSERT(response->AuthBytes.has_value());
@@ -240,7 +250,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. Malformed SASL SCRAM first client message");
 
         UNIT_ASSERT(response->AuthBytes.has_value());
         std::string errorMessage(response->AuthBytes->data(), response->AuthBytes->size());
@@ -248,6 +258,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
         auto parseErrorResult = NLogin::NSasl::ParseFinalServerMsg(errorMessage, errorMsg);
         UNIT_ASSERT_C(parseErrorResult == NLogin::NSasl::EParseMsgReturnCodes::Success, "Failed to parse error message");
         UNIT_ASSERT_C(!errorMsg.Error.empty(), "Error field should not be empty");
+        UNIT_ASSERT_VALUES_EQUAL(errorMsg.Error, "other-error");
     }
 } // Y_UNIT_TEST_SUITE(KafkaScramFirstMessage)
 
@@ -352,7 +363,6 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
                       "Failed to parse server final message: " + serverFinalMessage);
 
         UNIT_ASSERT_C(parsedFinalServerMsg.Error.empty(), "Server returned error: " + parsedFinalServerMsg.Error);
-
         UNIT_ASSERT_C(!parsedFinalServerMsg.ServerSignature.empty(), "Server signature is empty");
 
         std::string serverKey;
@@ -387,8 +397,8 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
     }
 
     // Test final SCRAM message with incorrect client proof
-    Y_UNIT_TEST(FinalMsgIncorrectProof) {
-        TInsecureTestServer testServer("2");
+    Y_UNIT_TEST_TWIN(FinalMsgIncorrectProof, HideAuthenticationFailureReasons) {
+        TInsecureTestServer testServer({ .KafkaApiMode = "2", .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons});
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -409,7 +419,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. ");
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure.");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. Invalid password");
+        }
 
         UNIT_ASSERT(response2->AuthBytes.has_value());
         std::string errorMessage(response2->AuthBytes->data(), response2->AuthBytes->size());
@@ -417,7 +431,12 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         auto parseErrorResult = NLogin::NSasl::ParseFinalServerMsg(errorMessage, errorMsg);
         UNIT_ASSERT_C(parseErrorResult == NLogin::NSasl::EParseMsgReturnCodes::Success, "Failed to parse error message");
         UNIT_ASSERT_C(!errorMsg.Error.empty(), "Error field should not be empty");
-        UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "invalid-proof");
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "other-error");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "invalid-proof");
+        }
     }
 
     // Test final SCRAM message with wrong nonce
@@ -460,7 +479,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. Nonces don't match");
 
         UNIT_ASSERT(response2->AuthBytes.has_value());
         std::string errorMessage(response2->AuthBytes->data(), response2->AuthBytes->size());
@@ -487,7 +506,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. Malformed SASL SCRAM final client message");
 
         UNIT_ASSERT(response2->AuthBytes.has_value());
         std::string errorMessage(response2->AuthBytes->data(), response2->AuthBytes->size());
@@ -518,7 +537,7 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
 
         // Check ErrorMessage field
         UNIT_ASSERT(response2->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. ");
+        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. Malformed SASL SCRAM final client message");
 
         // Check error message
         UNIT_ASSERT(response2->AuthBytes.has_value());
@@ -531,8 +550,8 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
     }
 
     // Test final SCRAM message with proof computed using wrong password
-    Y_UNIT_TEST(FinalMsgWrongPassword) {
-        TInsecureTestServer testServer("2");
+    Y_UNIT_TEST_TWIN(FinalMsgWrongPassword, HideAuthenticationFailureReasons) {
+        TInsecureTestServer testServer({ .KafkaApiMode = "2", .HideAuthenticationFailureReasons = HideAuthenticationFailureReasons});
         TKafkaTestClient client(testServer.Port);
 
         TString userName = "ouruser";
@@ -566,7 +585,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
 
         UNIT_ASSERT(response2->ErrorMessage.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. ");
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure.");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(*response2->ErrorMessage, "Authentication failure. Invalid password");
+        }
 
         UNIT_ASSERT(response2->AuthBytes.has_value());
         std::string errorMessage(response2->AuthBytes->data(), response2->AuthBytes->size());
@@ -574,6 +597,11 @@ Y_UNIT_TEST_SUITE(KafkaScramFinalMessage) {
         auto parseErrorResult = NLogin::NSasl::ParseFinalServerMsg(errorMessage, errorMsg);
         UNIT_ASSERT_C(parseErrorResult == NLogin::NSasl::EParseMsgReturnCodes::Success, "Failed to parse error message");
         UNIT_ASSERT_C(!errorMsg.Error.empty(), "Error field should not be empty");
-        UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "invalid-proof");
+
+        if (HideAuthenticationFailureReasons) {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "other-error");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(errorMsg.Error, "invalid-proof");
+        }
     }
 } // Y_UNIT_TEST_SUITE(KafkaScramFinalMessage)

@@ -12,6 +12,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// An interface for interacting with DirtyMap. It is needed to register
+// ready-to-process PBuffer records and update statistics about space usage in
+// PBuffers.
 struct IReadyQueue
 {
     enum class EQueueType

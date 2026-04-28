@@ -214,7 +214,7 @@ protected:
         auto stats = KqpCtx.KqpStats.GetStats(node.Raw());
         TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, KqpCtx.KqpStats.ShufflingsFSM, tableAliases));
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpCtx.KqpStats, optLevel,
+        TExprBase output = KqpOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpCtx.KqpStats, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
@@ -229,7 +229,7 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = NKikimr::NKqp::DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        TExprBase output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

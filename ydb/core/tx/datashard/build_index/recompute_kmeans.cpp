@@ -51,6 +51,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 InvalidEmbeddingRows = 0;
 
     bool InForeign = false;
     NTable::TPos IsForeignPos = 0;
@@ -123,6 +124,11 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingRows > 0) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build")
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -202,6 +208,10 @@ protected:
                 // Skip rows from "non-domestic" clusters to not affect K-means centroids
                 return;
             }
+        }
+        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
+            ++InvalidEmbeddingRows;
+            return;
         }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());

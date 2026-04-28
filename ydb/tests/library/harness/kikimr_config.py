@@ -817,6 +817,10 @@ class KikimrConfigGenerator(object):
         return self.yaml_config.get('http_proxy_config', {}).get('enabled')
 
     @property
+    def kafka_proxy_enabled(self):
+        return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
+
+    @property
     def working_dir(self):
         return self.__working_dir
 

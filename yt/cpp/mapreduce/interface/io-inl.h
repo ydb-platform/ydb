@@ -123,6 +123,8 @@ struct IReaderImplBase
     virtual i64 GetTabletIndex() const;
     virtual bool IsEndOfStream() const;
     virtual bool IsRawReaderExhausted() const;
+    virtual void Abort();
+    virtual bool IsAborted() const;
 };
 
 struct INodeReaderImpl
@@ -221,6 +223,16 @@ public:
     i64 GetTabletIndex() const
     {
         return Reader_->GetTabletIndex();
+    }
+
+    void Abort()
+    {
+        Reader_->Abort();
+    }
+
+    bool IsAborted() const
+    {
+        return Reader_->IsAborted();
     }
 
 protected:

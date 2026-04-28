@@ -532,6 +532,11 @@ const std::string& TClientResponse::GetAddress() const
     return Address_;
 }
 
+NProto::TResponseHeader& TClientResponse::Header()
+{
+    return Header_;
+}
+
 const NProto::TResponseHeader& TClientResponse::Header() const
 {
     return Header_;

@@ -15,10 +15,6 @@ TString GetFullName(const TInfoUnit& name) {
     return name.GetFullName();
 }
 
-bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op) {
-    return op->Props.NumOfConsumers.has_value() && op->Props.NumOfConsumers.value() > 1;
-}
-
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
     // clang-format off
     return Build<TCoAtomList>(ctx, pos)

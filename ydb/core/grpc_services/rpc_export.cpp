@@ -224,6 +224,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             TTraits::SetSourcePath(exportSettings, CommonSourcePath);
         }
 
+        if constexpr (IsFsExport) {
+            exportSettings->set_base_path(StripTrailingSlashes(exportSettings->base_path()));
+        }
+
         exportSettings->clear_items();
         for (const auto& [sourcePath, info] : ExportItems) {
             auto* item = exportSettings->add_items();

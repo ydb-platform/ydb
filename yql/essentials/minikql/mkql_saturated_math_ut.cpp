@@ -147,6 +147,11 @@ Y_UNIT_TEST(IsBelongToInterval_Double_BoundaryValues) {
 
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<double>::lowest(), 0.0, std::numeric_limits<double>::lowest()));
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<double>::lowest(), 0.0, 0.0));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::infinity()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::infinity()));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<double>::max(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max()));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i64_ui32) {
@@ -252,6 +257,87 @@ Y_UNIT_TEST(IsBelongToInterval_MixedTypes_double_float) {
 
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0f, 5.0)));
     UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0f, 4.9)));
+}
+
+Y_UNIT_TEST(IsBelongToInterval_Decimal_NormalNumbers) {
+    using T = NYql::NDecimal::TInt128;
+    const ui8 prec = 10;
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(10), T(5), T(15), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(10), T(5), T(16), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(10), T(5), T(14), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(10), T(5), T(15), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(10), T(5), T(0), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(10), T(5), T(16), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(10), T(5), T(5), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(10), T(5), T(10), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(10), T(5), T(4), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(10), T(5), T(5), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(10), T(5), T(-100), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(10), T(5), T(6), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(-10), T(5), T(-5), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(-10), T(5), T(-6), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(-10), T(5), T(-15), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(-10), T(5), T(-16), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(7), T(0), T(7), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(7), T(0), T(7), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(7), T(0), T(6), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(7), T(0), T(8), prec));
+}
+
+Y_UNIT_TEST(IsBelongToInterval_Decimal_InfiniteFrom) {
+    using T = NYql::NDecimal::TInt128;
+    const ui8 prec = 10;
+
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, NYql::NDecimal::Inf(), T(5), T(100), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, NYql::NDecimal::Inf(), T(5), T(100), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, NYql::NDecimal::Inf(), T(5), NYql::NDecimal::Inf(), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, -NYql::NDecimal::Inf(), T(5), T(100), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, -NYql::NDecimal::Inf(), T(5), -NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -NYql::NDecimal::Inf(), T(5), T(100), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -NYql::NDecimal::Inf(), T(5), -NYql::NDecimal::Inf(), prec));
+}
+
+Y_UNIT_TEST(IsBelongToInterval_Decimal_InfiniteX) {
+    using T = NYql::NDecimal::TInt128;
+    const ui8 prec = 10;
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(10), T(5), NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(10), T(5), NYql::NDecimal::Inf(), prec));
+
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(10), T(5), -NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(10), T(5), -NYql::NDecimal::Inf(), prec));
+}
+
+Y_UNIT_TEST(IsBelongToInterval_Decimal_BoundaryBecomesInfinite) {
+    using T = NYql::NDecimal::TInt128;
+    const ui8 prec = 5;
+
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, T(99998), T(3), T(99999), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(99998), T(3), T(99999), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, T(99998), T(3), NYql::NDecimal::Inf(), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, T(-99998), T(3), T(-99999), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(-99998), T(3), T(-99999), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, T(-99998), T(3), -NYql::NDecimal::Inf(), prec));
+}
+
+Y_UNIT_TEST(IsBelongToInterval_Decimal_InfinityIsStable) {
+    using T = NYql::NDecimal::TInt128;
+    const ui8 prec = 10;
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, NYql::NDecimal::Inf(), T(99999), NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, NYql::NDecimal::Inf(), T(99999), T(0), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -NYql::NDecimal::Inf(), T(99999), -NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -NYql::NDecimal::Inf(), T(99999), T(0), prec));
+
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, NYql::NDecimal::Inf(), T(0), NYql::NDecimal::Inf(), prec));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, NYql::NDecimal::Inf(), T(0), NYql::NDecimal::Inf(), prec));
 }
 
 } // Y_UNIT_TEST_SUITE(SaturatedMathTest)

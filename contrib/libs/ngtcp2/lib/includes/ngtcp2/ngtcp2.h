@@ -306,15 +306,29 @@ typedef struct ngtcp2_mem {
  * @macro
  *
  * :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE` is the default maximum UDP
- * datagram payload size that the local endpoint transmits.
+ * datagram payload size that the local endpoint transmits without
+ * Path MTU Discovery (PMTUD) or the custom settings (see
+ * :member:`ngtcp2_settings.max_tx_udp_payload_size` and
+ * :member:`ngtcp2_settings.no_tx_udp_payload_size_shaping`).
  */
 #define NGTCP2_MAX_UDP_PAYLOAD_SIZE 1200
 
 /**
  * @macro
  *
- * :macro:`NGTCP2_MAX_PMTUD_UDP_PAYLOAD_SIZE` is the maximum UDP
+ * :macro:`NGTCP2_MAX_TX_UDP_PAYLOAD_SIZE` is the maximum UDP datagram
+ * payload size that this library can output.
+ */
+#define NGTCP2_MAX_TX_UDP_PAYLOAD_SIZE 65527
+
+/**
+ * @macro
+ *
+ * :macro:`NGTCP2_MAX_PMTUD_UDP_PAYLOAD_SIZE` was the maximum UDP
  * datagram payload size that Path MTU Discovery can discover.
+ *
+ * Deprecated since v1.17.0.  Path MTU Discovery is not capped to this
+ * value anymore.
  */
 #define NGTCP2_MAX_PMTUD_UDP_PAYLOAD_SIZE 1452
 
@@ -1786,7 +1800,9 @@ typedef struct ngtcp2_settings {
   ngtcp2_printf log_printf;
   /**
    * :member:`max_tx_udp_payload_size` is the maximum size of UDP
-   * datagram payload that the local endpoint transmits.
+   * datagram payload that the local endpoint transmits.  This must be
+   * larger than or equal to :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`, and
+   * less then or equal to :macro:`NGTCP2_MAX_TX_UDP_PAYLOAD_SIZE`.
    */
   size_t max_tx_udp_payload_size;
   /**
@@ -1951,12 +1967,13 @@ typedef struct ngtcp2_settings {
   /**
    * :member:`pmtud_probes` is the array of UDP datagram payload size
    * to probe during Path MTU Discovery.  The discovery is done in the
-   * order appeared in this array.  The size must be strictly larger
-   * than 1200, otherwise the behavior is undefined.  The maximum
-   * value in this array should be set to
-   * :member:`max_tx_udp_payload_size`.  If this field is not set, the
-   * predefined PMTUD probes are made.  This field has been available
-   * since v1.4.0.
+   * order appeared in this array.  The payload size must be strictly
+   * larger than :macro:`NGTCP2_MAX_UDP_PAYLOAD_SIZE`, and less than
+   * or equal to :macro:`NGTCP2_MAX_TX_UDP_PAYLOAD_SIZE`.  Otherwise
+   * the behavior is undefined.  The maximum value in this array
+   * should be set to :member:`max_tx_udp_payload_size`.  If this
+   * field is not set, the predefined PMTUD probes are made.  This
+   * field has been available since v1.4.0.
    */
   const uint16_t *pmtud_probes;
   /**
@@ -4155,9 +4172,7 @@ NGTCP2_EXTERN void ngtcp2_conn_set_keep_alive_timeout(ngtcp2_conn *conn,
  * `ngtcp2_conn_get_expiry` returns the next expiry time.  It returns
  * ``UINT64_MAX`` if there is no next expiry.
  *
- * Call `ngtcp2_conn_handle_expiry` and then
- * `ngtcp2_conn_writev_stream` (or `ngtcp2_conn_writev_datagram`) when
- * the expiry time has passed.
+ * Call `ngtcp2_conn_handle_expiry` when the expiry time has passed.
  */
 NGTCP2_EXTERN ngtcp2_tstamp ngtcp2_conn_get_expiry(ngtcp2_conn *conn);
 
@@ -4165,6 +4180,20 @@ NGTCP2_EXTERN ngtcp2_tstamp ngtcp2_conn_get_expiry(ngtcp2_conn *conn);
  * @function
  *
  * `ngtcp2_conn_handle_expiry` handles expired timer.
+ *
+ * If it returns :macro:`NGTCP2_ERR_IDLE_CLOSE`, it means that an idle
+ * timer has fired for this particular connection.  In this case, drop
+ * the connection without calling
+ * `ngtcp2_conn_write_connection_close`.  If it returns any of the
+ * other negative error codes, close the connection by sending the
+ * terminal packet produced by `ngtcp2_conn_write_connection_close`.
+ * Otherwise, schedule `ngtcp2_conn_writev_stream` call.  An
+ * application may call any number of additional
+ * `ngtcp2_conn_read_pkt` and `ngtcp2_conn_handle_expiry` before
+ * calling `ngtcp2_conn_writev_stream`.  After calling
+ * `ngtcp2_conn_writev_stream`, new expiry is set.  The application
+ * should call `ngtcp2_conn_get_expiry` to get a new deadline and set
+ * the timer.
  */
 NGTCP2_EXTERN int ngtcp2_conn_handle_expiry(ngtcp2_conn *conn,
                                             ngtcp2_tstamp ts);
@@ -5632,6 +5661,26 @@ NGTCP2_EXTERN int ngtcp2_conn_set_stream_user_data(ngtcp2_conn *conn,
 /**
  * @function
  *
+ * `ngtcp2_conn_get_stream_user_data` returns stream_user_data
+ * associated to the stream identified by |stream_id|.  If the stream
+ * is not found, or no stream data is associated to the stream, this
+ * function returns NULL.
+ *
+ * The stream_user_data can be associated to the stream by one of the
+ * following functions:
+ *
+ * - `ngtcp2_conn_open_bidi_stream`
+ * - `ngtcp2_conn_open_uni_stream`
+ * - `ngtcp2_conn_set_stream_user_data`
+ *
+ * This function has been available since v1.17.0.
+ */
+NGTCP2_EXTERN void *ngtcp2_conn_get_stream_user_data(ngtcp2_conn *conn,
+                                                     int64_t stream_id);
+
+/**
+ * @function
+ *
  * `ngtcp2_conn_update_pkt_tx_time` sets the time instant of the next
  * packet transmission to pace packets.  This function must be called
  * after (multiple invocation of) `ngtcp2_conn_writev_stream`.  If
@@ -5714,14 +5763,23 @@ typedef ngtcp2_ssize (*ngtcp2_write_pkt)(ngtcp2_conn *conn, ngtcp2_path *path,
  * first packet is `ngtcp2_conn_get_path_max_tx_udp_payload_size(conn)
  * <ngtcp2_conn_get_path_max_tx_udp_payload_size>` bytes long.  The
  * application can adjust the length of the buffer to limit the number
- * of packets to aggregate.  If this function returns positive
- * integer, all packets share the same :type:`ngtcp2_path` and
- * :type:`ngtcp2_pkt_info` values, and they are assigned to the
- * objects pointed by |path| and |pi| respectively.  The length of all
- * packets other than the last packet is assigned to |*pgsolen|.  The
- * length of last packet is equal to or less than |*pgsolen|.
- * |write_pkt| must write a single packet.  After all packets are
- * written, this function calls `ngtcp2_conn_update_pkt_tx_time`.
+ * of packets to aggregate (or use `ngtcp2_conn_write_aggregate_pkt2`
+ * to control the number of packets to write directly).  If this
+ * function returns positive integer, all packets share the same
+ * :type:`ngtcp2_path` and :type:`ngtcp2_pkt_info` values, and they
+ * are assigned to the objects pointed by |path| and |pi|
+ * respectively.  The length of all packets other than the last packet
+ * is assigned to |*pgsolen|.  The length of last packet is equal to
+ * or less than |*pgsolen|.  |write_pkt| must write a single packet.
+ * After all packets are written, this function calls
+ * `ngtcp2_conn_update_pkt_tx_time`.
+ *
+ * This function is equivalent to call
+ * `ngtcp2_conn_write_aggregate_pkt2` with |buflen| = min(|buflen|,
+ * `ngtcp2_conn_get_send_quantum(conn)
+ * <ngtcp2_conn_get_send_quantum>`) and |num_pkts| = 0 followed by
+ * `ngtcp2_conn_update_pkt_tx_time(conn)
+ * <ngtcp2_conn_update_pkt_tx_time>`.
  *
  * This function returns the number of bytes written to the buffer, or
  * a negative error code returned by |write_pkt|.
@@ -5732,6 +5790,29 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt_versioned(
   ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
   ngtcp2_pkt_info *pi, uint8_t *buf, size_t buflen, size_t *pgsolen,
   ngtcp2_write_pkt write_pkt, ngtcp2_tstamp ts);
+
+/**
+ * @function
+ *
+ * `ngtcp2_conn_write_aggregate_pkt2` behaves like
+ * `ngtcp2_conn_write_aggregate_pkt`, but it accepts |num_pkts| to
+ * specify the maximum number of packets to write.  If |num_pkts| is
+ * 0, this function writes packets as much as possible.  The actual
+ * number of packets to write is determined by the connection state
+ * (e.g., the congestion controller, data available to send) and the
+ * length of packet produced.  It also does not clamp |buflen|, and
+ * does not call `ngtcp2_conn_update_pkt_tx_time`.
+ *
+ * This function offers more flexibility and optimization chances to
+ * an application.  It can experiment different GSO buffer size
+ * strategy and number of GSO writes per event loop.
+ *
+ * This function has been available since v1.17.0.
+ */
+NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_aggregate_pkt2_versioned(
+  ngtcp2_conn *conn, ngtcp2_path *path, int pkt_info_version,
+  ngtcp2_pkt_info *pi, uint8_t *buf, size_t buflen, size_t *pgsolen,
+  ngtcp2_write_pkt write_pkt, size_t num_pkts, ngtcp2_tstamp ts);
 
 /**
  * @function
@@ -6139,6 +6220,17 @@ NGTCP2_EXTERN uint32_t ngtcp2_select_version(const uint32_t *preferred_versions,
   ngtcp2_conn_write_aggregate_pkt_versioned(                                   \
     (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (BUFLEN), (PGSOLEN), \
     (WRITE_PKT), (TS))
+
+/*
+ * `ngtcp2_conn_write_aggregate_pkt2` is a wrapper around
+ * `ngtcp2_conn_write_aggregate_pkt2_versioned` to set the correct
+ * struct version.
+ */
+#define ngtcp2_conn_write_aggregate_pkt2(CONN, PATH, PI, BUF, BUFLEN, PGSOLEN, \
+                                         WRITE_PKT, NUM_PKTS, TS)              \
+  ngtcp2_conn_write_aggregate_pkt2_versioned(                                  \
+    (CONN), (PATH), NGTCP2_PKT_INFO_VERSION, (PI), (BUF), (BUFLEN), (PGSOLEN), \
+    (WRITE_PKT), (NUM_PKTS), (TS))
 
 /*
  * `ngtcp2_settings_default` is a wrapper around

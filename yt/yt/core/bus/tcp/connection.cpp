@@ -1237,10 +1237,8 @@ bool TTcpConnection::OnPacketReceived() noexcept
             YT_LOG_ERROR("Packet of unknown type received, ignored (PacketId: %v, PacketType: %v)",
                 Decoder_->GetPacketId(),
                 Decoder_->GetPacketType());
-            break;
+            return true;
     }
-
-    return false;
 }
 
 bool TTcpConnection::OnAckPacketReceived()
@@ -1957,9 +1955,10 @@ void TTcpConnection::UpdateTcpStatistics()
         int ret = ::getsockopt(Socket_, IPPROTO_TCP, TCP_INFO, &info, &len);
         if (ret == 0) {
             // Handle counter overflow.
-            i64 delta = info.tcpi_total_retrans < LastRetransmitCount_
-                ? info.tcpi_total_retrans + (Max<ui32>() - LastRetransmitCount_)
-                : info.tcpi_total_retrans - LastRetransmitCount_;
+            // tcpi_total_retrans is a uint32 that wraps around. Using unsigned subtraction
+            // handles the overflow case correctly without a branch: e.g. if the counter
+            // wrapped from Max<ui32>() past zero, (ui32)(new - old) still gives the right delta.
+            i64 delta = static_cast<ui32>(info.tcpi_total_retrans - LastRetransmitCount_);
             UpdateBusCounter(&TBusNetworkBandCounters::Retransmits, delta);
             LastRetransmitCount_ = info.tcpi_total_retrans;
         }
@@ -2083,6 +2082,7 @@ bool TTcpConnection::DoSslHandshake()
                 NCrypto::TX509Ptr peerCertificate(SSL_get_peer_certificate(Ssl_.get()));
                 if (!peerCertificate) {
                     Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL peer certificate is not available"));
+                    return false;
                 }
                 YT_LOG_DEBUG("TLS/SSL peer certificate (FingerprintSHA256: %v)",
                     NCrypto::GetFingerprintSHA256(peerCertificate));

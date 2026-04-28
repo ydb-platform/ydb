@@ -17,10 +17,10 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
     void Resume();
 
     using TResumeEventType = NActors::TEvents::TEvWakeup;
-    static inline bool IsResumeEvent(const TResumeEventType::TPtr& ev) {
+    static bool IsResumeEvent(const TResumeEventType::TPtr& ev) {
         return ev->Get()->Tag == TAG_WAKEUP_RESUME;
     }
-    static inline auto GetResumeEvent() {
+    static auto GetResumeEvent() {
         return std::make_unique<TResumeEventType>(TAG_WAKEUP_RESUME);
     }
 
@@ -30,10 +30,6 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
 
     // Returns parent pool's 'fair-share' minus 'usage'
     size_t GetSpareUsage() const;
-
-    // Account extra usage which doesn't affect scheduling
-    void IncreaseExtraUsage();
-    void DecreaseExtraUsage(const TDuration& burstUsage);
 
     void IncreaseBurstThrottle(const TDuration& burstThrottle);
     void IncreaseThrottle();

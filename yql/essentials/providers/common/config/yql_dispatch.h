@@ -2,8 +2,9 @@
 
 #include "yql_setting.h"
 
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_config_qplayer.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 

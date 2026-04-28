@@ -4,6 +4,7 @@ RECURSE(
     common
     ctas
     kafka
+    kafka_serverless
     kv
     kv_volume
     log

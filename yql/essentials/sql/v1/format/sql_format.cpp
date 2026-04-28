@@ -3473,6 +3473,10 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
         throw yexception() << issues.ToString();
     }
 
+    if (parsedSettings.PgParser) {
+        return query;
+    }
+
     auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {

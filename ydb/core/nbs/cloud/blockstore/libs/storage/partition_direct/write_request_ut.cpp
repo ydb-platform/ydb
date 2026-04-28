@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
              ui64 lsn,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
+             const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);

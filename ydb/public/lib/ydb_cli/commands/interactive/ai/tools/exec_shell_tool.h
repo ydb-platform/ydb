@@ -8,6 +8,7 @@
 namespace NYdb::NConsoleClient::NAi {
 
 struct TExecShellToolSettings {
+    TString Prompt; // Current interactive CLI prompt
     TDriver Driver;
 };
 

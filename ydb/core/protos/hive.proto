@@ -672,3 +672,22 @@ message TEvSetDown {
 message TEvSetDownReply {
     optional NKikimrProto.EReplyStatus Status = 1;
 }
+
+message TEvShrinkStoragePool {
+    optional NKikimrSubDomains.TDomainKey SubDomain = 1;
+    optional string StoragePool = 2;
+    optional uint64 NewSize = 3;
+    optional uint64 Version = 4;
+}
+
+message TEvShrinkStoragePoolReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string StoragePool = 2;
+    optional string Error = 3;
+    repeated uint32 GroupsToRemove = 4;
+    optional uint64 Version = 5;
+}
+
+message TEvShrinkStoragePoolDone {
+    optional string StoragePool = 1;
+}

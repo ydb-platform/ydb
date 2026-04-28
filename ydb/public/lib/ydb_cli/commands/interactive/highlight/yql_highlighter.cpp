@@ -1,5 +1,7 @@
 #include "yql_highlighter.h"
 
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
+
 #include <yql/essentials/sql/v1/highlight/sql_highlight.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlighter.h>
 
@@ -23,15 +25,6 @@ namespace {
             index[i] = j;
         }
         return index;
-    }
-
-    ftxui::Color ToFtxuiColor(replxx::Replxx::Color rColor) {
-        const int colorIndex = static_cast<int>(rColor);
-        if (rColor == replxx::Replxx::Color::DEFAULT || colorIndex < 0) {
-            return ftxui::Color::Default;
-        }
-
-        return ftxui::Color::Palette256(static_cast<uint8_t>(colorIndex));
     }
 
 } // anonymous namespace

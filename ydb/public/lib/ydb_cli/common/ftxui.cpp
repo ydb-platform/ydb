@@ -14,6 +14,7 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/scope.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
@@ -35,43 +36,19 @@ namespace {
 static ftxui::Color GlobalBorderColor = ftxui::Color::Default;
 
 // Helper to apply border with global color
-ftxui::Element ApplyBorder(ftxui::Element element) {
-    if (GlobalBorderColor == ftxui::Color::Default) {
+ftxui::Element ApplyBorder(ftxui::Element element, std::optional<ftxui::Color> color = std::nullopt) {
+    if (!color && GlobalBorderColor == ftxui::Color::Default) {
         return element | ftxui::border;
     }
-    return element | ftxui::borderStyled(GlobalBorderColor);
+    return element | ftxui::borderStyled(color.value_or(GlobalBorderColor));
 }
 
 // Helper to apply separator with global color
-ftxui::Element ApplySeparator() {
-    if (GlobalBorderColor == ftxui::Color::Default) {
+ftxui::Element ApplySeparator(std::optional<ftxui::Color> color = std::nullopt) {
+    if (!color && GlobalBorderColor == ftxui::Color::Default) {
         return ftxui::separator();
     }
-    return ftxui::separator() | ftxui::color(GlobalBorderColor);
-}
-
-void FlushStdin() {
-    // Wait a bit for any pending terminal responses (like CPR) to arrive
-    // and disable ECHO to prevent them from being printed to stdout
-#if defined(_unix_)
-    struct termios t;
-    if (tcgetattr(STDIN_FILENO, &t) == 0) {
-        struct termios raw = t;
-        raw.c_lflag &= ~ECHO;
-        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        tcflush(STDIN_FILENO, TCIFLUSH);
-
-        tcsetattr(STDIN_FILENO, TCSANOW, &t);
-    } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        tcflush(STDIN_FILENO, TCIFLUSH);
-    }
-#elif defined(_win_)
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
-#endif
+    return ftxui::separator() | ftxui::color(color.value_or(GlobalBorderColor));
 }
 
 class TFtxuiMenuRunner {
@@ -83,7 +60,7 @@ public:
         , Options(options)
         , PageSize(CalculatePageSize(std::min(options.size(), maxPageSize)))
         , PageCount((std::max(static_cast<int>(Options.size()), 1) - 1) / PageSize + 1)
-        , Screen(ftxui::ScreenInteractive::FitComponent())
+        , Screen(ftxui::ScreenInteractive::TerminalOutput())
         , Exit(Screen.ExitLoopClosure())
     {
         Y_VALIDATE(PageSize > 0, "PageSize must be greater than 0");
@@ -91,9 +68,7 @@ public:
 
         // Set initial selection
         if (initialSelected < Options.size()) {
-            PageBegin = std::max(0, static_cast<int>(initialSelected) - PageSize / 2);
-            PageBegin = std::min(PageBegin, static_cast<int>(Options.size()) - PageSize);
-            PageBegin = std::max(0, PageBegin);
+            PageBegin = std::max(0, std::min(static_cast<int>(initialSelected) - PageSize / 2, static_cast<int>(Options.size()) - PageSize));
             Selected = static_cast<int>(initialSelected) - PageBegin;
         }
 
@@ -139,11 +114,6 @@ public:
     }
 
     std::optional<size_t> Run() {
-        if (PageCount > 1) {
-            // Clear screen first, because menu can be redrawn
-            Cout << "\033[2J\033[H" << Flush;
-        }
-
         Screen.Loop(Renderer);
         return Result;
     }
@@ -260,17 +230,33 @@ private:
         elements.emplace_back(Menu->Render());
         elements.emplace_back(ApplySeparator());
 
-        auto info = ftxui::text("Use arrows ↑ and ↓ to choose, Enter to confirm, Esc to cancel");
+        auto info = ftxui::hbox({
+            ftxui::text("Use arrows "),
+            ftxui::text("↑") | ftxui::bold,
+            ftxui::text(" and "),
+            ftxui::text("↓") | ftxui::bold,
+            ftxui::text(" to choose, "),
+            ftxui::text("Enter") | ftxui::bold,
+            ftxui::text(" to confirm, "),
+            ftxui::text("Esc") | ftxui::bold,
+            ftxui::text(" to cancel"),
+        });
         if (PageCount > 1) {
             elements.emplace_back(ftxui::vbox({
                 std::move(info),
-                ftxui::text("Use arrows ← and → to navigate through pages")
+                ftxui::hbox({
+                    ftxui::text("Use arrows "),
+                    ftxui::text("←") | ftxui::bold,
+                    ftxui::text(" and "),
+                    ftxui::text("→") | ftxui::bold,
+                    ftxui::text(" to navigate through pages"),
+                })
             }));
         } else {
             elements.emplace_back(std::move(info));
         }
 
-        return ApplyBorder(ftxui::vbox(elements)) | ftxui::center;
+        return ApplyBorder(ftxui::vbox(elements));
     }
 
 private:
@@ -307,6 +293,7 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
 
     std::optional<size_t> result;
     try {
+        Cout << Endl;
         result = TFtxuiMenuRunner(title, options, initialSelected, maxPageSize).Run();
     } catch (const std::exception& e) {
         const auto& colors = NConsoleClient::AutoColors(Cerr);
@@ -324,7 +311,7 @@ bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>
         labels.push_back(label);
     }
 
-    if (auto idx = RunFtxuiMenu(title, labels, maxPageSize)) {
+    if (auto idx = RunFtxuiMenu(title, labels, /* initialSelected */ 0, maxPageSize)) {
         Y_VALIDATE(*idx < options.size(), "Unexpected option index: " << *idx);
         options[*idx].second();
         return true;
@@ -333,81 +320,22 @@ bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>
     return false;
 }
 
-std::optional<TString> RunFtxuiInput(const TString& title, const TString& initial, const std::function<bool(const TString&, TString&)>& validator) {
-    std::string value = std::string(initial);
-    std::string error;
-    std::optional<TString> result;
-
-    try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
-        screen.TrackMouse(false);
-
-        // Configure input with cursor at end and visible cursor
-        ftxui::InputOption inputOption;
-        inputOption.cursor_position = static_cast<int>(value.size());  // Cursor at end
-        inputOption.transform = [](ftxui::InputState state) {
-            // Don't use inverted style - it hides the terminal cursor
-            // Use default terminal color (works in both light and dark themes)
-            if (state.is_placeholder) {
-                state.element |= ftxui::dim;
-            }
-            return state.element;
-        };
-        auto input = ftxui::Input(&value, "", inputOption);
-        auto exit = screen.ExitLoopClosure();
-
-        ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
-            if (event == ftxui::Event::Return) {
-                TString errorMessage;
-                if (!validator || validator(TString(value), errorMessage)) {
-                    result = TString(value);
-                    exit();
-                    return true;
-                }
-                error = std::string(errorMessage);
-                return true;
-            }
-            if (event == ftxui::Event::Escape || event == ftxui::Event::CtrlC) {
-                exit();
-                return true;
-            }
-            return false;
-        });
-
-        ftxui::Component component = ftxui::Renderer(inputWithEvents, [&, inputWithEvents] {
-            // Fixed size for error area to prevent layout jumping
-            auto errorElement = error.empty()
-                ? ftxui::text(" ")  // Use space instead of empty to maintain height
-                : ftxui::text(error) | ftxui::color(ftxui::Color::Red);
-
-            return ApplyBorder(ftxui::vbox({
-                ftxui::text(std::string(title)) | ftxui::bold,
-                ApplySeparator(),
-                ftxui::hbox({ftxui::text("> "), inputWithEvents->Render()}),
-                errorElement,
-                ApplySeparator(),
-                ftxui::text("Enter to confirm, Esc to cancel"),
-            })) | ftxui::center;
-        });
-
-        screen.Loop(component);
-    } catch (const std::exception& e) {
-        Cerr << "FTXUI input failed: " << e.what() << Endl;
-        return std::nullopt;
-    }
-
-    FlushStdin();
-    return result;
+std::optional<TString> RunFtxuiInput(const TString& title, const TString& initial, const std::function<bool(const TString&, TString&)>& validator, const TString& placeholder) {
+    return RunFtxuiInputWithSuffix(title, initial, "", validator, placeholder);
 }
 
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
+    return AskYesNoFtxuiOptional(ftxui::text(std::string(question)) | ftxui::bold, defaultAnswer).value_or(defaultAnswer);
+}
+
+std::optional<bool> AskYesNoFtxuiOptional(const ftxui::Element& question, bool defaultAnswer, std::optional<ftxui::Color> color) {
     std::vector<TString> options = {"Yes", "No"};
     int initialSelection = defaultAnswer ? 0 : 1;
 
     // Use custom menu starting at the default option
     std::optional<size_t> result;
     try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
         screen.TrackMouse(false);
         auto exit = screen.ExitLoopClosure();
 
@@ -446,24 +374,30 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
 
         auto renderer = ftxui::Renderer(component, [&]() {
             return ApplyBorder(ftxui::vbox({
-                ftxui::text(std::string(question)) | ftxui::bold,
-                ApplySeparator(),
+                question,
+                ApplySeparator(color),
                 menu->Render(),
-                ApplySeparator(),
-                ftxui::text("Enter to confirm, Esc to cancel"),
-            })) | ftxui::center;
+                ApplySeparator(color),
+                ftxui::hbox({
+                    ftxui::text("Enter") | ftxui::bold,
+                    ftxui::text(" to confirm, "),
+                    ftxui::text("Esc") | ftxui::bold,
+                    ftxui::text(" to cancel"),
+                }),
+            }), color);
         });
 
+        Cout << Endl;
         screen.Loop(renderer);
     } catch (const std::exception& e) {
         Cerr << "FTXUI yes/no dialog failed: " << e.what() << Endl;
-        return defaultAnswer;
+        return std::nullopt;
     }
 
     FlushStdin();
 
     if (!result) {
-        return defaultAnswer;
+        return std::nullopt;
     }
     return *result == 0;
 }
@@ -472,19 +406,23 @@ std::optional<TString> RunFtxuiInputWithSuffix(
     const TString& title,
     const TString& initial,
     const TString& suffix,
-    const std::function<bool(const TString&, TString&)>& validator)
+    const std::function<bool(const TString&, TString&)>& validator,
+    const TString& placeholder)
 {
     std::string value = std::string(initial);
+    std::string placeholderValue(placeholder);
     std::string error;
+    int cursorPosition = value.size();  // Cursor at end
     std::optional<TString> result;
 
     try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
         screen.TrackMouse(false);
 
         // Configure input with cursor at end and visible cursor
         ftxui::InputOption inputOption;
-        inputOption.cursor_position = static_cast<int>(value.size());  // Cursor at end
+        inputOption.multiline = false;
+        inputOption.cursor_position = &cursorPosition;
         inputOption.transform = [](ftxui::InputState state) {
             // Don't use inverted style - it hides the terminal cursor
             // Use default terminal color (works in both light and dark themes)
@@ -493,7 +431,7 @@ std::optional<TString> RunFtxuiInputWithSuffix(
             }
             return state.element;
         };
-        auto input = ftxui::Input(&value, "", inputOption);
+        auto input = ftxui::Input(&value, &placeholderValue, inputOption);
         auto exit = screen.ExitLoopClosure();
 
         ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
@@ -511,6 +449,12 @@ std::optional<TString> RunFtxuiInputWithSuffix(
                 exit();
                 return true;
             }
+            if (event == ftxui::Event::Tab) {
+                if (value.empty() && !placeholderValue.empty()) {
+                    value = placeholderValue;
+                    cursorPosition = value.size();
+                }
+            }
             return false;
         });
 
@@ -527,21 +471,31 @@ std::optional<TString> RunFtxuiInputWithSuffix(
                 });
             }
 
-            // Fixed size for error area to prevent layout jumping
-            auto errorElement = error.empty()
-                ? ftxui::text(" ")  // Use space instead of empty to maintain height
-                : ftxui::text(error) | ftxui::color(ftxui::Color::Red);
-
-            return ApplyBorder(ftxui::vbox({
+            std::vector<ftxui::Element> elements = {
                 ftxui::text(std::string(title)) | ftxui::bold,
                 ApplySeparator(),
+                ftxui::text(""),
                 inputLine,
-                errorElement,
-                ApplySeparator(),
-                ftxui::text("Enter to confirm, Esc to cancel"),
-            })) | ftxui::center;
+            };
+
+            if (!error.empty()) {
+                elements.emplace_back(ftxui::text(" " + error) | ftxui::borderEmpty | ftxui::color(ftxui::Color::Red));
+            } else {
+                elements.emplace_back(ftxui::text(""));
+            }
+
+            elements.emplace_back(ApplySeparator());
+            elements.emplace_back(ftxui::hbox({
+                ftxui::text("Enter") | ftxui::bold,
+                ftxui::text(" to confirm, "),
+                ftxui::text("Esc") | ftxui::bold,
+                ftxui::text(" to cancel"),
+            }));
+
+            return ApplyBorder(ftxui::vbox(std::move(elements)));
         });
 
+        Cout << Endl;
         screen.Loop(component);
     } catch (const std::exception& e) {
         Cerr << "FTXUI input failed: " << e.what() << Endl;
@@ -552,13 +506,13 @@ std::optional<TString> RunFtxuiInputWithSuffix(
     return result;
 }
 
-std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
+std::optional<TString> RunFtxuiPasswordInput(ftxui::Element title) {
     std::string password;
     std::string masked;
     std::optional<TString> result;
 
     try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
         screen.TrackMouse(false);
         auto exit = screen.ExitLoopClosure();
 
@@ -566,12 +520,17 @@ std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
         auto component = ftxui::CatchEvent(
             ftxui::Renderer([&]() {
                 return ApplyBorder(ftxui::vbox({
-                    ftxui::text(std::string(title)) | ftxui::bold,
+                    title,
                     ApplySeparator(),
                     ftxui::hbox({ftxui::text("> "), ftxui::text(masked + "_")}),
                     ApplySeparator(),
-                    ftxui::text("Enter to confirm, Esc to cancel"),
-                })) | ftxui::center;
+                    ftxui::hbox({
+                        ftxui::text("Enter") | ftxui::bold,
+                        ftxui::text(" to confirm, "),
+                        ftxui::text("Esc") | ftxui::bold,
+                        ftxui::text(" to cancel"),
+                    }),
+                }));
             }),
             [&](const ftxui::Event& event) {
                 if (event == ftxui::Event::Return) {
@@ -600,6 +559,7 @@ std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
             }
         );
 
+        Cout << Endl;
         screen.Loop(component);
     } catch (const std::exception& e) {
         Cerr << "FTXUI password input failed: " << e.what() << Endl;
@@ -608,6 +568,10 @@ std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
 
     FlushStdin();
     return result;
+}
+
+std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
+    return RunFtxuiPasswordInput(ftxui::text(std::string(title)) | ftxui::bold);
 }
 
 void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title, ftxui::Color color) {
@@ -633,13 +597,14 @@ void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& tit
 
     if (message) {
         elements.push_back(*message);
-        elements.push_back(ftxui::separator() | ftxui::color(color));
+        elements.push_back(ApplySeparator() | ftxui::color(color));
     }
 
     auto document = ftxui::vbox(elements) | ftxui::bgcolor(ftxui::Color::Grey11);
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Full(), ftxui::Dimension::Fit(document));
     ftxui::Render(screen, document);
 
+    Cout << Endl;
     screen.Print();
     Cout << Endl;
 }
@@ -650,6 +615,38 @@ void PrintFtxuiMessage(const TString& body, const TString& title, ftxui::Color c
         message = ftxui::paragraph(std::string(body));
     }
     PrintFtxuiMessage(message, title, color);
+}
+
+ftxui::Color ToFtxuiColor(replxx::Replxx::Color rColor) {
+    const int colorIndex = static_cast<int>(rColor);
+    if (rColor == replxx::Replxx::Color::DEFAULT || colorIndex < 0) {
+        return ftxui::Color::Default;
+    }
+    return ftxui::Color::Palette256(static_cast<uint8_t>(colorIndex));
+}
+
+void FlushStdin() {
+    // Wait a bit for any pending terminal responses (like CPR) to arrive
+    // and disable ECHO to prevent them from being printed to stdout
+#if defined(_unix_)
+    struct termios t;
+    if (tcgetattr(STDIN_FILENO, &t) == 0) {
+        struct termios raw = t;
+        raw.c_lflag &= ~ECHO;
+        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        tcflush(STDIN_FILENO, TCIFLUSH);
+
+        tcsetattr(STDIN_FILENO, TCSANOW, &t);
+    } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        tcflush(STDIN_FILENO, TCIFLUSH);
+    }
+#elif defined(_win_)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+#endif
 }
 
 } // namespace NYdb::NConsoleClient

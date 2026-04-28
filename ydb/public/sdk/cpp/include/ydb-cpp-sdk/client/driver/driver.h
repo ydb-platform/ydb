@@ -14,6 +14,8 @@
 
 #include <library/cpp/logger/backend.h>
 
+#include <grpcpp/grpcpp.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NYdb::inline Dev {
@@ -139,6 +141,11 @@ public:
     //! default: "round_robin"
     TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
 
+    //! Set grpc compression algorithm
+    //! algorithm - EGrpcCompressionAlgorithm enum value, see grpc documentation for available algorithms
+    //! default: EGrpcCompressionAlgorithm::None
+    TDriverConfig& SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm);
+
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.
     //! Closes unused connections every 1/10 of timeout, so deletion time is approximate.
@@ -160,6 +167,14 @@ public:
     //! Note: if this option is unset, default 64_MB message size will be used.
     //! default: 0
     TDriverConfig& SetMaxMessageSize(uint64_t maxMessageSize);
+
+    //! Append a segment to the SDK build info header (x-ydb-sdk-build-info).
+    //! Do not call this method unless you know exactly what you are doing.
+    //! Segments are joined with ';'. Each segment must match: <name>/<X>.<Y>.<Z>
+    //!   name chars: lowercase latin letters, digits, '-'
+    //!   X, Y, Z chars: lowercase latin letters, digits
+    //! Throws on invalid format or if total extra length exceeds 512 bytes.
+    TDriverConfig& AppendBuildInfo(std::string_view segment);
 
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);

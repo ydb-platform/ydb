@@ -115,5 +115,9 @@ ui64 MaxInFlightReadsStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightReadsStreamLookup;
 }
 
+ui64 MaxBytesPerFetchStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxBytesPerFetchStreamLookup;
+}
+
 } // namespace NKqp
 } // namespace NKikimr

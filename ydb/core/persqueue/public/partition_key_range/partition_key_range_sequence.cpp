@@ -1,6 +1,5 @@
 #include "partition_key_range_sequence.h"
 
-#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/stream/format.h>
 #include <util/string/builder.h>

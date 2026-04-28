@@ -359,20 +359,23 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
         appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(5);
 
         TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
         StartSchemeCache(runtime);
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+        }
 
         auto sender1 = runtime.AllocateEdgeActor(0);
         auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
 
         // Sleep a little, so there's at least one plan step generated
         SimulateSleep(runtime, TDuration::Seconds(1));
-
-        for (size_t node = 0; node < nodesCount; ++node) {
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
-        }
 
         const ::NKikimr::TTableId table(0, 1);
         const ::NKikimr::TTableId otherTable(0, 2);
@@ -393,11 +396,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             snapshot = msg->Snapshot;
         }
 
-        for (size_t node = 0; node < nodesCount; ++node) {
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
-        }
-
-        SimulateSleep(runtime, TDuration::Minutes(1));
+        SimulateSleep(runtime, TDuration::Seconds(2));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get());
@@ -405,7 +404,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot));
         }
 
-        SimulateSleep(runtime, TDuration::Minutes(3));
+        SimulateSleep(runtime, TDuration::Seconds(10));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
@@ -414,7 +413,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         handle.Reset();
 
-        SimulateSleep(runtime, TDuration::Minutes(3));
+        SimulateSleep(runtime, TDuration::Seconds(10));
 
         for (size_t node = 0; node < nodesCount; ++node) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));

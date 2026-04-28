@@ -3989,9 +3989,12 @@ namespace NTypeAnnImpl {
         // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("If")
-                .Callable(0, "==")
-                    .Add(0, input->HeadPtr())
-                    .Add(1, input->TailPtr())
+                .Callable(0, "Coalesce")
+                    .Callable(0, "==")
+                        .Add(0, input->HeadPtr())
+                        .Add(1, input->TailPtr())
+                    .Seal()
+                    .Add(1, MakeBool<false>(input->Pos(), ctx.Expr))
                 .Seal()
                 .Callable(1, "Null")
                 .Seal()
@@ -16089,6 +16092,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["WinOnRows"] = &WinOnWrapper;
         ExtFunctions["WinOnGroups"] = &WinOnWrapper;
         ExtFunctions["WinOnRange"] = &WinOnWrapper;
+        ExtFunctions["WinFilter"] = &WinOnWrapper;
         ExtFunctions["WindowTraits"] = &WindowTraitsWrapper;
         Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;
@@ -16144,7 +16148,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgWhere"] = &SqlWhereWrapper;
         Functions["PgSort"] = &SqlSortWrapper;
         Functions["PgGroup"] = &SqlWhereWrapper;
-        Functions["PgWindow"] = &PgWindowWrapper;
+        Functions["PgWindow"] = &SqlWindowWrapper;
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
         Functions["PgConst"] = &PgConstWrapper;
         Functions["PgType"] = &PgTypeWrapper;
@@ -16300,8 +16304,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListTopSort"] = &ListTopSortWrapper;
         Functions["ListTopSortAsc"] = &ListTopSortWrapper;
         Functions["ListTopSortDesc"] = &ListTopSortWrapper;
-        Functions["ListSample"] = &ListSampleWrapper;
-        Functions["ListSampleN"] = &ListSampleNWrapper;
+        ExtFunctions["ListSample"] = &ListSampleWrapper;
+        ExtFunctions["ListSampleN"] = &ListSampleNWrapper;
         Functions["ListShuffle"] = &ListShuffleWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
@@ -16516,6 +16520,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlGroupingSet"] = &SqlGroupingSetWrapper;
         ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
+        ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
+        ExtFunctions["YqlAggWin"] = &YqlAggWinWrapper;
+        Functions["YqlWindow"] = &SqlWindowWrapper;
         Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {

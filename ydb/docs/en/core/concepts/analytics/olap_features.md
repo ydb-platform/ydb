@@ -54,7 +54,7 @@ Query language and integration with orchestration tools.
 
 Tools for application developers.
 
-  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, Node.js.
+  - [{{ydb-short-name}} SDK Overview](../../reference/ydb-sdk/index.md): Native SDKs for Go, Python, Java, C++, JavaScript.
   - [JDBC driver](../../reference/languages-and-apis/jdbc-driver/index.md): Standard connectivity for the Java ecosystem.
   - [{{ydb-short-name}} CLI](../../reference/ydb-cli/index.md): Command-line tool for administration and query execution.
 

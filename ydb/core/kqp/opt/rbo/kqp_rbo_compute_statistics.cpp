@@ -94,6 +94,7 @@ void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = TRBOMetadata();
+    Props.Metadata->LogicalCard = ELogicalCardinality::One;
 }
 
 /***
@@ -178,6 +179,44 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics->ERows = tableData.Metadata->RecordsCount;
     Props.Statistics->EBytes = tableData.Metadata->DataSize;
     Props.Cost = 0;
+
+    auto overrideStats = ctx.KqpCtx.GetOverrideStatistics();
+    if (overrideStats) {
+        auto dbStats = overrideStats->GetMapSafe();
+        if (auto it = dbStats.find(path.Value()); it != dbStats.end()) {
+            auto tableStats = it->second.GetMapSafe();
+            if (auto nrows = tableStats.find("n_rows"); nrows != tableStats.end()) {
+                Props.Statistics->ERows = nrows->second.GetDoubleSafe();
+            }
+            if (auto byteSize = tableStats.find("byte_size"); byteSize != tableStats.end()) {
+                Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
+            }
+        }
+    }
+}
+
+/**
+ * Compute metadata for Filter
+ */
+void TOpFilter::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    Props.Metadata = GetInput()->Props.Metadata;
+    auto newCard = Props.Metadata->LogicalCard;
+
+    switch( Props.Metadata->LogicalCard) {
+        case ELogicalCardinality::OneOrMore:
+            newCard = ELogicalCardinality::ZeroOrMore;
+            break;
+        case ELogicalCardinality::One:
+        case ELogicalCardinality::ZeroOrOne:
+            newCard = ELogicalCardinality::ZeroOrOne;
+            break;
+        default:
+            break;
+    }
+
+    Props.Metadata->LogicalCard = newCard;
 }
 
 /**
@@ -298,6 +337,13 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Metadata = GetInput()->Props.Metadata;
+
+    // Compute logical cardinality info. Its the same as input cardinality, except in the case
+    // where the group-by list is empty, then we always produce a single tuple
+    if (KeyColumns.empty()) {
+        Props.Metadata->LogicalCard = ELogicalCardinality::One;
+    }
+
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
@@ -345,6 +391,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Metadata = TRBOMetadata();
+
+    // FIXME: Compute decent logical cardinality
+    Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
     
     auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false));
     auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false));

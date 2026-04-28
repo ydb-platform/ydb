@@ -2,8 +2,9 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
+    array_power2.cpp
     GLOBAL bitset.cpp
-    GLOBAL string.cpp
+    GLOBAL fix_string.cpp
 )
 
 PEERDIR(
@@ -13,3 +14,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

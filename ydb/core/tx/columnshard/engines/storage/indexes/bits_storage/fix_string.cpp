@@ -1,4 +1,4 @@
-#include "string.h"
+#include "fix_string.h"
 
 #include <ydb/library/actors/core/log.h>
 
@@ -15,20 +15,16 @@ bool TFixStringBitsStorage::DoGet(const ui32 idx) const {
     return start & (1 << (idx % 8));
 }
 
-NKikimr::TConclusionStatus TFixStringBitsStorage::DoDeserializeFromString(const TString& data) {
-    Data = data;
-    return TConclusionStatus::Success();
-}
-
-TFixStringBitsStorage::TFixStringBitsStorage(const TDynBitMap& bitsVector) {
+TString TFixStringBitsStorageConstructor::DoSerializeToString(TDynBitMap&& bitsVector) const {
+    TString result;
     AFL_VERIFY(bitsVector.Size() % 8 == 0);
-    Data.resize(bitsVector.Size() / 8, '\0');
+    result.resize(bitsVector.Size() / 8, '\0');
     ui32 byteIdx = 0;
     ui8 byteCurrent = 0;
     ui8 shiftCurrent = 1;
     for (ui32 i = 0; i < bitsVector.Size(); ++i) {
         if (i && i % 8 == 0) {
-            Data[byteIdx] = (char)byteCurrent;
+            result[byteIdx] = (char)byteCurrent;
             byteCurrent = 0;
             shiftCurrent = 1;
             ++byteIdx;
@@ -39,9 +35,14 @@ TFixStringBitsStorage::TFixStringBitsStorage(const TDynBitMap& bitsVector) {
         shiftCurrent = (shiftCurrent << 1);
     }
     if (byteCurrent) {
-        Data[byteIdx] = (char)byteCurrent;
+        result[byteIdx] = (char)byteCurrent;
     }
-    AFL_VERIFY(byteIdx + 1 == Data.size())("idx", byteIdx)("data", Data.size());
+    AFL_VERIFY(byteIdx + 1 == result.size())("idx", byteIdx)("data", result.size());
+    return result;
+}
+
+TString TFixStringBitsStorageConstructor::DoSerializeToString(const TArrayPower2BitsStorage& storage) const {
+    return storage.SerializeToString();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

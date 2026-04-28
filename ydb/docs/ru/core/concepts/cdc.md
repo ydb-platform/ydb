@@ -93,8 +93,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
     "newImage": {<columns>},
     "oldImage": {<columns>},
     "ts": [<step>, <txId>],
-    "user": {<user SID>},
-    "traceId": {<Trace ID>}
+    "user": "<user SID>",
+    "traceId": "<Trace ID>"
 }
 ```
 
@@ -213,8 +213,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
             "step": <step>,
             "txId": <txId>,
             "snapshot": <bool>,
-            "user": {<user SID>},
-            "traceId": {<Trace ID>}
+            "user": <user SID>,
+            "traceId": <Trace ID>
         }
     }
 }

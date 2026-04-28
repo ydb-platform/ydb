@@ -1744,7 +1744,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
-                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+            .SetDatabase("/Root")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 
         TString consumerName = "consumer1";
 

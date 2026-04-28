@@ -86,7 +86,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                                                                      \
         YDB_API_DEFAULT_COUNTER_BLOCK(topic, methodName),                                                 \
         auditMode,                                                                                        \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,                                                         \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                                                       \
         COMMON,                                                                                           \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
         GRpcRequestProxyId_,                                                                              \
@@ -102,7 +102,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                             \
             YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(topic, methodName), \
             auditMode,                                               \
-            EEmptyDatabaseMode::EmptyDatabaseAllowed,                \
+            EEmptyDatabaseMode::EmptyDatabaseForbidden,              \
             operationCallClass,                                      \
             GRpcRequestProxyId_,                                     \
             CQ_,                                                     \

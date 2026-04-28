@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model)
 
 SRCS(
     host_stat_ut.cpp
+    oracle_ut.cpp
 )
 
 PEERDIR(

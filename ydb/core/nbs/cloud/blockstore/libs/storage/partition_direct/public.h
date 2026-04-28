@@ -10,6 +10,7 @@ struct TVChunkConfig;
 
 class TVChunk;
 using TVChunkPtr = std::shared_ptr<TVChunk>;
+using TVChunkWeakPtr = std::weak_ptr<TVChunk>;
 
 struct TDBGReadBlocksResponse;
 struct TDBGWriteBlocksResponse;

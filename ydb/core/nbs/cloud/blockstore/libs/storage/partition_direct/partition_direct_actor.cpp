@@ -148,9 +148,10 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
+    const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto executors =
-        GetNbsService()->ExecutorPool.GetExecutors(NumDirectBlockGroups);
+        nbsService->ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         const auto& conn =
@@ -168,8 +169,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
-            GetNbsService()->Scheduler,
-            GetNbsService()->Timer,
+            nbsService->StorageConfig,
+            nbsService->Scheduler,
+            nbsService->Timer,
             executors[i],
             TabletID(),
             1,   // generation

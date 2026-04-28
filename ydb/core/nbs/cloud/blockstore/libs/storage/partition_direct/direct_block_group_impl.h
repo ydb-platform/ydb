@@ -2,11 +2,14 @@
 
 #include "direct_block_group.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -15,19 +18,19 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
-#include <functional>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDirectBlockGroup
     : public IDirectBlockGroup
+    , public IHostStateController
     , public std::enable_shared_from_this<TDirectBlockGroup>
 {
 public:
     TDirectBlockGroup(
         NActors::TActorSystem* actorSystem,
+        TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
         TExecutorPtr executor,
@@ -39,6 +42,8 @@ public:
     ~TDirectBlockGroup() override = default;
 
     // IDirectBlockGroup implementation
+
+    void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
 
@@ -109,12 +114,9 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         ui8 hostIndex) override;
 
-    // Picks the best host (by lowest inflight count) out of the provided set
-    // of hosts. Ties are broken uniformly at random. Exposed as a static
-    // helper to enable direct unit testing of the selection logic.
-    [[nodiscard]] static ui8 SelectBestPBufferHost(
-        const std::vector<ui8>& hostIndexes,
-        const std::function<size_t(ui8)>& getInflight);
+    // IHostStateController implementation
+    void SetHostState(ui8 hostIndex, THostState::EState state) override;
+    ui64 GetHostPBufferUsedSize(ui8 hostIndex) const override;
 
 private:
     using TEvSyncWithPersistentBufferResult =
@@ -162,12 +164,6 @@ private:
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
 
-    // Instance helper that delegates to the static SelectBestPBufferHost,
-    // looking up the inflight counts from HostStatistics.
-    [[nodiscard]] ui8 SelectBestPBufferHostByOperation(
-        const std::vector<ui8>& hostIndexes,
-        EOperation operation) const;
-
     // Called right before a request is sent to the given host. Updates the
     // per-host inflight counter for the given operation type.
     void OnRequest(ui8 hostIndex, EOperation operation);
@@ -183,7 +179,10 @@ private:
         TDuration executionTime,
         const TVector<NProto::TError>& errors);
 
+    void ScheduleOracleThinking();
+
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const TStorageConfigPtr StorageConfig;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TExecutorPtr Executor;
@@ -194,7 +193,10 @@ private:
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TVector<THostStat> HostStatistics;
+    TVector<THostState> HostStates;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
+    TVector<TVChunkWeakPtr> VChunks;
+    TOracle Oracle;
 
     bool Initialized = false;
     NThreading::TPromise<void> ConnectionEstablishedPromise =

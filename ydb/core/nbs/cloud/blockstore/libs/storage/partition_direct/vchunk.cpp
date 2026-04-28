@@ -22,12 +22,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NThreading;
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-}   // namespace
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
@@ -55,6 +49,7 @@ TVChunk::TVChunk(
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+    // ActorSystem thread
 }
 
 TVChunk::~TVChunk() = default;
@@ -214,6 +209,14 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     return future;
 }
 
+ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto location = VChunkConfig.GetPBufferLocation(hostIndex);
+    auto counters = BlocksDirtyMap.GetPBufferCounters(location);
+    return counters.TotalBytesCount;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
@@ -236,6 +239,8 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    DirectBlockGroup->Register(weak_from_this());
 
     auto future =
         DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.VChunkIndex);

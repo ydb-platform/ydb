@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include "restore_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
@@ -100,6 +102,8 @@ class IDirectBlockGroup
 {
 public:
     virtual ~IDirectBlockGroup() = default;
+
+    virtual void Register(TVChunkWeakPtr vChunk) = 0;
 
     virtual TExecutorPtr GetExecutor() = 0;
 

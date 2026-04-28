@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/json
     contrib/libs/protobuf
     ydb/library/security
     ydb/public/api/protos/annotations

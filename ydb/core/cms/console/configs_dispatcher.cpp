@@ -508,6 +508,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("last_replay_dynamic_config", state.LastReplayUsedDynamicConfigPath);
 
     if (DebugInfo) {
+        response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
     }

@@ -73,9 +73,9 @@ struct TEvFlatOptionalEmpty : TEventFlat<TEvFlatOptionalEmpty, TEvFlatOptionalEm
 
     static constexpr ui32 EventType = EvFlatOptionalEmpty;
 
-    using TMarkerTag = TEvFlatOptionalEmptyScheme::TMarkerTag;
-    using TSchemeV1 = TEvFlatOptionalEmptyScheme::TSchemeV1;
     using TScheme = TEvFlatOptionalEmptyScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatOptionalEmpty, TEvFlatOptionalEmptyScheme>;
 
@@ -94,16 +94,15 @@ struct TEvFlatOptionalEmpty : TEventFlat<TEvFlatOptionalEmpty, TEvFlatOptionalEm
 };
 
 struct TEvFlatMessage;
-using TEvFlatMessageTTabletIdTag = TFlatEventDefs::FixedField<i64, 0>;
-using TEvFlatMessageTOldFieldTag = TFlatEventDefs::FixedField<i64, 1>;
-using TEvFlatMessageTArrayFieldTag = TFlatEventDefs::ArrayField<ui32, 2>;
-using TEvFlatMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
-    TEvFlatMessageTTabletIdTag, TEvFlatMessageTOldFieldTag, TEvFlatMessageTArrayFieldTag>;
-using TEvFlatMessageTSchemeV2 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
-    TEvFlatMessageTTabletIdTag, TEvFlatMessageTArrayFieldTag>;
-using TEvFlatMessageTVersions = TFlatEventDefs::Versions<TEvFlatMessageTSchemeV1, TEvFlatMessageTSchemeV2>;
 struct TEvFlatMessageScheme {
-    using TVersions = TEvFlatMessageTVersions;
+    using TTabletIdTag = TFlatEventDefs::FixedField<i64, 0>;
+    using TOldFieldTag = TFlatEventDefs::FixedField<i64, 1>;
+    using TArrayFieldTag = TFlatEventDefs::ArrayField<ui32, 2>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+        TTabletIdTag, TOldFieldTag, TArrayFieldTag>;
+    using TSchemeV2 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+        TTabletIdTag, TArrayFieldTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1, TSchemeV2>;
 };
 
 struct TEvFlatMessage : TEventFlat<TEvFlatMessage, TEvFlatMessageScheme> {
@@ -111,12 +110,12 @@ struct TEvFlatMessage : TEventFlat<TEvFlatMessage, TEvFlatMessageScheme> {
 
     static constexpr ui32 EventType = EvFlatMessage;
 
-    using TTabletIdTag = TEvFlatMessageTTabletIdTag;
-    using TOldFieldTag = TEvFlatMessageTOldFieldTag;
-    using TArrayFieldTag = TEvFlatMessageTArrayFieldTag;
-    using TSchemeV1 = TEvFlatMessageTSchemeV1;
-    using TSchemeV2 = TEvFlatMessageTSchemeV2;
     using TScheme = TEvFlatMessageScheme;
+    using TTabletIdTag = TScheme::TTabletIdTag;
+    using TOldFieldTag = TScheme::TOldFieldTag;
+    using TArrayFieldTag = TScheme::TArrayFieldTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
+    using TSchemeV2 = TScheme::TSchemeV2;
 
     friend class TEventFlat<TEvFlatMessage, TEvFlatMessageScheme>;
 
@@ -137,15 +136,13 @@ struct TEvFlatMessage : TEventFlat<TEvFlatMessage, TEvFlatMessageScheme> {
 };
 
 struct TEvFlatFixedFields;
-using TEvFlatFixedFieldsTSmallTag = TFlatEventDefs::FixedField<ui16, 0>;
-using TEvFlatFixedFieldsTTabletIdTag = TFlatEventDefs::FixedField<i64, 1>;
-using TEvFlatFixedFieldsTPointTag = TFlatEventDefs::FixedField<TPoint, 2>;
-using TEvFlatFixedFieldsTCookieTag = TFlatEventDefs::FixedField<ui32, 3>;
-using TEvFlatFixedFieldsTSchemeV1 = TFlatEventDefs::Scheme<
-    TEvFlatFixedFieldsTSmallTag, TEvFlatFixedFieldsTTabletIdTag, TEvFlatFixedFieldsTPointTag, TEvFlatFixedFieldsTCookieTag>;
-using TEvFlatFixedFieldsTVersions = TFlatEventDefs::Versions<TEvFlatFixedFieldsTSchemeV1>;
 struct TEvFlatFixedFieldsScheme {
-    using TVersions = TEvFlatFixedFieldsTVersions;
+    using TSmallTag = TFlatEventDefs::FixedField<ui16, 0>;
+    using TTabletIdTag = TFlatEventDefs::FixedField<i64, 1>;
+    using TPointTag = TFlatEventDefs::FixedField<TPoint, 2>;
+    using TCookieTag = TFlatEventDefs::FixedField<ui32, 3>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TSmallTag, TTabletIdTag, TPointTag, TCookieTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
 };
 
 struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsScheme> {
@@ -153,12 +150,12 @@ struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsSch
 
     static constexpr ui32 EventType = EvFlatFixedFields;
 
-    using TSmallTag = TEvFlatFixedFieldsTSmallTag;
-    using TTabletIdTag = TEvFlatFixedFieldsTTabletIdTag;
-    using TPointTag = TEvFlatFixedFieldsTPointTag;
-    using TCookieTag = TEvFlatFixedFieldsTCookieTag;
-    using TSchemeV1 = TEvFlatFixedFieldsTSchemeV1;
     using TScheme = TEvFlatFixedFieldsScheme;
+    using TSmallTag = TScheme::TSmallTag;
+    using TTabletIdTag = TScheme::TTabletIdTag;
+    using TPointTag = TScheme::TPointTag;
+    using TCookieTag = TScheme::TCookieTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsScheme>;
 
@@ -180,17 +177,15 @@ struct TEvFlatFixedFields : TEventFlat<TEvFlatFixedFields, TEvFlatFixedFieldsSch
 };
 
 struct TEvFlatRepeatedFields;
-using TEvFlatRepeatedFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
-using TEvFlatRepeatedFieldsTPointTag = TFlatEventDefs::FixedField<TPoint, 1>;
-using TEvFlatRepeatedFieldsTNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
-using TEvFlatRepeatedFieldsTItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 3>;
-using TEvFlatRepeatedFieldsTEmptyItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 4>;
-using TEvFlatRepeatedFieldsTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
-    TEvFlatRepeatedFieldsTMarkerTag, TEvFlatRepeatedFieldsTPointTag, TEvFlatRepeatedFieldsTNumbersTag,
-    TEvFlatRepeatedFieldsTItemsTag, TEvFlatRepeatedFieldsTEmptyItemsTag>;
-using TEvFlatRepeatedFieldsTVersions = TFlatEventDefs::Versions<TEvFlatRepeatedFieldsTSchemeV1>;
 struct TEvFlatRepeatedFieldsScheme {
-    using TVersions = TEvFlatRepeatedFieldsTVersions;
+    using TMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+    using TPointTag = TFlatEventDefs::FixedField<TPoint, 1>;
+    using TNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
+    using TItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 3>;
+    using TEmptyItemsTag = TFlatEventDefs::ArrayField<TRepeatedItem, 4>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+        TMarkerTag, TPointTag, TNumbersTag, TItemsTag, TEmptyItemsTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
 };
 
 struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeatedFieldsScheme> {
@@ -198,13 +193,13 @@ struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeated
 
     static constexpr ui32 EventType = EvFlatRepeatedFields;
 
-    using TMarkerTag = TEvFlatRepeatedFieldsTMarkerTag;
-    using TPointTag = TEvFlatRepeatedFieldsTPointTag;
-    using TNumbersTag = TEvFlatRepeatedFieldsTNumbersTag;
-    using TItemsTag = TEvFlatRepeatedFieldsTItemsTag;
-    using TEmptyItemsTag = TEvFlatRepeatedFieldsTEmptyItemsTag;
-    using TSchemeV1 = TEvFlatRepeatedFieldsTSchemeV1;
     using TScheme = TEvFlatRepeatedFieldsScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TPointTag = TScheme::TPointTag;
+    using TNumbersTag = TScheme::TNumbersTag;
+    using TItemsTag = TScheme::TItemsTag;
+    using TEmptyItemsTag = TScheme::TEmptyItemsTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeatedFieldsScheme>;
 
@@ -232,14 +227,13 @@ struct TEvFlatRepeatedFields : TEventFlat<TEvFlatRepeatedFields, TEvFlatRepeated
 };
 
 struct TEvFlatPayloadFields;
-using TEvFlatPayloadFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
-using TEvFlatPayloadFieldsTBlobTag = TFlatEventDefs::BytesField<1>;
-using TEvFlatPayloadFieldsTNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
-using TEvFlatPayloadFieldsTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
-    TEvFlatPayloadFieldsTMarkerTag, TEvFlatPayloadFieldsTBlobTag, TEvFlatPayloadFieldsTNumbersTag>;
-using TEvFlatPayloadFieldsTVersions = TFlatEventDefs::Versions<TEvFlatPayloadFieldsTSchemeV1>;
 struct TEvFlatPayloadFieldsScheme {
-    using TVersions = TEvFlatPayloadFieldsTVersions;
+    using TMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+    using TBlobTag = TFlatEventDefs::BytesField<1>;
+    using TNumbersTag = TFlatEventDefs::ArrayField<ui32, 2>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>,
+        TMarkerTag, TBlobTag, TNumbersTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
 };
 
 struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsScheme> {
@@ -247,11 +241,11 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFie
 
     static constexpr ui32 EventType = EvFlatPayloadFields;
 
-    using TMarkerTag = TEvFlatPayloadFieldsTMarkerTag;
-    using TBlobTag = TEvFlatPayloadFieldsTBlobTag;
-    using TNumbersTag = TEvFlatPayloadFieldsTNumbersTag;
-    using TSchemeV1 = TEvFlatPayloadFieldsTSchemeV1;
     using TScheme = TEvFlatPayloadFieldsScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TBlobTag = TScheme::TBlobTag;
+    using TNumbersTag = TScheme::TNumbersTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFieldsScheme>;
 
@@ -272,14 +266,12 @@ struct TEvFlatPayloadFields : TEventFlat<TEvFlatPayloadFields, TEvFlatPayloadFie
 };
 
 struct TEvFlatInlineFields;
-using TEvFlatInlineFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
-using TEvFlatInlineFieldsTBlobTag = TFlatEventDefs::InlineBytesField<16, 1>;
-using TEvFlatInlineFieldsTNumbersTag = TFlatEventDefs::InlineArrayField<ui32, 4, 2>;
-using TEvFlatInlineFieldsTSchemeV1 = TFlatEventDefs::Scheme<
-    TEvFlatInlineFieldsTMarkerTag, TEvFlatInlineFieldsTBlobTag, TEvFlatInlineFieldsTNumbersTag>;
-using TEvFlatInlineFieldsTVersions = TFlatEventDefs::Versions<TEvFlatInlineFieldsTSchemeV1>;
 struct TEvFlatInlineFieldsScheme {
-    using TVersions = TEvFlatInlineFieldsTVersions;
+    using TMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+    using TBlobTag = TFlatEventDefs::InlineBytesField<16, 1>;
+    using TNumbersTag = TFlatEventDefs::InlineArrayField<ui32, 4, 2>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TMarkerTag, TBlobTag, TNumbersTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
 };
 
 struct TEvFlatInlineFields : TEventFlat<TEvFlatInlineFields, TEvFlatInlineFieldsScheme> {
@@ -287,11 +279,11 @@ struct TEvFlatInlineFields : TEventFlat<TEvFlatInlineFields, TEvFlatInlineFields
 
     static constexpr ui32 EventType = EvFlatInlineFields;
 
-    using TMarkerTag = TEvFlatInlineFieldsTMarkerTag;
-    using TBlobTag = TEvFlatInlineFieldsTBlobTag;
-    using TNumbersTag = TEvFlatInlineFieldsTNumbersTag;
-    using TSchemeV1 = TEvFlatInlineFieldsTSchemeV1;
     using TScheme = TEvFlatInlineFieldsScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TBlobTag = TScheme::TBlobTag;
+    using TNumbersTag = TScheme::TNumbersTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatInlineFields, TEvFlatInlineFieldsScheme>;
 
@@ -312,13 +304,12 @@ struct TEvFlatInlineFields : TEventFlat<TEvFlatInlineFields, TEvFlatInlineFields
 };
 
 struct TEvFlatStrictArrayFields;
-using TEvFlatStrictArrayFieldsTMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
-using TEvFlatStrictArrayFieldsTNumbersTag = TFlatEventDefs::ArrayField<ui32, 1>;
-using TEvFlatStrictArrayFieldsTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithStrictScheme,
-    TFlatEventDefs::WithPayloadType<ui8>, TEvFlatStrictArrayFieldsTMarkerTag, TEvFlatStrictArrayFieldsTNumbersTag>;
-using TEvFlatStrictArrayFieldsTVersions = TFlatEventDefs::Versions<TEvFlatStrictArrayFieldsTSchemeV1>;
 struct TEvFlatStrictArrayFieldsScheme {
-    using TVersions = TEvFlatStrictArrayFieldsTVersions;
+    using TMarkerTag = TFlatEventDefs::FixedField<ui32, 0>;
+    using TNumbersTag = TFlatEventDefs::ArrayField<ui32, 1>;
+    using TSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithStrictScheme,
+        TFlatEventDefs::WithPayloadType<ui8>, TMarkerTag, TNumbersTag>;
+    using TVersions = TFlatEventDefs::Versions<TSchemeV1>;
 };
 
 struct TEvFlatStrictArrayFields : TEventFlat<TEvFlatStrictArrayFields, TEvFlatStrictArrayFieldsScheme> {
@@ -326,10 +317,10 @@ struct TEvFlatStrictArrayFields : TEventFlat<TEvFlatStrictArrayFields, TEvFlatSt
 
     static constexpr ui32 EventType = EvFlatStrictArrayFields;
 
-    using TMarkerTag = TEvFlatStrictArrayFieldsTMarkerTag;
-    using TNumbersTag = TEvFlatStrictArrayFieldsTNumbersTag;
-    using TSchemeV1 = TEvFlatStrictArrayFieldsTSchemeV1;
     using TScheme = TEvFlatStrictArrayFieldsScheme;
+    using TMarkerTag = TScheme::TMarkerTag;
+    using TNumbersTag = TScheme::TNumbersTag;
+    using TSchemeV1 = TScheme::TSchemeV1;
 
     friend class TEventFlat<TEvFlatStrictArrayFields, TEvFlatStrictArrayFieldsScheme>;
 

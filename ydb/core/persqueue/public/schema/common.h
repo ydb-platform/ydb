@@ -2,6 +2,7 @@
 
 #include "schema.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/public/describer/describer.h>

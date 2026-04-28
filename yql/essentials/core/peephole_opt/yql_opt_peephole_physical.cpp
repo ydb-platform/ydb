@@ -3210,7 +3210,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
     static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+    return !IsOptimizerDisabled<Flag>(types);
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {

@@ -35,6 +35,9 @@ public:
     TMaybe<size_t> GetReadByteCount() const override;
     bool IsRawReaderExhausted() const override;
 
+    void Abort() override;
+    bool IsAborted() const override;
+
 private:
     struct TSkiffTableSchema;
 

@@ -20,22 +20,26 @@
 using namespace NMVP::NOIDC;
 using namespace NActors;
 
-const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
+namespace {
 
-static TOpenIdConnectSettings BuildBaseSettings(TPortManager& tp, NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
-    ui16 sessionServicePort = tp.GetPort(8655);
-    ui16 profilePort = tp.GetPort(8766);
+    const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
 
-    TOpenIdConnectSettings s;
-    s.AccessServiceType = accessServiceType;
-    s.ClientId = "client_id";
-    s.AuthorizationServerAddress = "https://auth.test.net";
-    s.AllowedProxyHosts = {ALLOWED_PROXY_HOST};
-    s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
-    s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
-    s.ClientSecret = "0123456789abcdef";
-    return s;
-}
+    static TOpenIdConnectSettings BuildBaseSettings(TPortManager& tp, NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
+        ui16 sessionServicePort = tp.GetPort(8655);
+        ui16 profilePort = tp.GetPort(8766);
+
+        TOpenIdConnectSettings s;
+        s.AccessServiceType = accessServiceType;
+        s.ClientId = "client_id";
+        s.AuthorizationServerAddress = "https://auth.test.net";
+        s.AllowedProxyHosts = {ALLOWED_PROXY_HOST};
+        s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
+        s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
+        s.ClientSecret = "0123456789abcdef";
+        return s;
+    }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(Mvp) {
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
@@ -577,6 +581,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString state = urlParameters["state"];
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(headers.Has("X-Request-Id"));
         UNIT_ASSERT(headers.Has("Set-Cookie"));
         TStringBuf setCookie = headers.Get("Set-Cookie");
         UNIT_ASSERT_STRING_CONTAINS(setCookie, TOpenIdConnectSettings::YDB_OIDC_COOKIE);
@@ -607,6 +612,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT(protectedPageHeaders.Has("X-Request-Id"));
         UNIT_ASSERT(protectedPageHeaders.Has("Location"));
         redirectStrategy.CheckLocationHeader(protectedPageHeaders.Get("Location"), hostProxy, protectedPage);
         UNIT_ASSERT(protectedPageHeaders.Has("Set-Cookie"));
@@ -632,6 +638,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "200");
+        UNIT_ASSERT(NHttp::THeaders(outgoingResponseEv->Response->Headers).Has("X-Request-Id"));
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Body, "this is test.");
     }
 

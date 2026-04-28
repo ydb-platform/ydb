@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 #include <library/cpp/sliding_window/sliding_window.h>

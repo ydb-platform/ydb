@@ -19,6 +19,7 @@ public:
         : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
         , Promise(std::move(promise))
         , Settings(std::move(settings))
+        , Path(Settings.Request.path())
     {
     }
 
@@ -27,8 +28,8 @@ public:
 
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = Settings.Database,
-            .Request = Settings.Request,
-            .UserToken = Settings.UserToken,
+            .Request = std::move(Settings.Request),
+            .UserToken = std::move(Settings.UserToken),
             .IfExists = Settings.IfExists
         }));
     }
@@ -44,7 +45,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Settings.Database << "][" << Settings.Request.path() << "] ";
+        return TStringBuilder() << "[" << Settings.Database << "][" << Path << "] ";
     }
 
 private:
@@ -69,6 +70,7 @@ private:
 private:
     NThreading::TPromise<TAlterTopicResponse> Promise;
     TAlterTopicSettings Settings;
+    const TString Path;
 };
 
 } // namespace

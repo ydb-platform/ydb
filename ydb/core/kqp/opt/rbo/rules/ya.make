@@ -24,8 +24,9 @@ SRCS(
     push_olap_projection.cpp
     remove_extra_renames_stage.cpp
     remove_identity_map.cpp
-    propagate_limit_through_stage.cpp
+    propagate_aggregate_through_stage.cpp
     propagate_topsort_through_stage.cpp
+    propagate_limit_through_stage.cpp
 )
 
 PEERDIR(

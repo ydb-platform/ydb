@@ -2,136 +2,142 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 4-21/1 * * *"  # Every 1 hours from 4:00 to 21:00 UTC
+    - cron: "0 * * * *"  # Every hour at :00 UTC
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Comma-separated list of branches to process (empty = use branches from config file)'
+        description: 'Optional: comma-separated branches instead of stable_tests_branches.json. Empty = use stable_tests_branches.json from WORKFLOW_CHECKOUT_REF.'
         required: false
         default: ''
-      build_type:
-        description: 'tests_monitor / mute scripts build_type (relwithdebinfo, release-asan, …)'
+      build_types:
+        description: 'Comma-separated presets or "all" (default). Cannot request presets outside .github/config/mute_config.json (default + per-branch overrides).'
         required: false
-        default: relwithdebinfo
+        default: all
         type: string
 
 env:
+  # workflow_dispatch: branch selected in UI. schedule: repository default branch.
+  WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.repository.default_branch }}
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
+  MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_config.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
-  TITLE: "Update muted_ya.txt"
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
-  BUILD_TYPE: ${{ github.event.inputs.build_type || 'relwithdebinfo' }}
 
 jobs:
   setup:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
-      matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+      matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
-      - name: Checkout branches config
+      - name: Checkout branch list and mute files
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           path: config-repo
           sparse-checkout: |
-            ${{ env.BRANCHES_CONFIG_PATH }}
+            .github/config/
+            .github/scripts/tests/mute/mute_helper.py
+            .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
 
-      - id: set-matrix
+      - id: set-mute-matrix
         env:
-          BRANCHES_INPUT: ${{ github.event.inputs.branches }}
-          EVENT_NAME: ${{ github.event_name }}
+          INPUT_BRANCHES: ${{ github.event.inputs.branches || '' }}
+          INPUT_BUILD_TYPES: ${{ github.event.inputs.build_types || '' }}
         run: |
-          if [ "$EVENT_NAME" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
-            echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^\\s+"; "") | gsub("\\s+$"; "")) | map(select(length > 0))')" >> $GITHUB_OUTPUT
-          else
-            echo "branches=$(jq -c '.' config-repo/$BRANCHES_CONFIG_PATH)" >> $GITHUB_OUTPUT
-          fi
+          set -euo pipefail
+          python3 config-repo/.github/scripts/tests/mute/mute_helper.py matrix \
+            --branches-file "config-repo/${{ env.BRANCHES_CONFIG_PATH }}" \
+            --build-types-config "config-repo/${{ env.MUTE_BUILD_TYPES_CONFIG_PATH }}"
 
-      - name: Log branches to process
-        run: |
-          BRANCHES='${{ steps.set-matrix.outputs.branches }}'
-          echo "### Branches to process" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$BRANCHES" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Branches to process: $(echo "$BRANCHES" | jq -r '.[]' | tr '\n' ' ')"
-
-  collect-testowners:
+  collect-testowners-and-sync:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] codeowners pandas
+          pip install ydb[yc] codeowners requests
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-    
+
       - name: Collect testowners
         run: python3 .github/scripts/analytics/upload_testowners.py
 
+      # ``mute/manual_unmute.py sync`` selects CLOSED+COMPLETED candidates from YDB ``issues``;
+      # refresh that table here so fast-unmute does not wait for collect_analytics_fast (~30 min).
+      - name: Export GitHub issues to YDB
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+
+      - name: Sync manual fast-unmute state
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: python3 .github/scripts/tests/mute/manual_unmute.py sync
+
   update-muted-tests:
-    needs: [setup, collect-testowners]
+    needs: [setup, collect-testowners-and-sync]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     strategy:
       fail-fast: false
       matrix:
-        BASE_BRANCH: ${{ fromJson(needs.setup.outputs.matrix_branches) }}
+        include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
-      - name: Set environment variables
-        run: |
-          echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
-          PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
-          echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
-
-      # Всегда checkout main для получения актуальных скриптов
-      - name: Checkout main branch
+      - name: Checkout workflow branch
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
-          ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           fetch-depth: 0
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] PyGithub codeowners pandas numpy
+          pip install ydb[yc] PyGithub pandas numpy requests
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      # Получаем base_muted_ya.txt из целевой ветки
-      - name: Get base muted_ya.txt from target branch
+      - name: Prepare base mute file
         run: |
-          echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
-          git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
-          git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
-          echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
-    
+          set -euo pipefail
+          echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> "$GITHUB_ENV"
+          echo "BUILD_TYPE=${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
+          echo "PR_BRANCH=${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}_${{ matrix.BUILD_TYPE }}" >> "$GITHUB_ENV"
+
+          git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
+          git show "origin/${{ matrix.BASE_BRANCH }}:${{ matrix.MUTED_YA_RELATIVE }}" > base_muted_ya.txt
+
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
+
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file=base_muted_ya.txt 
-      
+        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file=base_muted_ya.txt
+
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
+      - name: Sync fast-unmute grace for re-muted tests
+        run: |
+          .github/scripts/tests/mute/create_new_muted_ya.py sync_fast_unmute_grace \
+            --branch=${{ env.BASE_BRANCH }} \
+            --build-type=${{ env.BUILD_TYPE }}
+
       - name: Generate new muted_ya.txt
         run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
+          .github/scripts/tests/mute/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
             --muted_ya_file=base_muted_ya.txt \
             --build-type=${{ env.BUILD_TYPE }}
@@ -142,99 +148,93 @@ jobs:
           # Compare base_muted_ya.txt with newly generated file
           if git diff --no-index --quiet base_muted_ya.txt mute_update/new_muted_ya.txt; then
             echo "No changes detected in muted_ya.txt"
-            echo "changes=false" >> $GITHUB_ENV
+            echo "changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "Changes detected in muted_ya.txt"
-            echo "changes=true" >> $GITHUB_ENV
+            echo "changes=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup git config
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
 
       - name: Create PR branch and apply changes
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         run: |
-          # Создаем PR ветку на основе целевой ветки
+          set -euo pipefail
+          # Путь к mute-файлу заранее в матрице (тот же dedicated_relative, что в mute_update_workflow_matrix).
+          OUT='${{ matrix.MUTED_YA_RELATIVE }}'
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
-          
-          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
-          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
-          
-          # Коммитим изменения
-          git add .github/config/muted_ya.txt
-          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
-          
-          echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes"
+          mkdir -p "$(dirname "$OUT")"
+          cp mute_update/new_muted_ya.txt "$OUT"
+
+          git add "$OUT"
+          git commit -m "Update mute list (${{ env.BUILD_TYPE }}) for ${{ env.BASE_BRANCH }}"
+
+          echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes ($OUT)"
 
       - name: Collect PR description
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         run: |
-          
-          PR_BODY=''
-          PR_BODY_FILE="pr_body_content.txt"
-          
-          PR_BODY+=$'# Muted tests update for ${{ env.BASE_BRANCH }}\n\n'
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
 
-          if [ -s mute_update/to_delete_debug.txt ]; then
-              DELETED_COUNT=$(wc -l < mute_update/to_delete_debug.txt)
-              PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
-              PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_delete_debug.txt)
-              PR_BODY+=$'\n```\n\n'
-          fi
-          if [ -s mute_update/to_mute_debug.txt ]; then
-              MUTED_COUNT=$(wc -l < mute_update/to_mute_debug.txt)
-              PR_BODY+=$'**Muted flaky: '"${MUTED_COUNT}**"$'\n\n'
-              PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_mute_debug.txt)
-              PR_BODY+=$'\n```\n\n'
+          base_branch = "${{ env.BASE_BRANCH }}"
+          build_type = "${{ env.BUILD_TYPE }}"
+          max_tests = 50
 
-              if [ -s mute_update/to_mute.txt ]; then
-                  BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
-                  MAX_TESTS=50
-                  TEST_COUNT=0
-                  FULL_URL="${BASE_URL}"
-                  while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                    formatted_name=$(echo "${test_name}" | sed 's/ /\//')
-                    encoded_name=$(echo "${formatted_name}" \
-                      | sed 's/ /%20/g' \
-                      | sed 's/\//%2F/g' \
-                      | sed 's/\[/%5B/g' \
-                      | sed 's/\]/%5D/g' \
-                      | sed 's/+/%2B/g' \
-                      | sed 's/-/%2D/g')
-                    FULL_URL="${FULL_URL}&full_name=${encoded_name}"
-                    TEST_COUNT=$((TEST_COUNT+1))
-                  done < mute_update/to_mute.txt
-                  PR_BODY+=$"[View history of muted flaky tests on Dashboard](${FULL_URL})"
-                  PR_BODY+=$'\n'
-              fi
-          fi
-          if [ -s mute_update/to_unmute_debug.txt ]; then
-              UNMUTED_COUNT=$(wc -l < mute_update/to_unmute_debug.txt)
-              PR_BODY+=$'**Unmuted stable: '"${UNMUTED_COUNT}**"$'\n\n'
-              PR_BODY+=$'```\n'
-              PR_BODY+=$(cat mute_update/to_unmute_debug.txt)
-              PR_BODY+=$'\n```\n\n'
-          fi
+          def read_lines(path):
+              p = Path(path)
+              if not p.exists() or p.stat().st_size == 0:
+                  return []
+              return p.read_text(encoding="utf-8").splitlines()
 
-          echo "$PR_BODY" > "$PR_BODY_FILE"
-          echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
+          def append_debug_section(parts, title, lines, count_override=None):
+              if not lines:
+                  return
+              count = count_override if count_override is not None else len(lines)
+              parts.append(f"**{title}: {count}**\n\n")
+              parts.append("```\n")
+              parts.append("\n".join(lines))
+              parts.append("\n```\n\n")
+
+          to_delete = read_lines("mute_update/to_delete.txt")
+          to_mute = read_lines("mute_update/to_mute.txt")
+          to_unmute = read_lines("mute_update/to_unmute.txt")
+
+          body = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
+          append_debug_section(body, "Removed from mute", to_delete, count_override=len(to_delete))
+          append_debug_section(body, "Muted flaky", to_mute, count_override=len(to_mute))
+
+          if to_mute:
+              url = (
+                  "https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link"
+                  f"?branch={quote(base_branch, safe='')}"
+                  f"&build_type={quote(build_type, safe='')}"
+              )
+              for test_name in to_mute[:max_tests]:
+                  url += f"&full_name={quote(test_name.replace(' ', '/'), safe='')}"
+              body.append(f"[View history of muted flaky tests on Dashboard]({url})\n")
+
+          append_debug_section(body, "Unmuted stable", to_unmute, count_override=len(to_unmute))
+          Path("pr_body_content.txt").write_text("".join(body), encoding="utf-8")
+          PY
+          echo "PR_BODY_PATH=pr_body_content.txt" >> "$GITHUB_ENV"
 
       - name: Upload all generated files as artifacts
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: muted-tests-all-files-${{ env.BASE_BRANCH }}
+          name: muted-tests-all-files-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
           path: |
             mute_update/
           retention-days: 7
 
       - name: Push PR branch
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         run: |
           # Retry logic for transient GitHub API timeouts
           MAX_RETRIES=5
@@ -265,29 +265,29 @@ jobs:
           done
 
       - name: Create or update PR
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          # Возвращаемся на main для доступа к скриптам
-          git checkout main
+          # Возвращаемся на WORKFLOW_CHECKOUT_REF для доступа к скриптам
+          git checkout "origin/${{ env.WORKFLOW_CHECKOUT_REF }}"
           
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \
             --branch_for_pr="${{ env.PR_BRANCH }}" \
-            --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" \
+            --title="Update muted_ya (${{ env.BUILD_TYPE }}) in ${{ env.BASE_BRANCH }}" \
             --body="${{ env.PR_BODY_PATH }}"
         
       - name: Prepare PR comment
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         id: comment_pr
         run: |
           # Читаем содержимое PR body
           PR_BODY_CONTENT=$(cat pr_body_content.txt)
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMPLETE_BODY=$(cat << EOF
-          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}
+          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }} (build: ${{ env.BUILD_TYPE }})
 
           ${PR_BODY_CONTENT}
           EOF
@@ -297,7 +297,7 @@ jobs:
           echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT
 
       - name: Add comment, reviewers and labels
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         uses: actions/github-script@v7
         env:
           LABELS: ${{ env.LABELS }}
@@ -310,13 +310,40 @@ jobs:
             // Читаем комментарий из файла
             const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
             const commentBody = fs.readFileSync(commentFile, 'utf8');
+            const MAX_COMMENT_LENGTH = 65000;
+            let finalCommentBody = commentBody;
+
+            if (commentBody.length > MAX_COMMENT_LENGTH) {
+              console.log(`Comment is too large (${commentBody.length} chars), creating gist fallback`);
+              try {
+                const gist = await github.rest.gists.create({
+                  public: false,
+                  description: `Muted tests update details for PR #${{ steps.create_or_update_pr.outputs.pr_number }}`,
+                  files: {
+                    [`muted-tests-update-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}.md`]: {
+                      content: commentBody
+                    }
+                  }
+                });
+                finalCommentBody = [
+                  `Collected in workflow [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for ${{ env.BASE_BRANCH }} (build: ${{ env.BUILD_TYPE }})`,
+                  '',
+                  `The full comment body is too large for GitHub issue comments (${commentBody.length.toLocaleString()} chars).`,
+                  `Full details: ${gist.data.html_url}`
+                ].join('\n');
+              } catch (error) {
+                console.log(`Failed to create gist fallback: ${error.message}`);
+                const suffix = '\n\n[Comment truncated due to GitHub limit]';
+                finalCommentBody = commentBody.slice(0, MAX_COMMENT_LENGTH - suffix.length) + suffix;
+              }
+            }
             
             // Добавляем комментарий
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: commentBody
+              body: finalCommentBody
             });
             
             // Добавляем лейблы
@@ -337,7 +364,7 @@ jobs:
             });
           
       - name: Enable auto-merge (squash)
-        if: env.changes == 'true'
+        if: steps.changes_check.outputs.changes == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}

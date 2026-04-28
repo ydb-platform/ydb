@@ -21,6 +21,12 @@
 #include <util/generic/scope.h>
 #include <util/string/strip.h>
 
+#if defined(_unix_)
+#include <csignal>
+#include <termios.h>
+#include <unistd.h>
+#endif
+
 namespace NYdb::NConsoleClient {
 
 namespace {
@@ -118,6 +124,28 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     config.BuildInfoCommandTag = "interactive";
 
+    // Ctrl+C handling stays where it should: inside replxx. While a line is being read the
+    // terminal is in raw mode with ISIG disabled, so the tty driver does not turn Ctrl+C
+    // into SIGINT — it arrives as a \x03 byte that replxx interprets as a cancel event
+    // (or as an exit when two cancels happen within DoubleCtrlCWindow).
+    //
+    // The reason we mask SIGINT here is purely to close a narrow race that appears every
+    // time replxx switches the terminal back to canonical mode (on every ReadLine return
+    // and at shutdown). Any \x03 bytes still queued in the pty buffer are then translated
+    // by the tty driver into a real SIGINT, and the default disposition would kill the
+    // process before "Bye!" is printed — even though replxx has already consumed the
+    // logical Ctrl+C event. SIG_IGN simply discards these stragglers; user-visible Ctrl+C
+    // behaviour is unchanged.
+    //
+    // The race is Unix-specific (it depends on tty-driver translation in canonical mode),
+    // so we only touch SIGINT on Unix builds.
+#if defined(_unix_)
+    const auto prevSigintHandler = std::signal(SIGINT, SIG_IGN);
+    Y_DEFER {
+        std::signal(SIGINT, prevSigintHandler);
+    };
+#endif
+
     const TDriver driver(config.CreateDriverConfig());
     const auto configManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, !config.EnableAiInteractive);
     if (auto code = PrintWelcomeMessage(config, driver, configManager)) {
@@ -179,6 +207,13 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Clear line (hints can be still present)
     lineReader->Finish(true);
+
+    // Drop any Ctrl+C bytes the user may have sent but that replxx didn't consume, so the tty
+    // driver doesn't echo stale "^C" sequences after the farewell message.
+#if defined(_unix_)
+    tcflush(STDIN_FILENO, TCIFLUSH);
+#endif
+
     Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;

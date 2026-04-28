@@ -100,6 +100,146 @@ Y_UNIT_TEST_SUITE(Donor) {
         UNIT_ASSERT(found);
     }
 
+    struct TManualReassignScenario {
+        ui32 GroupId;
+        NKikimrBlobStorage::TBaseConfig::TVSlot Source;
+        NKikimrBlobStorage::TBaseConfig::TPDisk SparePDisk;
+    };
+
+    TManualReassignScenario PrepareManualCrossNodeReassignScenario(TEnvironmentSetup& env) {
+        const ui32 groupId = env.GetGroups().front();
+
+        NKikimrBlobStorage::TBaseConfig baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *source = nullptr;
+        THashSet<ui32> usedNodes;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.GetGroupId() == groupId) {
+                usedNodes.insert(slot.GetVSlotId().GetNodeId());
+                if (!source) {
+                    source = &slot;
+                }
+            }
+        }
+        UNIT_ASSERT_C(source, "expected a source slot in the group");
+
+        const NKikimrBlobStorage::TBaseConfig::TPDisk *sparePDisk = nullptr;
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            if (!usedNodes.contains(pdisk.GetNodeId())) {
+                sparePDisk = &pdisk;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(sparePDisk, "expected a spare PDisk on an unused node");
+
+        return {
+            .GroupId = groupId,
+            .Source = *source,
+            .SparePDisk = *sparePDisk,
+        };
+    }
+
+    NKikimrBlobStorage::TConfigResponse InvokeManualReassign(TEnvironmentSetup& env,
+            const TManualReassignScenario& scenario) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+        cmd->SetGroupId(scenario.GroupId);
+        cmd->SetGroupGeneration(scenario.Source.GetGroupGeneration());
+        cmd->SetFailRealmIdx(scenario.Source.GetFailRealmIdx());
+        cmd->SetFailDomainIdx(scenario.Source.GetFailDomainIdx());
+        cmd->SetVDiskIdx(scenario.Source.GetVDiskIdx());
+        auto *target = cmd->MutableTargetPDiskId();
+        target->SetNodeId(scenario.SparePDisk.GetNodeId());
+        target->SetPDiskId(scenario.SparePDisk.GetPDiskId());
+        return env.Invoke(request);
+    }
+
+    const NKikimrBlobStorage::TBaseConfig::TVSlot *FindSlotByLocation(const NKikimrBlobStorage::TBaseConfig& baseConfig,
+            ui32 groupId, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx) {
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.GetGroupId() == groupId
+                    && slot.GetFailRealmIdx() == failRealmIdx
+                    && slot.GetFailDomainIdx() == failDomainIdx
+                    && slot.GetVDiskIdx() == vdiskIdx) {
+                return &slot;
+            }
+        }
+        return nullptr;
+    }
+
+    Y_UNIT_TEST(ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry) {
+        TEnvironmentSetup env{{
+            .NodeCount = 12,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto scenario = PrepareManualCrossNodeReassignScenario(env);
+        auto response = InvokeManualReassign(env, scenario);
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
+
+        NKikimrBlobStorage::TBaseConfig baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *acceptor = FindSlotByLocation(baseConfig, scenario.GroupId,
+            scenario.Source.GetFailRealmIdx(), scenario.Source.GetFailDomainIdx(), scenario.Source.GetVDiskIdx());
+        NKikimrBlobStorage::TBaseConfig_TVSlot_TDonorDisk donor;
+        UNIT_ASSERT_C(acceptor, "expected a donor-backed slot after the initial cross-node reassign");
+        UNIT_ASSERT_VALUES_EQUAL(acceptor->DonorsSize(), 1);
+        donor = acceptor->GetDonors(0);
+
+        const auto& acceptorId = acceptor->GetVSlotId();
+        const auto& donorId = donor.GetVSlotId();
+        UNIT_ASSERT_C(acceptorId.GetNodeId() != donorId.GetNodeId(),
+            "test requires cross-node donor relocation path");
+
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableUpdateSettings();
+            cmd->AddTryToRelocateBrokenDisksLocallyFirst(true);
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
+        cmd->SetGroupId(scenario.GroupId);
+        cmd->SetGroupGeneration(acceptor->GetGroupGeneration());
+        cmd->SetFailRealmIdx(acceptor->GetFailRealmIdx());
+        cmd->SetFailDomainIdx(acceptor->GetFailDomainIdx());
+        cmd->SetVDiskIdx(acceptor->GetVDiskIdx());
+        auto *target = cmd->MutableTargetPDiskId();
+        target->SetNodeId(donorId.GetNodeId());
+        target->SetPDiskId(donorId.GetPDiskId());
+
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_C(!response.GetStatus(0).GetSuccess(), response.DebugString());
+        UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Group fit error"), response.DebugString());
+
+        baseConfig = env.FetchBaseConfig();
+        bool found = false;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            const auto& slotId = slot.GetVSlotId();
+            if (slot.GetGroupId() == scenario.GroupId
+                    && slotId.GetNodeId() == acceptorId.GetNodeId()
+                    && slotId.GetPDiskId() == acceptorId.GetPDiskId()
+                    && slotId.GetVSlotId() == acceptorId.GetVSlotId()) {
+                found = true;
+                UNIT_ASSERT_VALUES_EQUAL(slot.DonorsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetDonors(0).GetVSlotId().GetNodeId(), donorId.GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetDonors(0).GetVSlotId().GetPDiskId(), donorId.GetPDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(slot.GetDonors(0).GetVSlotId().GetVSlotId(), donorId.GetVSlotId());
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "acceptor slot must stay unchanged after rejected manual reassign");
+    }
+
     Y_UNIT_TEST(SkipBadDonor) {
         TEnvironmentSetup env{{
             .NodeCount = 8,

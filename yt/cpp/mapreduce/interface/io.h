@@ -8,6 +8,7 @@
 
 #include "fwd.h"
 
+#include "abortable_stream.h"
 #include "client_method_options.h"
 #include "common.h"
 #include "distributed_session.h"
@@ -107,7 +108,7 @@ class TIOException
 /// Interface representing YT file reader.
 class IFileReader
     : public TThrRefBase
-    , public IInputStream
+    , public IAbortableInputStream
 { };
 
 /// Interface representing YT file writer.
@@ -135,7 +136,7 @@ public:
 /// Low-level interface to read YT table with retries.
 class TRawTableReader
     : public TThrRefBase
-    , public IInputStream
+    , public IAbortableInputStream
 {
 public:
     /// @brief Retry table read starting from the specified `rangeIndex` and `rowIndex`.
@@ -279,6 +280,12 @@ public:
 
     /// Returns `true` if job raw input stream was closed and `false` otherwise.
     bool IsRawReaderExhausted() const;
+
+    /// @brief Abort the reader, interrupting any in-progress or future reads.
+    void Abort();
+
+    /// @brief Check whether the reader is aborted.
+    bool IsAborted() const;
 };
 
 /// @brief Iterator for use in range-based-for.

@@ -48,8 +48,11 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
     }
 
     Y_UNIT_TEST(TopicMetadataGoodAndBad) {
+        auto pm = MakeSimpleShared<TPortManager>();
+        ui16 kafkaPort = pm->GetPort();
         auto serverSettings = NKikimr::NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
         serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+        serverSettings.AppConfig->MutableKafkaProxyConfig()->SetListeningPort(kafkaPort);
         const TString DbRoot = "/Root/LbAccount";
         const TString Account = "account";
         const TString DbPath = DbRoot + "/" + Account;
@@ -62,7 +65,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         serverSettings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(DbRoot);
         serverSettings.PQConfig.SetTestDatabaseRoot(DbRoot);
         serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(false);
-        NPersQueue::TTestServer server{serverSettings};
+        NPersQueue::TTestServer server(serverSettings, true, {}, NActors::NLog::PRI_INFO, pm);
         ui32 totalPartitions = 5;
         server.AnnoyingClient->MkDir("/Root", "LbAccount");
         server.AnnoyingClient->MkDir("/Root/LbAccount", "account");

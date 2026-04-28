@@ -128,7 +128,7 @@ struct TStageGraph {
         NYql::EStorageType StorageType;
     };
 
-    TVector<ui32> StageIds;
+    TList<ui32> StageIds;
     THashMap<ui32, TSourceStageTraits> SourceStageRenames;
     THashMap<ui32, TVector<ui32>> StageInputs;
     THashMap<ui32, TVector<ui32>> StageOutputs;

@@ -175,10 +175,12 @@ private:
         for (const auto& index : req.indexes()) {
             if (index.name().empty()) {
                 issues.AddIssue(NYql::TIssue("Index name cannot be empty"));
+                code = StatusIds::BAD_REQUEST;
                 return false;
             }
             if (!indexNames.insert(index.name()).second) {
                 issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate index name: " << index.name()));
+                code = StatusIds::BAD_REQUEST;
                 return false;
             }
         }
@@ -193,6 +195,7 @@ private:
                     if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex() ||
                         !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
                         issues.AddIssue(NYql::TIssue("Local bloom filter index is not enabled"));
+                        code = StatusIds::BAD_REQUEST;
                         return false;
                     }
                     olapIndex->SetClassName("BLOOM_FILTER");
@@ -201,18 +204,21 @@ private:
                         double fpp = index.local_bloom_filter_index().false_positive_probability();
                         if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
                             issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
+                            code = StatusIds::BAD_REQUEST;
                             return false;
                         }
                         bloom->SetFalsePositiveProbability(fpp);
                     }
                     if (index.index_columns().size() != 1) {
                         issues.AddIssue(NYql::TIssue("Bloom filter index supports exactly one column"));
+                        code = StatusIds::BAD_REQUEST;
                         return false;
                     }
                     {
                         auto it = colNameToId.find(index.index_columns(0));
                         if (it == colNameToId.end()) {
                             issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            code = StatusIds::BAD_REQUEST;
                             return false;
                         }
                         bloom->AddColumnIds(it->second);
@@ -223,6 +229,7 @@ private:
                     if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex() ||
                         !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
                         issues.AddIssue(NYql::TIssue("Local bloom ngram filter index is not enabled"));
+                        code = StatusIds::BAD_REQUEST;
                         return false;
                     }
                     olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
@@ -232,6 +239,7 @@ private:
                         double fpp = idxProto.false_positive_probability();
                         if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
                             issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
+                            code = StatusIds::BAD_REQUEST;
                             return false;
                         }
                         ngram->SetFalsePositiveProbability(fpp);
@@ -253,12 +261,14 @@ private:
                     }
                     if (index.index_columns().size() != 1) {
                         issues.AddIssue(NYql::TIssue("Bloom NGram filter index supports exactly one column"));
+                        code = StatusIds::BAD_REQUEST;
                         return false;
                     }
                     {
                         auto it = colNameToId.find(index.index_columns(0));
                         if (it == colNameToId.end()) {
                             issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            code = StatusIds::BAD_REQUEST;
                             return false;
                         }
                         ngram->SetColumnId(it->second);
@@ -274,6 +284,7 @@ private:
                 case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
                 case Ydb::Table::TableIndex::kGlobalJsonIndex:
                     issues.AddIssue(NYql::TIssue("This index is not supported for column tables"));
+                    code = StatusIds::BAD_REQUEST;
                     return false;
             }
         }

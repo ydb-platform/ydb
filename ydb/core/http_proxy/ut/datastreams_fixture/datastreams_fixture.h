@@ -80,6 +80,11 @@ public:
         bool EnableMetering : 1 = false;
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
+<<<<<<< HEAD
+=======
+        bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
+>>>>>>> 78242e20f03 (LOGBROKER-10375 Add split by mps (#38551))
     };
 
     void InitAll(const TInitParameters initParameters);

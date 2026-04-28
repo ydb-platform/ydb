@@ -449,9 +449,9 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             body = content.get('body') or ''
             state_reason = (content.get('stateReason') or '').strip().upper()
             label_nodes = (content.get('labels') or {}).get('nodes') or []
-            label_names = [
+            label_names = {
                 str(n['name']).strip().lower() for n in label_nodes if n and n.get('name')
-            ]
+            }
             if state == 'CLOSED':
                 if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in label_names:
                     pass

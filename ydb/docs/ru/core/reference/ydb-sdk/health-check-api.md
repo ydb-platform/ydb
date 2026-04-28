@@ -37,6 +37,11 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   Функциональность на данный момент не поддерживается. Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
@@ -104,6 +109,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

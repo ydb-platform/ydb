@@ -164,6 +164,10 @@
 
   {% endlist %}
 
+- C#
+
+  Этот алгоритм используется по умолчанию.
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}

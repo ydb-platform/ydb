@@ -638,4 +638,8 @@ struct TPersistentBufferFormat {
         TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
+    IActor *CreateDDiskActorInMem(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+        TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+
 } // NKikimr::NDDisk

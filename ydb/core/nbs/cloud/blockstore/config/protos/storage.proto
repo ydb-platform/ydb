@@ -21,6 +21,7 @@ message TDDiskConfig
     optional bool UseSQPoll = 1;
     optional bool UseIOPoll = 2;
     optional bool ForcePDiskFallback = 3;
+    optional bool UseInMemoryDDisk = 4;
 }
 
 message TPBufferConfig

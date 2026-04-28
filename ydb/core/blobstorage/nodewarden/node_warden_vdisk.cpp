@@ -192,6 +192,7 @@ namespace NKikimr::NStorage {
         if (ddisk) {
             NDDisk::TDDiskConfig ddiskConfig{};
             NDDisk::TPersistentBufferFormat pbufferFormat{};
+            bool useInMemoryDDisk = false;
             if (Cfg->DDiskConfig) {
                 if (Cfg->DDiskConfig->HasUseSQPoll()) {
                     ddiskConfig.UseSQPoll = Cfg->DDiskConfig->GetUseSQPoll();
@@ -201,6 +202,9 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
                     ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
+                }
+                if (Cfg->DDiskConfig->HasUseInMemoryDDisk()) {
+                    useInMemoryDDisk = Cfg->DDiskConfig->GetUseInMemoryDDisk();
                 }
             }
             if (Cfg->PBufferConfig) {
@@ -226,8 +230,13 @@ namespace NKikimr::NStorage {
                     pbufferFormat.MaxBarriersLimit = Cfg->PBufferConfig->GetMaxBarriersLimit();
                 }
             }
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
-                std::move(ddiskConfig), AppData()->Counters));
+            if (useInMemoryDDisk) {
+                actor.reset(NDDisk::CreateDDiskActorInMem(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
+                    std::move(ddiskConfig), AppData()->Counters));
+            } else {
+                actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
+                    std::move(ddiskConfig), AppData()->Counters));
+            }
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -282,7 +291,6 @@ namespace NKikimr::NStorage {
 
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
-            vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 

@@ -14,6 +14,8 @@
 
 namespace NActors::NTracing {
 
+    std::atomic<ui64> NextTracerInstanceId{1};
+
     struct TThreadBuffer {
         std::vector<TTraceEvent> Events;
         std::atomic<ui64> WritePos{0};
@@ -59,7 +61,7 @@ namespace NActors::NTracing {
             const ui64 delta = (nowUs > startUs) ? (nowUs - startUs) : 0;
             event.DeltaUs = static_cast<ui32>(std::min<ui64>(delta, std::numeric_limits<ui32>::max()));
             event.ThreadIdx = threadIdx;
-            ui64 pos = buf->WritePos.fetch_add(1, std::memory_order_release);
+            ui64 pos = buf->WritePos.fetch_add(1, std::memory_order_relaxed);
             buf->Events[pos % BufferSize] = event;
             if (pos == 0) {
                 UpdateThreadPoolName(threadIdx);
@@ -206,7 +208,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = ts.CurrentActivityIndex;
             ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event);
+            RegisterEventTypeNameIfNeeded(ts, event.Type, event);
         }
 
         void HandleReceive(IActor& recipient, IEventHandle& event) override {
@@ -225,7 +227,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = activityIndex;
             ev.HandleHash = HashHandlePointer(reinterpret_cast<ui64>(&event));
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, event);
+            RegisterEventTypeNameIfNeeded(ts, event.Type, event);
         }
 
         void HandleForward(ui64 oldHandlePtr, IEventHandle& event, ui32 originalType) override {
@@ -243,7 +245,7 @@ namespace NActors::NTracing {
             ev.ActivityIndex = ts.CurrentActivityIndex;
             ev.HandleHash = HashHandlePointer(oldHandlePtr);
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
-            TracerImpl.RegisterEventTypeName(ts.Buffer, originalType, event);
+            RegisterEventTypeNameIfNeeded(ts, originalType, event);
         }
 
         bool Start() override {
@@ -281,22 +283,55 @@ namespace NActors::NTracing {
 
     private:
         struct TThreadState {
+            ui64 OwnerInstanceId = 0;
             TThreadBuffer* Buffer = nullptr;
             ui8 Idx = 0;
             ui16 CurrentActivityIndex = 0;
+            ui8 RegisteredEventTypeCount = 0;
+            ui32 RegisteredEventTypes[8] = {};
+
+            void ResetEventTypeCache() {
+                RegisteredEventTypeCount = 0;
+            }
         };
+
+        static bool HasCachedEventType(const TThreadState& state, ui32 typeIndex) {
+            for (ui8 i = 0; i < state.RegisteredEventTypeCount; ++i) {
+                if (state.RegisteredEventTypes[i] == typeIndex) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static void CacheEventType(TThreadState& state, ui32 typeIndex) {
+            if (state.RegisteredEventTypeCount < sizeof(state.RegisteredEventTypes) / sizeof(state.RegisteredEventTypes[0])) {
+                state.RegisteredEventTypes[state.RegisteredEventTypeCount++] = typeIndex;
+            }
+        }
+
+        void RegisterEventTypeNameIfNeeded(TThreadState& state, ui32 typeIndex, const IEventHandle& event) {
+            if (HasCachedEventType(state, typeIndex)) {
+                return;
+            }
+            TracerImpl.RegisterEventTypeName(state.Buffer, typeIndex, event);
+            CacheEventType(state, typeIndex);
+        }
 
         TThreadState& GetThreadState() {
             thread_local TThreadState state;
-            if (!state.Buffer) {
+            if (state.OwnerInstanceId != InstanceId) {
                 ui32 idx = 0;
                 state.Buffer = TracerImpl.AcquireBuffer(idx);
                 state.Idx = static_cast<ui8>(idx);
+                state.OwnerInstanceId = InstanceId;
+                state.ResetEventTypeCache();
             }
             return state;
         }
 
         bool AutoStart = false;
+        const ui64 InstanceId = NextTracerInstanceId.fetch_add(1, std::memory_order_relaxed);
         TInternalTracer TracerImpl;
         std::atomic<ETracerState> State{ETracerState::Idle};
     };

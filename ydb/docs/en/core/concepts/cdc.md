@@ -105,8 +105,8 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
-* `user` : User identifier. Present if the `USER_SIDS` setting is enabled. Contains user's `SID` and it is equal with `ttl@system` if record is deleted by TTL process.
-* `traceId` : Open telemetry identifier. Presents if the `TRACE_IDS` setting is enabled.
+* `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's `SID` and is set set to `ttl@system` if the record is deleted by the TTL process.
+* `traceId`: OpenTelemetry identifier. Present if the `TRACE_IDS` setting is enabled.
 
 
 Sample record of an update in `UPDATES` mode:
@@ -193,7 +193,7 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 * `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
 * `eventSource`: Includes the `ydb:document-table` string.
 * `eventVersion`: Includes the `1.0` string.
-* `userIdentity` - Includes user information (value of `principalId` contains user's `SID` and it is equal with `ttl@system` if record is deleted by TTL process.
+* `userIdentity`: Includes user information. Contains `type` (`"User"` or `"Service"`) and `principalId` (user's `SID`). If the record is deleted by the TTL process, `type` is `"Service"` and `principalId` is `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 

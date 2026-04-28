@@ -192,7 +192,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * `eventName` — `INSERT`, `MODIFY` или `REMOVE`. Значение `INSERT` допустимо только в режиме `NEW_AND_OLD_IMAGES`.
 * `eventSource` — содержит строку `ydb:document-table`.
 * `eventVersion` — содержит строку `1.0`.
-* `userIdentity` - информация о пользователе (вложенное знаение `principalId` содержит `SID` пользователя, если происходит удаление записей по TTL, то указывается значение `ttl@system`.).
+* `userIdentity` - информация о пользователе (вложенное значение `principalId` содержит `SID` пользователя, если происходит удаление записей по TTL, то указывается значение `ttl@system`.).
 
 {% endif %}
 

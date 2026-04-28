@@ -273,6 +273,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                   title
                   url
                   state
+                  stateReason
                   body
                   createdAt
                   labels(first: 40) {
@@ -416,9 +417,14 @@ def generate_github_issue_title_and_body(test_data):
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     """Project items → issue index.
 
-    Includes **open** issues and **closed** issues only when the GitHub label
-    ``manual-fast-unmute`` is present (fast-unmute without reopening the issue).
-    Other closed cards are skipped so downstream logic matches project 45 only.
+    Includes **open** issues.
+
+    Includes **closed** issues when either:
+    - GitHub label ``manual-fast-unmute`` is present (fast-unmute tracking without reopening), or
+    - ``stateReason`` is ``COMPLETED`` (manual close as done — still the canonical mute issue until
+      closed as not planned or reopened).
+
+    Other closed cards (e.g. ``NOT_PLANNED``) are skipped so mute tooling no longer matches them.
     """
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     all_issues_with_contet = {}
@@ -426,10 +432,16 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             state = content.get('state')
+            state_reason = (content.get('stateReason') or '').strip().upper()
             label_nodes = (content.get('labels') or {}).get('nodes') or []
             label_names = [n['name'] for n in label_nodes if n and n.get('name')]
-            if state == 'CLOSED' and MANUAL_FAST_UNMUTE_GITHUB_LABEL not in label_names:
-                continue
+            if state == 'CLOSED':
+                if MANUAL_FAST_UNMUTE_GITHUB_LABEL in label_names:
+                    pass
+                elif state_reason == 'COMPLETED':
+                    pass
+                else:
+                    continue
 
             body = content['body']
             parsed = parse_body(body)
@@ -462,6 +474,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['title'] = content['title']
             all_issues_with_contet[content['id']]['url'] = content['url']
             all_issues_with_contet[content['id']]['state'] = content['state']
+            all_issues_with_contet[content['id']]['state_reason'] = content.get('stateReason') or ''
             all_issues_with_contet[content['id']]['createdAt'] = content['createdAt']
             all_issues_with_contet[content['id']]['status_updated'] = status_updated
             all_issues_with_contet[content['id']]['status'] = status
@@ -505,24 +518,53 @@ def get_muted_tests_from_issues(issues_dict=None):
 
     # First, collect all issues for each (test, build_type) key
     for issue in issues_dict:
-        if issues_dict[issue]["state"] != 'CLOSED':
-            bt = issues_dict[issue].get('build_type') or DEFAULT_BUILD_TYPE
-            for test in issues_dict[issue]['tests']:
+        info = issues_dict[issue]
+        state = info['state']
+        state_reason = (info.get('state_reason') or '').strip().upper()
+        bt = info.get('build_type') or DEFAULT_BUILD_TYPE
+
+        # Open issues: reserve (test, build_type) for mute/issue automation.
+        # Closed as COMPLETED (with or without manual-fast-unmute label yet): same — do not open a duplicate.
+        if state == 'CLOSED':
+            if state_reason != 'COMPLETED':
+                continue
+            for test in info['tests']:
                 key = (test, bt)
                 if key not in muted_tests:
                     muted_tests[key] = []
                 muted_tests[key].append(
                     {
-                        'url': issues_dict[issue]['url'],
-                        'createdAt': issues_dict[issue]['createdAt'],
-                        'status_updated': issues_dict[issue]['status_updated'],
-                        'status': issues_dict[issue]['status'],
-                        'state': issues_dict[issue]['state'],
-                        'branches': issues_dict[issue]['branches'],
+                        'url': info['url'],
+                        'createdAt': info['createdAt'],
+                        'status_updated': info['status_updated'],
+                        'status': info['status'],
+                        'state': state,
+                        'branches': info['branches'],
                         'build_type': bt,
                         'id': issue,
                     }
                 )
+            continue
+
+        if state != 'OPEN':
+            continue
+
+        for test in info['tests']:
+            key = (test, bt)
+            if key not in muted_tests:
+                muted_tests[key] = []
+            muted_tests[key].append(
+                {
+                    'url': info['url'],
+                    'createdAt': info['createdAt'],
+                    'status_updated': info['status_updated'],
+                    'status': info['status'],
+                    'state': state,
+                    'branches': info['branches'],
+                    'build_type': bt,
+                    'id': issue,
+                }
+            )
     
     # Then, for each test, keep only the latest issue (by createdAt)
     for test in muted_tests:

@@ -1,15 +1,19 @@
 #include "kqp_query_classifier.h"
+#include "kqp_proxy_service_impl.h"
+
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 
 namespace NKikimr::NKqp {
 
 class TWmQueryClassifier : public IWmQueryClassifier {
 public:
-    TWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+    TWmQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                        TClassifierSnapshotPtr classifierSnapshot,
+                       TString databaseId,
                        TClassifyContext context)
-        : PoolInfoSnapshot(std::move(poolInfoSnapshot))
+        : ResourcePoolMap(std::move(resourcePoolMap))
         , ClassifierSnapshot(std::move(classifierSnapshot))
+        , DatabaseId(std::move(databaseId))
         , Context(std::move(context))
         , Configs(nullptr)
     {
@@ -18,7 +22,7 @@ public:
         }
 
         const auto& dbConfigs = ClassifierSnapshot->GetResourcePoolClassifierConfigsByRank();
-        auto it = dbConfigs.find(Context.DatabaseId);
+        auto it = dbConfigs.find(DatabaseId);
 
         if (it != dbConfigs.end()) {
             Configs = &it->second;
@@ -169,12 +173,25 @@ private:
         return true;
     }
 
-    const TPoolInfoSnapshot::TPoolEntry* FindPool(const TString& poolId) const {
-        if (!PoolInfoSnapshot) {
+    const TResourcePoolEntry* FindPool(const TString& poolId) const {
+        if (!ResourcePoolMap) {
             return nullptr;
         }
 
-        return PoolInfoSnapshot->FindPool(Context.DatabaseId, poolId);
+        auto it = ResourcePoolMap->find(TResourcePoolsCache::GetPoolKey(DatabaseId, poolId));
+        return it != ResourcePoolMap->end() ? &it->second : nullptr;
+    }
+
+    bool UserHasAccess(const TResourcePoolEntry& poolEntry, ui32 access) const {
+        if (!Context.UserToken || Context.UserToken->GetSerializedToken().empty()) {
+            return true;
+        }
+
+        if (!poolEntry.SecurityObject) {
+            return true;
+        }
+
+        return poolEntry.SecurityObject->CheckAccess(access, *Context.UserToken);
     }
 
     template<typename TStore>
@@ -189,7 +206,7 @@ private:
     ///
     template<typename TStore>
     bool TryResolve(const TString& poolId, TStore& store) {
-        if (poolId == NResourcePool::REJECT_POOL_ID) {
+        if (to_lower(poolId) == NResourcePool::REJECT_POOL_ID) {
             store = TReject{
                 .Code = Ydb::StatusIds::ABORTED,
                 .Message = TStringBuilder() << "Query is rejected by classifier"
@@ -204,7 +221,16 @@ private:
             return false;
         }
 
-        if (!poolInfo->UserHasAccess(Context)) {
+        if (!UserHasAccess(*poolInfo, NACLib::DescribeSchema)) {
+            store = TReject{
+                .Code = Ydb::StatusIds::NOT_FOUND,
+                .Message = TStringBuilder()
+                    << "Resource pool: " << poolId << " not found or you don't have describe permissions"
+            };
+            return false;
+        }
+
+        if (!UserHasAccess(*poolInfo, NACLib::SelectRow)) {
             store = TReject{
                 .Code = Ydb::StatusIds::UNAUTHORIZED,
                 .Message = TStringBuilder()
@@ -223,8 +249,9 @@ private:
     }
 
 private:
-    const TPoolInfoSnapshotPtr PoolInfoSnapshot;
+    const TResourcePoolMapPtr ResourcePoolMap;
     const TClassifierSnapshotPtr ClassifierSnapshot;
+    const TString DatabaseId;
     const TClassifyContext Context;
     // Points into ClassifierSnapshot's data; valid as long as ClassifierSnapshot is alive
     const std::map<i64, TResourcePoolClassifierConfig>* Configs;
@@ -233,10 +260,11 @@ private:
     mutable std::unordered_map<TString, bool> MemberNameCache;
 };
 
-std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                                                             TClassifierSnapshotPtr classifierSnapshot,
+                                                            const TString& databaseId,
                                                             TClassifyContext context) {
-    return std::make_shared<TWmQueryClassifier>(std::move(poolInfoSnapshot), std::move(classifierSnapshot), std::move(context));
+    return std::make_shared<TWmQueryClassifier>(std::move(resourcePoolMap), std::move(classifierSnapshot), databaseId, std::move(context));
 }
 
 } // namespace NKikimr::NKqp

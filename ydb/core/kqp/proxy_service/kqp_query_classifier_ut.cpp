@@ -45,17 +45,17 @@ std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
     return snapshot;
 }
 
-std::shared_ptr<TPoolInfoSnapshot> MakePoolInfoSnapshot(
-    std::vector<std::pair<TString, TPoolInfoSnapshot::TPoolEntry>> entries)
+std::shared_ptr<TResourcePoolMap> MakeResourcePoolMap(
+    std::vector<std::pair<TString, TResourcePoolEntry>> entries)
 {
-    TPoolInfoSnapshot::TPoolsMap pools;
+    auto pools = std::make_shared<TResourcePoolMap>();
     for (auto& [key, entry] : entries) {
-        pools.emplace(std::move(key), std::move(entry));
+        pools->emplace(std::move(key), std::move(entry));
     }
-    return std::make_shared<TPoolInfoSnapshot>(std::move(pools));
+    return pools;
 }
 
-TPoolInfoSnapshot::TPoolEntry MakePoolEntry(i32 concurrentQueryLimit = -1) {
+TResourcePoolEntry MakePoolEntry(i32 concurrentQueryLimit = -1) {
     NResourcePool::TPoolSettings settings;
     settings.ConcurrentQueryLimit = concurrentQueryLimit;
     return {.Config = settings};
@@ -102,7 +102,7 @@ struct TClassifyTestCase {
 
         auto classifierSnap = MakeClassifierSnapshot(TEST_DB, std::move(configs));
 
-        std::vector<std::pair<TString, TPoolInfoSnapshot::TPoolEntry>> poolEntries = {
+        std::vector<std::pair<TString, TResourcePoolEntry>> poolEntries = {
             {_JoinPath(TEST_DB, ResourcePool), MakePoolEntry(10)},
             {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
         };
@@ -112,7 +112,7 @@ struct TClassifyTestCase {
         for (const auto& [name, limit] : ExtraPools) {
             poolEntries.push_back({_JoinPath(TEST_DB, name), MakePoolEntry(limit)});
         }
-        auto poolSnap = MakePoolInfoSnapshot(std::move(poolEntries));
+        auto poolSnap = MakeResourcePoolMap(std::move(poolEntries));
 
         auto token = ContextMemberName.empty()
             ? nullptr
@@ -120,13 +120,12 @@ struct TClassifyTestCase {
                 NACLib::TSID(ContextMemberName), TVector<NACLib::TSID>{});
 
         TClassifyContext ctx{
-            .PoolId = ExplicitPoolId,
-            .DatabaseId = TEST_DB,
+            .PoolId = ExplicitPoolId, 
             .AppName = ContextAppName,
             .UserToken = token,
         };
 
-        return CreateWmQueryClassifier(poolSnap, classifierSnap, std::move(ctx));
+        return CreateWmQueryClassifier(poolSnap, classifierSnap, TEST_DB, std::move(ctx));
     }
 
     IWmQueryClassifier::TPreClassifyResult RunPreClassify() const {
@@ -160,7 +159,7 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
             MakeClassifierConfig(TEST_DB, "c1", 100, "pool_target", "admins"),
         });
 
-        auto poolSnap = MakePoolInfoSnapshot({
+        auto poolSnap = MakeResourcePoolMap({
             {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
         });
 
@@ -169,12 +168,11 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
 
         TClassifyContext ctx{
             .PoolId = "",
-            .DatabaseId = TEST_DB,
             .AppName = "",
             .UserToken = token,
         };
 
-        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, ctx);
+        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, TEST_DB, ctx);
         auto result = classifier->PreCompileClassify();
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }
@@ -192,18 +190,17 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
                 TString(NACLib::TSID())),
         });
 
-        auto poolSnap = MakePoolInfoSnapshot({
+        auto poolSnap = MakeResourcePoolMap({
             {_JoinPath(TEST_DB, "pool_target"), MakePoolEntry(10)},
         });
 
         TClassifyContext ctx{
             .PoolId = "",
-            .DatabaseId = TEST_DB,
             .AppName = "",
             .UserToken = nullptr,
         };
 
-        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, ctx);
+        auto classifier = CreateWmQueryClassifier(poolSnap, classifierSnap, TEST_DB, ctx);
         auto result = classifier->PreCompileClassify();
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }

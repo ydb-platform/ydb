@@ -11,46 +11,16 @@ namespace NKikimr::NKqp {
 
 struct TClassifyContext {
     const TString PoolId;
-    const TString DatabaseId;
     const TString AppName;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
-class TPoolInfoSnapshot {
-public:
-    struct TPoolEntry {
-        NResourcePool::TPoolSettings Config;
-        std::optional<NACLib::TSecurityObject> SecurityObject;
-
-        bool UserHasAccess(const TClassifyContext& context) const {
-            if (!context.UserToken || context.UserToken->GetSerializedToken().empty()) {
-                return true;
-            }
-
-            if (!SecurityObject) {
-                return true;
-            }
-
-            return SecurityObject->CheckAccess(NACLib::DescribeSchema
-                | NACLib::SelectRow, *context.UserToken);
-        }
-    };
-
-    using TPoolsMap = std::unordered_map<TString, TPoolEntry>;
-
-public:
-    explicit TPoolInfoSnapshot(TPoolsMap pools)
-        : Pools(std::move(pools))
-    {}
-
-    const TPoolEntry* FindPool(const TString& databaseId, const TString& poolId) const {
-        auto it = Pools.find(databaseId + "/" + poolId);
-        return it != Pools.end() ? &it->second : nullptr;
-    }
-
-private:
-    TPoolsMap Pools;
+struct TResourcePoolEntry {
+    NResourcePool::TPoolSettings Config;
+    std::optional<NACLib::TSecurityObject> SecurityObject;
 };
+
+using TResourcePoolMap = std::unordered_map<TString, TResourcePoolEntry>;
 
 ///
 /// Manages per-query workload manager policies
@@ -98,9 +68,10 @@ public:
 };
 
 using TClassifierSnapshotPtr = std::shared_ptr<const TResourcePoolClassifierSnapshot>;
-using TPoolInfoSnapshotPtr = std::shared_ptr<const TPoolInfoSnapshot>;
+using TResourcePoolMapPtr = std::shared_ptr<const TResourcePoolMap>;
 
-std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TPoolInfoSnapshotPtr poolInfoSnapshot,
+std::shared_ptr<IWmQueryClassifier> CreateWmQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                                                             TClassifierSnapshotPtr classifierSnapshot,
+                                                            const TString& databaseId,
                                                             TClassifyContext context);
 } // namespace NKikimr::NKqp

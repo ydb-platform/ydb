@@ -1596,14 +1596,14 @@ private:
         auto context = TClassifyContext{
             // This parameter is set when user creates a request with an explicit PoolId
             .PoolId = poolId,
-            .DatabaseId = ev->Get()->GetDatabaseId(),
             .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
             .UserToken = ev->Get()->GetUserToken()
         };
 
         auto classifier = CreateWmQueryClassifier(
-            ResourcePoolsCache.LastPoolInfoSnapshot,
+            ResourcePoolsCache.LastResourcePoolMapSnapshot,
             ResourcePoolsCache.LastClassifierSnapshot,
+            databaseId,
             context
         );
 

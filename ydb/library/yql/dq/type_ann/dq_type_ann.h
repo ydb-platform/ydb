@@ -73,7 +73,7 @@ struct TDqStageSettings {
     TDqStageSettings& SetShuffleEliminated() { IsShuffleEliminated = true; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
-    static TDqStageSettings New(TString stageGIUD);
+    static TDqStageSettings New(const TString& stageGIUD);
     static TDqStageSettings New();
 
     static TDqStageSettings Parse(const NNodes::TDqStageBase& node);

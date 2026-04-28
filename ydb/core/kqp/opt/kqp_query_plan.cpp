@@ -22,6 +22,8 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/utils/utf8.h>
 
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -2904,6 +2906,7 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
 }
 
 TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "", const TString& queryStats = "") {
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: SerializeTxPlans";
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
 
@@ -2977,6 +2980,8 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
+
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: PhyQuerySetTxPlans";
     TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */
@@ -3137,6 +3142,13 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
 TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
     if (txPlanJson.empty()) {
         return {};
+    }
+
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: AddExecStatsToTxPlan";
+
+
+    if (optCtx && optCtx->Config->GetEnableNewRBO()) {
+        return AddExecStatsToNewRboPlan(txPlanJson, stats, optCtx);
     }
 
     THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
@@ -3605,13 +3617,18 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     return AddExecStatsToTxPlan(txPlanJson, stats, TIntrusivePtr<NOpt::TKqpOptimizeContext>());
 }
 
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, TIntrusiveConstPtr<TKikimrConfiguration> config, const TString& poolId) {
     TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
             txPlans.push_back(txPlan);
         }
     }
+
+    if (config->GetEnableNewRBO()) {
+        return AddExecStatsToNewRboPlans(txPlans, queryStats, poolId);
+    }
+
     NJsonWriter::TBuf writer;
     writer.BeginObject();
 

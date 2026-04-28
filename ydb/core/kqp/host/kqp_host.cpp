@@ -341,7 +341,7 @@ public:
         for (auto id : SessionCtx->Query().ExecutionOrder) {
             auto result = SessionCtx->Query().Results.FindPtr(id);
             if (result) {
-                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats));
+                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats, SessionCtx->ConfigConstPtr()));
                 AddQueryStats(queryResult.QueryStats, std::move(result->QueryStats));
             }
         }

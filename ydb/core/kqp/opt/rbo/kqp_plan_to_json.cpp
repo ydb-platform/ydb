@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -61,6 +62,26 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
     }
 
     return result;
+}
+
+void FindPlanNodes(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
+    if (node.IsArray()) {
+        for (const auto& item: node.GetArray()) {
+            FindPlanNodes(item, key, results);
+        }
+    }
+
+    if (!node.IsMap()) {
+        return;
+    }
+
+    if (auto* valueNode = node.GetValueByPath(key)) {
+        results.push_back(*valueNode);
+    }
+
+    for (const auto& [_, value]: node.GetMap()) {
+        FindPlanNodes(value, key, results);
+    }
 }
 
 }
@@ -205,6 +226,40 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
     result["Plans"] = plans;
 
     return result;
+}
+
+
+TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
+    Y_UNUSED(optCtx);
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: AddExecStatsToNewRboPlan";
+
+    THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
+    THashMap<ui32, TString> stageIdToGuid;
+    THashSet<TString> stageGuids;
+
+    for (const auto& stage : stats.GetStages()) {
+        stages[stage.GetStageGuid()] = &stage;
+        stageIdToGuid[stage.GetStageId()] = stage.GetStageGuid();
+        stageGuids.insert(stage.GetStageGuid());
+    }
+
+    NJson::TJsonValue root;
+    NJson::ReadJsonTree(txPlan, &root, true);
+    std::vector<NJson::TJsonValue> stageNodes;
+    FindPlanNodes(root, "StageGuid", stageNodes);
+
+    for (auto& stageGuid : stageNodes) {
+        Y_ENSURE(stageGuids.contains(stageGuid.GetStringSafe()));
+    }
+
+    return txPlan;
+}
+
+TString AddExecStatsToNewRboPlans(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
+    Y_UNUSED(txPlans);
+    Y_UNUSED(queryStats);
+    Y_UNUSED(poolId);
+    return "";
 }
 
 }

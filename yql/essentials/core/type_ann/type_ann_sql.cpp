@@ -4859,6 +4859,9 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    YQL_ENSURE(input->IsCallable({"YqlGrouping", "PgGrouping"}));
+    const bool isYql = input->IsCallable("YqlGrouping");
+
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -4868,8 +4871,9 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    // TODO: check types for YQL
     bool needRetype = false;
-    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = 0; i < input->ChildrenSize() && !isYql; ++i) {
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
@@ -4893,8 +4897,14 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
-    input->SetTypeAnn(result);
+    YQL_TYPE_ANN_PTR result;
+    if (isYql) {
+        result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+    } else {
+        result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
+    }
+
+    input->SetTypeAnn(result.Get());
     return IGraphTransformer::TStatus::Ok;
 }
 

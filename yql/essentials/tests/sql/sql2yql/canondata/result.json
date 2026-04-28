@@ -9253,6 +9253,13 @@
             "uri": "https://{canondata_backend}/1880306/73c895b3f28d5d1da063a629bd93f4d2caf3ecd2/resource.tar.gz#test_sql2yql.test_select_yql-grouping_sets_rollup_ab_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-grouping_sets_rollup_grouping]": [
+        {
+            "checksum": "6d044060762c8c76208f1c20f9d33f9f",
+            "size": 1432,
+            "uri": "https://{canondata_backend}/1925842/ea26807917f51eed6d2f3cbc573dfac4b714fa33/resource.tar.gz#test_sql2yql.test_select_yql-grouping_sets_rollup_grouping_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-in_smart_parenthesis_context_3]": [
         {
             "checksum": "947e6051e84d0eb5964516bbdff09805",
@@ -16860,6 +16867,11 @@
     "test_sql_format.test[select_yql-grouping_sets_rollup_ab]": [
         {
             "uri": "file://test_sql_format.test_select_yql-grouping_sets_rollup_ab_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-grouping_sets_rollup_grouping]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-grouping_sets_rollup_grouping_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-in_smart_parenthesis_context_3]": [

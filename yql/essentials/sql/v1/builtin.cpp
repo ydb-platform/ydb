@@ -4225,6 +4225,10 @@ TNodeResult BuildBuiltinFunc(
                 return Wrap(BuildYqlWindow(pos, std::move(wargs)));
             }
 
+            if (isYqlSelect && normalizedName == "grouping") {
+                return Wrap(BuildYqlGrouping(pos, args));
+            }
+
             return WrapWithLangVerProxy(
                 pos,
                 Wrap(funcInfo.Callback(pos, args)),

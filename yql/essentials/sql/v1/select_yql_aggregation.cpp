@@ -130,4 +130,8 @@ TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) 
     return TNonNull(TNodePtr(new TYqlAggregation(std::move(position), std::move(args))));
 }
 
+TNodePtr BuildYqlGrouping(TPosition position, TVector<TNodePtr> args) {
+    return new TCallNodeImpl(position, "YqlGrouping", std::move(args));
+}
+
 } // namespace NSQLTranslationV1

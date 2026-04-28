@@ -2310,11 +2310,18 @@ TExprNode::TPtr BuildAggregationTraits(
         .Build();
 }
 
-TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
-    const TAggs& aggs, const TExprNode::TPtr& groupExprs, const TExprNode::TPtr& groupSets,
-    const TExprNode::TPtr& finalExtTypes, const TExprNode::TPtr& joinedUniqueExt,
-    TExprContext& ctx, TOptimizeContext& optCtx) {
-
+TExprNode::TPtr BuildGroup(
+    TPositionHandle pos,
+    TExprNode::TPtr list,
+    const TAggs& aggs,
+    const TExprNode::TPtr& groupExprs,
+    const TExprNode::TPtr& groupSets,
+    const TExprNode::TPtr& finalExtTypes,
+    const TExprNode::TPtr& joinedUniqueExt,
+    bool isYql,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx)
+{
     bool needRemapForDistinct = false;
     for (const auto& agg : aggs) {
         if (GetSetting(*agg.first->Child(1), "distinct")) {
@@ -2531,14 +2538,23 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
             auto joinColumns = ctx.NewList(pos, TExprNode::TListType(extKeysItems));
             auto joined = JoinColumns(pos, joinedUniqueExt, aggregate, joinColumns, {}, ctx);
 
-            auto pgZero = ctx.Builder(pos)
-                .Callable("PgConst")
-                    .Atom(0, "0")
-                    .Callable(1, "PgType")
-                        .Atom(0, "int8")
+            TExprNode::TPtr zero;
+            if (isYql) {
+                zero = ctx.Builder(pos)
+                    .Callable("Uint64")
+                        .Atom(0, "0")
                     .Seal()
-                .Seal()
-                .Build();
+                    .Build();
+            } else {
+                zero = ctx.Builder(pos)
+                    .Callable("PgConst")
+                        .Atom(0, "0")
+                        .Callable(1, "PgType")
+                            .Atom(0, "int8")
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
 
             auto arg = ctx.NewArgument(pos, "row");
             auto root = arg;
@@ -2553,7 +2569,7 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
                                 .Add(0, root)
                                 .Atom(1, column)
                             .Seal()
-                            .Add(1, pgZero)
+                            .Add(1, zero)
                         .Seal()
                     .Seal()
                     .Build();
@@ -2589,9 +2605,11 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
                                         ui32 j = 0;
                                         for (ui32 i = 0; i < groupExprs->Tail().ChildrenSize(); ++i) {
                                             if (!currentKeys.contains(i)) {
+                                                TStringBuf type = isYql ? "Uint64" : "Int32";
+
                                                 parent.List(j++)
                                                     .Atom(0, "_yql_grouping_" + ToString(i))
-                                                    .Callable(1, "Int32")
+                                                    .Callable(1, type)
                                                         .Atom(0, "1")
                                                     .Seal()
                                                     .Seal();
@@ -2636,9 +2654,9 @@ TExprNode::TPtr BuildHaving(
     const TAggregationMap& aggId,
     const TVector<TString>& inputAliases,
     const TExprNode::TListType& cleanedInputs,
+    bool isYql,
     TExprContext& ctx,
-    TOptimizeContext& optCtx,
-    bool isYql)
+    TOptimizeContext& optCtx)
 {
     auto havingLambda = having->TailPtr();
     auto havingLambdaRoot = havingLambda->TailPtr();
@@ -4074,11 +4092,11 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
 
             if (groupExprs) {
-                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, joinedUniqueExt, ctx, optCtx);
+                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, joinedUniqueExt, /*isYql=*/isYql, ctx, optCtx);
             }
 
             if (having) {
-                list = BuildHaving(node->Pos(), list, having->TailPtr(), aggId, inputAliases, cleanedInputs, ctx, optCtx, /*isYql=*/isYql);
+                list = BuildHaving(node->Pos(), list, having->TailPtr(), aggId, inputAliases, cleanedInputs, /*isYql=*/isYql, ctx, optCtx);
             }
 
             if (!winCtx.Funcs.empty()) {
@@ -4317,13 +4335,21 @@ TExprNode::TPtr ExpandSqlGroupRef(const TExprNode::TPtr& node, TExprContext& ctx
 
 TExprNode::TPtr ExpandSqlGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(optCtx);
+
+    YQL_ENSURE(node->IsCallable({"YqlGrouping", "PgGrouping"}));
+    const bool isYql = node->IsCallable("YqlGrouping");
+
+    TStringBuf type = isYql ? "Uint64" : "Int32";
+
     TExprNode::TPtr sum;
     YQL_ENSURE(node->ChildrenSize() >= 1);
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
         auto child = node->Child(i);
-        YQL_ENSURE(child->IsCallable("PgGroupRef"));
+        YQL_ENSURE(child->IsCallable(isYql ? "YqlGroupRef" : "PgGroupRef"));
+
         auto row = child->HeadPtr();
         auto index = child->Child(2)->Content();
+
         auto value = ctx.Builder(node->Pos())
             .Callable("Coalesce")
                 .Callable(0, "TryMember")
@@ -4332,7 +4358,7 @@ TExprNode::TPtr ExpandSqlGrouping(const TExprNode::TPtr& node, TExprContext& ctx
                     .Callable(2, "Null")
                     .Seal()
                 .Seal()
-                .Callable(1, "Int32")
+                .Callable(1, type)
                     .Atom(0, "0")
                 .Seal()
             .Seal()
@@ -4345,7 +4371,7 @@ TExprNode::TPtr ExpandSqlGrouping(const TExprNode::TPtr& node, TExprContext& ctx
                 .Callable("+")
                     .Callable(0, "*")
                         .Add(0, sum)
-                        .Callable(1, "Int32")
+                        .Callable(1, type)
                             .Atom(0, "2")
                         .Seal()
                     .Seal()
@@ -4355,11 +4381,15 @@ TExprNode::TPtr ExpandSqlGrouping(const TExprNode::TPtr& node, TExprContext& ctx
         }
     }
 
-    return ctx.Builder(node->Pos())
-        .Callable("ToPg")
-            .Add(0, sum)
-        .Seal()
-        .Build();
+    if (!isYql) {
+        sum = ctx.Builder(node->Pos())
+            .Callable("ToPg")
+                .Add(0, std::move(sum))
+            .Seal()
+            .Build();
+    }
+
+    return sum;
 }
 
 TExprNode::TPtr ExpandSqlIterate(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

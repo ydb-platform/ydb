@@ -222,6 +222,7 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
+        .IfNotExists = settings.IfNotExists,
         .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request)),
         .Cookie = settings.Cookie,
     });

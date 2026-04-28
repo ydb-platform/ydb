@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
@@ -16,7 +17,6 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <util/generic/overloaded.h>
 
@@ -1448,34 +1448,46 @@ public:
 
         std::pair<TString, TString> pathPair;
         TString error;
-        auto createPromise = NewPromise<TGenericResult>();
         if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
-        NKikimrSchemeOp::TModifyScheme schemeTx;
-        schemeTx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
 
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        auto pqDescr = schemeTx.MutableCreatePersQueueGroup();
-        pqDescr->SetName(pathPair.second);
-        NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(pathPair.second, request, schemeTx, AppData(ActorSystem), error, pathPair.first);
+        auto createPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            TCreateTopicSettings settings{std::move(request), pathPair.second, pathPair.first, existingOk};
+            auto getModifySchemeFuture = Gateway->CreateTopicPrepared(std::move(settings));
 
+            auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->Swap(&schemeTx);
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
-            TGenericResult result;
-            result.SetSuccess();
-            createPromise.SetValue(result);
+            getModifySchemeFuture.Subscribe([=] (const auto future) mutable {
+                TGenericResult result;
+                auto modifySchemeResult = future.GetValue();
+                if (modifySchemeResult.Status == Ydb::StatusIds::SUCCESS) {
+                    if (modifySchemeResult.ModifyScheme.HasAlterPersQueueGroup()) {
+                        auto* phyTx = phyQuery->AddTransactions();
+                        phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->Swap(&modifySchemeResult.ModifyScheme);
+                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->SetSuccessOnNotExist(existingOk);
+                    }
+                    result.SetSuccess();
+
+                } else {
+                    result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
+                    result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
+                }
+                createPromise.SetValue(result);
+            });
+
         } else {
             return Gateway->CreateTopic(cluster, std::move(request), existingOk);
         }
+
         return createPromise.GetFuture();
+    }
+
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
+        return Gateway->CreateTopicPrepared(std::move(settings));
     }
 
     TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
@@ -1491,7 +1503,6 @@ public:
         if (IsPrepare()) {
             TAlterTopicSettings settings{std::move(request), pathPair.second, pathPair.first, missingOk};
             auto getModifySchemeFuture = Gateway->AlterTopicPrepared(std::move(settings));
-
 
             auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
@@ -1517,8 +1528,8 @@ public:
         } else {
             return Gateway->AlterTopic(cluster, std::move(request), missingOk);
         }
-        return alterPromise.GetFuture();
 
+        return alterPromise.GetFuture();
     }
 
     NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {

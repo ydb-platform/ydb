@@ -17,7 +17,8 @@ const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::KqpServices = {
     NKikimrServices::KQP_COMPUTE,
     NKikimrServices::KQP_GATEWAY,
     NKikimrServices::KQP_RESOURCE_MANAGER,
-    NKikimrServices::KQP_EXECUTER
+    NKikimrServices::KQP_EXECUTER,
+    NKikimrServices::PQ_SCHEMA
 };
 
 const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::CSServices = {

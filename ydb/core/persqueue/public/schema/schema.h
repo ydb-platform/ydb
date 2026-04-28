@@ -122,10 +122,12 @@ struct TCreateTopicSettings {
     TString PeerName;
     Ydb::Topic::CreateTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IfNotExists = false;
     ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);
+NActors::IActor* CreateCreateTopicActor(NThreading::TPromise<TCreateTopicResponse>&& promise, TCreateTopicSettings&& settings);
 
 //
 // Drop Topic

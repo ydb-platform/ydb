@@ -1042,6 +1042,20 @@ public:
         Y_UNUSED(existingOk);
     }
 
+    TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TCreateTopicResponse>();
+        auto schemaTxFuture = schemaTxPromise.GetFuture();
+
+        IActor* requestHandler = NPQ::NSchema::CreateCreateTopicActor(std::move(schemaTxPromise), {
+            .Database = Database,
+            .Request = std::move(settings.Request),
+            .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
+            .IfNotExists = settings.ExistingOk
+        });
+        RegisterActor(requestHandler);
+        return schemaTxFuture;
+    }
+
     TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
         auto schemaTxPromise = NewPromise<NPQ::NSchema::TAlterTopicResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();

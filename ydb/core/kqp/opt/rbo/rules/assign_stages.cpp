@@ -24,6 +24,16 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
     }
     props.JoinAlgo = joinAlgo;
 }
+
+NYql::NDq::EHashShuffleFuncType GetAppropriateHashFunction(const TRBOContext& rboCtx, bool shuffleEliminated) {
+    if (shuffleEliminated) {
+        return rboCtx.KqpCtx.Config->ColumnShardHashShuffleFuncType.Get()
+            .GetOrElse(NYql::NDq::EHashShuffleFuncType::ColumnShardHashV1);
+    }
+
+    return rboCtx.KqpCtx.Config->HashShuffleFuncType.Get()
+        .GetOrElse(rboCtx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType());
+}
 } // namespace
 
 namespace NKikimr {
@@ -89,22 +99,22 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 rightShuffleKeys.push_back(key.second);
             }
 
-            auto seHashFunc = ctx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType();
-            if (join->Props.LeftShuffleEliminated || join->Props.RightShuffleEliminated) {
-                seHashFunc = NDq::EHashShuffleFuncType::ColumnShardHashV1;
-            }
+            bool shuffleEliminated =
+                join->Props.LeftShuffleEliminated || join->Props.RightShuffleEliminated;
+
+            auto hashFunction = GetAppropriateHashFunction(ctx, shuffleEliminated);
 
             if (join->Props.LeftShuffleEliminated) {
                 props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
             } else {
-                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftOutputIndex, seHashFunc);
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftOutputIndex, hashFunction);
                 props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
             }
 
             if (join->Props.RightShuffleEliminated) {
                 props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>(rightOutputIndex));
             } else {
-                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightOutputIndex, seHashFunc);
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightOutputIndex, hashFunction);
                 props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
             }
         }
@@ -172,7 +182,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             auto connection = MakeIntrusive<TShuffleConnection>(
                 aggregate->KeyColumns,
                 outputIndex,
-                ctx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType()
+                GetAppropriateHashFunction(ctx, /*shuffleEliminated=*/false)
             );
 
             props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));

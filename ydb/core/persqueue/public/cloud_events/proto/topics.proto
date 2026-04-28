@@ -84,7 +84,7 @@ message TopicDetails {
 message CreateTopic {
   option (event_descriptor) = {
     service: "ydb"
-    category: DATA
+    category: MANAGEMENT
     visibility: PUBLIC
   };
 
@@ -134,7 +134,7 @@ message CreateTopic {
 message AlterTopic {
   option (event_descriptor) = {
     service: "ydb"
-    category: DATA
+    category: MANAGEMENT
     visibility: PUBLIC
   };
 

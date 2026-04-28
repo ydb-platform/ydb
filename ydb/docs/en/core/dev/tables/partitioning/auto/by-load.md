@@ -11,3 +11,5 @@ Authoritative thresholds, key sampling, replica-aware CPU accounting, and merge 
 * Errors such as **`STATUS_OVERLOADED`** on writes to a hot partition.
 
 A Data shard uses **at most one CPU core** for mutation work on a partition: adding CPUs on the node does not remove a single-partition bottleneck — you need splits and/or a better key design.
+
+For additional diagnostic steps when a shard is overloaded, see [{#T}](../../../../troubleshooting/performance/schemas/overloaded-shards.md).

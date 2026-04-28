@@ -10,4 +10,14 @@ Recommendations from the {{ ydb-short-name }} data model:
 
 * With load-based autopartitioning, avoid leaving the minimum partition count at **1** if load is bursty: after a lull, merges can collapse the table to one partition and force expensive splits again. See [{#T}](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count).
 
+To apply the recommendations:
+
+```yql
+ALTER TABLE `my_table` SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 50
+);
+```
+
 Optional initial spreading across keys uses [`UNIFORM_PARTITIONS`](../../../concepts/datamodel/table.md#uniform_partitions) or [`PARTITION_AT_KEYS`](../../../concepts/datamodel/table.md#partition_at_keys) — see [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).

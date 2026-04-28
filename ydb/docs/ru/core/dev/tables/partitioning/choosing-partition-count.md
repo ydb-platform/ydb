@@ -10,4 +10,14 @@
 
 * При включённом автопартицировании по нагрузке **не оставляйте** минимальное число партиций равным **1**, если нагрузка «плавающая»: после спада нагрузки merge может свести таблицу к одной партиции и потребоваться заново делить при новом всплеске. Подробнее — [{#T}](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count).
 
+Применить рекомендации на практике можно инструкцией YQL:
+
+```yql
+ALTER TABLE `my_table` SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 50
+);
+```
+
 Начальное равномерное распределение по ключу задаётся опционально через [`UNIFORM_PARTITIONS`](../../../concepts/datamodel/table.md#uniform_partitions) или [`PARTITION_AT_KEYS`](../../../concepts/datamodel/table.md#partition_at_keys) — см. [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).

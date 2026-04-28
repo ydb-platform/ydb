@@ -598,8 +598,7 @@ TCollectResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) 
     TString name(item.GetString());
     auto it = Variables.find(name);
     if (it == Variables.end()) {
-        return TCollectResult(TIssue(TStringBuilder() << "Variable '$" << name
-            << "' is referenced in jsonpath but not provided in PASSING clause"));
+        return TCollectResult(TCollectResult::TTokens{});
     }
     return TCollectResult(TString(it->second));
 }

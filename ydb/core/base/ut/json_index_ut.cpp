@@ -1630,7 +1630,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
     Y_UNIT_TEST(CollectPath_Variables) {
         const TVarMap empty;
-        const TString notFoundError = "not provided in PASSING clause";
 
         // Equality: variable on the right side, all scalar types
         ValidateQueriesWithVars("$.key == $var", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
@@ -1724,16 +1723,16 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             ECallableType::JsonValue, EMode::Or);
 
         // Variable not in map
-        ValidateErrorWithVars("$.key == $var", notFoundError, empty, ECallableType::JsonValue);
-        ValidateErrorWithVars("$var == $.key", notFoundError, empty, ECallableType::JsonValue);
+        ValidateQueriesWithVars("$.key == $var", {"\4key"}, empty, ECallableType::JsonValue);
+        ValidateQueriesWithVars("$var == $.key", {"\4key"}, empty, ECallableType::JsonValue);
 
         // Variable exists but queried variable is missing
-        ValidateErrorWithVars("$.key == $missing", notFoundError,
+        ValidateQueriesWithVars("$.key == $missing", {"\4key"},
             {{"other", strSuffix("x")}}, ECallableType::JsonValue);
 
         // One variable present, other missing in AND
-        ValidateErrorWithVars("($.a == $v1) && ($.b == $v2)", notFoundError,
-            {{"v1", strSuffix("x")}}, ECallableType::JsonValue);
+        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2)", {"\2a" + strSuffix("x"), "\2b"},
+            {{"v1", strSuffix("x")}}, ECallableType::JsonValue, EMode::And);
 
         // Variable in non-literal context: standalone path
         ValidateErrorWithVars("$var", varContextError, {{"var", strSuffix("x")}});
@@ -1809,8 +1808,8 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {"\2a\2b" + strSuffix("a"), "\2a\2b" + strSuffix("b")},
             {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, ECallableType::JsonExists);
 
-        // Missing variable in filter -> error
-        ValidateErrorWithVars("$.a ? (@.b == $var)", notFoundError, empty, ECallableType::JsonExists);
+        // Missing variable in filter -> skipped
+        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b"}, empty, ECallableType::JsonExists);
     }
 
     // Tokens with no ancestor–descendant relation survive both AND and OR merge intact.

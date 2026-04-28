@@ -3875,14 +3875,8 @@ Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
 }
 
-Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
-#if ANTLR_VER == 3
-    ExpectFailWithFuzzyError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-                             "<main>:1:40: Error: with: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
-#else
-    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-                        "<main>:1:40: Error: with: alternative is not implemented yet: \n");
-#endif
+Y_UNIT_TEST(AlterTableAddIndexWithIsSupported) {
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {

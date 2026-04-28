@@ -27,8 +27,8 @@
 
     * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
-* `USER_SIDS` - включение-выключение добавления SID пользователя в записи changefeed. По умолчанию выключено.
-* `TRACE_IDS` - включение-выключение идентификатора трассировки OpenTelemetry. По умолчанию выключено.
+* `USER_SIDS` — включение-выключение трассировки информации о пользователе. По умолчанию выключено.
+* `TRACE_IDS` — включение-выключение идентификатора трассировки OpenTelemetry. По умолчанию выключено.
 * `BARRIERS_INTERVAL` — периодичность выгрузки [барьеров](../../../../concepts/cdc.md#barriers). Тип значения — `Interval`. По умолчанию выключено.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_AUTO_PARTITIONING` — {% if oss == true and backend_name == "YDB" %}[режим автопартиционирования топика](../../../../concepts/cdc.md#topic-partitions){% else %}режим автопартиционирования топика{% endif %}:

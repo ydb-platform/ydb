@@ -786,5 +786,41 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(activeSessions, 0, "All sessions should be closed after stress test");
     }
 
+    Y_UNIT_TEST(SessionInfoProtoUnknownFieldsCompatibility) {
+        std::list<TKqpSessionInfo*> idleList;
+        TKqpSessionInfo info(
+            "session-123", TActorId(1, 1, 1, 1), "my_db",
+            nullptr, {1, 2}, TMonotonic::Now(), idleList.end(),
+            false, TInstant::Now()
+        );
+        info.QueryText = "SELECT 1";
+        info.State = TKqpSessionInfo::EXECUTING;
+
+        google::protobuf::RepeatedField<ui32> columns;
+        // SessionId
+        columns.Add(1);
+        // State
+        columns.Add(3);
+        // Some future field that is missing
+        columns.Add(60);
+
+        TKqpSessionInfo::TFieldsMap fieldsMap(columns);
+        NKikimrKqp::TSessionInfo proto;
+        info.SerializeTo(&proto, fieldsMap);
+
+        auto* reflection = proto.GetReflection();
+        std::vector<const google::protobuf::FieldDescriptor*> fields;
+        reflection->ListFields(proto, &fields);
+
+        UNIT_ASSERT_C(fields.size() == 2,
+            "Expected exactly 2 field to be set, but found " << fields.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetSessionId(), "session-123");
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetState(), "EXECUTING");
+
+        UNIT_ASSERT_VALUES_EQUAL(reflection->GetUnknownFields(proto).field_count(), 0);
+    }
+
+
 } // namespace NKqp
 } // namespace NKikimr

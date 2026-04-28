@@ -63,3 +63,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    schema
+)

@@ -201,7 +201,7 @@
 
 #### Локальный Bloom skip индекс {#local-bloom-skip-index}
 
-**Локальный Bloom skip индекс** - это компактный фильтр по значениям, ускоряющий селективные запросы за счёт пропуска частей данных, не содержащих искомых значений. В отличие от глобальных [вторичных индексов](#secondary-index), он хранится локально в каждом шарде таблицы и не поддерживает составные ключи или покрывающие колонки. В {{ ydb-short-name }} поддерживаются типы `bloom_filter` и `bloom_ngram_filter`; создание и параметры описаны в [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
+Локальный Bloom skip индекс - это компактный фильтр по значениям, ускоряющий селективные запросы за счёт пропуска фрагментов данных, не содержащих искомых значений. В отличие от глобальных [вторичных индексов](#secondary-index), он хранится локально в каждом шарде таблицы и имеет собственные ограничения (например, секции `COVER (...)` и data columns не поддерживаются). В {{ ydb-short-name }} поддерживаются типы `bloom_filter` и `bloom_ngram_filter`. Подробнее: [Bloom skip индексы](../dev/bloom-skip-indexes.md); синтаксис DDL — [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 #### Семейство колонок {#column-family}
 

@@ -32,7 +32,9 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% endif %}
 
-**Limitations.** The `ADD INDEX` operation for creating regular secondary indexes (`GLOBAL`/`LOCAL`, `UNIQUE`, and so on) is supported only for row-oriented tables. For column-oriented tables, `ADD INDEX` supports only the special local Bloom skip indexes described below.
+### Limitations
+
+The `ADD INDEX` operation for creating global secondary indexes (`GLOBAL`, `UNIQUE`, and so on) is supported only for row-oriented tables. For column-oriented tables, `ADD INDEX` supports only the special local Bloom skip indexes described below.
 
 For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **global secondary** and **vector** indexes is not yet supported (see the note above). At the same time, adding **local Bloom skip indexes** is supported; see [Bloom skip indexes](#local-bloom).
 
@@ -73,7 +75,7 @@ ALTER TABLE `series`
 
 ### Bloom skip indexes {#local-bloom}
 
-Bloom skip indexes allow the engine to skip data fragments that do not contain the requested values and speed up selective queries.
+Bloom skip indexes allow the engine to skip data fragments that do not contain the requested values and speed up selective queries. For an overview and usage patterns, see [Bloom skip indexes](../../../../dev/bloom-skip-indexes.md).
 
 Local Bloom skip indexes have additional limitations:
 
@@ -113,7 +115,7 @@ ALTER TABLE `/Root/Table`
 
 ## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. `ALTER INDEX` is supported for both global secondary indexes and Bloom skip indexes. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
+Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
 
 {% note info %}
 
@@ -143,7 +145,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 {% note info %}
 
-These settings cannot be reset.
+For global secondary index settings, `RESET` is not supported.
 
 {% endnote %}
 
@@ -151,8 +153,8 @@ These settings cannot be reset.
     * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
     * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
     * An integer of `Uint64` type for the other settings
-    * A floating-point value in `(0, 1)` for `false_positive_probability`
-    * An integer value from `3` to `8` for `ngram_size`
+    * A floating-point value in `(0, 1)` for `false_positive_probability`; smaller values usually reduce false positives but increase index size
+    * An integer value from `3` to `8` for `ngram_size` (a typical starting point is `3`)
     * `true` or `false` for `case_sensitive`
 
 ### Example

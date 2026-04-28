@@ -29,3 +29,4 @@
 * [Полнотекстовые индексы](../../dev/fulltext-indexes.md)
 * [Базовые функции полнотекстового поиска](../../yql/reference/builtins/fulltext.md)
 * [VIEW (Полнотекстовый индекс)](../../yql/reference/syntax/select/fulltext_index.md)
+* [Bloom skip индексы и фильтрация](bloom_skip_indexes.md) — для ускорения селективных запросов по значениям и подстрокам без инвертированного полнотекстового индекса

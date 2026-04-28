@@ -62,7 +62,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md) и [полнотекстовые индексы](fulltext_index.md).
+Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md), [полнотекстовые индексы](fulltext_index.md) и [Bloom skip индексы](bloom_skip_index.md).
 
 ### PRIMARY KEY
 
@@ -313,12 +313,14 @@ CREATE TABLE <table_name> (
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
 * [Полнотекстовый индекс](fulltext_index.md).
+* [Bloom skip индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
+* [Bloom skip индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).

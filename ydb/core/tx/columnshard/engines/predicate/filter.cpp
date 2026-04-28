@@ -5,25 +5,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <type_traits>
 
 namespace NKikimr::NOlap {
-
-std::vector<std::string> TPKRangesFilter::GetSortingColumnNames() const {
-    for (auto&& range : SortedRanges) {
-        auto fromCols = range.GetPredicateFrom().GetColumnNames();
-        if (!fromCols.empty()) {
-            return fromCols;
-        }
-
-        auto toCols = range.GetPredicateTo().GetColumnNames();
-        if (!toCols.empty()) {
-            return toCols;
-        }
-    }
-
-    return {};
-}
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (IsEmpty()) {
@@ -31,35 +14,55 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    const auto sortingColumns = GetSortingColumnNames();
-    NArrow::NMerger::TRWSortableBatchPosition iterator = sortingColumns.empty()
-        ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
-        : NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingColumns, {}, false);
-    bool reachedEnd = false;
-    for (const auto& range : SortedRanges) {
-        const ui64 initialIdx = iterator.GetPosition();
-        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(iterator);
-        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : iterator.GetRecordsCount();
+    ui64 pos = 0;
+    const ui64 recordsCount = data->num_rows();
 
+    auto iteratorAt = [&](const TPredicateContainer& pred, const ui64 atPos) {
+        std::vector<std::string> cols = pred.GetColumnNames();
+        auto it = cols.empty()
+            ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+            : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
+        AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
+        return it;
+    };
+
+    for (const auto& range : SortedRanges) {
+        const ui64 initialIdx = pos;
+
+        const ui64 beginIdx = [&]() -> ui64 {
+            const auto& predFrom = range.GetPredicateFrom();
+            if (predFrom.IsAll()) {
+                return pos;
+            }
+            auto itFrom = iteratorAt(predFrom, pos);
+            const auto findBegin = predFrom.FindFirstIncluded(itFrom);
+            return findBegin ? findBegin->GetPosition() : recordsCount;
+        }();
+        AFL_VERIFY(beginIdx >= initialIdx);
         result.Add(false, beginIdx - initialIdx);
-        reachedEnd = !iterator.InitPosition(beginIdx);
-        if (reachedEnd) {
-            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+        pos = beginIdx;
+        if (pos >= recordsCount) {
             break;
         }
 
-        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
-        const ui64 endIdx = findEnd ? findEnd->GetPosition() : iterator.GetRecordsCount();
-
-        result.Add(true, endIdx - beginIdx);
-        reachedEnd = !iterator.InitPosition(endIdx);
-        if (reachedEnd) {
-            AFL_VERIFY((i64)endIdx == iterator.GetRecordsCount());
+        const ui64 endIdx = [&]() -> ui64 {
+            const auto& predTo = range.GetPredicateTo();
+            if (predTo.IsAll()) {
+                return recordsCount;
+            }
+            auto itTo = iteratorAt(predTo, pos);
+            const auto findEnd = predTo.FindFirstExcluded(itTo);
+            return findEnd ? findEnd->GetPosition() : recordsCount;
+        }();
+        AFL_VERIFY(endIdx >= pos);
+        result.Add(true, endIdx - pos);
+        pos = endIdx;
+        if (pos >= recordsCount) {
             break;
         }
     }
-    if (!reachedEnd) {
-        result.Add(false, iterator.GetRecordsCount() - iterator.GetPosition());
+    if (pos < recordsCount) {
+        result.Add(false, recordsCount - pos);
     }
     return result;
 }
@@ -249,15 +252,19 @@ TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
 void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
     auto addRow = [this](TConstArrayRef<TCell> cells) -> ui32 {
         std::vector<TCell> cellsWithDefaults;
-        ui32 nonNullCount = 0;
+        ui32 explicitPrefixLen = 0;
         const size_t size = YdbPK.size();
         Y_ASSERT(size <= (size_t)ArrPK->num_fields());
         cellsWithDefaults.reserve(size);
         for (size_t i = 0; i < size; ++i) {
             if (i < cells.size() && !cells[i].IsNull()) {
                 cellsWithDefaults.push_back(cells[i]);
-                AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
-                ++nonNullCount;
+                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                ++explicitPrefixLen;
+            } else if (i < cells.size() && cells[i].IsNull()) {
+                cellsWithDefaults.emplace_back();
+                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                ++explicitPrefixLen;
             } else {
                 TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);
                 AFL_VERIFY(!!defaultCell);
@@ -267,7 +274,7 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
         AFL_VERIFY(cellsWithDefaults.size() == YdbPK.size());
         BatchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(YdbPK.data(), cellsWithDefaults.data(), cellsWithDefaults.size()));
 
-        return nonNullCount;
+        return explicitPrefixLen;
     };
 
     const ui32 leftPrefix = addRow(range.From.GetCells());

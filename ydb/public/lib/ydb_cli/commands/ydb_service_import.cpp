@@ -78,11 +78,11 @@ void TCommandImportBase::Config(TConfig& config) {
                 continue;
             }
 
-            if (!first && config.HelpCommandVerbosiltyLevel < 2) {
+            if (!first && config.HelpCommandVerbosityLevel < 2) {
                 help << ", ";
             }
 
-            if (config.HelpCommandVerbosiltyLevel >= 2) {
+            if (config.HelpCommandVerbosityLevel >= 2) {
                 help << Endl;
                 switch (mode) {
                 case NImport::EIndexPopulationMode::Build:
@@ -337,7 +337,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemS3::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
@@ -498,7 +498,7 @@ void TCommandImportFromNfs::Config(TConfig& config) {
             "object data files are specified. Use the full path to the mounted directory. Example: /mnt/import/path.")
         .Required().RequiredArgument("PATH").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
+    config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Item specification", config.HelpCommandVerbosityLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 

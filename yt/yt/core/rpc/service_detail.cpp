@@ -891,11 +891,11 @@ private:
         guard.Release();
 
         if (requestAttachmentsStream) {
-            requestAttachmentsStream->AbortUnlessClosed(Error_);
+            requestAttachmentsStream->AbortUnlessClosed(error);
         }
 
         if (responseAttachmentsStream) {
-            responseAttachmentsStream->AbortUnlessClosed(Error_);
+            responseAttachmentsStream->AbortUnlessClosed(error);
         }
     }
 

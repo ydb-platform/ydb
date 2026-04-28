@@ -9,7 +9,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/string.h>
-#include <ydb/core/persqueue/pqtablet/partition/partitioning_keys_manager.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 
@@ -144,6 +144,27 @@ Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest) {
         UNIT_ASSERT_C(keys[loIdx] <= med && med <= keys[hiIdx],
             TStringBuilder() << "median " << Uint128ToDiagString(med) << " outside ["
                              << Uint128ToDiagString(keys[loIdx]) << ", " << Uint128ToDiagString(keys[hiIdx]) << "]");
+    }
+
+
+    Y_UNIT_TEST(MergeKeepsNeighborBucketsSeparated) {
+        // Add() uses explicit instants, but GetMedianKey() evicts via Now(); base must be near Now()
+        // or sketches are removed as expired and the median becomes zero.
+        const TInstant base = Now();
+        const TDuration window = TDuration::Seconds(4);
+
+        TPartitioningKeysManager lhs(2, window);
+        TPartitioningKeysManager rhs(2, window);
+
+        lhs.Add(10, kMsgSize, base);
+        rhs.Add(20, kMsgSize, base);
+        rhs.Add(100, kMsgSize, base + TDuration::Seconds(2));
+
+        lhs.Merge(rhs);
+
+        const TUint128 median = lhs.GetMedianKey();
+        UNIT_ASSERT_C(median == 20,
+            TStringBuilder() << "median " << Uint128ToDiagString(median) << " expected 0:20");
     }
 
 } // Y_UNIT_TEST_SUITE(TPartitioningKeysManagerTest)

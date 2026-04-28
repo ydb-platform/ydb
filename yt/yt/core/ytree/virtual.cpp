@@ -663,7 +663,6 @@ void TVirtualListBase::GetSelf(
                         writer->OnEntity();
                     } else {
                         if (auto service = FindItemService(index)) {
-                            writer->OnListItem();
                             auto asyncResult = AsyncYPathGet(service, TYPath());
                             writer->OnRaw(asyncResult);
                         } else {

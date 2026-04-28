@@ -16,10 +16,10 @@
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
   [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
-      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )
@@ -85,7 +85,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
-{ % note info % }
+{% note info %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 

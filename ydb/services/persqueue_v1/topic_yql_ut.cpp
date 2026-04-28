@@ -75,7 +75,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                     auto_partitioning_up_utilization_percent = 50,
                     auto_partitioning_down_utilization_percent = 40,
                     retention_period = Interval('PT1H'),
-                    retention_storage_mb = 15,
                     supported_codecs = 'RAW, GZIP',
                     partition_write_speed_bytes_per_second = 9000,
                     partition_write_burst_bytes = 100500,
@@ -138,7 +137,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             ALTER CONSUMER c4 SET (availability_period = Interval('PT48H')),
             SET (min_active_partitions = 3,
                  retention_period = Interval('PT2H'),
-                 retention_storage_mb = 10,
                  partition_count_limit = 5,
                  partition_write_burst_bytes = 100501,
                  partition_write_speed_bytes_per_second = 9001

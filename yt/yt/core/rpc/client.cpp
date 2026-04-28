@@ -425,7 +425,7 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 
     auto control = RequestControl_.Lock();
     if (!control) {
-        RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
+        ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
             << TErrorAttribute("request_id", GetRequestId()));
         return;
     }
@@ -530,6 +530,11 @@ TClientResponse::TClientResponse(TClientContextPtr clientContext)
 const std::string& TClientResponse::GetAddress() const
 {
     return Address_;
+}
+
+NProto::TResponseHeader& TClientResponse::Header()
+{
+    return Header_;
 }
 
 const NProto::TResponseHeader& TClientResponse::Header() const

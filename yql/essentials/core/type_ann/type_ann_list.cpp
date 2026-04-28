@@ -566,7 +566,7 @@ namespace {
         }
         for (auto winOn: winList.Children()) {
             if (!TCoWinOnBase::Match(winOn.Get())) {
-                ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), "Expected WinOnRows/WinOnGroups/WinOnRange"));
+                ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), "Expected WinOnRows/WinOnGroups/WinOnRange/WinFilter"));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -581,6 +581,20 @@ namespace {
                 return IGraphTransformer::TStatus::Ok;
             }
             YQL_ENSURE(frame, "Frame expected to be non-empty.");
+            if (winOn->IsCallable("WinFilter")) {
+                auto currentOutputType = ctx.MakeType<TStructExprType>(outputStructType);
+                if (!currentOutputType->Validate(winOn->Pos(), ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                auto filterInputType = winOn->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (!IsFieldSubset(*filterInputType, *currentOutputType)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()),
+                        TStringBuilder() << "Expected window filter input type " << static_cast<const TTypeAnnotationNode&>(*filterInputType) <<
+                        " to be subset of current result type" << static_cast<const TTypeAnnotationNode&>(*currentOutputType)));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                continue;
+            }
             for (auto iterFunc = winOn->Children().begin() + 1; iterFunc != winOn->Children().end(); ++iterFunc) {
                 auto func = *iterFunc;
                 YQL_ENSURE(func->IsList());
@@ -1735,7 +1749,7 @@ namespace {
         return OptListWrapperImpl<1U>(input, output, ctx, "Collect");
     }
 
-    IGraphTransformer::TStatus ListSampleWrapperCommon(const TExprNode::TPtr& input, TExprNode::TPtr& output, NUdf::EDataSlot probArgDataType, TContext& ctx) {
+    IGraphTransformer::TStatus ListSampleWrapperCommon(const TExprNode::TPtr& input, TExprNode::TPtr& output, NUdf::EDataSlot probArgDataType, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1780,8 +1794,13 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (!EnsureSpecificDataType(*input->Child(1), probArgDataType, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
+        const TDataExprType* dataType = ctx.Expr.MakeType<TDataExprType>(probArgDataType);
+        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(dataType);
+
+        if (auto status = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok)
+        {
+            return status;
         }
 
         if (input->ChildrenSize() == 2) {
@@ -1800,11 +1819,11 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ListSampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ListSampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         return ListSampleWrapperCommon(input, output, NUdf::EDataSlot::Double, ctx);
     }
 
-    IGraphTransformer::TStatus ListSampleNWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ListSampleNWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         return ListSampleWrapperCommon(input, output, NUdf::EDataSlot::Uint64, ctx);
     }
 
@@ -7340,6 +7359,11 @@ namespace {
     }
 
     IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (input->IsCallable("WinFilter") && !CanPushdownFiltersOverWindow(&ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "WinFilter is unsupported"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -7364,7 +7388,7 @@ namespace {
         }
 
         auto ensureSortSpecValid = [&]() -> IGraphTransformer::TStatus {
-            if (!IsWindowNewPipelineEnabled(ctx.Types)) {
+            if (!IsWindowNewPipelineEnabled(ctx.Types) || ctx.Types.DeprecatedSQL) {
                 return IGraphTransformer::TStatus::Ok;
             }
             auto sortSpec = TWindowFrameSettings::GetSortSpec(*input, ctx.Expr);
@@ -7407,6 +7431,42 @@ namespace {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "RANGE in frame specification is not supported yet"));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        if (input->IsCallable("WinFilter")) {
+            if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!EnsureStructType(input->Child(1)->Pos(), *itemType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto& lambda = input->ChildRef(2);
+            bool isUniversal;
+            const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+
+            YQL_ENSURE(!isUniversal);
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambda->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         auto status = NormalizeKeyValueTuples(input, 1, output, ctx.Expr);

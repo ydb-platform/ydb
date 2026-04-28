@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         NKikimrBlobStorage::NDDisk::TDDiskId PersId;
 
         NDDisk::TQueryCredentials Creds;
-        NDDisk::TQueryCredentials PBCreds;
+        std::vector<NDDisk::TQueryCredentials> PBCreds;
         TActorId Edge;
 
         ui64 VChunkIndex = 0;
@@ -33,6 +33,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
                 .ConfigPreprocessor = [inMemCache](ui32, TNodeWardenConfig& cfg){
                     NYdb::NBS::NProto::TPBufferConfig pbCfg;
+                    pbCfg.SetMaxChunks(10);
                     pbCfg.SetMaxInMemoryCache(inMemCache);
                     cfg.PBufferConfig = pbCfg;
                 }
@@ -63,13 +64,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
         }
 
-        auto AllocateDDiskBlockGroup() {
+        auto AllocateDDiskBlockGroup(ui32 count = 8) {
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
             auto& r = ev->Record;
             r.SetDDiskPoolName("ddisk_pool");
             r.SetPersistentBufferDDiskPoolName("ddisk_pool");
             r.SetTabletId(1);
-            for (ui32 i = 0; i < 8; ++i) {
+            for (ui32 i = 0; i < count; ++i) {
                 auto *q = r.AddQueries();
                 q->SetDirectBlockGroupId(i + 1);
                 q->SetTargetNumVChunks(1);
@@ -77,7 +78,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             Env.Runtime->SendToPipe(MakeBSControllerID(), Edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(Edge);
             auto& rr = response->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(rr.ResponsesSize(), count);
             auto responses = rr.GetResponses();
             return responses;
         }
@@ -91,12 +92,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
-            PBCreds = Creds;
-            {
-                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
+
+            PBCreds.clear();
+            PBCreds.resize(10);
+            for (ui32 i : xrange(10)) {
+                PBCreds[i].TabletId = i + 1;
+                PBCreds[i].Generation = 1;
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds[i])), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                PBCreds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+                PBCreds[i].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
         }
 
@@ -165,7 +170,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         void ListPB() {
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvListPersistentBuffer(
-                PBCreds)), Edge.NodeId());
+                PBCreds[0])), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvListPersistentBufferResult>(Edge, false);
             const auto& rr = res->Get()->Record;
             UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -189,7 +194,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 
-        double WritePB(ui32 offset = 0, ui32 numBlocks = 0) {
+        double WritePB(ui32 offset = 0, ui32 numBlocks = 0, ui32 tabletIdx = 0) {
             if (numBlocks == 0) {
                 offset = RandomNumber(SurfaceBlocks) * BlockSize;
                 numBlocks = 1 + RandomNumber(Min<ui32>(3, SurfaceBlocks - offset / BlockSize));
@@ -207,7 +212,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 << " letter# " << letter << "\n";
 
             std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
-                PBCreds, {VChunkIndex, offset, size}, lsn, {0}));
+                PBCreds[tabletIdx], {VChunkIndex, offset, size}, lsn, {0}));
             ev->AddPayload(TRope(std::move(update)));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(Edge, false);
@@ -217,11 +222,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         ui32 GetPBInMemoryCacheSize() {
             Cerr << "get persistent buffer info \n";
+            return GetPBInfo()->Get()->InMemoryCacheSize;
+        }
 
-            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo());
+        TAutoPtr<TEventHandle<NDDisk::TEvPersistentBufferInfo>> GetPBInfo(bool describeFreeSpace = false, bool describeTablets = false) {
+            Cerr << "get persistent buffer info \n";
+
+            std::unique_ptr<NDDisk::TEvGetPersistentBufferInfo> ev(new NDDisk::TEvGetPersistentBufferInfo(describeFreeSpace, describeTablets));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvPersistentBufferInfo>(Edge, false);
-            return res->Get()->InMemoryCacheSize;
+            return res;
         }
 
         void ReadPB(ui32 repeat = 1) {
@@ -241,7 +251,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 << " lsn# " << lsn << "\n";
             for (ui32 _ : xrange(repeat)) {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvReadPersistentBuffer(
-                    PBCreds, {VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation, {true})), Edge.NodeId());
+                    PBCreds[0], {VChunkIndex, offsetInBytes, size}, lsn, PBCreds[0].Generation, {true})), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(Edge, false);
                 const auto& rr = res->Get()->Record;
                 UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -254,7 +264,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
         }
 
-        double ErasePB(ui64 lsn = 0) {
+        double ErasePB(ui64 lsn = 0, ui32 tabletIdx = 0) {
             if (lsn == 0) {
                 std::vector<ui64> lsns;
                 lsns.reserve(PersistentBuffers.size());
@@ -272,7 +282,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 Cerr << "erase persistent buffer lsn# " << lsn << "\n";
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvErasePersistentBuffer(
-                    PBCreds, lsn, PBCreds.Generation)),
+                    PBCreds[tabletIdx], lsn, PBCreds[tabletIdx].Generation)),
                     Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
@@ -303,7 +313,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 }
                 auto lsn = lsns.begin();
                 std::advance(lsn, RandomNumber(lsns.size()));
-                erases.push_back({*lsn, PBCreds.Generation});
+                erases.push_back({*lsn, PBCreds[0].Generation});
                 lsns.erase(lsn);
             }
 
@@ -311,7 +321,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 Cerr << "batch erase persistent buffer count# " << erases.size() << Endl;
 
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
-                    PBCreds, erases)), Edge.NodeId());
+                    PBCreds[0], erases)), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
                 return res->Get()->Record.GetFreeSpace();
@@ -370,7 +380,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
 
             std::tuple<ui32, ui32, ui32> sourceDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
-            ui64 sourceDDiskInstanceGuid = *PBCreds.DDiskInstanceGuid;
+            ui64 sourceDDiskInstanceGuid = *PBCreds[0].DDiskInstanceGuid;
             auto sync = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(Creds, sourceDDiskId, sourceDDiskInstanceGuid);
 
             for (ui64 lsn : selectedLsns) {
@@ -379,7 +389,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const ui32 size = std::get<1>(record);
                 Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
                     << " lsn# " << lsn << "\n";
-                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn, PBCreds.Generation);
+                sync->AddSegment({VChunkIndex, offsetInBytes, size}, lsn, PBCreds[0].Generation);
             }
 
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, sync.release()), Edge.NodeId());
@@ -414,7 +424,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             for (ui64 lsn : selectedLsns) {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
-                    PBCreds, {{lsn, PBCreds.Generation}})),
+                    PBCreds[0], {{lsn, PBCreds[0].Generation}})),
                     Edge.NodeId());
                 auto eraseRes = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
                 UNIT_ASSERT(eraseRes->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -434,10 +444,12 @@ Y_UNIT_TEST_SUITE(DDisk) {
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
 
-            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
-            res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
-            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            PBCreds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+            for (auto& cred : PBCreds) {
+                Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(cred)), Edge.NodeId());
+                res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
+                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                cred.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+            }
         }
     };
 
@@ -524,7 +536,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
     }
 
     Y_UNIT_TEST(PersistentBufferFreeSpace) {
-        const ui32 maxChunks = 256;
+        const ui32 maxChunks = 10;
         const ui32 sectorInChunk = 32768;
         TDDiskTestContext f(1_MB);
         auto groups = f.AllocateDDiskBlockGroup();
@@ -556,7 +568,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             if (i % 200 == 99) {
                 f.RestartNode();
             }
-            auto fs = i % 2 ? f.ErasePB() : f.BatchErasePB();
+            auto fs = f.BatchErasePB();
             freeSpace = fs >= 0 ? fs : freeSpace;
             Cerr << "freeSpace: " << freeSpace << Endl;
         }
@@ -597,5 +609,193 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         ui32 cacheSize = f.GetPBInMemoryCacheSize();
         UNIT_ASSERT(cacheSize == 1_MB);
+    }
+
+    Y_UNIT_TEST(PBAllocatedOnSameNodeButDifferentPDisk) {
+        TDDiskTestContext f;
+        auto r = f.AllocateDDiskBlockGroup(32);
+        std::unordered_map<TNodeId, ui32> ddisksCnt;
+        std::unordered_map<TNodeId, ui32> pbuffsCnt;
+        for (auto& item : r) {
+            Cerr << "DBG: " << item.GetDirectBlockGroupId() << Endl;
+            std::unordered_map<TNodeId, TPDiskId> ddisks;
+            std::unordered_map<TNodeId, TPDiskId> pbuffs;
+            UNIT_ASSERT(item.NodesSize() == 5);
+            for (auto& node : item.GetNodes()) {
+                TDDiskId ddid = node.GetDDiskId();
+                auto [_, inserted1] = ddisks.emplace(ddid.NodeId, ddid.ComprisingPDiskId());
+                UNIT_ASSERT(inserted1);
+                ddisksCnt[ddid.NodeId]++;
+                TDDiskId pbid = node.GetPersistentBufferDDiskId();
+                auto [__, inserted2] = pbuffs.emplace(pbid.NodeId, pbid.ComprisingPDiskId());
+                UNIT_ASSERT(inserted2);
+                pbuffsCnt[pbid.NodeId]++;
+                UNIT_ASSERT(ddid.NodeId == pbid.NodeId);
+                Cerr << "   DDisk: " << node.GetDDiskId() << Endl;
+                Cerr << "   PBuff: " << node.GetPersistentBufferDDiskId() << Endl;
+            }
+            for (auto& [nId, dd] : ddisks) {
+                auto& pb = pbuffs[nId];
+                UNIT_ASSERT(nId == 8 ? pb == dd : pb != dd);
+            }
+        }
+        UNIT_ASSERT(pbuffsCnt.size() == 8);
+        UNIT_ASSERT(ddisksCnt.size() == 8);
+        ui32 cnt = ddisksCnt.begin()->second;
+        for (auto [k, v] : ddisksCnt) {
+            UNIT_ASSERT(cnt == v);
+        }
+        for (auto [kd, v] : pbuffsCnt) {
+            UNIT_ASSERT(cnt == v);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferEraseBarrier) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i = 1; i < 20; ++i) {
+            f.WritePB();
+        }
+        f.ErasePB();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds[0].TabletId);
+        }
+        f.ListPB();
+        f.RestartNode();
+        f.ListPB();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b.begin()->first == f.PBCreds[0].TabletId);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferEraseSingleLsnNoBarrier) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        f.WritePB();
+        f.ErasePB();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 0);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferEraseBarrierManyTablets) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+        for (ui32 i : xrange(5)) {
+            f.WritePB(0, 128, i);
+            f.WritePB(0, 128, i);
+            f.WritePB(0, 128, i);
+        }
+        f.ErasePB(5, 1); // one record left
+        f.ErasePB(100, 4); // all records deleted
+        f.ErasePB(1, 0); // 1 record deleted, no barrier
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 2);
+            UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100);
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.RestartNode();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 2);
+            UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100); // Barrier was not deleted, because record was not overwritten
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+
+        f.WritePB(0, 128, 6);
+        f.WritePB(0, 128, 6);
+        f.WritePB(0, 128, 6);
+        f.ErasePB(300, 6); // all records deleted
+        for (ui32 _ : xrange(2530)) {
+            f.WritePB(0, 128, 7); // write full PB to overwrite deleted records space
+        }
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b[f.PBCreds[6].TabletId] == 300);
+            UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100);
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.RestartNode();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b[f.PBCreds[6].TabletId] == 300); // Hole
+            UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100); // Hole
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.ErasePB(2000, 7); // clear PB space to write more
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000); // Hole replaced
+            UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100); // Hole
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.WritePB(0, 128, 8);
+        f.WritePB(0, 128, 8);
+        f.WritePB(0, 128, 8);
+        f.ErasePB(3000, 8); // all records deleted
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000);
+            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3000); // Hole replaced
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.WritePB(0, 128, 8);
+        f.WritePB(0, 128, 8);
+        f.ErasePB(3500, 8); // all records deleted
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000);
+            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3500); // Same place used
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.WritePB(0, 128, 9);
+        f.WritePB(0, 128, 9);
+        f.ErasePB(6000, 9); // all records deleted
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b[f.PBCreds[9].TabletId] == 6000); // One new
+            UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000);
+            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3500);
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
+        f.RestartNode();
+        {
+            auto info = f.GetPBInfo(false, true);
+            auto& b = info->Get()->EraseBarriers;
+            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b[f.PBCreds[9].TabletId] == 6000);
+            UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000);
+            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3500);
+            UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
+        }
     }
 }

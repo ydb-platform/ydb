@@ -21,7 +21,8 @@ logger = logging.getLogger()
 # ---------------------------------------------------------------------------
 
 
-class SafetyWarden(metaclass=ABCMeta):
+class SafetyWarden(object):
+    __metaclass__ = ABCMeta
 
     def __init__(self, name):
         super(SafetyWarden, self).__init__()
@@ -58,8 +59,9 @@ class AggregateSafetyWarden(SafetyWarden):
 # ---------------------------------------------------------------------------
 
 
-class CommandExecutor(metaclass=ABCMeta):
+class CommandExecutor(object):
     """Protocol: execute a shell command and return ``(retcode, list_of_lines)``."""
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def execute_command(self, command, timeout=60):
@@ -344,19 +346,20 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(CommandBasedSafetyWarden):
         )
 
 
-class GrepDMesgForPatternsSafetyWarden(CommandBasedSafetyWarden):
-    def __init__(self, executor, list_of_markers, lines_after=1):
-        name = "GrepDMesgForPatternsSafetyWarden for markers = {markers}".format(
+class GrepJournalctlKernelForPatternsSafetyWarden(CommandBasedSafetyWarden):
+    def __init__(self, executor, list_of_markers, lines_after=1, hours_back=24):
+        name = "GrepJournalctlKernelForPatternsSafetyWarden for markers = {markers}".format(
             markers=list_of_markers,
         )
+        since_value = '{hours} hours ago'.format(hours=hours_back)
         command = [
-            'dmesg', '-T',
+            'sudo', 'journalctl', '-k', '--no-pager', '--since', "'{since}'".format(since=since_value),
             '|',
             'grep',
             '-A', str(lines_after),
         ] + construct_list_of_grep_pattern_arguments(list_of_markers)
 
-        super(GrepDMesgForPatternsSafetyWarden, self).__init__(
+        super(GrepJournalctlKernelForPatternsSafetyWarden, self).__init__(
             name, executor, command=command, split_line_size=lines_after,
         )
 
@@ -436,8 +439,6 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             logger.warning("Timeout while checking unified_agent for VERIFY failed")
         except ValueError as e:
             logger.warning("Error parsing unified_agent output: {}".format(e))
-        except FileNotFoundError:
-            logger.warning("unified_agent not found")
         except Exception as e:
             logger.warning("Error checking unified_agent: {}".format(e))
 

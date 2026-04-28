@@ -136,7 +136,7 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
         AllowedInputFormats.insert(format);
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         description << Endl << "Use -hh option to see all options relevant to input format.";
     }
     config.Opts->AddLongOption("input-format", description.Str())
@@ -165,7 +165,7 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
     auto& inputFraming = config.Opts->AddLongOption("input-framing", description.Str())
             .RequiredArgument("STRING").StoreResult(&InputFramingFormat)
             .Completer(MakeChoiceCompleter(allowedFormats, InputFramingDescriptions));
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputFraming.Hidden();
     }
 }
@@ -258,7 +258,7 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
         auto findResult = FormatDescriptions.find(format);
         Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             description << "\n  " << colors.BoldColor() << format << colors.OldColor()
                 << "\n    " << findResult->second;
         } else {
@@ -270,7 +270,7 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
             description << colors.BoldColor() << format << colors.OldColor();
         }
     }
-    if (config.HelpCommandVerbosiltyLevel >= 2) {
+    if (config.HelpCommandVerbosityLevel >= 2) {
         description << "\nDefault: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ".";
     } else {
         description << " (default: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ")";

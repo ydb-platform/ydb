@@ -1,7 +1,9 @@
 #include "region.h"
 
 #include "range_translate.h"
-#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+#include "vchunk.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,7 +29,8 @@ TRegion::TRegion(
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHandoffDelay,
+    TDuration writeHedgingDelay,
+    TDuration writeRequestTimeout,
     TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
@@ -49,7 +52,8 @@ TRegion::TRegion(
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,
-            writeHandoffDelay,
+            writeHedgingDelay,
+            writeRequestTimeout,
             traceSamplePeriod,
             vChunkCounters);
         vChunk->Start();

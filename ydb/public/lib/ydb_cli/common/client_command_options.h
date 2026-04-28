@@ -65,8 +65,8 @@ public:
         return Opts;
     }
 
-    void SetHelpCommandVerbosiltyLevel(size_t level) {
-        HelpCommandVerbosiltyLevel = level;
+    void SetHelpCommandVerbosityLevel(size_t level) {
+        HelpCommandVerbosityLevel = level;
     }
 
     // Priority of parsing auth methods from env, from first to last.
@@ -95,7 +95,7 @@ private:
     NLastGetopt::TOpts Opts;
     std::vector<TIntrusivePtr<TClientCommandOption>> ClientOpts;
     std::vector<TIntrusivePtr<TAuthMethodOption>> EnvAuthPriority;
-    size_t HelpCommandVerbosiltyLevel = 1;
+    size_t HelpCommandVerbosityLevel = 1;
 };
 
 // YDB client command option

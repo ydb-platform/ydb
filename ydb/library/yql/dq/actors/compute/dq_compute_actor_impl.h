@@ -28,6 +28,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <library/cpp/html/escape/escape.h>
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
@@ -1635,6 +1636,10 @@ protected:
                         str << stats->CurrentWaitOutputStartTime;
                     }
                     str << Endl;
+                    str << "  InputWaitCount: " << stats->InputWaitCount << Endl;
+                    str << "  OutputWaitCount: " << stats->OutputWaitCount << Endl;
+                    str << "  TotalInputsConsumed: " << stats->TotalInputsConsumed << Endl;
+                    str << "  TotalOutputsProduced: " << stats->TotalOutputsProduced << Endl;
                 }
                 ExtraMonitoringInfo(str, cgi);
 
@@ -1647,6 +1652,17 @@ protected:
                     str << "  LastRunStatus: " << ProcessOutputsState.LastRunStatus << Endl;
                     str << "  LastRunTime: " << ProcessOutputsState.LastRunTime << Endl;
                     str << "  LastPopReturnedNoData: " << ProcessOutputsState.LastPopReturnedNoData << Endl;
+                }
+
+                if (auto stats = GetTaskRunnerStats(); stats && !stats->ComputationLogBuffer.empty()) {
+                    str << Endl << Endl;
+                    COLLAPSED_BUTTON_CONTENT("ComputationLog", TStringBuilder() << "Compute graph log: " << stats->ComputationLogBuffer.size() << " entries") {
+                        str << Endl;
+                        for (const auto& line : stats->ComputationLogBuffer) {
+                            str << "  " << line.first << " " << NHtml::EscapeText(line.second);
+                        }
+                    }
+                    str << Endl;
                 }
 
                 str << Endl;

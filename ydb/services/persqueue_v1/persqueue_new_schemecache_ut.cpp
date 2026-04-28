@@ -828,7 +828,8 @@ namespace NKikimr::NPersQueueTests {
             TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
-                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
+                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
                 res.Wait();
                 Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());
@@ -918,7 +919,8 @@ namespace NKikimr::NPersQueueTests {
             {
                 grpc::ClientContext grpcContext;
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                UNIT_ASSERT_VALUES_EQUAL_C(addRuleResponse.operation().status(), Ydb::StatusIds::ALREADY_EXISTS, status.error_message());
             }
 
             Ydb::PersQueue::V1::RemoveReadRuleRequest removeRuleRequest;

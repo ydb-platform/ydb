@@ -27,7 +27,6 @@ void TSchedulableTask::Resume() {
     NActors::TActivationContext::Send(ActorId, GetResumeEvent());
 }
 
-// TODO: referring to the pool's usage - to support all-equal fair-share query mode.
 bool TSchedulableTask::TryIncreaseUsage() {
     bool increased = false;
     ui64 fairShare = 0;
@@ -36,6 +35,14 @@ bool TSchedulableTask::TryIncreaseUsage() {
     if (const auto snapshot = Query->GetSnapshot()) {
         fairShare = snapshot->FairShare;
         poolOrQuery = Query->GetParent();
+
+        // Special case for zero demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
+        if (fairShare == 0 && snapshot->CpuDemand == 0) {
+            auto prevDemand = snapshot->CpuDemand.fetch_add(1);
+            if (prevDemand == 0) {
+                fairShare = Query->AllowMinFairShare;
+            }
+        }
     } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
         fairShare = Query->AllowMinFairShare;
         poolOrQuery = Query.get();

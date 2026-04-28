@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(100)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
@@ -12,7 +12,10 @@ ELSE()
 ENDIF()
 
 SRCS(
+    common.cpp
     datastreams_ut.cpp
+    streaming_ddl_ut.cpp
+    streaming_sys_view_ut.cpp
 )
 
 PEERDIR(

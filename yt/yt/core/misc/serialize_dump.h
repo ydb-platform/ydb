@@ -60,7 +60,7 @@ public:
 
 
     template <class... TArgs>
-    void WriteContent(const char* format, const TArgs&... args)
+    void WriteContent(TFormatString<TArgs...> format, TArgs&&... args)
     {
         BeginWrite();
         ScratchBuilder_.AppendChar(' ', IndentDepth_ * 2);
@@ -69,7 +69,7 @@ public:
             ScratchBuilder_.AppendString(": ");
             FieldName_ = {};
         }
-        ScratchBuilder_.AppendFormat(format, args...);
+        ScratchBuilder_.AppendFormat(format, std::forward<TArgs>(args)...);
         ScratchBuilder_.AppendChar('\n');
         EndWrite();
     }

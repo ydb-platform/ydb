@@ -192,7 +192,7 @@ public:
 private:
     std::atomic<FILE*> ShutdownLogFile_ = IsShutdownLoggingEnabledImpl() ? stderr : nullptr;
 
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
 
     struct TRegisteredCallback
     {

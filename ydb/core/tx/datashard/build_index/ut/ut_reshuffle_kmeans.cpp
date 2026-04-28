@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto posting = DoReshuffleKMeans(server, sender, 40, level,
             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
             VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
-        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOut);
+        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOutReshuffle);
     }
 
     Y_UNIT_TEST(MainToPostingWithKeyRange) {
@@ -979,6 +979,81 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UNIT_ASSERT(!secondPosting.Contains("key = 3,"));
         UNIT_ASSERT(secondPosting.Contains("key = 4,"));
         UNIT_ASSERT(secondPosting.Contains("key = 5,"));
+    }
+
+    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        // 2 valid rows, 3 invalid rows (no format byte \x02)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\"),"
+            "(3, \"invalid\", \"three\"),"
+            "(4, \"\", \"four\"),"
+            "(5, \"bad\", \"five\");");
+
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+        auto tid = datashards[0];
+
+        auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(tid);
+        tableId.PathId.ToProto(rec.MutablePathId());
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
+
+        rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING);
+        rec.AddClusters("\x30\x30\2");
+        rec.AddClusters("\x31\x31\2");
+        rec.SetParent(0);
+        rec.SetChild(1);
+        rec.SetEmbeddingColumn("embedding");
+        rec.AddDataColumns("data");
+        rec.SetDatabaseName(kDatabaseName);
+        rec.SetOutputName(kPostingTable);
+
+        runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReshuffleKMeansResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
+
+        // Warning about 3 invalid rows should be present
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        TString issuesStr = issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
     }
 }
 

@@ -334,11 +334,15 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
 
         auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         auto planElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+        planElement["Node Type"] = "Query";
+        planElement["PlanNodeType"] = "Query";
         planElement["Plans"] = planList;
         planJson["Plan"] = planElement;
 
         auto simplifiedPlanList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         auto simplifiedPlanElement = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+        simplifiedPlanElement["Node Type"] = "Query";
+        simplifiedPlanElement["PlanNodeType"] = "Query";
         simplifiedPlanElement["Plans"] = simplifiedPlanList;
 
         planJson["SimplifiedPlan"] = simplifiedPlanElement;
@@ -461,6 +465,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Optimize physical stages.
     TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateAggregateThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));

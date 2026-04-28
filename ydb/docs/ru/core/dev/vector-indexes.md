@@ -140,7 +140,7 @@ ALTER TABLE my_table
     * `clusters`: количество кластеров в k-means, определяющее ширину поиска (рекомендуется 64-512).
     * `overlap_clusters`: количество кластеров нижнего уровня, в которые добавляется каждый вектор (рекомендуется 3).
 
-Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](../yql/reference/syntax/select/vector_index.md) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-execution-optimization/query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
+Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](../yql/reference/syntax/select/vector_index.md) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ### Перекрытие кластеров {#overlap-clusters}
 

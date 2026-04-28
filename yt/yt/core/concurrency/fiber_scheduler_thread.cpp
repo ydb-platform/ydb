@@ -678,7 +678,7 @@ private:
 
     std::atomic<bool> Canceled_ = false;
     NThreading::TEvent ErrorSet_;
-    NThreading::TSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     TError CancelationError_;
     TFuture<void> Future_;
 };
@@ -727,7 +727,7 @@ public:
     }
 
 private:
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
 
     struct TGlobalContextSwitchHandlers
     {

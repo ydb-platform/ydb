@@ -298,6 +298,8 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    optional uint64 WriteSpeedInMessagesPerSecond = 18 [default = 0];
 };
 
 message TPartitionKeyRange {

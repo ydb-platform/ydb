@@ -293,5 +293,5 @@ message TFeatureFlags {
     optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
-
-}   
+    optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
+}

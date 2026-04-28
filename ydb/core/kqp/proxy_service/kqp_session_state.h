@@ -23,4 +23,4 @@ struct IWmSessionUpdater {
     virtual void SetPoolId(TString poolId) = 0;
 };
 
-}
+} // NKikimr::NKqp

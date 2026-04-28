@@ -24,6 +24,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
@@ -776,7 +777,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        if (!TryFillPoolInfoFromCache(ev, requestId)) {
+        if (!TryFillPoolInfoFromCache(ev, sessionInfo, requestId)) {
             return;
         }
 
@@ -1591,49 +1592,70 @@ private:
         }
     }
 
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+    void Classify(const TEvKqp::TEvQueryRequest::TPtr& ev, TWmQueryClassifier& cl) {
+        const auto& databaseId = ev->Get()->GetDatabaseId();
+
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
+            || ev->Get()->IsInternalCall()
+            || ev->Get()->GetIsWarmupCompilation()) {
+            cl.Bypass();
+            return;
+        }
+
+        cl.PreCompileClassify();
+
+        // Trigger updates for missing pools
+        for (const auto& missedPoolId : cl.GetMissedPoolIds()) {
+            ResourcePoolsCache.GetPoolInfo(databaseId, missedPoolId, ActorContext());
+        }
+    }
+
+    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 requestId) {
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
-        const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetPoolId("");
-            return true;
-        }
+        auto context = TClassifyContext{
+            // This parameter is set when user creates a request with an explicit PoolId
+            .PoolId = ev->Get()->GetPoolId(),
+            .DatabaseId = ev->Get()->GetDatabaseId(),
+            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
+            .UserToken = ev->Get()->GetUserToken()
+        };
 
-        const auto& userToken = ev->Get()->GetUserToken();
-        if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(databaseId, userToken, ActorContext()));
-        }
+        auto classifier = std::make_shared<TWmQueryClassifier>(
+            ResourcePoolsCache.LastPoolInfoSnapshot, ResourcePoolsCache.LastClassifierSnapshot, context);
 
-        const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
+        Classify(ev, *classifier);
+        const auto status = classifier->GetPreClassifyResult();
 
-        if (!poolInfo) {
-            Y_ASSERT(!poolId.empty());
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            return true;
-        }
-
-        const auto& securityObject = poolInfo->SecurityObject;
-        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
+        bool isSuccess = std::visit(TOverloaded {
+            [this, &requestId](const IWmQueryClassifier::TReject& reject) {
+                ReplyProcessError(reject.Code, reject.Message, requestId);
                 return false;
+            },
+            [&ev](const IWmQueryClassifier::TResolvedPoolId& resolved) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: resolved: " << resolved.PoolId);
+                ev->Get()->SetPoolId(resolved.PoolId);
+                return true;
+            },
+            [&ev](const IWmQueryClassifier::TBypass&) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
+                // This pool ID is only needed for legacy tests to run
+                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
+                ev->Get()->SetPoolConfig(IWmQueryClassifier::EMPTY_POOL);
+                return true;
+            },
+            [&ev](const IWmQueryClassifier::TPendingCompilation&) {
+                KQP_PROXY_LOG_D("Proxy Classify returns: need compilation");
+                ev->Get()->SetPoolId("");
+                return true;
             }
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
-                return false;
-            }
+        }, status);
+
+        if (!isSuccess) {
+            return false;
         }
 
-        const auto& poolConfig = poolInfo->Config;
-        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
-            ev->Get()->SetPoolConfig(poolConfig);
-        }
-
-        Y_ASSERT(!poolId.empty());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-
+        ev->Get()->SetWmQueryClassifier(classifier);
         return true;
     }
 
@@ -1915,7 +1937,7 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
     void InitSharedReading() {

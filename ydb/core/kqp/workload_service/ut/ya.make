@@ -11,8 +11,9 @@ ENDIF()
 
 SRCS(
     kqp_workload_service_actors_ut.cpp
-    kqp_workload_service_tables_ut.cpp
+    kqp_workload_service_fullscan_ut.cpp
     kqp_workload_service_query_sessions_ut.cpp
+    kqp_workload_service_tables_ut.cpp
     kqp_workload_service_ut.cpp
 )
 

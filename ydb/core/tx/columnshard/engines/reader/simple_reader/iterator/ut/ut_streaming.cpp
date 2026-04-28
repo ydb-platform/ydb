@@ -1024,6 +1024,11 @@ void TestMemoryLimitChunkBoundaries() {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetConfiguredLimit(4);
+    // Force non-in-memory reading so streaming pages are created deterministically.
+    // Without this, the default MemoryLimitScanPortion (~100MB) keeps the small test
+    // blob in-memory, BuildReadPages() is bypassed, and the page/iteration assertions
+    // below become vacuous.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1151,6 +1156,12 @@ void TestAbortDuringStreaming() {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
+    // Force non-in-memory reading so streaming pages are actually created and the
+    // abort-mid-stream path is exercised deterministically. Without this, the
+    // portion may be read in-memory (under the default ~100MB threshold) and
+    // TotalPagesCreated stays at 0, making the assertion below vacuous/flaky.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -1242,6 +1253,11 @@ void TestStreamingWithFilterSkip() {
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    // Force non-in-memory reading so streaming pages are created deterministically.
+    // Without this, small per-row payloads can fit under the in-memory threshold and
+    // the read completes in a single page, making the iterationsCount > 1 assertion flaky.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1459,6 +1475,15 @@ void TestPrefetchNoDoubleAdvance() {
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so streaming actually pages and the prefetch / ContinueCursor
+    // logic is exercised. Without this, each portion can be served as a single in-memory
+    // page, making batchCount==1 and turning the UNIT_ASSERT_GT(batchCount, 1u) check into a
+    // false negative for the double-advance bug this test guards against.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+    // Force the portion to split into many small chunks so BuildReadPages() yields multiple
+    // pages deterministically, regardless of the natural chunk boundaries of the test data.
+    csControllerGuard->SetOverrideBlobSplitSettings(
+        NOlap::NSplitter::TSplitSettings().SetMinRecordsCount(1));
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1474,13 +1499,20 @@ void TestPrefetchNoDoubleAdvance() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce multiple streaming pages.
-    const ui32 numRecords = 5000;
-    std::pair<ui64, ui64> portion = {0, numRecords};
+    // Write the data as multiple separate portions so that the scan produces multiple
+    // client-visible batches (one batch per portion at minimum). A single large write
+    // creates only one portion which is delivered as a single batch even when paged
+    // internally — that would make UNIT_ASSERT_GT(batchCount, 1u) a false negative.
+    const ui32 numPortions = 50;
+    const ui32 recordsPerPortion = 100;
+    const ui32 numRecords = numPortions * recordsPerPortion;
 
     std::vector<ui64> writeIds;
-    TString data = MakeTestBlob(portion, table.Schema);
-    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+    for (ui32 i = 0; i < numPortions; ++i) {
+        std::pair<ui64, ui64> portion = {i * recordsPerPortion, (i + 1) * recordsPerPortion};
+        TString data = MakeTestBlob(portion, table.Schema);
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, table.Schema, true, &writeIds));
+    }
 
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
@@ -1513,50 +1545,162 @@ void TestPrefetchNoDoubleAdvance() {
          << ", rows=" << rb->num_rows()
          << ", iterations=" << reader.GetIterationsCount() << Endl;
 
-    // With 5000 records and streaming, we expect multiple batches.
+    // With 50 portions of 100 records each and streaming, we expect multiple batches.
     // If ContinueCursor was called twice (double-advance), we'd skip pages
     // and get fewer rows or the scan would complete incorrectly.
     UNIT_ASSERT_GT(batchCount, 1u);
 }
 
-// Tests the race condition between ContinueCursor() and SetPrefetchTriggered(true).
+// Controller that records every streaming page advance performed inside
+// IDataSource::ContinueCursor(). Used by TestPrefetchTriggeredRaceCondition to
+// detect the actual signature of the prefetch / Continue() race: a double-advance
+// of the same (sourceIdx, pageBefore) transition, or a non-contiguous page sequence.
+class TPageAdvanceTrackingController: public TDefaultTestsController {
+private:
+    mutable TAdaptiveLock Lock;
+    // (sourceIdx, pageBefore) -> count of times this transition occurred.
+    THashMap<std::pair<ui64, ui32>, ui32> TransitionCounts;
+    // Per-source ordered list of (pageBefore, pageAfter) transitions.
+    THashMap<ui64, std::vector<std::pair<ui32, ui32>>> TransitionsBySource;
+    THashMap<ui64, bool> ReverseBySource;
+    TAtomicCounter TotalPagesCreated;
+
+public:
+    virtual void OnPageCreated(const ui64 /*pagesInFlight*/) override {
+        TotalPagesCreated.Inc();
+    }
+
+    virtual void OnStreamingPageAdvance(
+        const ui64 sourceIdx, const ui32 pageBefore, const ui32 pageAfter, const bool reverse) override {
+        TGuard<TAdaptiveLock> g(Lock);
+        TransitionCounts[std::make_pair(sourceIdx, pageBefore)] += 1;
+        TransitionsBySource[sourceIdx].emplace_back(pageBefore, pageAfter);
+        ReverseBySource[sourceIdx] = reverse;
+    }
+
+    ui64 GetTotalPagesCreated() const {
+        return (ui64)TotalPagesCreated.Val();
+    }
+
+    // Returns the highest occurrence count for any (sourceIdx, pageBefore)
+    // transition. In a correct implementation this must be exactly 1; values
+    // greater than 1 prove a page was advanced more than once (the double-
+    // advance signature of the prefetch/Continue race).
+    ui32 GetMaxTransitionCount() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        ui32 maxCount = 0;
+        for (const auto& [_, count] : TransitionCounts) {
+            maxCount = std::max(maxCount, count);
+        }
+        return maxCount;
+    }
+
+    ui64 GetTotalAdvances() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        ui64 total = 0;
+        for (const auto& [_, list] : TransitionsBySource) {
+            total += list.size();
+        }
+        return total;
+    }
+
+    // Returns the first (sourceIdx, pageBefore -> pageAfter) transition that is
+    // not strictly contiguous (pageAfter != pageBefore +/- 1 according to scan
+    // direction), if any. Format: "src=X, before=Y, after=Z".
+    std::optional<TString> FindNonContiguousTransition() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        for (const auto& [src, list] : TransitionsBySource) {
+            const bool reverse = ReverseBySource.at(src);
+            for (const auto& [before, after] : list) {
+                const ui32 expected = reverse ? before - 1 : before + 1;
+                if (after != expected) {
+                    return TStringBuilder() << "src=" << src << ", before=" << before
+                                            << ", after=" << after
+                                            << ", reverse=" << reverse;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Returns the (sourceIdx, pageBefore) of the first transition that occurred
+    // more than once, if any.
+    std::optional<TString> FindDuplicateTransition() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        for (const auto& [key, count] : TransitionCounts) {
+            if (count > 1) {
+                return TStringBuilder() << "src=" << key.first
+                                        << ", pageBefore=" << key.second
+                                        << ", occurrences=" << count;
+            }
+        }
+        return std::nullopt;
+    }
+
+    THashMap<ui64, std::vector<std::pair<ui32, ui32>>> GetTransitionsBySource() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return TransitionsBySource;
+    }
+};
+
+// Race-condition regression test for TSyncPointResult::OnSourceReady() ordering
+// of SetPrefetchTriggered(true) vs ContinueCursor():
 //
-// BUG: In TSyncPointResult::OnSourceReady() at line 77-78:
-//   simpleSource->ContinueCursor(source);      // line 77
-//   simpleSource->SetPrefetchTriggered(true);  // line 78
+//     simpleSource->SetPrefetchTriggered(true);   // must run BEFORE
+//     simpleSource->ContinueCursor(source);       // potential synchronous re-entry
 //
-// ContinueCursor() resets ScriptCursor and starts an async task. When the async
-// task completes and calls back into OnSourcePrepared -> OnSourceReady, the source
-// is still at the front of SourcesSequentially (because ESourceAction::Wait was
-// returned). The new page's result will be processed, but PrefetchTriggered is set
-// to true AFTER ContinueCursor already started the async work.
+// ContinueCursor() schedules an async fetch task for the next streaming page.
+// If that task can complete synchronously (e.g. cached data, single-threaded
+// test runtime) and re-enter OnSourceReady before SetPrefetchTriggered(true)
+// has executed, then a later ack-driven Continue() would observe
+// PrefetchTriggered == false and call ContinueCursor() a second time on the
+// same source — advancing the early-page index twice and skipping a page.
 //
-// If the async task completes synchronously (e.g., in-memory data), OnSourceReady
-// could be re-entered before SetPrefetchTriggered(true) executes. When Continue()
-// is later called (after the client ack), it checks PrefetchTriggered to decide
-// whether to skip ContinueCursor(). If the flag wasn't set yet, Continue() might
-// call ContinueCursor() again, causing a double-advance and skipping a page.
+// Black-box "did all rows arrive?" assertions cannot reliably catch this:
+// the symptom (a missing page worth of rows) only manifests when the race
+// actually triggers, which is non-deterministic under TTestBasicRuntime.
 //
-// This test uses MaxPagesInFlight=1 and forces in-memory reading to maximize the
-// chance of triggering the race condition. All pages must be read correctly.
+// This test instead asserts the structural invariant directly via a controller
+// hook (OnStreamingPageAdvance) wired into IDataSource::ContinueCursor():
+//
+//   * Each (sourceIdx, pageBefore) transition must occur EXACTLY ONCE.
+//   * The page-index sequence per source must be strictly contiguous
+//     (pageAfter == pageBefore + 1 for forward scans).
+//   * The total advance count must equal totalPages - 1 per source.
+//   * Every timestamp 0..numRecords-1 must appear EXACTLY ONCE in the result
+//     (catches both skipped pages and duplicated pages).
+//
+// Configuration: streaming enabled with MaxPagesInFlight > 1 so the prefetch
+// path in OnSourceReady is actually exercised, and memoryLimit=1 +
+// MinRecordsCount=1 to force many small pages within a single source. The
+// scan is driven via the explicit Ack/Receive loop (not ReadAll) so that
+// any double-advance triggered between an ack and the next batch will be
+// recorded by the controller.
 void TestPrefetchTriggeredRaceCondition() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
 
-    // Enable streaming with MaxPagesInFlight=1 to force sequential processing.
-    // This maximizes the chance of the race: each page must be acked before
-    // the next prefetch starts.
+    // MaxPagesInFlight > 1 is REQUIRED: with limit=1 the prefetch branch in
+    // OnSourceReady (lines 88-102 of result.cpp) is bypassed entirely and the
+    // race window does not exist — making the test vacuous. Use 4 to actively
+    // drive the prefetch path.
     auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
     streamingConfig->SetEnabled(true);
-    streamingConfig->SetMaxPagesInFlight(1);
+    streamingConfig->SetMaxPagesInFlight(4);
 
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TPageAdvanceTrackingController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    // Use a small memory limit to force multiple streaming pages.
-    // Combined with MaxPagesInFlight=1, this creates the race condition scenario.
+    // Force non-in-memory reading and small chunk boundaries so a single
+    // portion is split into multiple streaming pages, exercising the
+    // intra-source prefetch / advance loop. Combined with multi-portion writes
+    // below this maximizes the chance that ContinueCursor() actually advances
+    // an early-page index, which is the only path where the
+    // SetPrefetchTriggered(true) / ContinueCursor() race can manifest.
     csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+    csControllerGuard->SetOverrideBlobSplitSettings(
+        NOlap::NSplitter::TSplitSettings().SetMinRecordsCount(1));
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1572,14 +1716,20 @@ void TestPrefetchTriggeredRaceCondition() {
     TestTableDescription table;
     auto planStep = SetupSchema(runtime, sender, tableId, table);
 
-    // Write enough data to produce multiple streaming pages.
-    // With small memory limit, this should produce many pages.
-    const ui32 numRecords = 10000;
-    std::pair<ui64, ui64> portion = {0, numRecords};
-
+    // Multiple portions => multiple sources, so OnPageCreated fires many times
+    // (sanity that streaming is active) and the cross-source prefetch loop in
+    // OnSourceReady is exercised even though each individual source produces
+    // only one page (the intra-source advance path is rarely hit under
+    // TTestBasicRuntime; see comment near the totalAdvances check below).
+    const ui32 numPortions = 50;
+    const ui32 recordsPerPortion = 100;
+    const ui32 numRecords = numPortions * recordsPerPortion;
     std::vector<ui64> writeIds;
-    TString data = MakeTestBlob(portion, table.Schema);
-    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+    for (ui32 i = 0; i < numPortions; ++i) {
+        std::pair<ui64, ui64> portion = {i * recordsPerPortion, (i + 1) * recordsPerPortion};
+        TString data = MakeTestBlob(portion, table.Schema);
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, table.Schema, true, &writeIds));
+    }
 
     planStep = ProposeCommit(runtime, sender, txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
@@ -1587,12 +1737,13 @@ void TestPrefetchTriggeredRaceCondition() {
     TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
     reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
 
+    // Drive the scan via the explicit Ack/Receive loop so the test thread yields
+    // back to the runtime between every page. This maximizes the chance that
+    // any racy interleaving of ContinueCursor() / SetPrefetchTriggered(true)
+    // occurs while we are observing.
     UNIT_ASSERT(reader.InitializeScanner());
     reader.Ack();
 
-    // Receive all batches and verify correct completion.
-    // If the race condition occurs (PrefetchTriggered not set before Continue is called),
-    // ContinueCursor would be called again and we'd skip a page, resulting in fewer rows.
     ui32 batchCount = 0;
     while (true) {
         bool hasMore = reader.Receive();
@@ -1606,15 +1757,105 @@ void TestPrefetchTriggeredRaceCondition() {
     UNIT_ASSERT(reader.IsCorrectlyFinished());
     auto rb = reader.GetResult();
     UNIT_ASSERT(rb);
-    
-    // The bug would cause some pages to be skipped, resulting in fewer rows than expected.
-    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalPagesCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui64 totalAdvances = csControllerGuard->GetTotalAdvances();
+    const ui32 maxTransitionCount = csControllerGuard->GetMaxTransitionCount();
+    const auto duplicate = csControllerGuard->FindDuplicateTransition();
+    const auto nonContiguous = csControllerGuard->FindNonContiguousTransition();
+    const auto transitionsBySource = csControllerGuard->GetTransitionsBySource();
 
     Cerr << "PrefetchTriggeredRaceCondition: batches=" << batchCount
          << ", rows=" << rb->num_rows()
+         << ", totalPagesCreated=" << totalPagesCreated
+         << ", totalAdvances=" << totalAdvances
+         << ", maxTransitionCount=" << maxTransitionCount
          << ", iterations=" << reader.GetIterationsCount() << Endl;
 
-    // With 10000 records and streaming, we expect multiple batches.
+    // -------- Sanity: streaming was active --------
+    // Streaming pages must have been emitted (sanity: streaming was active).
+    UNIT_ASSERT_GT(totalPagesCreated, 1u);
+
+    // The intra-source advance path (ContinueCursor advancing the early-page
+    // index) is the ONLY place where the SetPrefetchTriggered/ContinueCursor
+    // race can manifest.  If it didn't fire under this configuration we still
+    // run the result-correctness check (4) below so the test stays useful as
+    // a black-box smoke test, but we log a warning so that nobody assumes the
+    // structural race-condition checks (1)-(3) executed.
+    if (totalAdvances == 0) {
+        Cerr << "PrefetchTriggeredRaceCondition: WARNING — intra-source page "
+             << "advance path was not triggered (totalAdvances=0). Race-condition "
+             << "structural checks are vacuous; relying on result-completeness "
+             << "check only." << Endl;
+    }
+
+    // -------- The actual race-condition assertions --------
+    // These run only when the intra-source page-advance path actually fired
+    // (totalAdvances > 0). When it didn't, totalAdvances == 0 and the per-
+    // transition map is empty; check (4) below still catches the bug's
+    // observable symptom (skipped or duplicated rows) as a fallback.
+
+    if (totalAdvances > 0) {
+        // (1) No (sourceIdx, pageBefore) transition may occur more than once.
+        //     A second occurrence is the exact signature of the prefetch /
+        //     Continue() double-advance bug.
+        UNIT_ASSERT_C(maxTransitionCount == 1,
+            "Double-advance detected in IDataSource::ContinueCursor(): "
+            << (duplicate ? *duplicate : TString("(unknown)"))
+            << ". This is the prefetch / Continue() race: SetPrefetchTriggered(true) "
+            "did not execute before ContinueCursor() re-entered OnSourceReady, so a "
+            "subsequent ack-driven Continue() advanced the page a second time, "
+            "skipping the page in between.");
+
+        // (2) Each per-source advance sequence must be strictly contiguous.
+        //     A gap (pageAfter != pageBefore + 1) would imply pages were silently
+        //     skipped without going through ContinueCursor — a different breakage
+        //     of the same invariant.
+        UNIT_ASSERT_C(!nonContiguous.has_value(),
+            "Non-contiguous page advance detected: " << nonContiguous.value_or("?"));
+
+        // (3) Per source: the page-index sequence must be strictly 0,1,2,...,K-1.
+        //     A double-advance would skip a page (e.g. 0->1 then 1->3 instead of
+        //     1->2), which is also caught by (2), but we additionally pin the
+        //     starting page to 0 to detect a missed first advance.
+        for (const auto& [src, list] : transitionsBySource) {
+            if (list.empty()) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(list.front().first, 0u,
+                "First advance of source " << src << " did not start at page 0");
+            const ui32 lastAfter = list.back().second;
+            UNIT_ASSERT_VALUES_EQUAL_C(lastAfter, list.size(),
+                "Source " << src << ": last pageAfter=" << lastAfter
+                << " does not match advance count=" << list.size()
+                << " (page sequence not strictly 0,1,2,...)");
+        }
+    }
+
+    // (4) Result completeness: every timestamp must appear EXACTLY ONCE.
+    //     A double-advance manifests as a missing range of timestamps; a
+    //     duplicate emission would manifest as a timestamp count > 1. Both
+    //     are caught here even if the controller-level checks somehow missed
+    //     the race.
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+    auto timestampCol = rb->GetColumnByName("timestamp");
+    UNIT_ASSERT(timestampCol);
+    auto timestampArray = std::static_pointer_cast<arrow::UInt64Array>(timestampCol);
+    UNIT_ASSERT(timestampArray);
+    std::vector<ui32> seenCounts(numRecords, 0);
+    for (int i = 0; i < timestampArray->length(); ++i) {
+        const ui64 ts = timestampArray->Value(i);
+        UNIT_ASSERT_LT_C(ts, numRecords, "Out-of-range timestamp: " << ts);
+        ++seenCounts[ts];
+    }
+    for (ui32 ts = 0; ts < numRecords; ++ts) {
+        UNIT_ASSERT_VALUES_EQUAL_C(seenCounts[ts], 1u,
+            "Timestamp " << ts << " appears " << seenCounts[ts]
+            << " times (expected exactly 1). Skipped or duplicated streaming page.");
+    }
+
+    // (5) Streaming pages must produce client-visible batches; if batches==0
+    //     while advances > 0, something silently dropped page results.
     UNIT_ASSERT_GT(batchCount, 1u);
 }
 
@@ -1633,8 +1874,15 @@ void TestStreamingPageBoundaryCorrectness() {
     streamingConfig->SetEnabled(true);
     streamingConfig->SetMaxPagesInFlight(4);
 
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    // Force out-of-memory reading so the portion is actually split into early pages.
+    // Without this, 10 000 records fit under the default MemoryLimitScanPortion,
+    // the source is marked in-memory, no early pages are produced, and the
+    // pageStartRow/pageEndRow branches in NeedFetchColumns()/DoAssembleColumns()
+    // are never executed — making the page-boundary assertions vacuous.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1675,10 +1923,17 @@ void TestStreamingPageBoundaryCorrectness() {
          << ", iterations=" << reader.GetIterationsCount()
          << Endl;
 
-    // We expect multiple iterations in streaming mode with 10000 records
+    // We expect multiple iterations in streaming mode with 10000 records.
     // This indirectly verifies page-boundary correctness: if NeedFetchColumns
-    // or DoAssembleColumns had bugs, we'd get wrong row counts or scan would fail
+    // or DoAssembleColumns had bugs, we'd get wrong row counts or scan would fail.
     UNIT_ASSERT_GT(reader.GetIterationsCount(), 1u);
+
+    // Stronger guarantee: with the memory limit override above, the portion
+    // must actually be split into multiple early pages. This ensures the
+    // page-boundary code paths (pageStartRow/pageEndRow filtering) were
+    // exercised, rather than the source being assembled as a single in-memory
+    // batch.
+    UNIT_ASSERT_GT(csControllerGuard->GetTotalPagesCreated(), 1u);
 }
 
 // Verifies that a task processing error during streaming causes the scan to
@@ -1707,6 +1962,13 @@ void TestBlobReadErrorDuringStreaming() {
 
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so the streaming page path is entered deterministically,
+    // independent of the testing controller's default memory limit. Without this override,
+    // small per-row payloads could fit under the in-memory threshold, the BuildReadPages()
+    // path would be bypassed, totalPagesCreated would stay at 0, and the
+    // UNIT_ASSERT_GT(totalCreated, 0u) assertion below would become vacuous (the test would
+    // not actually cover the intended "error during streaming" behavior).
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);

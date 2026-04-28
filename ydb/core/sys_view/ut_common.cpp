@@ -164,6 +164,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     tableServiceConfig = settings.TableServiceConfig;
     tableServiceConfig.SetEnableTempTablesForUser(true);
 
+    auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+    securityConfig.SetHideAuthenticationFailureReasons(false);
+
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

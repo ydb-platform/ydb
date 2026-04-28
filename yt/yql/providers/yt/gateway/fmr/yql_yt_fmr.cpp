@@ -1763,7 +1763,7 @@ private:
 
 
     template<class TExecCtx>
-    TFuture<TFmrOperationResult> SortedUploadTableFromFmrToYt(const TExecCtx& execCtx, ui64 outputTableIndex) {
+    TFuture<TFmrOperationResult> DoSortedUploadTableFromFmrToYt(const TExecCtx& execCtx, ui64 outputTableIndex) {
         TString sessionId = execCtx->GetSessionId();
         TYtSettings::TConstPtr& config = execCtx->Options_.Config();
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
@@ -1880,7 +1880,7 @@ private:
     }
 
     template<class TExecCtx>
-    TFuture<TFmrOperationResult> UploadTableFromFmrToYt(const TExecCtx& execCtx, ui64 outputTableIndex) {
+    TFuture<TFmrOperationResult> DoUploadTableFromFmrToYt(const TExecCtx& execCtx, ui64 outputTableIndex) {
         TString sessionId = execCtx->GetSessionId();
         TYtSettings::TConstPtr& config = execCtx->Options_.Config();
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
@@ -1951,6 +1951,45 @@ private:
     }
 
     template<class TExecCtx>
+    void StartUploadAsync(
+        const TExecCtx& execCtx,
+        ui64 tableIndex,
+        bool isOrdered,
+        const TFmrTableId& tableId,
+        TPromise<TFmrOperationResult> promise)
+    {
+        TFuture<TFmrOperationResult> realFuture;
+        try {
+            if (isOrdered) {
+                realFuture = DoSortedUploadTableFromFmrToYt(execCtx, tableIndex);
+            } else {
+                realFuture = DoUploadTableFromFmrToYt(execCtx, tableIndex);
+            }
+        } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "StartUploadAsync: sync error for " << tableId << ": " << CurrentExceptionMessage();
+            with_lock(Mutex_) {
+                InFlightUploads_.erase(tableId);
+            }
+            promise.SetValue(ResultFromCurrentException<TFmrOperationResult>());
+            return;
+        }
+
+        realFuture.Subscribe([this, tableId, promise = std::move(promise)](const auto& f) mutable {
+            TFmrOperationResult result;
+            try {
+                result = f.GetValue();
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "StartUploadAsync: async error for " << tableId << ": " << CurrentExceptionMessage();
+                result = ResultFromCurrentException<TFmrOperationResult>();
+            }
+            with_lock(Mutex_) {
+                InFlightUploads_.erase(tableId);
+            }
+            promise.SetValue(std::move(result));
+        });
+    }
+
+    template<class TExecCtx>
     TFuture<TFmrOperationResult> DumpFmrTablesToYt(const std::vector<TExecCtx>& execCtxs) {
         std::vector<TFuture<TFmrOperationResult>> uploadFmrTableToYtFutures;
         for (auto& ctx: execCtxs) {
@@ -1963,31 +2002,25 @@ private:
 
                 TFmrTableId tableId(ctx->Cluster_, outputTable.Path);
                 TFuture<TFmrOperationResult> uploadFuture;
-                bool needNewUpload = false;
+                TMaybe<TPromise<TFmrOperationResult>> newPromise;
+
                 with_lock(Mutex_) {
                     auto it = InFlightUploads_.find(tableId);
                     if (it != InFlightUploads_.end()) {
                         YQL_CLOG(INFO, FastMapReduce) << "DumpFmrTablesToYt: reusing in-flight upload for " << tableId;
                         uploadFuture = it->second;
                     } else {
-                        needNewUpload = true;
-                    }
-                }
-                if (needNewUpload) {
-                    if (isOrdered) {
-                        uploadFuture = SortedUploadTableFromFmrToYt(ctx, tableIndex);
-                    } else {
-                        uploadFuture = UploadTableFromFmrToYt(ctx, tableIndex);
-                    }
-                    with_lock(Mutex_) {
+                        auto promise = NewPromise<TFmrOperationResult>();
+                        uploadFuture = promise.GetFuture();
                         InFlightUploads_[tableId] = uploadFuture;
+                        newPromise = std::move(promise);
                     }
-                    uploadFuture.Subscribe([this, tableId](const auto&) {
-                        with_lock(Mutex_) {
-                            InFlightUploads_.erase(tableId);
-                        }
-                    });
                 }
+
+                if (newPromise.Defined()) {
+                    StartUploadAsync(ctx, tableIndex, isOrdered, tableId, std::move(*newPromise));
+                }
+
                 uploadFmrTableToYtFutures.emplace_back(uploadFuture);
             }
         }
@@ -2317,7 +2350,12 @@ private:
             TStringStream jobStateStream;
             mapJob->Save(jobStateStream);
 
-            TMapOperationParams mapOperationParams{.Input = mapInputTables,.Output = fmrOutputTables, .SerializedMapJobState = jobStateStream.Str(), .IsOrdered = ordered};
+            TMapOperationParams mapOperationParams{
+                .Input = mapInputTables,
+                .Output = fmrOutputTables,
+                .SerializedMapJobState = jobStateStream.Str(),
+                .IsOrdered = ordered
+            };
             TStartOperationRequest mapOperationRequest{
                 .OperationType = EOperationType::Map,
                 .OperationParams = mapOperationParams,
@@ -2339,8 +2377,19 @@ private:
                 return execCtx->Cluster_ + "." + table.Path;}
             );
 
-            YQL_CLOG(INFO, FastMapReduce) << "Starting map from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end()) << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
-            return GetRunningOperationFuture(mapOperationRequest, sessionId);
+            YQL_CLOG(INFO, FastMapReduce) << "Starting " << (ordered ? "Ordered Map" : "Map")
+                << " from yt tables: " << JoinRange(' ', inputPaths.begin(), inputPaths.end())
+                << " to yt tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
+            return GetRunningOperationFuture(mapOperationRequest, sessionId).Apply(
+                [this, sessionId, fmrOutputTables](const auto& f) {
+                    auto result = f.GetValue();
+                    if (result.Errors.empty()) {
+                        for (const auto& output : fmrOutputTables) {
+                            SetTableSortingSpec(output.FmrTableId, output.SortColumns, output.SortOrder, sessionId);
+                        }
+                    }
+                    return result;
+                });
         });
     }
 

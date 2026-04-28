@@ -294,6 +294,7 @@ void TDataShard::Die(const TActorContext& ctx) {
 
     NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BuildIndexPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
 
@@ -1627,10 +1628,20 @@ void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperati
     );
 }
 
+void TDataShard::SendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
+    for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
+        auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        copy->Record = response->Record;
+        SendViaSchemeshardPipe(ctx, CurrentSchemeShardId, BuildIndexPipe, std::move(copy));
+    }
+}
+
 void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     if (!txId) {
-        for (const auto& op : TransQueue.GetSchemaOperations())
+        for (const auto& op : TransQueue.GetSchemaOperations()) {
             NotifySchemeshard(ctx, op.first);
+        }
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -3073,7 +3084,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     }
 
     ui64 txInfly = TxInFly();
-    TDuration lag = GetDataTxCompleteLag();
+    TDuration lag = GetTxCompleteLag();
     if (txInfly > 1 && lag > TDuration::MilliSeconds(MaxTxLagMilliseconds)) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByLag;
@@ -3616,6 +3627,14 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         return;
     }
 
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            BuildIndexPipe = TActorId();
+            SendPendingBuildIndexFinalResponses(ctx);
+        }
+        return;
+    }
+
     if (ev->Get()->ClientId == DbStatsReportPipe) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             DbStatsReportPipe = TActorId();
@@ -3680,6 +3699,12 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
+        return;
+    }
+
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        BuildIndexPipe = TActorId();
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -4039,11 +4064,11 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
-    TDuration dataTxCompleteLag = GetDataTxCompleteLag();
-    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(dataTxCompleteLag.MilliSeconds());
-    if (dataTxCompleteLag > TDuration::Minutes(5)) {
+    TDuration txCompleteLag = GetTxCompleteLag();
+    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(txCompleteLag.MilliSeconds());
+    if (txCompleteLag > TDuration::Minutes(5)) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Tx completion lag (" << dataTxCompleteLag << ") is > 5 min on tablet "
+                   "Tx completion lag (" << txCompleteLag << ") is > 5 min on tablet "
                    << TabletID());
     }
 

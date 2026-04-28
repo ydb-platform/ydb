@@ -139,6 +139,8 @@ protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     NLWTrace::TOrbit DataSourceOrbit;
     TMonotonic LastProbeTimestamp;
+    TMonotonic SourcesAheadQueueEnterTime;
+    ui32 SourcesAhead = 0;
     TMonotonic SourceCreatedTimestamp;
     TDuration TotalExecutionDuration;
     ui64 TotalBytesRead = 0;
@@ -156,6 +158,34 @@ public:
         return result;
     }
 
+    void SetSourcesAheadQueueEnterTime(const TMonotonic t) {
+        SourcesAheadQueueEnterTime = t;
+    }
+
+    TDuration GetSourcesAheadQueueWaitDuration() const {
+        if (!SourcesAhead || !SourcesAheadQueueEnterTime) {
+            return TDuration::Zero();
+        }
+        return TMonotonic::Now() - SourcesAheadQueueEnterTime;
+    }
+
+    void SetSourcesAhead(const ui32 count) {
+        SourcesAhead = count;
+    }
+
+    ui32 GetSourcesAhead() const {
+        return SourcesAhead;
+    }
+
+    ui32 GetFilteredRowsCount() const {
+        if (!HasStageResult() || GetStageResult().IsEmpty()) {
+            return 0;
+        }
+        const auto& notAppliedFilter = GetStageResult().GetNotAppliedFilter();
+        return notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(GetStageResult().GetBatch()->num_rows())
+                                : GetStageResult().GetBatch()->num_rows();
+    }
+
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }
@@ -163,6 +193,8 @@ public:
     void AddBytesRead(const ui64 bytes) {
         TotalBytesRead += bytes;
     }
+
+    void OnStartProcessing();
 
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
@@ -174,6 +206,12 @@ public:
 
     ui64 GetTotalBytesRead() const {
         return TotalBytesRead;
+    }
+
+    ui64 ExtractTotalBytesRead() {
+        const ui64 result = TotalBytesRead;
+        TotalBytesRead = 0;
+        return result;
     }
 
     NLWTrace::TOrbit& GetDataSourceOrbit() {
@@ -257,6 +295,15 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
+        static std::shared_ptr<ISnapshotSchema> defaultValue;
+        return defaultValue;
+    }
+
+    virtual ui64 GetUsedRawBytesOptional() const {
+        return 0;
+    }
 
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
 

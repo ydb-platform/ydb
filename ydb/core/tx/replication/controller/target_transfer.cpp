@@ -344,8 +344,10 @@ void TTargetTransfer::WorkerStatusChanged(ui64 workerId, ui64 status) {
     }
 }
 
-void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
-    TBase::UpdateStats(workerId, newStats);
+bool TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
+    if (!TBase::UpdateStats(workerId, newStats)) {
+        return false;
+    }
 
     EnsureCounters();
     auto* statsPtr = dynamic_cast<TTransferStats*>(Stats.get());
@@ -376,6 +378,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
             countersPtr->MinWorkerUptime->Set(0);
         }
     }
+    return true;
 }
 
 TTargetWithStreamStats* TTargetTransfer::GetStatsImpl() {

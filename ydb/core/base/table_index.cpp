@@ -170,6 +170,23 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
     return *result;
 }
 
+bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
+    switch (type) {
+        case Ydb::Table::TableIndex::kGlobalIndex:
+        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            return false;
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+            return true;
+    }
+}
+
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
     if (const auto* broken = IsContains(table.Keys, table.Columns)) {
         explain = TStringBuilder()

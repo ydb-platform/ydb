@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              ui8 hostIndex,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
+             const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              ui8 hostIndex,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
+             const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);

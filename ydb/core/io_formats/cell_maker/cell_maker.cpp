@@ -1,5 +1,7 @@
 #include "cell_maker.h"
 
+#include <ydb/core/io_formats/json/json.h>
+
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -20,6 +22,7 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
+#include <limits>
 #include <typeinfo>
 
 namespace NKikimr::NFormats {
@@ -268,17 +271,24 @@ namespace {
         }
     };
 
-    NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
-    }
-
     TString WriteJson(const NJson::TJsonValue& json) {
         TStringStream str;
-        NJson::WriteJson(&str, &json, DefaultJsonConfig());
+        NJson::WriteJson(&str, &json, DefaultJsonWriterConfig());
         return str.Str();
+    }
+
+    double GetDoubleSafeWithNanInf(const NJson::TJsonValue& value) {
+        if (value.IsString()) {
+            const auto& s = value.GetStringSafe();
+            if (s == "inf") {
+                return std::numeric_limits<double>::infinity();
+            } else if (s == "-inf") {
+                return -std::numeric_limits<double>::infinity();
+            } else if (s == "nan") {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+        }
+        return value.GetDoubleSafe();
     }
 
 } // anonymous
@@ -430,9 +440,9 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
         case NScheme::NTypeIds::Uint64:
             return TCellMaker<ui64>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
         case NScheme::NTypeIds::Float:
-            return TCellMaker<float>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<float>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Double:
-            return TCellMaker<double>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<double>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Date:
             return TCellMaker<TInstant, ui16>::Make(cell, value.GetStringSafe(), pool, err, &Days);
         case NScheme::NTypeIds::Datetime:

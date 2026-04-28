@@ -930,7 +930,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     THashMap<ui32, size_t> KeyColumnIdToPos;
 
-    std::shared_ptr<const TPartitioning> TablePartitioning;
+    TPartitioning::TCPtr TablePartitioning;
     THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;
     TPartitionIndex NextPartitionIndex = 0;
 

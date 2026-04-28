@@ -1524,7 +1524,7 @@ public:
     }
 
     void OnPartitioningChanged(
-        const std::shared_ptr<const TPartitioning>& partitioning) override {
+        const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
         Partitioning = partitioning;
         BeforePartitioningChanged();
@@ -1926,7 +1926,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TPartitioning> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     std::optional<bool> IsOlap;
 };
 

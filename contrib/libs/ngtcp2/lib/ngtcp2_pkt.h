@@ -103,10 +103,6 @@
 /* NGTCP2_RETRY_TAGLEN is the length of Retry packet integrity tag. */
 #define NGTCP2_RETRY_TAGLEN 16
 
-/* NGTCP2_HARD_MAX_UDP_PAYLOAD_SIZE is the maximum UDP datagram
-   payload size that this library can write. */
-#define NGTCP2_HARD_MAX_UDP_PAYLOAD_SIZE ((1 << 24) - 1)
-
 /* NGTCP2_PKT_LENGTHLEN is the number of bytes that is occupied by
    Length field in Long packet header. */
 #define NGTCP2_PKT_LENGTHLEN 4
@@ -195,7 +191,7 @@ typedef struct ngtcp2_stream {
   uint8_t flags;
   /* CRYPTO frame does not include this field, and must set it to
      0. */
-  uint8_t fin;
+  int fin;
   /* CRYPTO frame does not include this field, and must set it to
      0. */
   int64_t stream_id;

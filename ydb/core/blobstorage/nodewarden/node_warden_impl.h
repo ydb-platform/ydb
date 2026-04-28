@@ -220,6 +220,7 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxChunksToDefragInflight;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
@@ -241,6 +242,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
         TControlWrapper EnableChunkKeeper;

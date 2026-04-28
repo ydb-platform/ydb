@@ -31,8 +31,13 @@ message TMLPMetrics {
 enum EReadWithKeepOrder {
     READ_WITH_KEEP_ORDER_UNSPECIFIED = 0;
     READ_WITH_KEEP_ORDER_BLOCK_ALL = 1; /* reading from a partition returns an empty list of messages */
+    READ_WITH_KEEP_ORDER_BLACKLIST = 2; /* reading returns only messages whose message group id is not included in the locked list */
     READ_WITH_KEEP_ORDER_ALLOW_ALL = 3; /* no reading restrictions */
 }
+
+message TFullBlacklist {
+    repeated fixed32 ParentLockedMessageGroupsIdHash = 1 [packed = true];
+};
 
 message TExternalLockedMessageGroupsId {
     optional uint32 ParentPartitionId = 1;
@@ -41,6 +46,9 @@ message TExternalLockedMessageGroupsId {
     optional uint64 Step = 4; /* increases when the new full state is sent */
 
     optional EReadWithKeepOrder Mode = 5;
+    oneof BlacklistUpdate {
+       TFullBlacklist FullBlacklist = 6; /* full list of locked message group id */
+    }
 }
 
 message TMLPStorageSnapshot {

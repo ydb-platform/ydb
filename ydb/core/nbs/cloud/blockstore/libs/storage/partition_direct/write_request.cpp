@@ -59,13 +59,11 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 
 void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
-    auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        TraceId.Clone(),
-        "TBaseWriteRequestExecutor",
-        NWilson::EFlags::AUTO_END,
-        ActorSystem));
-    span->Attribute("Location", ToString(location));
+    auto span =
+        DirectBlockGroup->CreateChildSpan(TraceId, "TBaseWriteRequestExecutor");
+    if (span) {
+        span->Attribute("Location", ToString(location));
+    }
 
     RequestedWrites.Set(location);
 
@@ -75,7 +73,7 @@ void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
         Lsn,
         VChunkRange,
         Request->Sglist,
-        span->GetTraceId());
+        span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
         [self = shared_from_this(), location, span = std::move(span)]       //

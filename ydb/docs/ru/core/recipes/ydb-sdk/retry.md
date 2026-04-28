@@ -651,6 +651,51 @@
 
   {% endlist %}
 
+- C#
+
+  В {{ ydb-short-name }} C# SDK повторные попытки реализованы на двух уровнях.
+
+  {% list tabs %}
+
+  - OpenRetryableConnectionAsync
+
+    Метод `OpenRetryableConnectionAsync` создаёт соединение с автоматическими повторными попытками при transient-ошибках. Соединение, полученное таким образом, не поддерживает интерактивные транзакции — для работы с транзакциями используйте `ExecuteInTransactionAsync`.
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    var command = new YdbCommand("SELECT series_id, title FROM series WHERE series_id = $series_id", connection);
+    command.Parameters.Add(new YdbParameter("$series_id", YdbDbType.Uint64, 1U));
+
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        Console.WriteLine($"series_id: {reader.GetUint64(0)}, title: {reader.GetString(1)}");
+    }
+    ```
+
+  - ExecuteInTransactionAsync
+
+    Метод `ExecuteInTransactionAsync` выполняет несколько операций в рамках одной транзакции с автоматическим повтором при конфликтах:
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await dataSource.ExecuteInTransactionAsync(async connection =>
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "UPSERT INTO series (series_id, title) VALUES (1, \"IT Crowd\")";
+        await command.ExecuteNonQueryAsync();
+    });
+    ```
+
+  {% endlist %}
+
 - JavaScript
 
   Повторные попытки и переподключения сделаны внутри sdk, отдельно ничего пользователю настраивать не нужно.

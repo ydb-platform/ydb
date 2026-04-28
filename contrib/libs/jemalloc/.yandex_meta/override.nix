@@ -7,5 +7,7 @@ pkgs: attrs: with pkgs; with attrs; rec {
     sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
   };
 
+  patches = [];
+
   buildInputs = [ libunwind ];
 }

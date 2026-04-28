@@ -960,3 +960,16 @@ class TestStreamingInYdb(StreamingTestBase):
                 match=r"SHARED_READING in External data source is not supported",
             ):
                 self.create_source(kikimr, source_name, shared=True)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
+    def test_table_mode(self, kikimr, entity_name, local_topics):
+        input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
+
+        message = b'{"time": "lunch time"}'
+        self.write_stream([message], endpoint=endpoint)
+
+        sql = f"SELECT * FROM {input_name}"
+
+        result_sets = kikimr.ydb_client.query(sql)
+        assert result_sets[0].rows[0]['Data'] == message

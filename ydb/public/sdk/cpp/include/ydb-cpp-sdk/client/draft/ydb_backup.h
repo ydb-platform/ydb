@@ -33,7 +33,7 @@ enum class ERestoreProgress {
 class TIncrementalBackupResponse : public TOperation {
 public:
     struct TMetadata {
-        EBackupProgress Progress;
+        EBackupProgress Progress = EBackupProgress::Unspecified;
         int32_t ProgressPercent = 0; // [0; 100]
     };
 
@@ -50,7 +50,7 @@ private:
 class TBackupCollectionRestoreResponse : public TOperation {
 public:
     struct TMetadata {
-        ERestoreProgress Progress;
+        ERestoreProgress Progress = ERestoreProgress::Unspecified;
         int32_t ProgressPercent = 0; // [0; 100]
     };
 

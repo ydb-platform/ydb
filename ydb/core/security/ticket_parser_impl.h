@@ -10,6 +10,7 @@
 #include <ydb/core/security/certificate_check/cert_check.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/security/util/net.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -26,6 +27,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/generic/queue.h>
+#include <util/generic/strbuf.h>
 #include <util/stream/file.h>
 #include <util/string/vector.h>
 
@@ -328,6 +330,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterWrongPeernameFormat;
     ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
     ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
@@ -967,6 +970,21 @@ private:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+        if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
+            CounterWrongPeernameFormat->Inc();
+            BLOG_W("Ticket " << MaskTicket(ev->Get()->Ticket) <<
+                   ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
+                   " for DB: " << ev->Get()->Database.Quote());
+
+            if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
+                TEvTicketParser::TError error;
+                error.Message = "Unacceptable peername format";
+                error.Retryable = false;
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);
+                return;
+            }
+        }
+
         TStringBuf ticket;
         TStringBuf ticketType;
         if (IsTicketCertificate(ev->Get()->Ticket)) {
@@ -2161,6 +2179,7 @@ protected:
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
+        CounterWrongPeernameFormat = counters->GetCounter("WrongPeernameFormat", true);
         CounterTicketsHighPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "HighPriority")->GetHistogram("TicketsBuildTimeMs",
             NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
         CounterTicketsLowPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "LowPriority")->GetHistogram("TicketsBuildTimeMs",

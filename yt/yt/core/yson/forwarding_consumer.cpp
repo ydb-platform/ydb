@@ -317,7 +317,7 @@ TTeeYsonConsumer::TTeeYsonConsumer(
     EYsonType type)
     : OwnedConsumers_(std::move(ownedConsumers))
 {
-    consumers.reserve(consumers.size() + ownedConsumers.size());
+    consumers.reserve(consumers.size() + OwnedConsumers_.size());
     for (const auto& consumer : OwnedConsumers_) {
         consumers.push_back(consumer.get());
     }

@@ -84,11 +84,6 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Input(narrowMap)
             .Done().Ptr();
             // clang-format on
-
-            if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(Read)) {
-                source =
-                    NPhysicalConvertionUtils::BuildMultiConsumerHandler(source, Read->Props.NumOfConsumers.value(), Ctx, Pos);
-            }
             break;
         }
         default:

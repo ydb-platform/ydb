@@ -251,7 +251,6 @@ namespace NActors {
                             " size# " << size << " hexDump# " << HexEncode(input->GetString()));
                 }
             }
-            ev->CachedByteSize = input->GetSize();
             return holder.Release();
         }
 
@@ -305,6 +304,7 @@ namespace NActors {
         void StripPayload() {
             Payload.clear();
             TotalPayloadSize = 0;
+            InvalidateCachedByteSize();
         }
 
     protected:

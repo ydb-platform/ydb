@@ -97,6 +97,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -212,6 +216,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -259,6 +267,10 @@
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -350,6 +362,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -478,6 +494,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -588,6 +608,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -703,6 +727,10 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -800,6 +828,10 @@
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

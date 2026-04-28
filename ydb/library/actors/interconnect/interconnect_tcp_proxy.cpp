@@ -333,13 +333,17 @@ namespace NActors {
 
         bool runDelayedRdmaHandshakeTimer = false;
 
+        const auto handshakeSuccessLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
+            ? NLog::PRI_NOTICE
+            : NLog::PRI_INFO;
+
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
-            LOG_INFO_IC("ICP19", "incoming handshake succeeded");
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP19", handshakeSuccessLogPriority, "incoming handshake succeeded");
             DropIncomingHandshake(false);
             DropOutgoingHandshake();
         } else if (ev->Sender == OutgoingHandshakeActor) {
-            LOG_INFO_IC("ICP20", "outgoing handshake succeeded");
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP20", handshakeSuccessLogPriority, "outgoing handshake succeeded");
             if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
                 runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
             }
@@ -412,12 +416,18 @@ namespace NActors {
             (IncomingHandshakeActor && OutgoingHandshakeActor);
         LogHandshakeFail(ev, inconclusive);
 
+        const auto handshakeFailLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
+            ? NLog::PRI_DEBUG
+            : NLog::PRI_NOTICE;
+
         if (ev->Sender == IncomingHandshakeActor) {
-            LOG_NOTICE_IC("ICP24", "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP24", handshakeFailLogPriority,
+                          "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
                           ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), OutgoingHandshakeActor.ToString().data());
             DropIncomingHandshake(false);
         } else if (ev->Sender == OutgoingHandshakeActor) {
-            LOG_NOTICE_IC("ICP25", "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP25", handshakeFailLogPriority,
+                          "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
                           ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), IncomingHandshakeActor.ToString().data(),
                           HeldHandshakeReply ? "yes" : "no");
             DropOutgoingHandshake(false);

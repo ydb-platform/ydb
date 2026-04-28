@@ -71,7 +71,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
         ```
 
     1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
-  
+
         ```json
         - labels:
             container: ydb-dynamic

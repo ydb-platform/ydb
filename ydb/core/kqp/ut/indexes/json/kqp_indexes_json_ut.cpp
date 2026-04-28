@@ -2980,5 +2980,86 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR) OR JSON_EXISTS(Text, '$.k1' TRUE ON ERROR))");
         });
     }
+
+    Y_UNIT_TEST(JsonPassingVariablesTokens) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // JSON_VALUE: variable on right side, equality, all scalar types
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING 1 AS var RETURNING Bool))", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING -1 AS var RETURNING Bool))", {"\3k1" + numSuffix(-1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING 1.0 AS var RETURNING Bool))", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING -1.0 AS var RETURNING Bool))", {"\3k1" + numSuffix(-1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING "123"u AS var RETURNING Bool))", {"\3k1" + strSuffix("123")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING true AS var RETURNING Bool))", {"\3k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING false AS var RETURNING Bool))", {"\3k1" + falseSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING NULL AS var RETURNING Bool))", {"\3k1" + nullSuffix});
+
+            // JSON_VALUE: variable on left side
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$var == $.k1' PASSING 1 AS var RETURNING Bool))", {"\3k1" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$var == $.k1' PASSING "hello"u AS var RETURNING Bool))", {"\3k1" + strSuffix("hello")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$var == $.k1' PASSING true AS var RETURNING Bool))", {"\3k1" + trueSuffix});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$var == $.k1' PASSING NULL AS var RETURNING Bool))", {"\3k1" + nullSuffix});
+
+            // JSON_VALUE: non-equality operators with variable -> path only (literal dropped)
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 != $var' PASSING 5 AS var RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 < $var' PASSING 5 AS var RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 <= $var' PASSING 5 AS var RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 > $var' PASSING 0 AS var RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 >= $var' PASSING 0 AS var RETURNING Bool))", {"\3k1"});
+
+            // JSON_VALUE: multiple variables in AND
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '($.k1 == $v1) && ($.k2 == $v2)' PASSING "x"u AS v1, 1 AS v2 RETURNING Bool))",
+                {"\3k1" + strSuffix("x"), "\3k2" + numSuffix(1)}, "and");
+
+            // JSON_VALUE: multiple variables in OR
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '($.k1 == $v1) || ($.k2 == $v2)' PASSING "x"u AS v1, 1 AS v2 RETURNING Bool))",
+                {"\3k1" + strSuffix("x"), "\3k2" + numSuffix(1)}, "or");
+
+            // JSON_VALUE: mixed variable and literal
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '($.k1 == $var) && ($.k2 == 42)' PASSING "x"u AS var RETURNING Bool))",
+                {"\3k1" + strSuffix("x"), "\3k2" + numSuffix(42)}, "and");
+
+            // JSON_VALUE: non-literal PASSING types -> error
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING Json('123') AS var RETURNING Bool))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING CurrentUtcTimestamp() AS var RETURNING Bool))");
+
+            // JSON_EXISTS: filter with variable, equality, all scalar types
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING 1 AS var))", {"\3k1\3k2" + numSuffix(1)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING "hello"u AS var))", {"\3k1\3k2" + strSuffix("hello")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING true AS var))", {"\3k1\3k2" + trueSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING false AS var))", {"\3k1\3k2" + falseSuffix});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING NULL AS var))", {"\3k1\3k2" + nullSuffix});
+
+            // JSON_EXISTS: variable on left side in filter equality
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? ($var == @.k2)' PASSING "val"u AS var))", {"\3k1\3k2" + strSuffix("val")});
+
+            // JSON_EXISTS: non-equality filter operators with variable -> path only
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 < $var)' PASSING 10 AS var))", {"\3k1\3k2"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != $var)' PASSING "x"u AS var))", {"\3k1\3k2"});
+
+            // JSON_EXISTS: multiple variables in filter AND
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $v1 && @.k3 == $v2)' PASSING "x"u AS v1, 1 AS v2))",
+                {"\3k1\3k2" + strSuffix("x"), "\3k1\3k3" + numSuffix(1)}, "and");
+
+            // JSON_EXISTS: multiple variables in filter OR
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$.k1 ? ((@.k2 == $v1) || (@.k2 == $v2))' PASSING "a"u AS v1, "b"u AS v2))",
+                {"\3k1\3k2" + strSuffix("a"), "\3k1\3k2" + strSuffix("b")}, "or");
+
+            // JSON_EXISTS: non-literal PASSING types -> error
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING Json('123') AS var))");
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING CurrentUtcTimestamp() AS var))");
+
+            // JSON_VALUE: without variable -> skip
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $var' PASSING 10 AS var2 RETURNING Bool))", {"\3k1"});
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1 == $var && $.k2 == $var2' PASSING 10 AS var2 RETURNING Bool))",
+                {"\3k1", "\3k2" + numSuffix(10)}, "and");
+        });
+    }
 }
 }  // namespace NKikimr::NKqp

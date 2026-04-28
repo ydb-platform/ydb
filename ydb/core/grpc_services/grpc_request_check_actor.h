@@ -40,7 +40,6 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
         ctx->RaiseIssue(issue);
         ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        ctx->FinishSpan();
         return false;
     } else {
         return true;
@@ -587,34 +586,29 @@ private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown resource database");
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
@@ -631,7 +625,6 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
-        GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
         PassAway();
     }
@@ -663,7 +656,6 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
-        GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         PassAway();
     }

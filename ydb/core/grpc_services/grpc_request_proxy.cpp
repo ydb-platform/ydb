@@ -86,7 +86,6 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -94,7 +93,6 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             event->Release().Release()->Pass(*this);
         }
     }

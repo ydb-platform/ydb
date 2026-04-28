@@ -78,10 +78,12 @@ private:
 struct TShuffleConnection: public TConnection {
     TShuffleConnection(const TVector<TInfoUnit>& keys,
                        ui32 outputIndex,
-                       NDq::EHashShuffleFuncType hashFuncType)
+                       NDq::EHashShuffleFuncType hashFuncType,
+                       bool useSpilling = false)
         : TConnection("Shuffle", outputIndex)
         , Keys(keys)
-        , HashFuncType(hashFuncType) {
+        , HashFuncType(hashFuncType)
+        , UseSpilling(useSpilling) {
     }
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
@@ -91,6 +93,7 @@ struct TShuffleConnection: public TConnection {
 
     TVector<TInfoUnit> Keys;
     NDq::EHashShuffleFuncType HashFuncType;
+    bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {

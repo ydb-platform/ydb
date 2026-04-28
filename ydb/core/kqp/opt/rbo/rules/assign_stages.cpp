@@ -89,8 +89,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
             props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TBroadcastConnection>(rightOutputIndex));
         }
-        // For inner join (we don't support other joins yet) we build a new stage
-        // with GraceJoinCore and connect inputs via Shuffle connections
         else {
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
@@ -104,17 +102,38 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
             auto hashFunction = GetAppropriateHashFunction(ctx, shuffleEliminated);
 
+            // Channel spilling (UseSpilling) is opt-in: without a specific need, backpressure
+            // is preferred. There are two exceptions to this:
+            //
+            // 1. GraceJoins. Because of the way GraceJoin algorithm is implemented, it tries to
+            //    align left and right inputs. This may lead to a deadlock if two separate tasks
+            //    wait for two different inputs. We explicitly set UseSpilling = true for those
+            //
+            // 2. MultiOutput. This is handled in tasks graph.
+            //
+            // All other things set UseSpilling = false instead (the default in TShuffleConnection)
+
             if (join->Props.LeftShuffleEliminated) {
                 props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
             } else {
-                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftOutputIndex, hashFunction);
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
+                    leftShuffleKeys,
+                    leftOutputIndex,
+                    hashFunction,
+                    /*useSpilling=*/true
+                );
                 props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
             }
 
             if (join->Props.RightShuffleEliminated) {
                 props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>(rightOutputIndex));
             } else {
-                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightOutputIndex, hashFunction);
+                auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
+                    rightShuffleKeys,
+                    rightOutputIndex,
+                    hashFunction,
+                    /*useSpilling=*/true
+                );
                 props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
             }
         }

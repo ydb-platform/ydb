@@ -11,7 +11,7 @@ select
     o_orderpriority,
     rank() over (order by o_totalprice desc) as price_rank
 from
-    `{path}orders`
+    `column/tpch/s10000/orders`
 );
 
 -- Get top-100 and bottom-100 by rank

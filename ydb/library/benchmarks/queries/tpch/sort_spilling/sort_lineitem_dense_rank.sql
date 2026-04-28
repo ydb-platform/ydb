@@ -12,7 +12,7 @@ select
     l_quantity,
     dense_rank() over (order by l_returnflag asc, l_shipdate asc) as date_rank
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 );
 
 -- Aggregate by rank to get daily statistics per returnflag

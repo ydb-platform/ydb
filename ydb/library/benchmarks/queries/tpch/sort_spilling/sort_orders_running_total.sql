@@ -9,7 +9,7 @@ select
     o_orderstatus,
     sum(o_totalprice) over w as running_total
 from
-    `{path}orders`
+    `column/tpch/s10000/orders`
 window w as (order by o_orderdate rows between unbounded preceding and current row)
 );
 

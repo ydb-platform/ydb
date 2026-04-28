@@ -9,15 +9,15 @@ with a TopSort (ORDER BY ... LIMIT). After sorting, the queries perform
 additional computation that depends on the full sorted order (window functions,
 running aggregates, etc.).
 
+Table paths use the format `column/tpch/s10000/<table>`.
+
 ## Usage
 
-Run on a cluster with TPC-H 10000 data loaded. The `{path}` placeholder
-should be replaced with the actual path prefix to the TPC-H tables.
+Run on a cluster with TPC-H 10000 data loaded in column tables.
 
 Example:
 ```bash
-sed 's|{path}|/Root/tpch/s10000/|g' sort_lineitem_running_sum.sql | \
-    ydb -e grpc://cluster:2135 -d /Root/db scripting yql --stdin
+ydb -e grpc://cluster:2135 -d /Root/db scripting yql -f sort_lineitem_running_sum.sql
 ```
 
 ## Queries

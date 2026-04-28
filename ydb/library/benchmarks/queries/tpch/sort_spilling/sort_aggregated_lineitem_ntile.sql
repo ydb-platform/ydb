@@ -5,11 +5,11 @@
 $agg = (
 select
     l_orderkey,
-    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    sum(l_extendedprice * (CAST(1 AS Decimal(12,2)) - l_discount)) as revenue,
     sum(l_quantity) as total_quantity,
     count(*) as lineitem_count
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 group by
     l_orderkey
 );

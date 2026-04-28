@@ -12,7 +12,7 @@ select
     lead(l_extendedprice) over w as next_price,
     lead(l_comment) over w as next_comment
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 window w as (order by l_comment asc)
 );
 

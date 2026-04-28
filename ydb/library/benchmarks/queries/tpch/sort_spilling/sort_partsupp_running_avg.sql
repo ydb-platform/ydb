@@ -11,7 +11,7 @@ select
     avg(ps_supplycost) over w as running_avg_cost,
     sum(ps_availqty) over w as running_total_qty
 from
-    `{path}partsupp`
+    `column/tpch/s10000/partsupp`
 window w as (order by ps_supplycost desc, ps_availqty asc, ps_partkey asc
              rows between unbounded preceding and current row)
 );

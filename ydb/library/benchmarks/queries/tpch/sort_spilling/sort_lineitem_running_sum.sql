@@ -11,7 +11,7 @@ select
     sum(l_quantity) over w as running_qty,
     sum(l_extendedprice) over w as running_price
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 window w as (order by l_shipdate rows between unbounded preceding and current row)
 );
 

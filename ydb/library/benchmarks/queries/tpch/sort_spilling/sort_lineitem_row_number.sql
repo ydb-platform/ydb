@@ -10,7 +10,7 @@ select
     l_shipdate,
     row_number() over (order by l_extendedprice desc) as rn
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 );
 
 -- Extract percentile boundaries (every 1% of data)

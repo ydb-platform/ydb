@@ -11,11 +11,11 @@ select
     o.o_orderdate as o_orderdate,
     o.o_totalprice as o_totalprice,
     o.o_orderpriority as o_orderpriority,
-    sum(l.l_extendedprice * (1 - l.l_discount)) over w as running_revenue
+    sum(l.l_extendedprice * (CAST(1 AS Decimal(12,2)) - l.l_discount)) over w as running_revenue
 from
-    `{path}lineitem` as l
+    `column/tpch/s10000/lineitem` as l
 join
-    `{path}orders` as o
+    `column/tpch/s10000/orders` as o
 on
     l.l_orderkey = o.o_orderkey
 where

@@ -11,7 +11,7 @@ select
     lag(l_extendedprice) over w as prev_price,
     l_extendedprice - coalesce(lag(l_extendedprice) over w, l_extendedprice) as price_diff
 from
-    `{path}lineitem`
+    `column/tpch/s10000/lineitem`
 window w as (order by l_returnflag asc, l_shipdate desc, l_orderkey asc)
 );
 

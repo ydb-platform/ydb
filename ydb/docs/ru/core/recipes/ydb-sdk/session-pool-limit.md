@@ -14,6 +14,49 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    - `MaxActiveSessions` — максимальный размер пула (по умолчанию 50).
+    - `MinPoolSize` — минимальное число сессий (по умолчанию 10). SDK перестанет закрывать сессии по таймауту по достижении лимита, поэтому число не гарантированное.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    NYdb::NQuery::TQueryClient CreateQueryClient(const NYdb::TDriver& driver) {
+        NYdb::NQuery::TClientSettings settings;
+        settings.SessionPoolSettings(
+            NYdb::NQuery::TSessionPoolSettings()
+                .MaxActiveSessions(500)
+                .MinPoolSize(10));
+        return NYdb::NQuery::TQueryClient(driver, settings);
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                max_pool_size: 500
+                min_pool_size: 10
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}

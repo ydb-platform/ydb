@@ -12,6 +12,90 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/table/table.h>
+
+    void BulkUpsertLogs(const NYdb::TDriver& driver) {
+      NYdb::NTable::TTableClient client(driver);
+
+      constexpr int kBatchSize = 1000;
+      NYdb::TValueBuilder rowsBuilder;
+      rowsBuilder.BeginList();
+      for (int i = 0; i < kBatchSize; ++i) {
+          rowsBuilder.AddListItem()
+              .BeginStruct()
+              .AddMember("App").Utf8("App_" + std::to_string(i / 256))
+              .AddMember("Host").Utf8("192.168.0." + std::to_string(i % 256))
+              .AddMember("Timestamp")
+                  .Timestamp(TInstant::Now() + TDuration::Seconds(i))
+              .AddMember("HttpCode").Uint32(static_cast<uint32_t>(i % 113 == 0 ? 404 : 200))
+              .AddMember("Message")
+                  .Utf8(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+              .EndStruct();
+      }
+      rowsBuilder.EndList();
+
+      NYdb::TValue rows = rowsBuilder.Build();
+
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync(
+          [&rows](NYdb::NTable::TTableClient& client) {
+              return client.BulkUpsert("/local/bulk_upsert_example", NYdb::TValue{rows}).GetValueSync();
+          },
+          NYdb::NTable::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct LogMessage final {
+        ydb::Utf8 App;
+        ydb::Utf8 Host;
+        std::chrono::system_clock::time_point Timestamp;
+        std::uint32_t HttpCode;
+        ydb::Utf8 Message;
+    };
+
+    void BulkUpsertLogs(ydb::TableClient& client) {
+        constexpr int kBatchSize = 1000;
+        std::vector<LogMessage> rows;
+        rows.reserve(kBatchSize);
+
+        for (int i = 0; i < kBatchSize; ++i) {
+            rows.push_back({
+                .App = ydb::Utf8{"App_" + std::to_string(i / 256)},
+                .Host = ydb::Utf8{"192.168.0." + std::to_string(i % 256)},
+                .Timestamp = std::chrono::system_clock::now() + std::chrono::seconds{i},
+                .HttpCode = static_cast<std::uint32_t>(i % 113 == 0 ? 404 : 200),
+                .Message = ydb::Utf8{
+                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1"
+                },
+            });
+        }
+
+        client.BulkUpsert(
+            "/local/bulk_upsert_example",
+            rows,
+            ydb::OperationSettings{
+                .is_idempotent = true,
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}

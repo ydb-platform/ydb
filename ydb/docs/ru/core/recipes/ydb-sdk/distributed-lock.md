@@ -12,6 +12,52 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/coordination/coordination.h>
+
+  void CoordinationExclusiveWork(
+      const NYdb::TDriver& driver,
+      const std::string& nodePath,
+      const std::string& semaphoreName)
+  {
+      using namespace NYdb::NStatusHelpers;
+
+      NYdb::NCoordination::TClient client(driver);
+
+      auto sessionResult = client.StartSession(nodePath).ExtractValueSync();
+      ThrowOnError(sessionResult);
+
+      auto session = sessionResult.ExtractResult();
+
+      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings()
+          .Ephemeral(true)
+          .Exclusive()
+          .Timeout(TDuration::Minutes(5));
+
+      auto acquireResult = session.AcquireSemaphore(semaphoreName, acquireSettings).ExtractValueSync();
+      ThrowOnError(acquireResult);
+
+      if (!acquireResult.GetResult()) {
+          // semaphore was not acquired
+          return;
+      }
+
+      // lock acquired, start processing
+
+      auto releaseStatus = session.ReleaseSemaphore(semaphoreName).ExtractValueSync();
+      ThrowOnError(releaseStatus);
+
+      if (!releaseStatus.GetResult()) {
+          // semaphore was not released
+          return;
+      }
+
+      // lock released, end processing
+  }
+  ```
+
 - Go
 
    ```go

@@ -6,6 +6,43 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    NYdb::TDriver CreateDriverWithAccessToken(const std::string& accessToken) {
+        auto config = NYdb::TDriverConfig("grpcs://localhost:2135/?database=/local")
+            .SetAuthToken(accessToken);
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "token": "<access token>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}

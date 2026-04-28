@@ -20,6 +20,34 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  Данный формат соответствует [`NYdb::TResultSet::EFormat::Value`](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/result/result.h). Он используется по умолчанию на стороне сервиса, если формат не задан; ниже — явное указание, как в примере на Python. Сессию `NYdb::NQuery::TSession` обычно получают в колбэке `TQueryClient::RetryQuerySync` / `RetryQuery`.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+  #include <ydb-cpp-sdk/client/types/status/status.h>
+
+  NYdb::TStatus ExampleValue(NYdb::NQuery::TSession session) {
+      constexpr std::string_view query = "SELECT * FROM example ORDER BY Key LIMIT 100;";
+
+      auto settings = NYdb::NQuery::TExecuteQuerySettings()
+          .Format(NYdb::TResultSet::EFormat::Value)
+          .SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::FirstOnly);
+
+      auto queryResult = session.ExecuteQuery(
+          query,
+          NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+          settings).GetValueSync();
+
+      NYdb::NStatusHelpers::ThrowOnError(queryResult);
+
+      for (const NYdb::TResultSet& resultSet : queryResult.GetResultSets()) {
+          std::cout << "Rows: " << resultSet.RowsCount() << ", columns: " << resultSet.ColumnsCount() << std::endl;
+      }
+  }
+  ```
+
 - Python
 
   Данный формат используется по умолчанию при выполнении запроса через QueryService. Ниже приведён пример явного указания формата возвращаемых данных.

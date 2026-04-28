@@ -382,6 +382,7 @@ void TQuoterService::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(QUOTER_SERVICE_PROVIDER));
 
     Become(&TThis::StateFunc);
+    ScheduleNextCleanupPass();
 }
 
 void TQuoterService::TryTickSchedule(TInstant now) {
@@ -854,12 +855,24 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
             PRE() {
                 str << "LastProcessed: " << LastProcessed << "\n"
                     << "Quoters:\n";
+                bool firstQuoter = true;
                 for (auto& [quoterId, quoterState] : Quoters) {
+                    if (firstQuoter) {
+                        firstQuoter = false;
+                    } else {
+                        str << "\n";
+                    }
                     str << "  Name: " << quoterState.QuoterName << "\n"
                         << "  Id: " << quoterId << "\n"
                         << "  ProxyId: " << quoterState.ProxyId << "\n"
                         << "  Resources:\n";
+                    bool firstRes = true;
                     for (auto& [resId, resPtr] : quoterState.Resources) {
+                        if (firstRes) {
+                            firstRes = false;
+                        } else {
+                            str << "\n";
+                        }
                         str << "    Id: " << resId << "\n";
                         if (resPtr) {
                             str << "    Name: " << resPtr->Resource << "\n"
@@ -1094,12 +1107,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         if (resUpdate.ResourceState == EUpdateState::Broken
             || (resUpdate.ResourceState == EUpdateState::Evict && quores.QueueHead == Max<ui32>()))
         {
-            BLOG_I("closing resource on ProxyUpdate " << quoter.QuoterName << ":" << quores.Resource);
-            Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
-
-            ForbidResource(quores);
-            quoter.ResourcesIndex.erase(quores.Resource);
-            quoter.Resources.erase(resourceIt);
+            EvictResource(quoter, resUpdate.ResourceId, "ProxyUpdate");
             continue;
         }
 
@@ -1118,15 +1126,111 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         }
     }
 
-    if (quoter.Empty()) {
-        BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName);
-        return BreakQuoter(quoterIt);
-    }
+    CloseQuoterIfEmpty(quoterIt, "ProxyUpdate");
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     Counters.ResultRpcDeadline->Inc();
+}
+
+void TQuoterService::StartCleanupPass() {
+    CleanupQuoters = {};
+
+    for (const auto& [quoterId, _] : Quoters) {
+        Y_UNUSED(_);
+        CleanupQuoters.push(quoterId);
+    }
+}
+
+void TQuoterService::ScheduleNextCleanupPass() {
+    Schedule(CleanupPeriod, new TEvents::TEvWakeup(WakeupTagCleanup));
+}
+
+void TQuoterService::HandleCleanup() {
+    if (CleanupQuoters.empty()) {
+        StartCleanupPass();
+    }
+
+    const TInstant now = TActivationContext::Now();
+    size_t resourcesProcessed = 0;
+    while (!CleanupQuoters.empty() && resourcesProcessed < CleanupBatchLimit) {
+        const ui64 quoterId = CleanupQuoters.front();
+        CleanupQuoters.pop();
+
+        auto quoterIt = Quoters.find(quoterId);
+        if (quoterIt == Quoters.end()) {
+            continue;
+        }
+
+        TVector<ui64> resourcesToEvict;
+        for (const auto& [resourceId, resHolder] : quoterIt->second.Resources) {
+            ++resourcesProcessed;
+
+            const TResource& quores = *resHolder.Get();
+            if (quores.Activation == TInstant::Zero()
+                && quores.NextTick == TInstant::Zero()
+                && quores.QueueHead == Max<ui32>()
+                && now - quores.LastTick >= CleanupResourceIdlePeriod
+                && now - quores.LastAllocated >= CleanupResourceIdlePeriod)
+            {
+                resourcesToEvict.push_back(resourceId);
+            }
+        }
+
+        for (ui64 resourceId : resourcesToEvict) {
+            EvictResource(quoterIt->second, resourceId, "Cleanup");
+        }
+
+        CloseQuoterIfEmpty(quoterIt, "Cleanup");
+    }
+
+    if (!CleanupQuoters.empty()) {
+        // Allow external requests to be processed
+        Send(SelfId(), new TEvents::TEvWakeup(WakeupTagCleanup));
+        return;
+    }
+
+    ScheduleNextCleanupPass();
+}
+
+void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason) {
+    auto resourceIt = quoter.Resources.find(resourceId);
+    if (resourceIt == quoter.Resources.end()) {
+        return;
+    }
+
+    TResource &quores = *resourceIt->second;
+    BLOG_I("closing resource on " << reason << " " << quoter.QuoterName << ":" << quores.Resource);
+    Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
+
+    ForbidResource(quores);
+    quoter.ResourcesIndex.erase(quores.Resource);
+    quoter.Resources.erase(resourceIt);
+}
+
+bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason) {
+    if (!quoterIt->second.Empty()) {
+        return false;
+    }
+
+    BLOG_I("closing quoter on " << reason << " as no activity left " << quoterIt->second.QuoterName);
+    BreakQuoter(quoterIt);
+    return true;
+}
+
+void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
+    switch (ev->Get()->Tag) {
+    case WakeupTagTick:
+        HandleTick();
+        return;
+    case WakeupTagCleanup:
+        HandleCleanup();
+        return;
+    default:
+        BLOG_WARN("Unknown TEvWakeup tag: " << ev->Get()->Tag);
+        return;
+    }
 }
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {

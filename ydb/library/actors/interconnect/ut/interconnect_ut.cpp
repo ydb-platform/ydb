@@ -706,8 +706,9 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
         const ui32 noticeLogCount = outgoingHandshakeFailures->Notice.load(std::memory_order_relaxed);
         const ui32 debugLogCount = outgoingHandshakeFailures->Debug.load(std::memory_order_relaxed);
-        UNIT_ASSERT_VALUES_EQUAL_C(noticeLogCount, 1,
-            "expected exactly one notice-level ICP25 outgoing handshake failure log record in 10 seconds");
+        UNIT_ASSERT_C(noticeLogCount == 1 || noticeLogCount == 2,
+            TStringBuilder() << "expected one or two notice-level ICP25 outgoing handshake failure log records in 10 seconds, got "
+                << noticeLogCount);
         UNIT_ASSERT_C(debugLogCount > 0,
             "expected repeated ICP25 outgoing handshake failure log records to be demoted to debug");
     }

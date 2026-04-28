@@ -15,6 +15,9 @@ row; downstream marts use those columns.
 
 Edge cases:
   * No ``area`` in issue ``info`` → area_override = NULL
+  * Closed **NOT_PLANNED** / **DUPLICATE** → area_override = NULL
+  * Closed **COMPLETED** with ``manual-fast-unmute`` label → override applies (fast-track window)
+  * Closed **COMPLETED** without that label → override cleared if **project Status** is ``Unmuted`` or closer is automation bot
   * Area resolves to the same team as the default owner → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
@@ -47,8 +50,10 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import (
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     create_test_issue_mapping,
     DEFAULT_BUILD_TYPE,
+    issue_label_names_lower,
     scan_to_utc_date,
 )
 
@@ -216,6 +221,22 @@ def _extract_area_from_info(info_raw) -> str:
     return info.get("area") or ""
 
 
+def _closed_by_login_lower(info_raw) -> str:
+    """``issues.info`` JSON → ``closed_by_login`` lowercased (who closed the issue)."""
+    if not info_raw:
+        return ""
+    try:
+        if isinstance(info_raw, str):
+            info = json.loads(info_raw) if info_raw.strip() else {}
+        elif isinstance(info_raw, dict):
+            info = info_raw
+        else:
+            info = json.loads(str(info_raw))
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    return (info.get("closed_by_login") or "").strip().lower()
+
+
 def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     """Prefix match: area/cs/compression -> area/cs (longest mapping key wins).
 
@@ -232,18 +253,47 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_area_override(body: str, info_raw, area_to_owner: dict, issue_state=None):
+def resolve_area_override(
+    body: str,
+    info_raw,
+    area_to_owner: dict,
+    issue_state=None,
+    state_reason=None,
+    labels_raw=None,
+    project_status=None,
+):
     """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
 
-    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
+    **Closed issues**
 
-    **Closed issues** never contribute an override: after automation unmutes (routine close or
-    fast-track completion) the mute issue is closed — routing falls back to TESTOWNERS until a
-    new open mute issue with ``area/`` applies again.
+    * ``NOT_PLANNED`` / ``DUPLICATE``: no override (row may still appear before exclusion filters).
+    * ``COMPLETED`` + label ``manual-fast-unmute``: override stays (fast-track active after human complete).
+    * ``COMPLETED`` without that label: override cleared when **project Status** is ``Unmuted`` (fast-track
+      success), or when closed by automation (``ydbot``, ``github-actions``, ``*[bot]``) — routine unmute;
+      otherwise kept (e.g. human closed completed without entering fast-track).
+
+    Open issues: unchanged area logic.
     """
     st = (issue_state or "").strip().upper()
+    sr = (state_reason or "").strip().upper()
+    labels_lo = issue_label_names_lower(labels_raw)
+
     if st == "CLOSED":
-        return None
+        if sr in ("NOT_PLANNED", "DUPLICATE"):
+            return None
+        if sr == "COMPLETED":
+            if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in labels_lo:
+                pass
+            else:
+                ps = (project_status or "").strip().lower()
+                if ps == "unmuted":
+                    return None
+                closer = _closed_by_login_lower(info_raw)
+                bot_like = closer in ("ydbot", "github-actions") or closer.endswith("[bot]")
+                if bot_like:
+                    return None
+        else:
+            return None
 
     area_label = (_extract_area_from_info(info_raw) or "").strip()
     if not area_label:
@@ -386,6 +436,9 @@ def main():
                         issue.get('info'),
                         area_to_owner,
                         issue.get('state'),
+                        issue.get('state_reason'),
+                        issue.get('labels'),
+                        issue.get('project_status'),
                     )
 
             print("Creating test-to-issue mapping...")

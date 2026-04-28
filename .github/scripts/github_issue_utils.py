@@ -30,6 +30,9 @@ def team_slug_from_monitor_owner(owner) -> str:
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 DEFAULT_BRANCH = 'main'
 
+# Same label as ``mute.update_mute_issues`` / ``mute.fast_unmute_github`` — fast-unmute tracking.
+MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
+
 
 def scan_to_utc_date(val) -> Optional[dt.date]:
     """YDB scan value → UTC calendar date.
@@ -252,6 +255,20 @@ def _decode_issues_json_column(val):
         except json.JSONDecodeError:
             return None
     return None
+
+
+def issue_label_names_lower(raw_labels) -> frozenset:
+    """Parse ``issues.labels`` JSON (export schema) → frozenset of lowercase label names."""
+    decoded = _decode_issues_json_column(raw_labels)
+    if not decoded:
+        return frozenset()
+    names = []
+    for item in decoded:
+        if isinstance(item, dict):
+            n = item.get('name')
+            if n:
+                names.append(str(n).strip().lower())
+    return frozenset(names)
 
 
 def build_github_issue_mapping_info_snapshot(issue_row: dict) -> dict:

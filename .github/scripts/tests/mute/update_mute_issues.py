@@ -7,14 +7,17 @@ from urllib.parse import quote_plus
 _scripts_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
-from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
+from github_issue_utils import (
+    DEFAULT_BUILD_TYPE,
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
+    parse_body,
+)
 
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = '45'
-# GitHub issue label set by ``mute/fast_unmute_github.py`` while fast-unmute rows exist.
-MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
+# Label constant: ``github_issue_utils.MANUAL_FAST_UNMUTE_GITHUB_LABEL`` (fast-unmute tracking).
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 

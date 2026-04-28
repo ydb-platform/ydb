@@ -1,0 +1,11 @@
+{
+    "test_request_log.TestCanonical.test_canonical_chunked_query": {
+        "uri": "file://test_request_log.TestCanonical.test_canonical_chunked_query/extracted"
+    },
+    "test_request_log.TestCanonical.test_canonical_error_query": {
+        "uri": "file://test_request_log.TestCanonical.test_canonical_error_query/extracted"
+    },
+    "test_request_log.TestCanonical.test_canonical_generic_query": {
+        "uri": "file://test_request_log.TestCanonical.test_canonical_generic_query/extracted"
+    }
+}

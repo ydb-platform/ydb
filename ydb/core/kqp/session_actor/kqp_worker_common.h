@@ -63,6 +63,32 @@ inline bool IsExecuteAction(const NKikimrKqp::EQueryAction& action) {
     }
 }
 
+inline bool IsQueryAllowedToLog(const TString& text) {
+    static const TString user = "user";
+    static const TString password = "password";
+    static const TString secret = "secret";
+
+    auto caseInsensitiveSearch = [](auto begin, auto end, const TString& keyword) {
+        return std::search(begin, end, keyword.begin(), keyword.end(),
+            [](const char a, const char b) -> bool { return std::tolower(a) == b; });
+    };
+
+    auto itUser = caseInsensitiveSearch(text.begin(), text.end(), user);
+    if (itUser != text.end()) {
+        auto itPassword = caseInsensitiveSearch(itUser, text.end(), password);
+        if (itPassword != text.end()) {
+            return false;
+        }
+    }
+
+    if (caseInsensitiveSearch(text.begin(), text.end(), secret) != text.end()) {
+        return false;
+    }
+
+    return true;
+}
+
+
 inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings::TConstPtr& kqpSettings,
     const TKqpWorkerSettings& workerSettings)
 {

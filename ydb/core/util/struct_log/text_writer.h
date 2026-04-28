@@ -14,14 +14,15 @@
 
 namespace NKikimr::NStructLog {
 
-class TMetaWriter
+class TTextWriter
 {
 public:
-    TMetaWriter() {}
+    TTextWriter() {}
 
-    bool Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message)
+    bool Write(TStringBuilder& outputText, const TStructuredMessage& message)
     {
-        MetaFlags = &metaFlags;
+        OutputText = &outputText;
+        FirstValue = true;
 
         if (!message.ForEachSerialized([&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
                 auto it = TypeValueWriterMap.find(typeCode);
@@ -34,29 +35,42 @@ public:
             return false;
         };
 
-        MetaFlags = nullptr;
+        OutputText = nullptr;
         return true;
     }
 
 protected:
-    TLogRecord::TMetaFlags* MetaFlags{nullptr};
+    TStringBuilder* OutputText{nullptr};
+    bool FirstValue{true};
 
     class TValueWriter {
         public:
-            TMetaWriter& Writer;
-            const std::vector<TKeyName>* KeyName {nullptr};
+            TTextWriter& Writer;
+            const std::vector<TKeyName>* KeyName{nullptr};
 
-            TValueWriter(TMetaWriter& writer) : Writer(writer) {}
+            TValueWriter(TTextWriter& writer) : Writer(writer) {}
 
             template <typename T>
             void operator()(const T& value) const {
-                TStringBuilder metakeyName;
-                metakeyName << "meta";
-                for(auto& keyItem: *KeyName) {
-                    metakeyName << ".";
-                    metakeyName << keyItem.ToString();
+                auto& outputText = *Writer.OutputText;
+                if (Writer.FirstValue) {
+                    Writer.FirstValue = false;
+                } else {
+                    outputText << " ";
                 }
-                Writer.MetaFlags->push_back({metakeyName, TTypesMapping::ToString(value)});
+
+                bool first = true;
+
+                for(auto& keyItem: *KeyName) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        outputText << ".";
+                    }
+                    outputText << keyItem.ToString();
+                }
+                outputText << "=";
+                outputText << TTypesMapping::ToString(value);
             }
     };
     TValueWriter ValueWriter{*this};

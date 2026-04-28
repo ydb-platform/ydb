@@ -858,7 +858,12 @@ private:
         if (writeFinishOp) {
             return false;
         }
-        Storage.resize(0);
+        // resize(0) only destroys elements but keeps the vector's backing buffer allocated.
+        // Use swap to actually deallocate the buffer back to the MKQL allocator's free list,
+        // so the pages can be reused for subsequent accumulation or read-back.
+        TStorage().swap(Storage);
+        Full.clear();
+        Full.shrink_to_fit();
         return true;
     }
 

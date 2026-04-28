@@ -10,9 +10,15 @@
 | Название очереди          | CPU | Memory | Описание                                        |
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | Операции удаления данных по [TTL](../../concepts/ttl.md).                |
+<<<<<<< HEAD
 | `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery.md#s3).                |
 | `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery.md#s3).     |
 | `queue_build_index`       | 10 | — | Операции [онлайн-создания вторичного индекса](../../concepts/secondary_indexes.md#index-add).   |
+=======
+| `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery/index.md#s3).                |
+| `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery/index.md#s3).     |
+| `queue_build_index`       | 10 | — | Операции [онлайн-создания вторичного индекса](../../concepts/query_execution/secondary_indexes.md#index-add).   |
+>>>>>>> aebbe3e3080 (Add system tablet backup docs (#38408))
 | `queue_cdc_initial_scan` | 4 | — | [Первоначальное сканирование таблицы](../../concepts/cdc.md#initial-scan).             |
 
 {% note info %}

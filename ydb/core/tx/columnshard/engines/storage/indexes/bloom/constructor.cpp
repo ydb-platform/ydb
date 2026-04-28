@@ -24,6 +24,12 @@ bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
     }
 }
 
+bool IsSupportedColumnType(const NScheme::TTypeId typeId, const TReadDataExtractorContainer& dataExtractor) {
+    const auto extractorProto = dataExtractor.SerializeToProto();
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
+    return IsSupportedTypeForEquals(typeId) || isJsonSubColumn;
+}
+
 } // namespace
 
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
@@ -34,7 +40,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         return nullptr;
     }
 
-    if (!IsSupportedTypeForEquals(columnInfo->GetType().GetTypeId())) {
+    if (!IsSupportedColumnType(columnInfo->GetType().GetTypeId(), GetDataExtractor())) {
         errors.AddError(Sprintf("inappropriate column type for bloom index: %s", columnInfo->GetTypeName().c_str()));
         return nullptr;
     }

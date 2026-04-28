@@ -3,13 +3,15 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain) {
+TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
@@ -24,13 +26,23 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
     if (!owner->GetIndexOptional()) {
-        SourcesConstructor = NReader::NSimple::TPortionsSources::BuildEmpty();
+        switch (readerClass) {
+            case EReaderClass::Plain:
+                SourcesConstructor = NReader::NPlain::TPortionSources::BuildEmpty();
+                break;
+            case EReaderClass::Simple:
+                SourcesConstructor = NReader::NSimple::TPortionsSources::BuildEmpty();
+                break;
+            case EReaderClass::Trivial:
+                SourcesConstructor = NReader::NTrivial::TPortionsSources::BuildEmpty();
+                break;
+        }
         SourcesConstructor->InitCursor(nullptr);
         return TConclusionStatus::Success();
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.Orbit);
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, readerClass);
 
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());

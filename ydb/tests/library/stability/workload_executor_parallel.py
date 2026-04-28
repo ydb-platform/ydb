@@ -5,10 +5,9 @@ import logging
 import time as time_module
 import pytest
 
-from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
-from ydb.tests.library.stability.utils.collect_errors import ErrorsCollector
+from ydb.tests.library.stability.utils.collect_errors import AgentErrorsCollector, WardenResults
 from ydb.tests.library.stability.utils.upload_results import RunConfigInfo, safe_upload_results, test_event_report
 from ydb.tests.library.stability.utils.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
@@ -54,16 +53,6 @@ class ParallelWorkloadTestBase:
                 "Nemesis Teardown Summary",
                 attachment_type=allure.attachment_type.TEXT,
             )
-
-    @pytest.fixture(autouse=True, scope="session")
-    def health_checker_daemon(self, binary_deployer: StressUtilDeployer):
-        if self.event_process_mode is not None:
-            reporter = HealthCheckReporter(binary_deployer.hosts)
-            reporter.start_healthchecks()
-            yield reporter
-            reporter.stop_healthchecks()
-        else:
-            yield None
 
     @pytest.fixture(autouse=True, scope="session")
     def stress_executor(self) -> StressRunExecutor:
@@ -115,7 +104,7 @@ class ParallelWorkloadTestBase:
         additional_stats.duration = duration_value
         additional_stats.all_hosts = stress_deployer.hosts
         additional_stats.stress_util_names = list(workload_params.keys())
-        errors_collector = ErrorsCollector(additional_stats.all_hosts, stress_deployer.nodes)
+        errors_collector = AgentErrorsCollector(additional_stats.all_hosts, stress_deployer.nodes)
 
         # Publish TestInit record
         with allure.step("Initialize test"):
@@ -166,7 +155,7 @@ class ParallelWorkloadTestBase:
     def _finalize_workload_results(
         self,
         stress_deployer: StressUtilDeployer,
-        errors_collector: ErrorsCollector,
+        errors_collector: AgentErrorsCollector,
         execution_result: dict,
         preparation_result: dict[str, StressUtilDeployResult],
         run_config: RunConfigInfo
@@ -194,14 +183,14 @@ class ParallelWorkloadTestBase:
 
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            node_errors, verify_errors = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
+            node_errors, warden_results = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
 
             # Separate step for uploading results (AFTER all data preparation)
-            safe_upload_results(overall_result, run_config, node_errors, verify_errors)
+            safe_upload_results(overall_result, run_config, node_errors)  # noqa: warden_results not uploaded yet
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors, verify_errors)
+            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors)
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -210,48 +199,48 @@ class ParallelWorkloadTestBase:
 
     def process_workload_result_with_diagnostics(
         self,
-        errors_collector: ErrorsCollector,
+        errors_collector: AgentErrorsCollector,
         result: StressUtilTestResults,
-    ) -> tuple[list, dict]:
+    ) -> tuple[list, any]:
         """
-        Processes workload result with diagnostic information
+        Processes workload result with diagnostic information from nemesis orchestrator.
+
+        Uses the nemesis orchestrator warden API to collect safety/liveness check
+        results instead of direct SSH-based log parsing.
 
         Args:
-            olap_load_base: Load test base configuration
+            errors_collector: AgentErrorsCollector instance for orchestrator-based diagnostics
             result: Workload execution results
 
         Returns:
             Tuple containing:
             - node_errors: List of node error objects
-            - verify_errors: Dictionary of verification errors
+            - warden_results: Full WardenResults from orchestrator
 
         Note:
-            - Collects node diagnostics and verification results
-            - Generates Allure report with detailed information
-            - Handles error cases gracefully
+            - Collects node diagnostics via orchestrator warden checks
+            - Collects coredumps via SSH (breakpad)
+            - Generates Allure report with detailed information including warden checks table
         """
         with allure.step("Process workload result"):
             node_errors = []
-            verify_errors = {}
+            warden_results = WardenResults()
 
-            # Check node status and collect errors
+            # Check node status and collect errors via orchestrator
             try:
-                # Use parent class method for node diagnostics
                 end_time = time_module.time()
                 diagnostics_start_time = result.start_time
-                verify_errors = errors_collector.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
-                node_errors = errors_collector.check_nodes_diagnostics_with_timing(
+                node_errors, warden_results = errors_collector.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
-                # Add error to result
-                node_errors = []  # Set empty list if diagnostics failed
+                node_errors = []
+                warden_results = WardenResults()
+                warden_results.error_message = f"Failed to collect diagnostics: {e}"
 
             # Calculate execution time
             end_time = time_module.time()
-
-            # --- IMPORTANT: set nodes_with_issues for proper fail ---
 
             # Prepare error lists for upload
             node_error_messages = []
@@ -264,12 +253,8 @@ class ParallelWorkloadTestBase:
                         node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                 if node_error.was_oom:
                     node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
-                verify_fails_count = 0
-                for verify_summary, detailed_verify_errors in verify_errors.items():
-                    if node_error.node.host in detailed_verify_errors['hosts_count']:
-                        verify_fails_count += detailed_verify_errors['hosts_count'][node_error.node.host]
-                if verify_fails_count:
-                    node_error_messages.append(f"Node {node_error.node.host} had {verify_fails_count} VERIFY fails")
+                if node_error.verifies:
+                    node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
                 if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
                     node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
@@ -279,18 +264,17 @@ class ParallelWorkloadTestBase:
                     if "coredump" not in err.lower() and "oom" not in err.lower():
                         workload_error_messages.append(err)
 
-            # 4. Generate allure report
-            create_parallel_allure_report(result, node_errors, verify_errors)
+            # Generate allure report with warden results
+            create_parallel_allure_report(result, node_errors, warden_results)
 
-            return node_errors, verify_errors
+            return node_errors, warden_results
 
     def _handle_final_status(
         self,
-        errors_collector: ErrorsCollector,
+        errors_collector: AgentErrorsCollector,
         result: StressUtilTestResults,
         preparation_result: dict[str, StressUtilDeployResult],
         node_errors: list,
-        verify_errors: dict
     ) -> None:
         """
         Handles final test status (fail, broken, etc.)
@@ -298,13 +282,12 @@ class ParallelWorkloadTestBase:
         Args:
             result: Test results object
             node_errors: List of node errors
-            verify_errors: Verification errors
 
         Raises:
             pytest.fail: If nodes have coredumps/OOMs
             Exception: If workload errors occurred
         """
-        nodes_with_issues = len(node_errors) + len(verify_errors)
+        nodes_with_issues = len(node_errors)
         workload_errors = []
         if result.errors:
             for err in result.errors:

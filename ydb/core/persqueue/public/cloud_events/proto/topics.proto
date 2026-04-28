@@ -86,6 +86,7 @@ message CreateTopic {
     service: "ydb"
     category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];
@@ -136,6 +137,7 @@ message AlterTopic {
     service: "ydb"
     category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];
@@ -186,6 +188,7 @@ message DeleteTopic {
     service: "ydb"
     category: MANAGEMENT
     visibility: PUBLIC
+    event_mode: WRITE
   };
 
   Authentication authentication = 1 [(required) = true];

@@ -5904,16 +5904,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     dropStep = tablePath->StepCreated;
                     dropTxId = tablePath->CreateTxId;
                 }
+                // This scheme object has no matching index in schema — perform hard delete.
+                // Mark as dropped and remove the index data, which decrements DbRefCount.
                 childIt->second->SetDropped(dropStep, dropTxId);
                 Self->PersistDropStep(db, childPathId, dropStep, TOperationId(dropTxId, 0));
                 Self->PersistRemoveTableIndex(db, childPathId);
-                Self->Indexes.erase(childPathId);
+
+                // After PersistRemoveTableIndex, DbRefCount should be 0, allowing full removal.
+                // Perform the complete, consistent removal flow in one place.
+                Y_ABORT_UNLESS(childIt->second->DbRefCount == 0);
+                Self->PersistRemovePath(db, childIt->second);
 
                 tablePath->DecAliveChildrenPrivate();
-                tablePath->RemoveChild(childName, childPathId);
-
-                Y_ABORT_UNLESS(tablePath->AllChildrenCount > 0);
-                --tablePath->AllChildrenCount;
                 Self->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Sub(1);
 
                 auto domainInfo = Self->ResolveDomainInfo(childPathId);

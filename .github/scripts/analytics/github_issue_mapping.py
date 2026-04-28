@@ -46,8 +46,8 @@ import sys
 from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from tests.mute.update_mute_issues import MANUAL_FAST_UNMUTE_GITHUB_LABEL
 from github_issue_utils import (
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     create_test_issue_mapping,
     DEFAULT_BUILD_TYPE,
     issue_label_names_lower,

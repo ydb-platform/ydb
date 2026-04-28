@@ -30,10 +30,6 @@ def team_slug_from_monitor_owner(owner) -> str:
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 DEFAULT_BRANCH = 'main'
 
-# Same strings as ``mute/update_mute_issues`` / ``mute.fast_unmute_pipeline`` (GraphQL labels).
-MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
-MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
-
 
 def scan_to_utc_date(val) -> Optional[dt.date]:
     """YDB scan value → UTC calendar date.

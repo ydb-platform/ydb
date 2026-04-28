@@ -9,8 +9,6 @@ if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 from github_issue_utils import (
     DEFAULT_BUILD_TYPE,
-    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     parse_body,
 )
 
@@ -30,6 +28,8 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # project
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
+MANUAL_FAST_UNMUTE_GITHUB_LABEL = 'manual-fast-unmute'
+MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL = 'fast-unmute-finished'
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.

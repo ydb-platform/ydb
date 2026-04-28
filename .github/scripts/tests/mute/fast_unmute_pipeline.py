@@ -7,8 +7,6 @@ from collections import defaultdict
 
 from github_issue_utils import (
     DEFAULT_BUILD_TYPE,
-    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
 )
 
 from mute.constants import (
@@ -56,6 +54,8 @@ from mute.fast_unmute_ydb import (
 )
 from mute.update_mute_issues import (
     add_issue_comment,
+    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     parse_body,
 )
 

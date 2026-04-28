@@ -32,6 +32,28 @@ namespace NActors {
         };
 
         template <class T, class = void>
+        struct TIsVersionOption : std::false_type {
+        };
+
+        template <class T>
+        struct TIsVersionOption<T, std::void_t<decltype(T::IsVersionOption)>>
+            : std::bool_constant<T::IsVersionOption> {
+        };
+
+        template <class... T>
+        struct TCountVersionSchemes;
+
+        template <>
+        struct TCountVersionSchemes<> {
+            static constexpr size_t Value = 0;
+        };
+
+        template <class T, class... TRest>
+        struct TCountVersionSchemes<T, TRest...> {
+            static constexpr size_t Value = TCountVersionSchemes<TRest...>::Value + (TIsVersionOption<T>::value ? 0 : 1);
+        };
+
+        template <class T, class = void>
         struct THasPayloadIdType : std::false_type {
         };
 
@@ -43,14 +65,22 @@ namespace NActors {
         template <class... T>
         struct TLastType;
 
+        template <>
+        struct TLastType<> {
+            using Type = void;
+        };
+
         template <class T>
         struct TLastType<T> {
-            using Type = T;
+            using Type = std::conditional_t<TIsVersionOption<T>::value, void, T>;
         };
 
         template <class T, class... TRest>
         struct TLastType<T, TRest...> {
-            using Type = typename TLastType<TRest...>::Type;
+            using TTail = typename TLastType<TRest...>::Type;
+            using Type = std::conditional_t<std::is_void_v<TTail>,
+                std::conditional_t<TIsVersionOption<T>::value, void, T>,
+                TTail>;
         };
 
         template <class... T>
@@ -100,16 +130,36 @@ namespace NActors {
         template <class... T>
         struct TMaxHeaderSize;
 
+        template <>
+        struct TMaxHeaderSize<> {
+            static constexpr size_t Value = 0;
+        };
+
+        template <class T, bool IsVersionOption>
+        struct TMaxHeaderSizeItem;
+
+        template <class T>
+        struct TMaxHeaderSizeItem<T, false> {
+            static constexpr size_t Value = T::HeaderSize;
+        };
+
+        template <class T>
+        struct TMaxHeaderSizeItem<T, true> {
+            static constexpr size_t Value = 0;
+        };
+
         template <class T>
         struct TMaxHeaderSize<T> {
-            static constexpr size_t Value = T::HeaderSize;
+            static constexpr size_t Value = TMaxHeaderSizeItem<T, TIsVersionOption<T>::value>::Value;
         };
 
         template <class T, class... TRest>
         struct TMaxHeaderSize<T, TRest...> {
             static constexpr size_t Tail = TMaxHeaderSize<TRest...>::Value;
-            static constexpr size_t Value = T::HeaderSize > Tail ? T::HeaderSize : Tail;
+            static constexpr size_t Head = TMaxHeaderSizeItem<T, TIsVersionOption<T>::value>::Value;
+            static constexpr size_t Value = Head > Tail ? Head : Tail;
         };
+
     } // namespace NFlatEventDetail
 
     /**
@@ -142,6 +192,14 @@ namespace NActors {
         struct WithPayloadType {
             using TPayloadIdType = TPayloadId;
             static constexpr bool IsSchemeOption = true;
+        };
+
+        struct WithStrictScheme {
+            static constexpr bool IsSchemeOption = true;
+        };
+
+        struct WithEmptyVersion {
+            static constexpr bool IsVersionOption = true;
         };
 
     public:
@@ -866,6 +924,7 @@ namespace NActors {
         struct Scheme {
             static constexpr size_t PayloadTypeOptionCount = (0u + ... + (NFlatEventDetail::THasPayloadIdType<TItems>::value ? 1u : 0u));
             static_assert(PayloadTypeOptionCount <= 1, "Flat event scheme may specify at most one payload id type");
+            static constexpr bool IsStrict = (std::is_same_v<TItems, WithStrictScheme> || ...);
 
             using TPayloadId = typename NFlatEventDetail::TPayloadIdTypeSelector<ui16, TItems...>::Type;
             static_assert(std::is_integral_v<TPayloadId> && std::is_unsigned_v<TPayloadId>,
@@ -882,6 +941,7 @@ namespace NActors {
                 static constexpr bool IsField = true;
                 static constexpr bool IsFixed = TItem::IsFixed;
                 static constexpr bool IsPayload = TItem::IsPayload;
+                static constexpr bool IsBytesPayload = TItem::IsPayload && TItem::Kind == EFieldKind::Bytes;
 
                 static consteval size_t GetStoredSize() {
                     if constexpr (TItem::Kind == EFieldKind::Fixed) {
@@ -901,6 +961,7 @@ namespace NActors {
                 static constexpr bool IsField = false;
                 static constexpr bool IsFixed = false;
                 static constexpr bool IsPayload = false;
+                static constexpr bool IsBytesPayload = false;
                 static constexpr size_t StoredSize = 0;
             };
 
@@ -908,6 +969,8 @@ namespace NActors {
             static_assert(NFlatEventDetail::TAreDistinctFields<TItems...>::value, "Duplicate field tag in flat event scheme");
             static constexpr size_t FieldCount = (0u + ... + (TItemTraits<TItems>::IsField ? 1u : 0u));
             static constexpr size_t PayloadFieldCount = (0u + ... + (TItemTraits<TItems>::IsPayload ? 1u : 0u));
+            static constexpr size_t BytesPayloadFieldCount = (0u + ... + (TItemTraits<TItems>::IsBytesPayload ? 1u : 0u));
+            static constexpr bool HasOnlyBytesPayloadFields = PayloadFieldCount > 0 && PayloadFieldCount == BytesPayloadFieldCount;
             static_assert(PayloadFieldCount <= std::numeric_limits<TPayloadId>::max(), "Too many payload fields in flat event scheme");
             static_assert(PayloadFieldCount > 0 || PayloadTypeOptionCount == 0,
                 "WithPayloadType is only allowed for schemes with payload fields");
@@ -991,45 +1054,65 @@ namespace NActors {
 
         template <class... TSchemes>
         struct Versions {
-            static_assert(sizeof...(TSchemes) > 0, "At least one scheme version is required");
-
             using TLatestScheme = typename NFlatEventDetail::TLastType<TSchemes...>::Type;
-            static_assert(sizeof...(TSchemes) <= std::numeric_limits<ui8>::max(), "Too many flat event versions");
-            static constexpr ui8 VersionCount = sizeof...(TSchemes);
+            static constexpr size_t VersionCount = NFlatEventDetail::TCountVersionSchemes<TSchemes...>::Value;
+            static_assert(VersionCount <= std::numeric_limits<ui8>::max(), "Too many flat event versions");
             static constexpr size_t MaxHeaderSize = NFlatEventDetail::TMaxHeaderSize<TSchemes...>::Value;
+            static constexpr bool IsEmpty = VersionCount == 0;
+            static constexpr bool HasEmptyVersion = IsEmpty || (std::is_same_v<TSchemes, WithEmptyVersion> || ...);
 
             template <class TScheme>
-            static constexpr bool HasScheme = (std::is_same_v<TScheme, TSchemes> || ...);
+            static constexpr bool HasScheme = ((!NFlatEventDetail::TIsVersionOption<TSchemes>::value && std::is_same_v<TScheme, TSchemes>) || ...);
 
             template <class TScheme>
             static consteval ui8 GetVersion() {
+                static_assert(!IsEmpty, "Empty flat event has no scheme versions");
                 static_assert(HasScheme<TScheme>, "Scheme does not belong to this flat event version set");
                 return GetVersionImpl<TScheme, 1, TSchemes...>();
             }
 
             template <class F>
             static decltype(auto) Dispatch(ui8 version, F&& f) {
-                return DispatchImpl<1, TSchemes...>(version, std::forward<F>(f));
+                if constexpr (IsEmpty) {
+                    Y_UNUSED(version);
+                    Y_UNUSED(f);
+                    ythrow TWithBackTrace<yexception>() << "Empty flat event has no scheme versions";
+                } else {
+                    return DispatchImpl<1, TSchemes...>(version, std::forward<F>(f));
+                }
             }
 
         private:
+            template <class TScheme, ui8 Version>
+            static consteval ui8 GetVersionImpl() {
+                static_assert(Version == 0, "Scheme does not belong to this flat event version set");
+                return 0;
+            }
+
             template <class TScheme, ui8 Version, class TCurrent, class... TRest>
             static consteval ui8 GetVersionImpl() {
-                if constexpr (std::is_same_v<TScheme, TCurrent>) {
+                if constexpr (NFlatEventDetail::TIsVersionOption<TCurrent>::value) {
+                    return GetVersionImpl<TScheme, Version, TRest...>();
+                } else if constexpr (std::is_same_v<TScheme, TCurrent>) {
                     return Version;
                 } else {
-                    static_assert(sizeof...(TRest) > 0, "Scheme does not belong to this flat event version set");
                     return GetVersionImpl<TScheme, static_cast<ui8>(Version + 1), TRest...>();
                 }
             }
 
+            template <ui8 Version, class F>
+            static decltype(auto) DispatchImpl(ui8 version, F&& f) {
+                Y_UNUSED(f);
+                ythrow TWithBackTrace<yexception>() << "Unsupported flat event version " << version;
+            }
+
             template <ui8 Version, class TScheme, class... TRest, class F>
             static decltype(auto) DispatchImpl(ui8 version, F&& f) {
-                if (version == Version) {
+                if constexpr (NFlatEventDetail::TIsVersionOption<TScheme>::value) {
+                    return DispatchImpl<Version, TRest...>(version, std::forward<F>(f));
+                } else if (version == Version) {
                     return f.template operator()<TScheme>();
-                }
-
-                if constexpr (sizeof...(TRest) > 0) {
+                } else if constexpr (sizeof...(TRest) > 0) {
                     return DispatchImpl<static_cast<ui8>(Version + 1), TRest...>(version, std::forward<F>(f));
                 } else {
                     ythrow TWithBackTrace<yexception>() << "Unsupported flat event version " << version;
@@ -1038,10 +1121,13 @@ namespace NActors {
         };
     };
 
-    template <class TEv, class TVersions>
+    template <class TEv, class TEventScheme>
     class TEventFlat : public IEventBase {
         static_assert(std::is_class_v<TEv>, "TEv must be a class");
         using TLayout = TEventFlatLayout;
+        using TVersions = typename TEventScheme::TVersions;
+        static constexpr bool IsEmptyEvent = TVersions::VersionCount == 0;
+        static constexpr bool HasEmptyVersion = TVersions::HasEmptyVersion;
 
     public:
         static void operator delete(void* ptr) noexcept {
@@ -1399,91 +1485,74 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return TStringBuilder() << TypeName<TEv>() << " { version# " << Version
-                << " header# " << HeaderSize << " payloads# " << GetPayloadSlotCount() << " }";
+            TStringBuilder builder;
+            builder << TypeName<TEv>() << " {";
+            if constexpr (!IsEmptyEvent) {
+                builder << " version# " << Version;
+            }
+            builder << " header# " << HeaderSize << " payloads# " << GetPayloadSlotCount() << " }";
+            return builder;
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* serializer) const override {
             AssertInitializedDebug();
-            if (!HasPayloads()) {
+            if constexpr (IsEmptyEvent) {
                 return SerializeHeaderOnlyToArcadiaStream(serializer);
+            } else {
+                if (!HasData()) {
+                    return SerializeHeaderOnlyToArcadiaStream(serializer);
+                }
+                if (!HasPayloads()) {
+                    return SerializeHeaderOnlyToArcadiaStream(serializer);
+                }
+                if (const auto inlineWire = TryBuildInlineArrayWire()) {
+                    return SerializeInlineArrayWireToArcadiaStream(serializer, *inlineWire);
+                }
+                if (CanUsePayloadsAsWirePayloads()) {
+                    return SerializeToArcadiaStreamImpl(serializer, Payloads)
+                        && SerializeHeaderOnlyToArcadiaStream(serializer);
+                }
+                const TVector<TRope> wirePayloads = BuildWirePayloads();
+                return SerializeToArcadiaStreamImpl(serializer, wirePayloads)
+                    && SerializeHeaderOnlyToArcadiaStream(serializer);
             }
-            if (const auto inlineWire = TryBuildInlineArrayWire()) {
-                return SerializeInlineArrayWireToArcadiaStream(serializer, *inlineWire);
-            }
-            const TVector<TRope> wirePayloads = BuildWirePayloads();
-            return SerializeToArcadiaStreamImpl(serializer, wirePayloads)
-                && SerializeHeaderOnlyToArcadiaStream(serializer);
         }
 
         std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
             AssertInitializedDebug();
-            if (!HasPayloads()) {
-                TRcBuf headerBuf = allocator->AllocRcBuf(HeaderSize, 0, 0);
-                if (!headerBuf) {
-                    return {};
+            if constexpr (IsEmptyEvent) {
+                Y_UNUSED(allocator);
+                return TRope();
+            } else {
+                if (!HasData()) {
+                    Y_UNUSED(allocator);
+                    return TRope();
                 }
-                if (HeaderSize) {
-                    std::memcpy(headerBuf.GetDataMut(), HeaderData(), HeaderSize);
+                if (!HasPayloads()) {
+                    TRcBuf headerBuf = allocator->AllocRcBuf(HeaderSize, 0, 0);
+                    if (!headerBuf) {
+                        return {};
+                    }
+                    if (HeaderSize) {
+                        std::memcpy(headerBuf.GetDataMut(), HeaderData(), HeaderSize);
+                    }
+                    return TRope(std::move(headerBuf));
                 }
-                return TRope(std::move(headerBuf));
-            }
-            if (const auto inlineWire = TryBuildInlineArrayWire()) {
-                const size_t size = inlineWire->GetSize();
-                TRcBuf buffer = allocator->AllocRcBuf(size, 0, 0);
-                if (!buffer) {
-                    return {};
+                if (const auto inlineWire = TryBuildInlineArrayWire()) {
+                    const size_t size = inlineWire->GetSize();
+                    TRcBuf buffer = allocator->AllocRcBuf(size, 0, 0);
+                    if (!buffer) {
+                        return {};
+                    }
+                    WriteInlineArrayWireToBuffer(buffer.GetDataMut(), *inlineWire);
+                    return TRope(std::move(buffer));
                 }
-                WriteInlineArrayWireToBuffer(buffer.GetDataMut(), *inlineWire);
-                return TRope(std::move(buffer));
-            }
-            const TVector<TRope> wirePayloads = BuildWirePayloads();
-            const ui32 headerSize = CalculateSerializedHeaderSizeImpl(wirePayloads);
-
-            TRope result;
-            if (headerSize) {
-                TRcBuf headerBuf = allocator->AllocRcBuf(headerSize, 0, 0);
-                if (!headerBuf) {
-                    return {};
+                if (CanUsePayloadsAsWirePayloads()) {
+                    return SerializeToRopeWithWirePayloads(Payloads, allocator);
                 }
-
-                char* data = headerBuf.GetDataMut();
-                auto append = [&data](const char* ptr, size_t len) {
-                    std::memcpy(data, ptr, len);
-                    data += len;
-                    return true;
-                };
-
-                char marker = ExtendedPayloadMarker;
-                append(&marker, 1);
-
-                auto appendNumber = [&append](size_t number) {
-                    char buf[MaxNumberBytes];
-                    return append(buf, WriteNumberTo(buf, number));
-                };
-
-                appendNumber(wirePayloads.size());
-                for (const TRope& rope : wirePayloads) {
-                    appendNumber(rope.GetSize());
-                }
-
-                result.Insert(result.End(), std::move(headerBuf));
+                const TVector<TRope> wirePayloads = BuildWirePayloads();
+                return SerializeToRopeWithWirePayloads(wirePayloads, allocator);
             }
-
-            for (const TRope& rope : wirePayloads) {
-                result.Insert(result.End(), TRope(rope));
-            }
-
-            TRcBuf flatHeaderBuf = allocator->AllocRcBuf(HeaderSize, 0, 0);
-            if (!flatHeaderBuf) {
-                return {};
-            }
-            if (HeaderSize) {
-                std::memcpy(flatHeaderBuf.GetDataMut(), HeaderData(), HeaderSize);
-            }
-            result.Insert(result.End(), std::move(flatHeaderBuf));
-
-            return result;
         }
 
         bool IsSerializable() const override {
@@ -1497,51 +1566,79 @@ namespace NActors {
 
         ui32 CalculateSerializedSizeCached() const override {
             AssertInitializedDebug();
-            if (!HasPayloads()) {
-                return HeaderSize;
+            if constexpr (IsEmptyEvent) {
+                return 0;
+            } else {
+                if (!HasData()) {
+                    return 0;
+                }
+                if (!HasPayloads()) {
+                    return HeaderSize;
+                }
+                if (const auto inlineWire = TryDescribeInlineArrayWire()) {
+                    return inlineWire->GetSize(HeaderSize);
+                }
+                if (CanUsePayloadsAsWirePayloads()) {
+                    return CalculateSerializedSizeImpl(Payloads, HeaderSize);
+                }
+                const TVector<TRope> wirePayloads = BuildWirePayloads();
+                return CalculateSerializedSizeImpl(wirePayloads, HeaderSize);
             }
-            if (const auto inlineWire = TryDescribeInlineArrayWire()) {
-                return inlineWire->GetSize(HeaderSize);
-            }
-            const TVector<TRope> wirePayloads = BuildWirePayloads();
-            return CalculateSerializedSizeImpl(wirePayloads, HeaderSize);
         }
 
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
             AssertInitializedDebug();
-            if (!HasPayloads()) {
-                TEventSerializationInfo info;
-                if (allowExternalDataChannel && HeaderSize >= ExternalDataChannelMinBytes) {
-                    info.Sections.push_back(TEventSectionInfo{0, HeaderSize, 0, 0, true, false});
+            if constexpr (IsEmptyEvent) {
+                Y_UNUSED(allowExternalDataChannel);
+                return {};
+            } else {
+                if (!HasData()) {
+                    Y_UNUSED(allowExternalDataChannel);
+                    return {};
+                }
+                if (!HasPayloads()) {
+                    TEventSerializationInfo info;
+                    if (allowExternalDataChannel && HeaderSize >= ExternalDataChannelMinBytes) {
+                        info.Sections.push_back(TEventSectionInfo{0, HeaderSize, 0, 0, true, false});
+                    }
+                    return info;
+                }
+                if (TryDescribeInlineArrayWire()) {
+                    return {};
+                }
+                if (CanUsePayloadsAsWirePayloads()) {
+                    return CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(),
+                        Payloads, HeaderSize);
+                }
+                const TVector<TRope> wirePayloads = BuildWirePayloads();
+                TEventSerializationInfo info = CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(),
+                    wirePayloads, HeaderSize);
+                if (!info.Sections.empty()) {
+                    DispatchCurrentVersion([&]<class TScheme>() {
+                        size_t wireIndex = 0;
+                        TScheme::ForEachPayloadField([&]<class TField>() {
+                            if (!HasStoredField<TScheme, TField>()) {
+                                return;
+                            }
+                            if constexpr (TField::Kind == EFieldKind::Array) {
+                                info.Sections[1 + wireIndex].Alignment = alignof(typename TField::TValue);
+                            }
+                            ++wireIndex;
+                        });
+                    });
                 }
                 return info;
             }
-            if (TryDescribeInlineArrayWire()) {
-                return {};
-            }
-            const TVector<TRope> wirePayloads = BuildWirePayloads();
-            TEventSerializationInfo info = CreateSerializationInfoImpl(0, allowExternalDataChannel && AllowExternalDataChannel(),
-                wirePayloads, HeaderSize);
-            if (!info.Sections.empty()) {
-                DispatchCurrentVersion([&]<class TScheme>() {
-                    size_t wireIndex = 0;
-                    TScheme::ForEachPayloadField([&]<class TField>() {
-                        if (!HasStoredField<TScheme, TField>()) {
-                            return;
-                        }
-                        if constexpr (TField::Kind == EFieldKind::Array) {
-                            info.Sections[1 + wireIndex].Alignment = alignof(typename TField::TValue);
-                        }
-                        ++wireIndex;
-                    });
-                });
-            }
-            return info;
         }
 
         ui8 GetVersion() const {
             AssertInitializedDebug();
             return Version;
+        }
+
+        bool HasData() const {
+            AssertInitializedDebug();
+            return Version != 0;
         }
 
         size_t GetSerializedSize() const {
@@ -1550,64 +1647,78 @@ namespace NActors {
 
         template <class TScheme = typename TVersions::TLatestScheme>
         static TEv* MakeEvent() {
-            static_assert(TVersions::template HasScheme<TScheme>, "Scheme does not belong to this flat event");
             THolder<TEv> holder = MakeHolder();
-            holder->ResetHeaderStorage(TScheme::HeaderSize);
-            holder->Version = TVersions::template GetVersion<TScheme>();
-            WriteUnaligned<ui8>(holder->MutableHeaderData(), holder->Version);
+            holder->template InitializeAsVersion<TScheme>();
             return holder.Release();
         }
 
         static TEv* Load(const TEventSerializedData* input) {
             Y_ENSURE(input, "Flat event buffer is null");
-            Y_ENSURE(input->GetSize(), "Flat event payload is empty");
+            if (!input->GetSize()) {
+                Y_ENSURE(HasEmptyVersion, "Flat event payload is empty");
+                THolder<TEv> holder = MakeHolder();
+                holder->InitializeAsNoData();
+                return holder.Release();
+            }
 
-            TVector<TRope> wirePayloads;
-            if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
-                TRope::TConstIterator iter = input->GetBeginIter();
-                size_t size = input->GetSize();
-                size_t totalPayloadSize = 0;
-                ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
-                Y_ENSURE(size, "Flat event header is missing");
+            if constexpr (IsEmptyEvent) {
+                Y_ENSURE(false, "Empty flat event payload is not empty");
+                return nullptr;
+            } else {
+                TVector<TRope> wirePayloads;
+                if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
+                    TRope::TConstIterator iter = input->GetBeginIter();
+                    size_t size = input->GetSize();
+                    size_t totalPayloadSize = 0;
+                    ParseExtendedFormatPayload(iter, size, wirePayloads, totalPayloadSize);
+                    Y_ENSURE(size, "Flat event header is missing");
+
+                    THolder<TEv> holder = MakeHolder();
+                    holder->AssignHeaderStorage(iter, size);
+                    holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
+
+                    holder->DispatchCurrentVersion([&]<class TScheme>() {
+                        Y_ENSURE(wirePayloads.size() <= TScheme::PayloadFieldCount,
+                            "Unexpected number of payloads " << wirePayloads.size() << " for flat event version " << holder->Version);
+                        holder->template AssignWirePayloadsForScheme<TScheme>(wirePayloads);
+                        holder->template ValidateStateForScheme<TScheme>();
+                    });
+
+                    return holder.Release();
+                }
 
                 THolder<TEv> holder = MakeHolder();
-                holder->AssignHeaderStorage(iter, size);
-                holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
+                const TRope& wire = input->GetRope();
+                const ui8 version = ReadWireVersion(wire);
+                holder->Version = version;
 
-                holder->DispatchCurrentVersion([&]<class TScheme>() {
-                    Y_ENSURE(wirePayloads.size() <= TScheme::PayloadFieldCount,
-                        "Unexpected number of payloads " << wirePayloads.size() << " for flat event version " << holder->Version);
-                    holder->template AssignWirePayloadsForScheme<TScheme>(wirePayloads);
+                DispatchVersion(version, [&]<class TScheme>() {
+                    const size_t size = wire.GetSize();
+                    if (size <= TScheme::HeaderSize) {
+                        holder->AssignHeaderStorage(wire);
+                        holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
+                    } else {
+                        holder->template AssignInlineArrayWireForScheme<TScheme>(wire);
+                    }
                     holder->template ValidateStateForScheme<TScheme>();
                 });
 
                 return holder.Release();
             }
-
-            THolder<TEv> holder = MakeHolder();
-            const TRope& wire = input->GetRope();
-            const ui8 version = ReadWireVersion(wire);
-            holder->Version = version;
-
-            DispatchVersion(version, [&]<class TScheme>() {
-                const size_t size = wire.GetSize();
-                if (size <= TScheme::HeaderSize) {
-                    holder->AssignHeaderStorage(wire);
-                    holder->Version = ValidateHeaderStorage(holder->HeaderData(), holder->HeaderSize);
-                } else {
-                    holder->template AssignInlineArrayWireForScheme<TScheme>(wire);
-                }
-                holder->template ValidateStateForScheme<TScheme>();
-            });
-
-            return holder.Release();
         }
 
         template <class TTag>
         bool HasField() const {
-            return DispatchCurrentVersion([&]<class TScheme>() {
-                return HasStoredField<TScheme, TTag>();
-            });
+            if constexpr (IsEmptyEvent) {
+                return false;
+            } else {
+                if (!HasData()) {
+                    return false;
+                }
+                return DispatchCurrentVersion([&]<class TScheme>() {
+                    return HasStoredField<TScheme, TTag>();
+                });
+            }
         }
 
         template <class TScheme>
@@ -1784,6 +1895,26 @@ namespace NActors {
     protected:
         TEventFlat() = default;
 
+        template <class TScheme = typename TVersions::TLatestScheme>
+        void InitializeAsVersion() {
+            if constexpr (IsEmptyEvent) {
+                InitializeAsNoData();
+            } else {
+                static_assert(TVersions::template HasScheme<TScheme>, "Scheme does not belong to this flat event");
+                ResetHeaderStorage(TScheme::HeaderSize);
+                Version = TVersions::template GetVersion<TScheme>();
+                WriteUnaligned<ui8>(MutableHeaderData(), Version);
+            }
+        }
+
+        void InitializeAsNoData() {
+            Y_ENSURE(HasEmptyVersion, "Flat event does not allow empty payload");
+            ResetHeaderStorage(0);
+            Payloads.clear();
+            ArrayPayloads.clear();
+            Version = 0;
+        }
+
     private:
         template <class TValue>
         static size_t CheckedFieldBytes(size_t count) {
@@ -1792,7 +1923,6 @@ namespace NActors {
         }
 
         static THolder<TEv> MakeHolder() {
-            static_assert(TVersions::MaxHeaderSize > 0, "Flat event must have non-empty header");
             return THolder<TEv>(new TEv());
         }
 
@@ -1807,8 +1937,13 @@ namespace NActors {
         template <class TScheme>
         void ValidateStateForScheme() const {
             Y_ENSURE(HeaderSize >= sizeof(ui8), "Flat event header is too short");
-            Y_ENSURE(HeaderSize <= TScheme::HeaderSize,
-                "Unexpected flat event header size " << HeaderSize << ", expected at most " << TScheme::HeaderSize);
+            if constexpr (TScheme::IsStrict) {
+                Y_ENSURE(HeaderSize == TScheme::HeaderSize,
+                    "Unexpected strict flat event header size " << HeaderSize << ", expected " << TScheme::HeaderSize);
+            } else {
+                Y_ENSURE(HeaderSize <= TScheme::HeaderSize,
+                    "Unexpected flat event header size " << HeaderSize << ", expected at most " << TScheme::HeaderSize);
+            }
             Y_ENSURE(Payloads.empty() || Payloads.size() <= TScheme::PayloadFieldCount,
                 "Unexpected number of flat payload slots " << Payloads.size() << ", expected 0.." << TScheme::PayloadFieldCount);
             Y_ENSURE(ArrayPayloads.empty() || ArrayPayloads.size() <= TScheme::PayloadFieldCount,
@@ -1899,11 +2034,14 @@ namespace NActors {
             iter += sizeof(wireVersion);
             size_t tailSize = size - sizeof(wireVersion);
 
-            const size_t headerSize = ReadNumberFromRope(iter, tailSize);
-            Y_ENSURE(headerSize >= sizeof(ui8),
-                "Flat inline array wire header is too short " << headerSize);
-            Y_ENSURE(headerSize <= TScheme::HeaderSize,
-                "Flat inline array wire header is too large " << headerSize << ", expected at most " << TScheme::HeaderSize);
+            size_t headerSize = TScheme::HeaderSize;
+            if constexpr (!TScheme::IsStrict) {
+                headerSize = ReadNumberFromRope(iter, tailSize);
+                Y_ENSURE(headerSize >= sizeof(ui8),
+                    "Flat inline array wire header is too short " << headerSize);
+                Y_ENSURE(headerSize <= TScheme::HeaderSize,
+                    "Flat inline array wire header is too large " << headerSize << ", expected at most " << TScheme::HeaderSize);
+            }
             Y_ENSURE(headerSize - sizeof(ui8) <= tailSize,
                 "Flat inline array wire is truncated in header, header# " << headerSize << " tail# " << tailSize);
 
@@ -1979,6 +2117,8 @@ namespace NActors {
         bool HasStoredField() const {
             if constexpr (!TScheme::template HasField<TTag>) {
                 return false;
+            } else if constexpr (TScheme::IsStrict) {
+                return true;
             } else {
                 return HeaderSize >= GetStoredFieldEndOffset<TScheme, TTag>();
             }
@@ -2006,9 +2146,10 @@ namespace NActors {
         struct TInlineArrayWireLayout {
             size_t DataBytes = 0;
             size_t TailBytes = 0;
+            bool HasHeaderSize = true;
 
             ui32 GetSize(size_t headerSize) const {
-                return static_cast<ui32>(headerSize + GetNumberWireSize(headerSize) + TailBytes);
+                return static_cast<ui32>(headerSize + (HasHeaderSize ? GetNumberWireSize(headerSize) : 0) + TailBytes);
             }
         };
 
@@ -2028,6 +2169,7 @@ namespace NActors {
         };
 
         static ui8 ReadWireVersion(const TRope& wire) {
+            static_assert(!IsEmptyEvent, "Empty flat event has no wire version");
             Y_ENSURE(wire.GetSize() >= sizeof(ui8), "Flat event header is too short");
             ui8 version = 0;
             auto iter = wire.Begin();
@@ -2039,7 +2181,11 @@ namespace NActors {
 
         template <class F>
         static decltype(auto) DispatchVersion(ui8 version, F&& f) {
-            if constexpr (TVersions::VersionCount == 1) {
+            if constexpr (IsEmptyEvent) {
+                Y_UNUSED(version);
+                Y_UNUSED(f);
+                ythrow TWithBackTrace<yexception>() << "Empty flat event has no scheme versions";
+            } else if constexpr (TVersions::VersionCount == 1) {
                 Y_ENSURE(version == 1, "Unsupported flat event version " << static_cast<size_t>(version));
                 return f.template operator()<typename TVersions::TLatestScheme>();
             } else {
@@ -2048,14 +2194,22 @@ namespace NActors {
         }
 
         std::optional<TInlineArrayWireLayout> TryDescribeInlineArrayWire() const {
-            return DispatchCurrentVersion([&]<class TScheme>() -> std::optional<TInlineArrayWireLayout> {
-                return TryDescribeInlineArrayWireForScheme<TScheme>();
-            });
+            if constexpr (IsEmptyEvent) {
+                return std::nullopt;
+            } else {
+                if (!HasData()) {
+                    return std::nullopt;
+                }
+                return DispatchCurrentVersion([&]<class TScheme>() -> std::optional<TInlineArrayWireLayout> {
+                    return TryDescribeInlineArrayWireForScheme<TScheme>();
+                });
+            }
         }
 
         template <class TScheme>
         std::optional<TInlineArrayWireLayout> TryDescribeInlineArrayWireForScheme() const {
             TInlineArrayWireLayout layout;
+            layout.HasHeaderSize = !TScheme::IsStrict;
 
             bool ok = true;
             TScheme::ForEachPayloadField([&]<class TField>() {
@@ -2108,48 +2262,57 @@ namespace NActors {
         }
 
         std::optional<TInlineArrayWire> TryBuildInlineArrayWire() const {
-            return DispatchCurrentVersion([&]<class TScheme>() -> std::optional<TInlineArrayWire> {
-                const auto layout = TryDescribeInlineArrayWireForScheme<TScheme>();
-                if (!layout) {
+            if constexpr (IsEmptyEvent) {
+                return std::nullopt;
+            } else {
+                if (!HasData()) {
                     return std::nullopt;
                 }
-
-                TInlineArrayWire wire;
-                wire.Layout = *layout;
-                wire.Header = TString(HeaderData(), HeaderSize);
-                wire.Arrays.reserve(TScheme::PayloadFieldCount);
-                char* headerData = wire.Header.Detach();
-
-                TScheme::ForEachPayloadField([&]<class TField>() {
-                    if (!HasStoredField<TScheme, TField>()) {
-                        return;
+                return DispatchCurrentVersion([&]<class TScheme>() -> std::optional<TInlineArrayWire> {
+                    const auto layout = TryDescribeInlineArrayWireForScheme<TScheme>();
+                    if (!layout) {
+                        return std::nullopt;
                     }
 
-                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
-                    const typename TScheme::TPayloadRef ref = GetPayloadRef<TScheme, TField>();
-                    char* refPtr = headerData + TScheme::template GetPayloadRefOffset<TField>();
+                    TInlineArrayWire wire;
+                    wire.Layout = *layout;
+                    wire.Header = TString(HeaderData(), HeaderSize);
+                    wire.Arrays.reserve(TScheme::PayloadFieldCount);
+                    char* headerData = wire.Header.Detach();
 
-                    if constexpr (TField::Kind != EFieldKind::Bytes) {
-                        const size_t bytes = payloadIndex < ArrayPayloads.size() ? ArrayPayloads[payloadIndex].GetSize() : 0;
-                        WriteUnaligned<typename TScheme::TPayloadRef>(refPtr, {});
-                        if (ref.PayloadId == 0) {
-                            wire.Arrays.push_back(typename TInlineArrayWire::TArrayEntry{});
+                    TScheme::ForEachPayloadField([&]<class TField>() {
+                        if (!HasStoredField<TScheme, TField>()) {
                             return;
                         }
 
-                        wire.Arrays.push_back(typename TInlineArrayWire::TArrayEntry{&ArrayPayloads[payloadIndex], bytes});
-                    }
-                });
+                        constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
+                        const typename TScheme::TPayloadRef ref = GetPayloadRef<TScheme, TField>();
+                        char* refPtr = headerData + TScheme::template GetPayloadRefOffset<TField>();
 
-                return wire;
-            });
+                        if constexpr (TField::Kind != EFieldKind::Bytes) {
+                            const size_t bytes = payloadIndex < ArrayPayloads.size() ? ArrayPayloads[payloadIndex].GetSize() : 0;
+                            WriteUnaligned<typename TScheme::TPayloadRef>(refPtr, {});
+                            if (ref.PayloadId == 0) {
+                                wire.Arrays.push_back(typename TInlineArrayWire::TArrayEntry{});
+                                return;
+                            }
+
+                            wire.Arrays.push_back(typename TInlineArrayWire::TArrayEntry{&ArrayPayloads[payloadIndex], bytes});
+                        }
+                    });
+
+                    return wire;
+                });
+            }
         }
 
         static void WriteInlineArrayWireToBuffer(char* dst, const TInlineArrayWire& wire) {
             Y_DEBUG_ABORT_UNLESS(!wire.Header.empty());
             std::memcpy(dst, wire.Header.data(), sizeof(ui8));
             dst += sizeof(ui8);
-            dst += WriteNumberTo(dst, wire.Header.size());
+            if (wire.Layout.HasHeaderSize) {
+                dst += WriteNumberTo(dst, wire.Header.size());
+            }
             if (wire.Header.size() > sizeof(ui8)) {
                 std::memcpy(dst, wire.Header.data() + sizeof(ui8), wire.Header.size() - sizeof(ui8));
                 dst += wire.Header.size() - sizeof(ui8);
@@ -2212,10 +2375,12 @@ namespace NActors {
                 return false;
             }
 
-            char headerSizeBuf[MaxNumberBytes];
-            const size_t headerSizeLen = WriteNumberTo(headerSizeBuf, wire.Header.size());
-            if (!WriteRawToArcadiaStream(serializer, headerSizeBuf, headerSizeLen)) {
-                return false;
+            if (wire.Layout.HasHeaderSize) {
+                char headerSizeBuf[MaxNumberBytes];
+                const size_t headerSizeLen = WriteNumberTo(headerSizeBuf, wire.Header.size());
+                if (!WriteRawToArcadiaStream(serializer, headerSizeBuf, headerSizeLen)) {
+                    return false;
+                }
             }
 
             if (wire.Header.size() > sizeof(ui8) && !WriteRawToArcadiaStream(
@@ -2239,28 +2404,108 @@ namespace NActors {
             return true;
         }
 
-        TVector<TRope> BuildWirePayloads() const {
-            TVector<TRope> wirePayloads;
-            DispatchCurrentVersion([&]<class TScheme>() {
-                wirePayloads.reserve(TScheme::PayloadFieldCount);
-                TScheme::ForEachPayloadField([&]<class TField>() {
-                    constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
-                    if (!HasStoredField<TScheme, TField>()) {
-                        return;
-                    }
-                    if constexpr (TField::Kind == EFieldKind::Bytes) {
-                        wirePayloads.push_back(payloadIndex < Payloads.size() ? TRope(Payloads[payloadIndex]) : TRope());
+        bool CanUsePayloadsAsWirePayloads() const {
+            if constexpr (IsEmptyEvent) {
+                return false;
+            } else {
+                if (!HasData()) {
+                    return false;
+                }
+                return DispatchCurrentVersion([&]<class TScheme>() {
+                    if constexpr (!TScheme::HasOnlyBytesPayloadFields) {
+                        return false;
                     } else {
-                        if (payloadIndex < ArrayPayloads.size()) {
-                            const_cast<TArrayPayloadStorage&>(ArrayPayloads[payloadIndex]).MaterializeHeap();
-                            wirePayloads.push_back(ArrayPayloads[payloadIndex].ToRope());
-                        } else {
-                            wirePayloads.push_back(TRope());
+                        if (Payloads.size() != TScheme::PayloadFieldCount) {
+                            return false;
                         }
+                        bool ok = true;
+                        TScheme::ForEachPayloadField([&]<class TField>() {
+                            ok = ok && HasStoredField<TScheme, TField>();
+                        });
+                        return ok;
                     }
                 });
-            });
-            return wirePayloads;
+            }
+        }
+
+        std::optional<TRope> SerializeToRopeWithWirePayloads(const TVector<TRope>& wirePayloads, IRcBufAllocator* allocator) const {
+            const ui32 headerSize = CalculateSerializedHeaderSizeImpl(wirePayloads);
+
+            TRope result;
+            if (headerSize) {
+                TRcBuf headerBuf = allocator->AllocRcBuf(headerSize, 0, 0);
+                if (!headerBuf) {
+                    return {};
+                }
+
+                char* data = headerBuf.GetDataMut();
+                auto append = [&data](const char* ptr, size_t len) {
+                    std::memcpy(data, ptr, len);
+                    data += len;
+                    return true;
+                };
+
+                char marker = ExtendedPayloadMarker;
+                append(&marker, 1);
+
+                auto appendNumber = [&append](size_t number) {
+                    char buf[MaxNumberBytes];
+                    return append(buf, WriteNumberTo(buf, number));
+                };
+
+                appendNumber(wirePayloads.size());
+                for (const TRope& rope : wirePayloads) {
+                    appendNumber(rope.GetSize());
+                }
+
+                result.Insert(result.End(), std::move(headerBuf));
+            }
+
+            for (const TRope& rope : wirePayloads) {
+                result.Insert(result.End(), TRope(rope));
+            }
+
+            TRcBuf flatHeaderBuf = allocator->AllocRcBuf(HeaderSize, 0, 0);
+            if (!flatHeaderBuf) {
+                return {};
+            }
+            if (HeaderSize) {
+                std::memcpy(flatHeaderBuf.GetDataMut(), HeaderData(), HeaderSize);
+            }
+            result.Insert(result.End(), std::move(flatHeaderBuf));
+
+            return result;
+        }
+
+        TVector<TRope> BuildWirePayloads() const {
+            TVector<TRope> wirePayloads;
+            if constexpr (IsEmptyEvent) {
+                return wirePayloads;
+            } else {
+                if (!HasData()) {
+                    return wirePayloads;
+                }
+                DispatchCurrentVersion([&]<class TScheme>() {
+                    wirePayloads.reserve(TScheme::PayloadFieldCount);
+                    TScheme::ForEachPayloadField([&]<class TField>() {
+                        constexpr size_t payloadIndex = TScheme::template GetPayloadIndex<TField>();
+                        if (!HasStoredField<TScheme, TField>()) {
+                            return;
+                        }
+                        if constexpr (TField::Kind == EFieldKind::Bytes) {
+                            wirePayloads.push_back(payloadIndex < Payloads.size() ? TRope(Payloads[payloadIndex]) : TRope());
+                        } else {
+                            if (payloadIndex < ArrayPayloads.size()) {
+                                const_cast<TArrayPayloadStorage&>(ArrayPayloads[payloadIndex]).MaterializeHeap();
+                                wirePayloads.push_back(ArrayPayloads[payloadIndex].ToRope());
+                            } else {
+                                wirePayloads.push_back(TRope());
+                            }
+                        }
+                    });
+                });
+                return wirePayloads;
+            }
         }
 
         bool SerializeHeaderOnlyToArcadiaStream(TChunkSerializer* serializer) const {
@@ -2291,9 +2536,14 @@ namespace NActors {
         template <class F>
         decltype(auto) DispatchCurrentVersion(F&& f) const {
             AssertInitializedDebug();
-            if constexpr (TVersions::VersionCount == 1) {
+            if constexpr (IsEmptyEvent) {
+                Y_UNUSED(f);
+                ythrow TWithBackTrace<yexception>() << "Empty flat event has no scheme versions";
+            } else if constexpr (TVersions::VersionCount == 1) {
+                Y_ENSURE(Version == 1, "Flat event has no data");
                 return f.template operator()<typename TVersions::TLatestScheme>();
             } else {
+                Y_ENSURE(Version != 0, "Flat event has no data");
                 return TVersions::Dispatch(Version, std::forward<F>(f));
             }
         }
@@ -2304,9 +2554,22 @@ namespace NActors {
         }
 
         void AssertInitializedDebug() const {
-            Y_DEBUG_ABORT_UNLESS(Version != 0);
-            Y_DEBUG_ABORT_UNLESS(HeaderSize >= sizeof(ui8));
-            Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui8>(HeaderData()) == Version);
+            if constexpr (HasEmptyVersion) {
+                if (Version == 0) {
+                    Y_DEBUG_ABORT_UNLESS(HeaderSize == 0);
+                    Y_DEBUG_ABORT_UNLESS(!HasPayloads());
+                    return;
+                }
+            }
+            if constexpr (IsEmptyEvent) {
+                Y_DEBUG_ABORT_UNLESS(Version == 0);
+                Y_DEBUG_ABORT_UNLESS(HeaderSize == 0);
+                Y_DEBUG_ABORT_UNLESS(!HasPayloads());
+            } else {
+                Y_DEBUG_ABORT_UNLESS(Version != 0);
+                Y_DEBUG_ABORT_UNLESS(HeaderSize >= sizeof(ui8));
+                Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui8>(HeaderData()) == Version);
+            }
         }
 
         template <class TScheme>

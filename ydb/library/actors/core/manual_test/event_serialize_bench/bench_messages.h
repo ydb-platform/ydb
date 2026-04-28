@@ -146,9 +146,12 @@ using TEvBenchFlatMessageTSchemeV1 = TFlatEventDefs::Scheme<
     TEvBenchFlatMessageTValue1Tag, TEvBenchFlatMessageTValue2Tag, TEvBenchFlatMessageTValue3Tag,
     TEvBenchFlatMessageTValue4Tag, TEvBenchFlatMessageTValue5Tag>;
 using TEvBenchFlatMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatMessageTSchemeV1>;
+struct TEvBenchFlatMessageScheme {
+    using TVersions = TEvBenchFlatMessageTVersions;
+};
 
-struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions>;
+struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
@@ -158,9 +161,9 @@ struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessage
     using TValue4Tag = TEvBenchFlatMessageTValue4Tag;
     using TValue5Tag = TEvBenchFlatMessageTValue5Tag;
     using TSchemeV1 = TEvBenchFlatMessageTSchemeV1;
-    using TScheme = TEvBenchFlatMessageTVersions;
+    using TScheme = TEvBenchFlatMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessageScheme>;
 
     auto Value1() { return this->template Field<TValue1Tag>(); }
     auto Value1() const { return this->template Field<TValue1Tag>(); }
@@ -189,17 +192,20 @@ struct TEvBenchFlatBytesMessage;
 using TEvBenchFlatBytesMessageTBlobTag = TFlatEventDefs::BytesField<0>;
 using TEvBenchFlatBytesMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>, TEvBenchFlatBytesMessageTBlobTag>;
 using TEvBenchFlatBytesMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatBytesMessageTSchemeV1>;
+struct TEvBenchFlatBytesMessageScheme {
+    using TVersions = TEvBenchFlatBytesMessageTVersions;
+};
 
-struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions>;
+struct TEvBenchFlatBytesMessage : TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
     using TBlobTag = TEvBenchFlatBytesMessageTBlobTag;
     using TSchemeV1 = TEvBenchFlatBytesMessageTSchemeV1;
-    using TScheme = TEvBenchFlatBytesMessageTVersions;
+    using TScheme = TEvBenchFlatBytesMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatBytesMessage, TEvBenchFlatBytesMessageScheme>;
 };
 
 struct TEvBenchFlatVPutLikeMessage;
@@ -228,9 +234,12 @@ using TEvBenchFlatVPutLikeMessageTSchemeV1 = TFlatEventDefs::Scheme<
     TEvBenchFlatVPutLikeMessageTExtraChecksTag,
     TEvBenchFlatVPutLikeMessageTPayloadTag>;
 using TEvBenchFlatVPutLikeMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatVPutLikeMessageTSchemeV1>;
+struct TEvBenchFlatVPutLikeMessageScheme {
+    using TVersions = TEvBenchFlatVPutLikeMessageTVersions;
+};
 
-struct TEvBenchFlatVPutLikeMessage : TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions>;
+struct TEvBenchFlatVPutLikeMessage : TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
@@ -246,9 +255,9 @@ struct TEvBenchFlatVPutLikeMessage : TEventFlat<TEvBenchFlatVPutLikeMessage, TEv
     using TExtraChecksTag = TEvBenchFlatVPutLikeMessageTExtraChecksTag;
     using TPayloadTag = TEvBenchFlatVPutLikeMessageTPayloadTag;
     using TSchemeV1 = TEvBenchFlatVPutLikeMessageTSchemeV1;
-    using TScheme = TEvBenchFlatVPutLikeMessageTVersions;
+    using TScheme = TEvBenchFlatVPutLikeMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatVPutLikeMessage, TEvBenchFlatVPutLikeMessageScheme>;
 };
 
 #define BENCH_30_U64_FIELDS(X) \
@@ -273,9 +282,12 @@ using TEvBenchFlatThirtyMessageTSchemeV1 = TFlatEventDefs::Scheme<
     TEvBenchFlatThirtyMessageTValue25Tag, TEvBenchFlatThirtyMessageTValue26Tag, TEvBenchFlatThirtyMessageTValue27Tag,
     TEvBenchFlatThirtyMessageTValue28Tag, TEvBenchFlatThirtyMessageTValue29Tag, TEvBenchFlatThirtyMessageTValue30Tag>;
 using TEvBenchFlatThirtyMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatThirtyMessageTSchemeV1>;
+struct TEvBenchFlatThirtyMessageScheme {
+    using TVersions = TEvBenchFlatThirtyMessageTVersions;
+};
 
-struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions>;
+struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
@@ -285,9 +297,9 @@ struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage, TEvBenc
     using TValue4Tag = TEvBenchFlatThirtyMessageTValue4Tag;
     using TValue5Tag = TEvBenchFlatThirtyMessageTValue5Tag;
     using TSchemeV1 = TEvBenchFlatThirtyMessageTSchemeV1;
-    using TScheme = TEvBenchFlatThirtyMessageTVersions;
+    using TScheme = TEvBenchFlatThirtyMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageScheme>;
 
     static TEvBenchFlatThirtyMessage* Make(ui64 base) {
         THolder<TEvBenchFlatThirtyMessage> holder(TBase::MakeEvent());
@@ -303,50 +315,59 @@ struct TEvBenchFlatArrayMessage;
 using TEvBenchFlatArrayMessageTValuesTag = TFlatEventDefs::ArrayField<ui64, 0>;
 using TEvBenchFlatArrayMessageTSchemeV1 = TFlatEventDefs::Scheme<TFlatEventDefs::WithPayloadType<ui8>, TEvBenchFlatArrayMessageTValuesTag>;
 using TEvBenchFlatArrayMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatArrayMessageTSchemeV1>;
+struct TEvBenchFlatArrayMessageScheme {
+    using TVersions = TEvBenchFlatArrayMessageTVersions;
+};
 
-struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions>;
+struct TEvBenchFlatArrayMessage : TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
     using TValuesTag = TEvBenchFlatArrayMessageTValuesTag;
     using TSchemeV1 = TEvBenchFlatArrayMessageTSchemeV1;
-    using TScheme = TEvBenchFlatArrayMessageTVersions;
+    using TScheme = TEvBenchFlatArrayMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatArrayMessage, TEvBenchFlatArrayMessageScheme>;
 };
 
 struct TEvBenchFlatInlineArray30Message;
 using TEvBenchFlatInlineArray30MessageTValuesTag = TFlatEventDefs::InlineArrayField<ui64, 30, 0>;
 using TEvBenchFlatInlineArray30MessageTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlatInlineArray30MessageTValuesTag>;
 using TEvBenchFlatInlineArray30MessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatInlineArray30MessageTSchemeV1>;
+struct TEvBenchFlatInlineArray30MessageScheme {
+    using TVersions = TEvBenchFlatInlineArray30MessageTVersions;
+};
 
-struct TEvBenchFlatInlineArray30Message : TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions>;
+struct TEvBenchFlatInlineArray30Message : TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
     using TValuesTag = TEvBenchFlatInlineArray30MessageTValuesTag;
     using TSchemeV1 = TEvBenchFlatInlineArray30MessageTSchemeV1;
-    using TScheme = TEvBenchFlatInlineArray30MessageTVersions;
+    using TScheme = TEvBenchFlatInlineArray30MessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatInlineArray30Message, TEvBenchFlatInlineArray30MessageScheme>;
 };
 
 struct TEvBenchFlatStructArrayMessage;
 using TEvBenchFlatStructArrayMessageTValuesTag = TFlatEventDefs::InlineArrayField<TTripleInts, 10, 0>;
 using TEvBenchFlatStructArrayMessageTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlatStructArrayMessageTValuesTag>;
 using TEvBenchFlatStructArrayMessageTVersions = TFlatEventDefs::Versions<TEvBenchFlatStructArrayMessageTSchemeV1>;
+struct TEvBenchFlatStructArrayMessageScheme {
+    using TVersions = TEvBenchFlatStructArrayMessageTVersions;
+};
 
-struct TEvBenchFlatStructArrayMessage : TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions> {
-    using TBase = TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions>;
+struct TEvBenchFlatStructArrayMessage : TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageScheme> {
+    using TBase = TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageScheme>;
 
     static constexpr ui32 EventType = EvBenchFlatMessage;
 
     using TValuesTag = TEvBenchFlatStructArrayMessageTValuesTag;
     using TSchemeV1 = TEvBenchFlatStructArrayMessageTSchemeV1;
-    using TScheme = TEvBenchFlatStructArrayMessageTVersions;
+    using TScheme = TEvBenchFlatStructArrayMessageScheme;
 
-    friend class TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageTVersions>;
+    friend class TEventFlat<TEvBenchFlatStructArrayMessage, TEvBenchFlatStructArrayMessageScheme>;
 };
 
 #undef BENCH_30_U64_FIELDS
@@ -356,18 +377,21 @@ using TEvBenchAckTCountTag = TFlatEventDefs::FixedField<ui32, 0>;
 using TEvBenchAckTChecksumTag = TFlatEventDefs::FixedField<ui64, 1>;
 using TEvBenchAckTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchAckTCountTag, TEvBenchAckTChecksumTag>;
 using TEvBenchAckTVersions = TFlatEventDefs::Versions<TEvBenchAckTSchemeV1>;
+struct TEvBenchAckScheme {
+    using TVersions = TEvBenchAckTVersions;
+};
 
-struct TEvBenchAck : TEventFlat<TEvBenchAck, TEvBenchAckTVersions> {
-    using TBase = TEventFlat<TEvBenchAck, TEvBenchAckTVersions>;
+struct TEvBenchAck : TEventFlat<TEvBenchAck, TEvBenchAckScheme> {
+    using TBase = TEventFlat<TEvBenchAck, TEvBenchAckScheme>;
 
     static constexpr ui32 EventType = EvBenchAck;
 
     using TCountTag = TEvBenchAckTCountTag;
     using TChecksumTag = TEvBenchAckTChecksumTag;
     using TSchemeV1 = TEvBenchAckTSchemeV1;
-    using TScheme = TEvBenchAckTVersions;
+    using TScheme = TEvBenchAckScheme;
 
-    friend class TEventFlat<TEvBenchAck, TEvBenchAckTVersions>;
+    friend class TEventFlat<TEvBenchAck, TEvBenchAckScheme>;
 
     auto Count() { return this->template Field<TCountTag>(); }
     auto Count() const { return this->template Field<TCountTag>(); }
@@ -386,17 +410,20 @@ struct TEvBenchFlush;
 using TEvBenchFlushTTag = TFlatEventDefs::FixedField<ui32, 0>;
 using TEvBenchFlushTSchemeV1 = TFlatEventDefs::Scheme<TEvBenchFlushTTag>;
 using TEvBenchFlushTVersions = TFlatEventDefs::Versions<TEvBenchFlushTSchemeV1>;
+struct TEvBenchFlushScheme {
+    using TVersions = TEvBenchFlushTVersions;
+};
 
-struct TEvBenchFlush : TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions> {
-    using TBase = TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions>;
+struct TEvBenchFlush : TEventFlat<TEvBenchFlush, TEvBenchFlushScheme> {
+    using TBase = TEventFlat<TEvBenchFlush, TEvBenchFlushScheme>;
 
     static constexpr ui32 EventType = EvBenchFlush;
 
     using TTag = TEvBenchFlushTTag;
     using TSchemeV1 = TEvBenchFlushTSchemeV1;
-    using TScheme = TEvBenchFlushTVersions;
+    using TScheme = TEvBenchFlushScheme;
 
-    friend class TEventFlat<TEvBenchFlush, TEvBenchFlushTVersions>;
+    friend class TEventFlat<TEvBenchFlush, TEvBenchFlushScheme>;
 
     auto Value() { return this->template Field<TTag>(); }
     auto Value() const { return this->template Field<TTag>(); }

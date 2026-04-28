@@ -5,7 +5,6 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes/ut/utils
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    ydb/core/kqp/tools/join_perf
 
     library/cpp/testing/unittest
     library/cpp/dwarf_backtrace
@@ -17,7 +16,6 @@ IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -25,7 +23,16 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     dq_hash_combine_ut.cpp
+)
+
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
+PEERDIR(
+    ydb/core/kqp/tools/join_perf
+)
+
+SRCS(
     dq_hash_join_ut.cpp
 )
+ENDIF()
 
 END()

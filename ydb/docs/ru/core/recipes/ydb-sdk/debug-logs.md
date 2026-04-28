@@ -403,6 +403,39 @@
       .client()?;
   ```
 
+- C#
+
+  В {{ ydb-short-name }} C# SDK логирование подключается через стандартный интерфейс `ILoggerFactory` из `Microsoft.Extensions.Logging`. Можно передать любую реализацию — консольный логгер, Serilog, NLog и другие:
+
+  ```C#
+  using Microsoft.Extensions.Logging;
+  using Ydb.Sdk.Ado;
+
+  var loggerFactory = LoggerFactory.Create(builder =>
+      builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
+
+  var ydbBuilder = new YdbConnectionStringBuilder
+  {
+      Host = "localhost",
+      Port = 2136,
+      Database = "/local",
+      LoggerFactory = loggerFactory
+  };
+
+  await using var dataSource = new YdbDataSource(ydbBuilder);
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
+
+  Так как `LoggerFactory` принимает стандартный `ILoggerFactory`, подключить Serilog или NLog можно без дополнительных адаптеров:
+
+  ```C#
+  // Serilog
+  var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+
+  // NLog
+  var loggerFactory = LoggerFactory.Create(builder => builder.AddNLog());
+  ```
+
 - PHP
 
   В YDB PHP SDK для логирования вам нужно использовать класс, который реализует `\Psr\Log\LoggerInterface`.

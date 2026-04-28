@@ -758,6 +758,54 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     }
 
+    Y_UNIT_TEST(NoProgressDefragBacksOffWhenCompactionIsDeferred) {
+        TTestEnvCompDefragIndependent env(0.01);
+        ui32 N = 50000;
+        ui32 batchSize = 1000;
+
+        env.WriteData(N, batchSize);
+        env.RunFullCompaction();
+
+        TVector<std::unique_ptr<IEventHandle>> compactions;
+        env.SetFilterFunction(TEvBlobStorage::EvCompactVDisk, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            compactions.push_back(std::move(ev));
+            return false;
+        });
+
+        env.SetFilterFunction(NKikimr::TEvHugeLockChunksResult::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            ev->Get<NKikimr::TEvHugeLockChunksResult>()->LockedChunks.clear();
+            return true;
+        });
+
+        std::optional<ui32> observedNodeId;
+        ui32 observedNodeNoProgressQuantums = 0;
+        env.SetFilterFunction(NKikimr::TEvDefragQuantumResult::EventType, [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const auto *res = ev->Get<NKikimr::TEvDefragQuantumResult>();
+            const bool noProgress = res->Stat.FoundChunksToDefrag && !res->Stat.RewrittenRecs && !res->Stat.RewrittenBytes;
+            if (noProgress) {
+                if (!observedNodeId) {
+                    observedNodeId = nodeId;
+                }
+                if (*observedNodeId == nodeId) {
+                    ++observedNodeNoProgressQuantums;
+                }
+            }
+            return true;
+        });
+
+        DeleteHugeBlobsOfTablet(env, N, 1);
+
+        for (ui32 i = 0; i < 120 && !observedNodeId; ++i) {
+            env.Env.Sim(TDuration::Seconds(5));
+        }
+
+        UNIT_ASSERT_C(observedNodeId, "No no-progress defrag quantum was observed");
+        UNIT_ASSERT_VALUES_EQUAL(observedNodeNoProgressQuantums, 1);
+
+        env.Env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(observedNodeNoProgressQuantums, 1);
+    }
+
     Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {
         TTestEnvCompDefragIndependent env(0.0); // Zero threshold - compaction should run immediately
         ui32 N = 50000;

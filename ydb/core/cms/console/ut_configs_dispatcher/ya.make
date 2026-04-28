@@ -6,6 +6,8 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/json
+    library/cpp/monlib/service
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion

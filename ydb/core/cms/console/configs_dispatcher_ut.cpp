@@ -7,6 +7,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
+
 #include <util/system/hostname.h>
 
 #include <ydb/core/protos/netclassifier.pb.h>
@@ -17,6 +20,55 @@ using namespace NConsole;
 using namespace NConsole::NUT;
 
 namespace {
+
+struct THttpRequest : NMonitoring::IHttpRequest {
+    HTTP_METHOD Method;
+    TCgiParameters CgiParameters;
+    THttpHeaders HttpHeaders;
+
+    explicit THttpRequest(HTTP_METHOD method)
+        : Method(method)
+    {
+    }
+
+    const char* GetURI() const override {
+        return "";
+    }
+
+    const char* GetPath() const override {
+        return "";
+    }
+
+    const TCgiParameters& GetParams() const override {
+        return CgiParameters;
+    }
+
+    const TCgiParameters& GetPostParams() const override {
+        return CgiParameters;
+    }
+
+    TStringBuf GetPostContent() const override {
+        return TStringBuf();
+    }
+
+    HTTP_METHOD GetMethod() const override {
+        return Method;
+    }
+
+    const THttpHeaders& GetHeaders() const override {
+        return HttpHeaders;
+    }
+
+    TString GetRemoteAddr() const override {
+        return TString();
+    }
+};
+
+NJson::TJsonValue ReadJsonFromString(TStringBuf json) {
+    NJson::TJsonValue value;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(json, &value), TString(json));
+    return value;
+}
 
 TTenantTestConfig::TTenantPoolConfig TenantTenantPoolConfig()
 {
@@ -1067,6 +1119,69 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT(state.ConfigSourceLabel.empty());
         UNIT_ASSERT(!state.HasStorageYaml);
+    }
+
+    Y_UNIT_TEST(TestMonJsonMasksSensitiveFieldsInDebugInfo) {
+        NKikimrConfig::TAppConfig config;
+
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.InitialConfig = config;
+        initInfo.StartupConfigYaml = "config: {}\n";
+        initInfo.DebugInfo = NConfig::TDebugInfo{};
+        initInfo.DebugInfo->StaticConfig.MutableGRpcConfig()->SetKey("static_secret");
+        initInfo.DebugInfo->OldDynConfig.MutableGRpcConfig()->SetKey("old_dyn_secret");
+        initInfo.DebugInfo->NewDynConfig.MutableGRpcConfig()->SetKey("new_dyn_secret");
+
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
+        auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
+        const TActorId dispatcherId = runtime.Register(dispatcher);
+        runtime.EnableScheduleForActor(dispatcherId, true);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
+            runtime.DispatchEvents(options);
+        }
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        request->HttpHeaders.AddHeader("Content-Type", "application/json");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
+        runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        const TString& answer = response->Answer;
+
+        const size_t jsonBegin = answer.find('{');
+        UNIT_ASSERT_UNEQUAL(jsonBegin, TString::npos);
+        const TString jsonBody = answer.substr(jsonBegin);
+        const NJson::TJsonValue actual = ReadJsonFromString(jsonBody);
+        const NJson::TJsonValue expected = ReadJsonFromString(R"json({
+            "last_replay_seed_nodes": false,
+            "initial_cms_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "last_replay_dynamic_config": false,
+            "resolved_json_config": null,
+            "initial_cms_yaml_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "current_json_config": {},
+            "has_storage_yaml": false,
+            "yaml_config": "",
+            "initial_json_config": {
+                "grpc_config": {
+                    "key": "***"
+                }
+            },
+            "labels": []
+        })json");
+        UNIT_ASSERT_C(expected == actual, jsonBody);
     }
 }
 

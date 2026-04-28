@@ -33,14 +33,15 @@ TVisitFunctor MakeFunctor(void (TStringMaskVisitor::*memberPtr)(const T&)) {
     };
 }
 
-// Replaces string literals in a query with '***removed***' while keeping numbers,
-// identifiers, and query shape intact. Used by request logging so that sensitive
-// data (passwords, secrets, user payloads) never ends up in logs verbatim.
+// Replaces YQL grammar rules whose payload is secret material (passwords,
+// password hashes, secret-object feature values) with '***removed***',
+// emitting the rest of the query as-is. Used by request logging so that
+// secret values never end up in logs verbatim.
 //
-// Masking is driven by the grammar, not by scanning token text: YQL accepts
-// several string quotings ('x', "x", @@x@@, typed literals) and a token-level
-// check would miss some of them. Each handler below matches a grammar rule
-// where a string may carry sensitive data and sets NextTokenReplacement_,
+// Masking is driven by the grammar, not by scanning token text: YQL
+// accepts several string quotings ('x', "x", @@x@@) and a token-level
+// check would miss some of them. Each handler below matches a specific
+// grammar rule that carries a secret value and sets NextTokenReplacement_,
 // which VisitToken then emits instead of the original token value.
 class TStringMaskVisitor {
 public:
@@ -60,10 +61,10 @@ public:
             return;
         }
 
-        if (!First_) {
+        if (LeadingSpaceSuppressed_) {
             Sb_ << ' ';
         } else {
-            First_ = false;
+            LeadingSpaceSuppressed_ = true;
         }
 
         if (NextTokenReplacement_) {
@@ -72,24 +73,6 @@ public:
         } else {
             Sb_ << str;
         }
-    }
-
-    // General path for user payloads: SELECT 'foo', WHERE col = "bar",
-    // INSERT ... VALUES (@@multi@@). Covers all string-quoting forms uniformly.
-    void VisitLiteralValue(const TRule_literal_value& msg) {
-        if (msg.Alt_case() == TRule_literal_value::kAltLiteralValue3) {
-            NextTokenReplacement_ = "'***removed***'";
-        }
-        VisitAllFields(TRule_literal_value::GetDescriptor(), msg);
-    }
-
-    // pragma_value is a separate grammar rule, not a literal_value, so PRAGMA
-    // foo = 'secret' would slip past VisitLiteralValue without its own handler.
-    void VisitPragmaValue(const TRule_pragma_value& msg) {
-        if (msg.Alt_case() == TRule_pragma_value::kAltPragmaValue3) {
-            NextTokenReplacement_ = "'***removed***'";
-        }
-        VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
 
     // CREATE/ALTER USER ... PASSWORD '...'. The password is consumed by
@@ -146,15 +129,13 @@ private:
 
     const TDispatchMap& Dispatch_;
     TStringBuilder Sb_;
-    bool First_ = true;
+    bool LeadingSpaceSuppressed_ = false;
     TMaybe<TString> NextTokenReplacement_;
 };
 
 const TDispatchMap& GetDispatch() {
     static const TDispatchMap dispatch = {
         {TToken::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitToken)},
-        {TRule_literal_value::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitLiteralValue)},
-        {TRule_pragma_value::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitPragmaValue)},
         {TRule_password_value::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitPasswordValue)},
         {TRule_hash_option::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitHashOption)},
         {TRule_object_feature_value::GetDescriptor(), MakeFunctor(&TStringMaskVisitor::VisitObjectFeatureValue)},

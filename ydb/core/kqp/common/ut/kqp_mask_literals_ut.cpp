@@ -8,53 +8,53 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(MaskSecretValueLiteralsTest) {
 
+    // --- Pass-through cases: nothing here is a "secret value" rule, so
+    // strings, numbers, pragmas, etc. are kept verbatim. ---
+
     Y_UNIT_TEST(SelectNumber) {
         UNIT_ASSERT_VALUES_EQUAL(
             *MaskSecretValueLiterals("select 1;"),
             "select 1 ;");
     }
 
-    Y_UNIT_TEST(SelectTrue) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("select true;"),
-            "select true ;");
-    }
-
-    Y_UNIT_TEST(SelectStringLiteral) {
+    Y_UNIT_TEST(SelectStringLiteralIsNotMasked) {
         UNIT_ASSERT_VALUES_EQUAL(
             *MaskSecretValueLiterals("select 'foo';"),
-            "select '***removed***' ;");
+            "select 'foo' ;");
     }
 
-    Y_UNIT_TEST(SelectDoubleQuotedString) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("select \"foo\";"),
-            "select '***removed***' ;");
-    }
-
-    Y_UNIT_TEST(SelectMultilineString) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("select @@multi\nline@@;"),
-            "select '***removed***' ;");
-    }
-
-    Y_UNIT_TEST(SelectFloat) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("select 3.0;"),
-            "select 3.0 ;");
-    }
-
-    Y_UNIT_TEST(SelectColumn) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("select col;"),
-            "select col ;");
-    }
-
-    Y_UNIT_TEST(WhereWithStringLiteral) {
+    Y_UNIT_TEST(WhereStringLiteralIsNotMasked) {
         UNIT_ASSERT_VALUES_EQUAL(
             *MaskSecretValueLiterals("select * from `logs/of/bob` where pwd='foo';"),
-            "select * from `logs/of/bob` where pwd = '***removed***' ;");
+            "select * from `logs/of/bob` where pwd = 'foo' ;");
     }
+
+    Y_UNIT_TEST(PragmaStringIsNotMasked) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("pragma a='foo';"),
+            "pragma a = 'foo' ;");
+    }
+
+    Y_UNIT_TEST(DoubleQuotedStringIsNotMasked) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select \"foo\";"),
+            "select \"foo\" ;");
+    }
+
+    Y_UNIT_TEST(MultilineStringIsNotMasked) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("select @@multi\nline@@;"),
+            "select @@multi\nline@@ ;");
+    }
+
+    Y_UNIT_TEST(InsertValuesAreNotMasked) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            *MaskSecretValueLiterals("insert into t (a, b) values ('x', 'y');"),
+            "insert into t ( a , b ) values ( 'x' , 'y' ) ;");
+    }
+
+
+    // --- Secret-value rules: the string is replaced with '***removed***'. ---
 
     Y_UNIT_TEST(CreateUserPassword) {
         UNIT_ASSERT_VALUES_EQUAL(
@@ -92,22 +92,11 @@ Y_UNIT_TEST_SUITE(MaskSecretValueLiteralsTest) {
             "CREATE USER foo HASH '***removed***' ;");
     }
 
-    Y_UNIT_TEST(PragmaNumber) {
+    Y_UNIT_TEST(CreateObjectSecretValue) {
         UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("pragma a=1"),
-            "pragma a = 1");
-    }
-
-    Y_UNIT_TEST(PragmaString) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("pragma a='foo';"),
-            "pragma a = '***removed***' ;");
-    }
-
-    Y_UNIT_TEST(PragmaTrue) {
-        UNIT_ASSERT_VALUES_EQUAL(
-            *MaskSecretValueLiterals("pragma a=true;"),
-            "pragma a = true ;");
+            *MaskSecretValueLiterals(
+                "CREATE OBJECT my_secret (TYPE SECRET) WITH (value = 'mysecret');"),
+            "CREATE OBJECT my_secret ( TYPE SECRET ) WITH ( value = '***removed***' ) ;");
     }
 
     Y_UNIT_TEST(InvalidSqlReturnsNothing) {

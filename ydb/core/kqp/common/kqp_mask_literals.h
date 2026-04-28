@@ -5,20 +5,22 @@
 
 namespace NKikimr::NKqp {
 
-// Replaces every string literal in the SQL query with '***removed***',
-// keeping numbers, identifiers, keywords and statement structure intact.
-// The function does NOT try to decide which literal is "the password" —
-// it masks all of them, on the assumption that the caller has already
-// established the query is suspect (e.g. a CREATE/ALTER USER, CREATE
-// OBJECT TYPE SECRET, etc.) and any string in such a query can carry
-// secret material.
+// Replaces only the string literals that the YQL grammar marks as secret
+// values with '***removed***'. Other strings, numbers, identifiers,
+// keywords and statement structure are preserved as-is. The masking is
+// not a generic "obfuscate all strings" pass — it deliberately targets
+// grammar rules whose payload is, by definition, secret material:
 //
-// Implementation is grammar-driven: handlers in kqp_mask_literals.cpp
-// cover the YQL grammar rules where strings appear (literal_value,
-// pragma_value, password_value, hash_option, object_feature_value).
-// If YQL grammar (yql/essentials/sql/v1/SQLv1Antlr4.g.in) gains a new
-// rule that consumes STRING_VALUE without going through literal_value
-// and may carry secrets, add a matching handler here and a test in
+//   * password_value         — CREATE/ALTER USER ... PASSWORD '...'
+//   * hash_option            — CREATE/ALTER USER ... HASH '...'
+//   * object_feature_value   — CREATE/ALTER/UPSERT OBJECT (TYPE SECRET)
+//                              WITH (key = '...'); also covers external
+//                              data source credentials (AWS keys,
+//                              MySQL/PG/CH passwords, ...)
+//
+// If YQL grammar (yql/essentials/sql/v1/SQLv1Antlr4.g.in) introduces a
+// new rule that carries secret material via STRING_VALUE, add a matching
+// handler in kqp_mask_literals.cpp and a test in
 // kqp_mask_literals_ut.cpp.
 //
 // Returns Nothing() if parsing fails. Callers MUST treat this as a hard

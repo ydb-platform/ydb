@@ -40,6 +40,26 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -78,6 +98,30 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                  "modified_at",
+                  TableTtl.TtlUnit.SECONDS,
+                  3600
+          ));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
@@ -109,6 +153,29 @@
 
 {% endif %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Go
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ## Включение TTL для вновь создаваемой таблицы {#enable-for-new-table}
@@ -160,6 +227,30 @@
   )
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  TableDescription description = TableDescription.newBuilder()
+          .addNullableColumn("id", PrimitiveType.Uint64)
+          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+          .setPrimaryKey("id")
+          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+          .build();
+
+  session.createTable("mytable", description).join().expectSuccess();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ## Выключение TTL {#disable}
@@ -196,6 +287,26 @@
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.notSet());
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 
 ## Получение настроек TTL {#describe}
@@ -232,5 +343,22 @@
   ttl = desc.ttl_settings
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+  ```
+
+>>>>>>> 317adb799 (dev: update dotnet snippets (#38018))
 {% endlist %}
 

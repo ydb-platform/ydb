@@ -29,8 +29,10 @@ YQL_LAST_ABI_VERSION()
 END()
 
 IF (OS_LINUX)
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
     # Solomon recipe is supported only for linux.
     RECURSE_FOR_TESTS(
         ut
     )
+ENDIF()
 ENDIF()

@@ -18,6 +18,16 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
+SRCS(
+    dq_channel_service_ut.cpp
+)
+
+PEERDIR(
+    ydb/core/kqp/ut/common
+)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -392,7 +392,6 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
-        // field 18 removed (was TKqpPhyCnScatter)
     };
 }
 

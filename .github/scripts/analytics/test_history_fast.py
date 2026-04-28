@@ -23,6 +23,7 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
             `duration` Double,
             `status` Utf8,
             `status_description` Utf8,
+            `error_type` Utf8,
             `owners` Utf8,
             `log` Utf8,
             `logsdir` Utf8,
@@ -56,6 +57,17 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         duration,
         status,
         status_description,
+        CAST(
+            CASE
+                WHEN String::Contains(String::ToLower(COALESCE(status_description, '')), 'sanitizer')
+                THEN 'SANITIZER'
+                WHEN String::Contains(String::ToLower(COALESCE(error_type, '')), 'timeout')
+                  OR String::Contains(String::ToLower(COALESCE(status_description, '')), 'timeout')
+                THEN 'TIMEOUT'
+                ELSE 'REGULAR'
+            END
+            AS Utf8
+        ) AS error_type,
         owners,
         log,
         logsdir,
@@ -126,6 +138,7 @@ def main():
                 .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
                 .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("error_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))

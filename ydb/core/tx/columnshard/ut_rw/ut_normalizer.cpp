@@ -564,8 +564,8 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
 
         class TController: public TInitVerifyDBController<TInit, TVerify> {
         public:
-            mutable TExpectation Expectation;
-            mutable ui32 ExpectedPortionsCount = 0;
+            TExpectation Expectation;
+            ui32 ExpectedPortionsCount = 0;
         };
 
         // TestNormalizerImpl creates a table (scheme-shard local path SchemeShardPathId), writes rows in
@@ -576,7 +576,7 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
             void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
                 using namespace NColumnShard;
 
-                auto* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
+                TController* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
                 UNIT_ASSERT_C(ctrl != nullptr, "LeakedBlobsNormalizer: expected TController registered via RegisterCSControllerGuard");
                 ctrl->Expectation.Clear();
 
@@ -771,34 +771,38 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
     }
 
     Y_UNIT_TEST(LeakedBlobsNormalizer_BatchLargerThanPortionsCount) {
-        TLeakedBlobsNormalizerTestScenario scenario;
-        scenario.RowCount = 20000;
-        scenario.PortionCount = 100;
-        scenario.BatchSize = 200;
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 100,
+            .BatchSize = 200,
+        };
         LeakedBlobsNormalizerTestImpl(scenario);
     }
 
     Y_UNIT_TEST(LeakedBlobsNormalizer_BatchSmallerThanPortionsCount) {
-        TLeakedBlobsNormalizerTestScenario scenario;
-        scenario.RowCount = 20000;
-        scenario.PortionCount = 200;
-        scenario.BatchSize = 33;
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 33,
+        };
         LeakedBlobsNormalizerTestImpl(scenario);
     }
 
     Y_UNIT_TEST(LeakedBlobsNormalizer_PortionsCountDividesByBatchSize) {
-        TLeakedBlobsNormalizerTestScenario scenario;
-        scenario.RowCount = 20000;
-        scenario.PortionCount = 200;
-        scenario.BatchSize = 50;
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 50,
+        };
         LeakedBlobsNormalizerTestImpl(scenario);
     }
 
     Y_UNIT_TEST(LeakedBlobsNormalizer_NoPortions) {
-        TLeakedBlobsNormalizerTestScenario scenario;
-        scenario.RowCount = 0;
-        scenario.PortionCount = 0;
-        scenario.BatchSize = 10;
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 0,
+            .PortionCount = 0,
+            .BatchSize = 10,
+        };
         LeakedBlobsNormalizerTestImpl(scenario);
     }
 

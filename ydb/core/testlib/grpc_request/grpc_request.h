@@ -18,7 +18,7 @@ struct TResultHolder {
     std::unique_ptr<const NProtoBuf::Message> Response;
 
     TRes AsResult() const {
-        auto r = dynamic_cast<const TRes*>(Response);
+        auto* r = dynamic_cast<const TRes*>(Response.get());
         UNIT_ASSERT(r);
 
         return *r;

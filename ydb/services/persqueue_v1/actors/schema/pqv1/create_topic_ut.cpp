@@ -93,7 +93,7 @@ Y_UNIT_TEST(SharedConsumer) {
     //readRule.set_service_type("test_service_type");
     readRule.set_starting_message_timestamp_ms(1000);
 
-    auto& type = *readRule.mutable_shared_read_rule_type();
+    auto& type = *readRule.mutable_shared_consumer_type();
     type.set_keep_messages_order(true);
     type.mutable_default_processing_timeout()->set_seconds(3);
     type.mutable_receive_message_wait_time()->set_seconds(5);

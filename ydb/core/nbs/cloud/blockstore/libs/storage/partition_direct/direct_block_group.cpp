@@ -7,8 +7,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
-#include <util/random/random.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;

@@ -13,8 +13,6 @@
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
-#include <functional>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////

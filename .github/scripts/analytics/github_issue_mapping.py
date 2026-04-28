@@ -46,7 +46,12 @@ from github_issue_utils import (
 
 
 def get_github_issues_data(ydb_wrapper):
-    """Get GitHub issues data from the issues table, including labels info."""
+    """Get GitHub issues data from the issues table, including labels info.
+
+    Excludes issues closed as **Not planned** or **Duplicate**: those must not win
+    ``latest per build_type`` in :func:`convert_mapping_to_table_data` or override
+    owner/area from a still-relevant mute issue.
+    """
     issues_table = ydb_wrapper.get_table_path("issues")
     query = f"""
     SELECT
@@ -54,6 +59,7 @@ def get_github_issues_data(ydb_wrapper):
         title,
         url,
         state,
+        state_reason,
         body,
         created_at,
         updated_at,
@@ -61,6 +67,10 @@ def get_github_issues_data(ydb_wrapper):
     FROM `{issues_table}`
     WHERE body IS NOT NULL
     AND body != ''
+    AND NOT (
+        state = 'CLOSED'
+        AND state_reason IN ('NOT_PLANNED', 'DUPLICATE')
+    )
     """
 
     print("Fetching GitHub issues data...")
@@ -259,7 +269,8 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
         if not issues:
             continue
 
-        # Group issues by build_type, then pick the latest per group
+        # Group issues by build_type, then pick the latest created issue per group.
+        # Issues closed as not-planned/duplicate are omitted upstream (get_github_issues_data).
         by_build_type = {}
         for issue in issues:
             bt = issue.get('build_type', DEFAULT_BUILD_TYPE)

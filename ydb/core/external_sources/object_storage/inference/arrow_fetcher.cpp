@@ -62,6 +62,7 @@ public:
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames:
+            case EFileFormat::Csv:
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
@@ -105,7 +106,16 @@ public:
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
+                file = CleanupCsvFile(data, request, Config_->CsvParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
+                break;
+            }
+            case EFileFormat::Csv: {
+                auto withHeader = PrependSyntheticCsvHeader(data, Config_->CsvParseOpts.delimiter);
+                file = CleanupCsvFile(withHeader, request, Config_->CsvParseOpts, ctx);
                 if (!file) {
                     return;
                 }
@@ -126,7 +136,7 @@ public:
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
-                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
+                file = CleanupJsonFile(data, request, Config_->JsonParseOpts, ctx);
                 if (!file) {
                     return;
                 }
@@ -137,6 +147,35 @@ public:
             default:
                 Y_ABORT("Invalid format should be unreachable");
         }
+    }
+
+    static TString PrependSyntheticCsvHeader(const TString& data, char delimiter) {
+        size_t firstNewline = data.find('\n');
+        TStringBuf firstLine = (firstNewline == TString::npos)
+            ? TStringBuf{data}
+            : TStringBuf{data.data(), firstNewline};
+
+        size_t columnCount = 1;
+        for (char c : firstLine) {
+            if (c == delimiter) {
+                ++columnCount;
+            }
+        }
+
+        TStringBuilder header;
+        for (size_t i = 0; i < columnCount; ++i) {
+            if (i > 0) {
+                header << delimiter;
+            }
+            header << "column" << i;
+        }
+        header << '\n';
+
+        TString result;
+        result.reserve(header.size() + data.size());
+        result.append(header);
+        result.append(data);
+        return result;
     }
 
     void HandleS3Error(TEvS3RangeError::TPtr& ev, const NActors::TActorContext& ctx) {

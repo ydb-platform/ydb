@@ -8,22 +8,16 @@
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 struct FormatConfig {
-    virtual ~FormatConfig() noexcept = default;
+    EFileFormat Format = EFileFormat::Undefined;
+    bool ShouldMakeOptional = true;
 
-    EFileFormat Format;
-    bool ShouldMakeOptional;
-};
+    // CSV / TSV options (used when Format is CsvWithNames, TsvWithNames, or Csv).
+    arrow::csv::ParseOptions CsvParseOpts = arrow::csv::ParseOptions::Defaults();
+    arrow::csv::ConvertOptions CsvConvOpts = arrow::csv::ConvertOptions::Defaults();
+    bool CsvHasHeader = true;
 
-struct CsvConfig : public FormatConfig {
-    arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
-    arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
-};
-
-using TsvConfig = CsvConfig;
-using ParquetConfig = FormatConfig;
-
-struct JsonConfig : public FormatConfig {
-    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
+    // JSON options (used when Format is JsonEachRow or JsonList).
+    arrow::json::ParseOptions JsonParseOpts = arrow::json::ParseOptions::Defaults();
 };
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params = {});

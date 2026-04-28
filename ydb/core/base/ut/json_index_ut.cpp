@@ -16,7 +16,7 @@ std::set<TString> ParseAndCollect(const TString& jsonPath, ECallableType callabl
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    auto result = CollectJsonPath(path, callableType);
+    auto result = CollectJsonPath(path, callableType, {});
     UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
 
     if (tokensMode.has_value()) {
@@ -36,7 +36,7 @@ void ValidateError(const TString& jsonPath, const TString& errorMessage, ECallab
     } else {
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-        auto result = CollectJsonPath(path, callableType);
+        auto result = CollectJsonPath(path, callableType, {});
         UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);
@@ -96,6 +96,7 @@ const TString varError = "Variables are not supported at the moment";
 const TString predError = "Predicates are not allowed in this context";
 const TString filterError = "'@' is only allowed inside filters";
 const TString emptyError = "Cannot collect tokens for the given JSON path"; 
+const TString varContextError = "Variables are not allowed in this context";
 
 using EMode = TCollectResult::ETokensMode;
 
@@ -115,6 +116,59 @@ void CheckMerge(const TCollectResult& result, std::initializer_list<TString> exp
     const TCollectResult::TTokens expected(expectedTokens);
     UNIT_ASSERT(result.GetTokens() == expected);
     UNIT_ASSERT(result.GetTokensMode() == expectedMode);
+}
+
+using TVarMap = std::unordered_map<TString, TString>;
+
+std::set<TString> ParseAndCollectWithVars(const TString& jsonPath, ECallableType callableType,
+    const TVarMap& variables, std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    NYql::TIssues issues;
+    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
+    UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
+
+    auto result = CollectJsonPath(path, callableType, variables);
+    UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
+
+    if (tokensMode.has_value()) {
+        UNIT_ASSERT_C(result.GetTokensMode() == *tokensMode, "for path = " << jsonPath);
+    }
+
+    return result.GetTokens();
+}
+
+void ValidateQueriesWithVars(const TString& jsonPath, TVector<TString> expectedQueries,
+    const TVarMap& variables, ECallableType callableType = ECallableType::JsonValue,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    auto result = ParseAndCollectWithVars(jsonPath, callableType, variables, tokensMode);
+
+    TVector<TString> resultVector;
+    std::copy(result.begin(), result.end(), std::back_inserter(resultVector));
+
+    std::sort(resultVector.begin(), resultVector.end());
+    std::sort(expectedQueries.begin(), expectedQueries.end());
+
+    UNIT_ASSERT_VALUES_EQUAL_C(resultVector, expectedQueries, "for path = " << jsonPath);
+}
+
+template <bool ParserError = false>
+void ValidateErrorWithVars(const TString& jsonPath, const TString& errorMessage,
+    const TVarMap& variables, ECallableType callableType = ECallableType::JsonExists)
+{
+    NYql::TIssues issues;
+    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
+
+    if constexpr (ParserError) {
+        UNIT_ASSERT_STRING_CONTAINS_C(issues.ToOneLineString(), errorMessage, "for path = " << jsonPath);
+    } else {
+        UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
+
+        auto result = CollectJsonPath(path, callableType, variables);
+        UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
+
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);
+    }
 }
 
 }  // namespace
@@ -1574,13 +1628,189 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$ ? ((@ ? ((@ ? (@.p == null)).q == true)).r == false)", {"\2p" + nullSuffix});
     }
 
-    // Variables are not supported now
     Y_UNIT_TEST(CollectPath_Variables) {
-        const TString errorMessage = "Variables are not supported at the moment";
+        const TVarMap empty;
+        const TString notFoundError = "not provided in PASSING clause";
 
-        ValidateError("$var", errorMessage);
-        ValidateError("$var.key", errorMessage);
-        ValidateError("$var[1, 2, 3]", errorMessage);
+        // Equality: variable on the right side, all scalar types
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + strSuffix("")}, {{"var", strSuffix("")}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(42)}, {{"var", numSuffix(42)}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(0)}, {{"var", numSuffix(0)}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(3.14)}, {{"var", numSuffix(3.14)}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(-10)}, {{"var", numSuffix(-10)}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + boolFalseSuffix}, {{"var", boolFalseSuffix}});
+        ValidateQueriesWithVars("$.key == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+
+        // Equality: variable on the left side
+        ValidateQueriesWithVars("$var == $.key", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
+        ValidateQueriesWithVars("$var == $.key", {"\4key" + numSuffix(5)}, {{"var", numSuffix(5)}});
+        ValidateQueriesWithVars("$var == $.key", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateQueriesWithVars("$var == $.key", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+
+        // Context object as path
+        ValidateQueriesWithVars("$ == $var", {strSuffix("root")}, {{"var", strSuffix("root")}});
+        ValidateQueriesWithVars("$var == $", {numSuffix(0)}, {{"var", numSuffix(0)}});
+
+        // Deeper member access paths
+        ValidateQueriesWithVars("$.a.b == $var", {"\2a\2b" + strSuffix("x")}, {{"var", strSuffix("x")}});
+        ValidateQueriesWithVars("$.a.b.c == $var", {"\2a\2b\2c" + numSuffix(1)}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$.aba.\"caba\" == $var", {"\4aba\5caba" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateQueriesWithVars("$var == $.a.b.c", {"\2a\2b\2c" + nullSuffix}, {{"var", nullSuffix}});
+
+        // Array access
+        ValidateQueriesWithVars("$.key[0] == $var", {"\4key" + strSuffix("x")}, {{"var", strSuffix("x")}});
+        ValidateQueriesWithVars("$.key[last] == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateQueriesWithVars("$.key[1, 2, 3] == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+        ValidateQueriesWithVars("$.a.b[0].c == $var", {"\2a\2b\2c" + numSuffix(7)}, {{"var", numSuffix(7)}});
+
+        // Wildcard member access: path finishes, literal not appended
+        ValidateQueriesWithVars("$.* == $var", {""}, {{"var", strSuffix("x")}});
+        ValidateQueriesWithVars("$.a.* == $var", {"\2a"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$var == $.*", {""}, {{"var", strSuffix("x")}});
+        ValidateQueriesWithVars("$var == $.a.*", {"\2a"}, {{"var", numSuffix(1)}});
+
+        // Methods: path finishes, literal not appended
+        ValidateQueriesWithVars("$.key.size() == $var", {"\4key"}, {{"var", numSuffix(3)}});
+        ValidateQueriesWithVars("$.key.abs() == $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$.key.type() == $var", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateQueriesWithVars("$.a.b.floor() == $var", {"\2a\2b"}, {{"var", numSuffix(0)}});
+
+        // Unary arithmetic on path: path finishes, literal not appended
+        ValidateQueriesWithVars("-$.key == $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("+$.key == $var", {"\4key"}, {{"var", numSuffix(0)}});
+
+        // Multiple variables: AND
+        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2)",
+            {"\2a" + strSuffix("x"), "\2b" + numSuffix(1)},
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateQueriesWithVars("($.a == $v) && ($.b == $v)",
+            {"\2a" + nullSuffix, "\2b" + nullSuffix},
+            {{"v", nullSuffix}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2) && ($.c == $v3)",
+            {"\2a" + strSuffix("a"), "\2b" + numSuffix(2), "\2c" + boolTrueSuffix},
+            {{"v1", strSuffix("a")}, {"v2", numSuffix(2)}, {"v3", boolTrueSuffix}},
+            ECallableType::JsonValue, EMode::And);
+
+        // Multiple variables: OR
+        ValidateQueriesWithVars("($.a == $v1) || ($.b == $v2)",
+            {"\2a" + strSuffix("x"), "\2b" + numSuffix(1)},
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}},
+            ECallableType::JsonValue, EMode::Or);
+        ValidateQueriesWithVars("($.key == $v1) || ($.key == $v2)",
+            {"\4key" + strSuffix("a"), "\4key" + strSuffix("b")},
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}},
+            ECallableType::JsonValue, EMode::Or);
+        ValidateQueriesWithVars("($.a == $v1) || ($.b == $v2) || ($.c == $v3)",
+            {"\2a" + boolTrueSuffix, "\2b" + nullSuffix, "\2c" + numSuffix(0)},
+            {{"v1", boolTrueSuffix}, {"v2", nullSuffix}, {"v3", numSuffix(0)}},
+            ECallableType::JsonValue, EMode::Or);
+
+        // Mixed: variable and literal
+        ValidateQueriesWithVars("($.a == $var) && ($.b == 42)",
+            {"\2a" + strSuffix("x"), "\2b" + numSuffix(42)},
+            {{"var", strSuffix("x")}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateQueriesWithVars("($.a == \"hello\") && ($.b == $var)",
+            {"\2a" + strSuffix("hello"), "\2b" + numSuffix(3.14)},
+            {{"var", numSuffix(3.14)}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateQueriesWithVars("($.a == $var) || ($.b == true)",
+            {"\2a" + nullSuffix, "\2b" + boolTrueSuffix},
+            {{"var", nullSuffix}},
+            ECallableType::JsonValue, EMode::Or);
+
+        // Variable not in map
+        ValidateErrorWithVars("$.key == $var", notFoundError, empty, ECallableType::JsonValue);
+        ValidateErrorWithVars("$var == $.key", notFoundError, empty, ECallableType::JsonValue);
+
+        // Variable exists but queried variable is missing
+        ValidateErrorWithVars("$.key == $missing", notFoundError,
+            {{"other", strSuffix("x")}}, ECallableType::JsonValue);
+
+        // One variable present, other missing in AND
+        ValidateErrorWithVars("($.a == $v1) && ($.b == $v2)", notFoundError,
+            {{"v1", strSuffix("x")}}, ECallableType::JsonValue);
+
+        // Variable in non-literal context: standalone path
+        ValidateErrorWithVars("$var", varContextError, {{"var", strSuffix("x")}});
+        ValidateErrorWithVars("$var.key", varContextError, {{"var", strSuffix("x")}});
+        ValidateErrorWithVars("$var[0]", varContextError, {{"var", strSuffix("x")}});
+        ValidateErrorWithVars("$var.a.b.c", varContextError, {{"var", strSuffix("x")}});
+
+        // Variable in arithmetic: treated as empty literal, path only
+        ValidateQueriesWithVars("$.key + $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$var + $.key", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$.key - $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateQueriesWithVars("$.key * $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateQueriesWithVars("$.key / $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateQueriesWithVars("$.key % $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateQueriesWithVars("$.a.b + $var", {"\2a\2b"}, {{"var", numSuffix(5)}});
+
+        // Both sides are variables: treated as two empty literals -> emptyError
+        ValidateErrorWithVars("$v1 + $v2", emptyError, {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}});
+        ValidateErrorWithVars("$v1 * $v2", emptyError, {{"v1", numSuffix(3)}, {"v2", numSuffix(4)}});
+
+        // Variable in comparison operators: variable is treated as a dropped literal
+        ValidateQueriesWithVars("$.key < $var", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateQueriesWithVars("$.key <= $var", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateQueriesWithVars("$.key > $var", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateQueriesWithVars("$.key >= $var", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateQueriesWithVars("$.key != $var", {"\4key"}, {{"var", strSuffix("x")}});
+
+        // Variable on left side
+        ValidateQueriesWithVars("$var < $.key", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateQueriesWithVars("$var > $.key", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateQueriesWithVars("$var != $.key", {"\4key"}, {{"var", strSuffix("x")}});
+        ValidateQueriesWithVars("$var <= $.a.b", {"\2a\2b"}, {{"var", numSuffix(3)}});
+
+        // Both sides variables: emptyError
+        ValidateErrorWithVars("$v1 < $v2", emptyError,
+            {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}}, ECallableType::JsonValue);
+        ValidateErrorWithVars("$v1 != $v2", emptyError,
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, ECallableType::JsonValue);
+
+        // Filter predicate with variable
+        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + strSuffix("x")},
+            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
+        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + numSuffix(42)},
+            {{"var", numSuffix(42)}}, ECallableType::JsonExists);
+        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + boolTrueSuffix},
+            {{"var", boolTrueSuffix}}, ECallableType::JsonExists);
+        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + nullSuffix},
+            {{"var", nullSuffix}}, ECallableType::JsonExists);
+
+        // Variable on left side in filter equality
+        ValidateQueriesWithVars("$.a ? ($var == @.b)", {"\2a\2b" + strSuffix("x")},
+            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
+
+        // Deeper filter paths
+        ValidateQueriesWithVars("$.a.b ? (@.c == $var)", {"\2a\2b\2c" + numSuffix(1)},
+            {{"var", numSuffix(1)}}, ECallableType::JsonExists);
+        ValidateQueriesWithVars("$.key ? (@.sub == $var)", {"\4key\4sub" + strSuffix("val")},
+            {{"var", strSuffix("val")}}, ECallableType::JsonExists);
+
+        // Variable in filter comparison (dropped, path only)
+        ValidateQueriesWithVars("$.a ? (@.b < $var)", {"\2a\2b"},
+            {{"var", numSuffix(10)}}, ECallableType::JsonExists);
+        ValidateQueriesWithVars("$.a ? (@.b != $var)", {"\2a\2b"},
+            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
+
+        // Multiple variables in filter AND
+        ValidateQueriesWithVars("$.a ? (@.b == $v1 && @.c == $v2)",
+            {"\2a\2b" + strSuffix("x"), "\2a\2c" + numSuffix(1)},
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}}, ECallableType::JsonExists);
+
+        // Multiple variables in filter OR
+        ValidateQueriesWithVars("$.a ? ((@.b == $v1) || (@.b == $v2))",
+            {"\2a\2b" + strSuffix("a"), "\2a\2b" + strSuffix("b")},
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, ECallableType::JsonExists);
+
+        // Missing variable in filter -> error
+        ValidateErrorWithVars("$.a ? (@.b == $var)", notFoundError, empty, ECallableType::JsonExists);
     }
 
     // Tokens with no ancestor–descendant relation survive both AND and OR merge intact.

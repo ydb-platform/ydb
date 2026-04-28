@@ -86,7 +86,8 @@ TVector<TString> TokenizeBinaryJson(const TStringBuf text);
 
 // Builds tokens for the given jsonpath expression
 // The tokens are used for searching in the JSON index
-TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
+TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType,
+    const std::unordered_map<TString, TString>& variables);
 
 // Merges two collect results with AND semantics (all tokens must match)
 TCollectResult MergeAnd(TCollectResult left, TCollectResult right);

@@ -575,6 +575,12 @@ namespace NActors {
                     logRecord << ": " << fileName << ":" << lineNumber;
                 }
                 logRecord << ": " << formatted;
+
+                if (structMessage.Defined()) {
+                    logRecord << " ";
+                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                }
+
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
@@ -584,6 +590,11 @@ namespace NActors {
                 logRecord
                     << Settings->ComponentName(component)
                     << ": " << formatted;
+
+                if (structMessage.Defined()) {
+                    logRecord << " ";
+                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                }
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;

@@ -23,6 +23,7 @@
 #include <ydb/core/util/struct_log/create_message.h>
 #include <ydb/core/util/struct_log/json_writer.h>
 #include <ydb/core/util/struct_log/meta_writer.h>
+#include <ydb/core/util/struct_log/text_writer.h>
 #include <ydb/core/util/struct_log/log_stack.h>
 #include <ydb/core/util/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
@@ -263,6 +264,7 @@ namespace NActors {
         TLogBuffer LogBuffer;
         NKikimr::NStructLog::TJsonWriter StructJsonWriter;
         NKikimr::NStructLog::TMetaWriter StructMetaWriter;
+        NKikimr::NStructLog::TTextWriter StructTextWriter;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);

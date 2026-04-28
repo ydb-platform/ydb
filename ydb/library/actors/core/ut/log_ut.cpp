@@ -650,3 +650,69 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         env.FetchMeta({{"meta.value", "100"}});
     }
 }
+
+Y_UNIT_TEST_SUITE(TWriteTextLogTest) {
+
+    Y_UNIT_TEST(MemLogAdapter) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
+
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
+
+        env.FlushLogBuffer();
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message ");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message1 value1=1");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2 value2=2");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: My log message2 value1=1 value2=2");
+    }
+
+    Y_UNIT_TEST(WriteSimple) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_FULL_FORMAT);
+
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:677: Test message ");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:678: Test message with data value=1");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:679: Test message with data value=1 value2=2");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWriteShortTextLogTest) {
+
+    Y_UNIT_TEST(MemLogAdapter) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
+
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message");
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message1", YDBLOG_CREATE_MESSAGE({"value1", 1}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value2", 2}));
+        MemStructLogAdapter(env, NLog::EPriority::PRI_DEBUG, 0, nullptr, 0, "My log message2", YDBLOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2}));
+
+        env.FlushLogBuffer();
+
+        env.FetchMessage("FAKE: My log message ");
+        env.FetchMessage("FAKE: My log message1 value1=1");
+        env.FetchMessage("FAKE: My log message2 value2=2");
+        env.FetchMessage("FAKE: My log message2 value1=1 value2=2");
+    }
+
+    Y_UNIT_TEST(WriteSimple) {
+        TFixture env{NoBufferSettings()};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
+
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDBLOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+
+        env.FetchMessage("FAKE: Test message ");
+        env.FetchMessage("FAKE: Test message with data value=1");
+        env.FetchMessage("FAKE: Test message with data value=1 value2=2");
+    }
+}

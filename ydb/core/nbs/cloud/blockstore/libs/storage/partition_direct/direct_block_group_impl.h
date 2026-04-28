@@ -108,6 +108,8 @@ public:
         ui8 hostIndex) override;
 
 private:
+    using TEvSyncWithPersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
@@ -141,6 +143,10 @@ private:
             response,
         NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
         TDuration executionTime);
+
+    TDBGFlushResponse HandleSyncWithPBufferResponse(
+        const TEvSyncWithPersistentBufferResult& response,
+        size_t segmentCount);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,

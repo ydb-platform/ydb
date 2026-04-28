@@ -573,6 +573,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     TDuration executionTime)
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
+
     for (const auto& singlePBufferResponse: response.GetResult()) {
         ui8* hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
@@ -620,9 +621,6 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
-
     const auto startAt = TMonotonic::Now();
 
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
@@ -661,78 +659,36 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         {
             // ActorSystem thread
 
-            TDBGFlushResponse flushResponse;
-
-            if (auto self = weakSelf.lock()) {
-                const TEvSyncWithPersistentBufferResult& response =
-                    f.GetValue();
-                if (response.GetStatus() ==
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
-                    response.GetSegmentResults().size() ==
-                        static_cast<int>(segmentCount))
-                {
-                    for (size_t i = 0; i < segmentCount; ++i) {
-                        const auto& segmentResult =
-                            response.GetSegmentResults(i);
-                        const bool ok =
-                            segmentResult.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
-                            segmentResult.GetStatus() ==
-                                NKikimrBlobStorage::NDDisk::TReplyStatus::
-                                    OUTDATED;
-                        flushResponse.Errors.push_back(MakeError(
-                            ok ? S_OK : E_FAIL,
-                            ok ? "" : segmentResult.GetErrorReason()));
-                    }
-                } else {
-                    LOG_ERROR(
-                        *self->ActorSystem,
-                        NKikimrServices::NBS_PARTITION,
-                        "SyncWithPBufferResult: %s, status: %d, error reason: "
-                        "%s",
-                        response.ShortUtf8DebugString().c_str(),
-                        response.GetStatus(),
-                        response.GetErrorReason().c_str());
-
-                    for (size_t i = 0; i < segmentCount; ++i) {
-                        LOG_ERROR(
-                            *self->ActorSystem,
-                            NKikimrServices::NBS_PARTITION,
-                            "SyncWithPBufferSegmentResult: %s, status: %d, "
-                            "error reason: %s",
-                            response.GetSegmentResults(i)
-                                .ShortUtf8DebugString()
-                                .c_str(),
-                            response.GetSegmentResults(i).GetStatus(),
-                            response.GetSegmentResults(i)
-                                .GetErrorReason()
-                                .c_str());
-
-                        flushResponse.Errors.push_back(
-                            MakeError(E_FAIL, response.GetErrorReason()));
-                    }
-                }
-            }
-
             executor->ExecuteSimple(
                 [weakSelf,
                  promise = std::move(promise),
+                 f,
                  childSpan = std::move(childSpan),
                  pbufferHostIndex,
                  ddiskHostIndex,
                  startAt,
-                 flushResponse = std::move(flushResponse),
+                 segmentCount,
                  threadChecker]   //
                 () mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
+                    TDBGFlushResponse flushResponse;
+
                     if (auto self = weakSelf.lock()) {
+                        flushResponse = self->HandleSyncWithPBufferResponse(
+                            f.GetValue(),
+                            segmentCount);
                         self->OnMultiFlushResponse(
                             pbufferHostIndex,
                             ddiskHostIndex,
                             TMonotonic::Now() - startAt,
                             flushResponse.Errors);
+                    } else {
+                        for (size_t i = 0; i < segmentCount; ++i) {
+                            flushResponse.Errors.push_back(
+                                MakeError(E_CANCELLED));
+                        }
                     }
 
                     promise.SetValue(std::move(flushResponse));
@@ -740,6 +696,49 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         });
 
     return flushFuture;
+}
+
+TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
+    const TEvSyncWithPersistentBufferResult& response,
+    size_t segmentCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TDBGFlushResponse result;
+
+    if (response.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK &&
+        response.GetSegmentResults().size() == static_cast<int>(segmentCount))
+    {
+        for (size_t i = 0; i < segmentCount; ++i) {
+            const auto& segmentResult = response.GetSegmentResults(i);
+            const bool ok =
+                segmentResult.GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
+                segmentResult.GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
+            result.Errors.push_back(MakeError(
+                ok ? S_OK : E_FAIL,
+                ok ? "" : segmentResult.GetErrorReason()));
+        }
+    } else {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "SyncWithPBufferResult: Segment count: %d, %d. Error %s, status: "
+            "%d, error reason: %s",
+            segmentCount,
+            response.SegmentResultsSize(),
+            response.ShortUtf8DebugString().c_str(),
+            response.GetStatus(),
+            response.GetErrorReason().c_str());
+
+        for (size_t i = 0; i < segmentCount; ++i) {
+            result.Errors.push_back(
+                MakeError(E_FAIL, response.GetErrorReason()));
+        }
+    }
+
+    return result;
 }
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(

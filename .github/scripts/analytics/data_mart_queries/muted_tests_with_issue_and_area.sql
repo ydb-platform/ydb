@@ -109,6 +109,7 @@ SELECT
     gim.area_override AS area_override,
     gim.area_override_since AS area_override_since,
     gim.github_issue_info AS github_issue_info,
+    JSON_VALUE(gim.github_issue_info, '$.assignees[0].login') AS github_issue_assignee,
     CAST(CASE WHEN mfu.full_name IS NOT NULL THEN 1 ELSE 0 END AS Uint8) AS is_manual_fast_unmute,
     mfu.mfu_since AS manual_fast_unmute_since,
     mfu.mfu_window_days AS manual_fast_unmute_window_days,

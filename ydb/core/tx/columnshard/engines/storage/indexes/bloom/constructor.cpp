@@ -25,8 +25,7 @@ bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
 }
 
 bool IsSupportedColumnType(const NScheme::TTypeId typeId, const TReadDataExtractorContainer& dataExtractor) {
-    const auto extractorProto = dataExtractor.SerializeToProto();
-    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && dataExtractor.HasSubColumn();
     return IsSupportedTypeForEquals(typeId) || isJsonSubColumn;
 }
 

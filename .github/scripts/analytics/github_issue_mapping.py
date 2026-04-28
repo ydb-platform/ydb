@@ -88,7 +88,7 @@ def get_github_issues_data(ydb_wrapper):
     AND body != ''
     AND NOT (
         state = 'CLOSED'
-        AND state_reason IN ('NOT_PLANNED', 'DUPLICATE')
+        AND Coalesce(state_reason, '') IN ('NOT_PLANNED', 'DUPLICATE')
     )
     """
 

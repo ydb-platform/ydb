@@ -541,10 +541,14 @@ def get_muted_tests_from_issues(issues_dict=None):
         bt = info.get('build_type') or DEFAULT_BUILD_TYPE
 
         # Open issues: reserve (test, build_type) for mute/issue automation.
-        # Closed as COMPLETED (or empty reason + mute body): do not open a duplicate.
+        # Closed issues with manual-fast-unmute label, COMPLETED reason, or empty reason + mute body:
+        # do not open a duplicate.
         if state == 'CLOSED':
-            closed_ok = state_reason == 'COMPLETED' or (
-                not state_reason and info.get('has_mute_body')
+            labels = info.get('labels') or []
+            closed_ok = (
+                MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
+                or state_reason == 'COMPLETED'
+                or (not state_reason and info.get('has_mute_body'))
             )
             if not closed_ok:
                 continue

@@ -16786,8 +16786,8 @@ IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& input, TExprC
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
-    output = input;
+IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    output = node;
     if (ctx.Step.IsDone(TExprStep::ValidateProviders)) {
         return IGraphTransformer::TStatus::Ok;
     }

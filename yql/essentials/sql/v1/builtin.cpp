@@ -2420,16 +2420,16 @@ TString THoppingWindow::GetOpName() const {
     return "HoppingWindow";
 }
 
-TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
-    auto literal = node->GetLiteral("String");
+TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& val) const {
+    auto literal = val->GetLiteral("String");
     if (!literal) {
-        return Y("EvaluateExpr", node);
+        return Y("EvaluateExpr", val);
     }
     if (*literal == "max") {
-        return node;
+        return val;
     }
 
-    return new TYqlData(node->GetPos(), "Interval", {node});
+    return new TYqlData(val->GetPos(), "Interval", {val});
 }
 
 TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {

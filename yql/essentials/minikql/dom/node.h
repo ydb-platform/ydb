@@ -214,6 +214,6 @@ struct TDebugPrinter {
 } // namespace NYql::NDom
 
 template <>
-inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream& o, const NYql::NDom::TDebugPrinter& p) {
-    p.Out(o);
+inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream& out, const NYql::NDom::TDebugPrinter& value) {
+    value.Out(out);
 }

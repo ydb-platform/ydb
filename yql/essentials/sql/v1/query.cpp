@@ -1476,9 +1476,9 @@ private:
     TScopedStatePtr Scoped_;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(source), scoped);
 }
 
 namespace {
@@ -1995,8 +1995,8 @@ private:
     const bool MissingOk_;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, table, missingOk, tableType, scoped);
 }
 
 namespace {
@@ -2317,8 +2317,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, params, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, topic, params, scoped);
 }
 
 class TControlUser final: public TAstListNode {
@@ -4129,8 +4129,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped) {
-    return new TShowCreateNode(pos, tr, type, scoped);
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, table, type, scoped);
 }
 
 class TBaseBackupCollectionNode

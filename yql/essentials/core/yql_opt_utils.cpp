@@ -212,7 +212,7 @@ bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& struct
 
 // Check if the flat map is a simple rename flat map and compute the mapping from new names to original ones
 bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode,
-    THashMap<TString, TString> & mapping) {
+    THashMap<TString, TString>& renameMap) {
 
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
@@ -241,7 +241,7 @@ bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::T
         auto from = member.Name();
 
         if (to != from){
-            mapping[to.StringValue()] = from.StringValue();
+            renameMap[to.StringValue()] = from.StringValue();
         }
     }
 
@@ -251,7 +251,7 @@ bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::T
 // Check if the flat map is a simple rename flat map or a flatmap that also computes some
 // values in 1-1 fashion
 bool IsRenameOrApplyFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode,
-    THashMap<TString, TString> & mapping, TSet<TString> & apply) {
+    THashMap<TString, TString>& renameMap, TSet<TString>& apply) {
 
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
@@ -281,7 +281,7 @@ bool IsRenameOrApplyFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExpr
         auto from = member.Name();
 
         if (to != from){
-            mapping[to.StringValue()] = from.StringValue();
+            renameMap[to.StringValue()] = from.StringValue();
         }
     }
 
@@ -753,11 +753,11 @@ TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& setti
     return ret;
 }
 
-TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact) {
+TMaybe<TIssue> ParseToDictSettings(const TExprNode& node, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact) {
     isCompact = false;
-    auto settings = input.Child(3);
+    auto settings = node.Child(3);
     if (settings->Type() != TExprNode::List) {
-        return TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected tuple, but got: " << input.Type());
+        return TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type());
     }
 
     for (auto& child : settings->Children()) {
@@ -799,13 +799,13 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
                 return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Bad option: " << child->Child(0)->Content());
             }
         } else {
-            return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected atom or list, but got: " << input.Type());
+            return TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected atom or list, but got: " << node.Type());
         }
 
     }
 
     if (!type || !isMany) {
-        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed/Auto and Many/One");
+        return TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed/Auto and Many/One");
     }
 
     return TMaybe<TIssue>();
@@ -2185,10 +2185,10 @@ TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
     return {};
 }
 
-bool IsStrict(const TExprNode::TPtr& root) {
+bool IsStrict(const TExprNode::TPtr& node) {
     // TODO: add TExprNode::IsStrict() method (with corresponding flag). Fill it as part of type annotation pass
     bool isStrict = true;
-    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+    VisitExpr(node, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("AssumeStrict")) {
             return false;
         }
@@ -2209,11 +2209,11 @@ bool IsStrict(const TExprNode::TPtr& root) {
     return isStrict;
 }
 
-bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
+bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg) {
     bool withDependsOn = false;
     size_t insideDependsOn = 0;
 
-    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+    VisitExpr(node, [&](const TExprNode::TPtr& node) {
         if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
         } else if (insideDependsOn && node == arg) {
@@ -2518,13 +2518,13 @@ TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf pre
 
 bool CheckSupportedTypes(
     const TTypeAnnotationNode::TListType& typesToCheck,
-    const TSet<TString>& supportedTypes,
-    const TSet<NUdf::EDataSlot>& supportedDataTypes,
+    const TSet<TString>& typesSupported,
+    const TSet<NUdf::EDataSlot>& dataSlotsSupported,
     std::function<void(const TString&)> unsupportedTypeHandler,
     bool allowNestedOptionals
 ) {
     TSet<ETypeAnnotationKind> supported;
-    for (const auto &e: supportedTypes) {
+    for (const auto &e: typesSupported) {
         if (e == "pg") {
             supported.insert(ETypeAnnotationKind::Pg);
         } else if (e == "tuple") {
@@ -2543,7 +2543,7 @@ bool CheckSupportedTypes(
             return false;
         }
     }
-    if (!supportedDataTypes.empty()) {
+    if (!dataSlotsSupported.empty()) {
         supported.emplace(ETypeAnnotationKind::Data);
     }
     auto checkType = [&] (const TTypeAnnotationNode* type) {
@@ -2552,7 +2552,7 @@ bool CheckSupportedTypes(
                 unsupportedTypeHandler(TStringBuilder() << "unsupported data types");
                 return false;
             }
-            if (!supportedDataTypes.contains(type->Cast<TDataExprType>()->GetSlot())) {
+            if (!dataSlotsSupported.contains(type->Cast<TDataExprType>()->GetSlot())) {
                 unsupportedTypeHandler(TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
                 return false;
             }
@@ -2562,7 +2562,7 @@ bool CheckSupportedTypes(
                 return false;
             }
             auto name = type->Cast<TPgExprType>()->GetName();
-            if (name == "float4" && !supportedDataTypes.contains(NUdf::EDataSlot::Float)) {
+            if (name == "float4" && !dataSlotsSupported.contains(NUdf::EDataSlot::Float)) {
                 unsupportedTypeHandler(TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
                 return false;
             }

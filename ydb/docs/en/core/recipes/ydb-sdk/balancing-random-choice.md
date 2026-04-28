@@ -164,38 +164,4 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
-<<<<<<< HEAD
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
-- Java
-
-  {% list tabs %}
-
-  - Native SDK
-
-    "Random choice" in the Java SDK corresponds to the `USE_ALL_NODES` policy in `BalancingSettings` (this is also the default if you do not override settings).
-
-    ```java
-    import tech.ydb.core.grpc.BalancingSettings;
-    import tech.ydb.core.grpc.GrpcTransport;
-
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.fromPolicy(BalancingSettings.Policy.USE_ALL_NODES))
-            .build()) {
-        // ...
-    }
-    ```
-
-  - JDBC
-
-    Balancing when selecting a new session is handled by the native transport inside the driver; if needed, use the same parameters as in the native SDK via [JDBC connection settings](../../reference/languages-and-apis/jdbc-driver/properties.md).
-
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing parameters as with the driver directly (for example `spring.datasource.url` with query parameters or `DataSource` properties).
-
-  {% endlist %}
-
-=======
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

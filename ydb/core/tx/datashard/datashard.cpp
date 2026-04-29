@@ -15,7 +15,6 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/library/aclib/user_context.h>
-
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
 

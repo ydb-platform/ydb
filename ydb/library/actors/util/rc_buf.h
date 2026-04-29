@@ -821,7 +821,7 @@ public:
     {
         auto delta = Backend.GetData().data() - other.Backend.GetData().data();
         Begin = other.Begin + delta;
-        End   = other.End   + delta;
+        End = other.End + delta;
     }
 
     TRcBuf(TRcBuf&& other)
@@ -836,7 +836,7 @@ public:
             Backend = other.Backend;
             auto delta = Backend.GetData().data() - oldBase;
             Begin = other.Begin + delta;
-            End   = other.End   + delta;
+            End = other.End + delta;
         }
         return *this;
     }

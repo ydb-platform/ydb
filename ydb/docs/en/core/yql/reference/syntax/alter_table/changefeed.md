@@ -24,7 +24,7 @@
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
-* `USER_SIDS`: Enabling/disabling user SIDs. Disabled by default.
+* `USER_SIDS`: Enabling/disabling user [SIDs](../../../../concepts/cdc.md#record-structure). Disabled by default.
 * `TRACE_IDS`: Enabling/disabling OpenTelemetry [trace identifires](../../../../concepts/cdc.md#record-structure). Disabled by default.
 * `BARRIERS_INTERVAL` — [barrier](../../../../concepts/cdc.md#barriers) emission interval. The value type is `Interval`. Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).

@@ -1298,7 +1298,7 @@ TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& 
         if (!EnsureWideFlowOrStreamType(inputNode, ctx)) {
             return false;
         }
-        const auto* ann = inputNode.GetTypeAnn();
+        const TTypeAnnotationNode* ann = inputNode.GetTypeAnn().Get();
         const TMultiExprType* multi = nullptr;
         if (ann->GetKind() == ETypeAnnotationKind::Flow) {
             multi = ann->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();

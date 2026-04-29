@@ -284,6 +284,8 @@ private:
 
         for (auto& t : ev->Get()->Topics) {
             Y_ABORT_UNLESS(t != nullptr);
+            Y_ABORT_UNLESS(!t->GetOriginalTopic().Contains("rt3."),
+                       "rt3 topic names are not supported: %s", t->GetOriginalTopic().c_str());
         }
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,

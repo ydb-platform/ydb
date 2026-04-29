@@ -32,6 +32,7 @@ class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
     TKqpOptimizeContext& KqpCtx;
     TKqpStatsStore* KqpStats;
     const TKqpProviderContext& KqpPctx;
+    [[maybe_unused]] const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
     THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
@@ -41,13 +42,15 @@ class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
             const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
             TTypeAnnotationContext& typeCtx,
             const TKikimrConfiguration::TPtr& config,
-            const TKqpProviderContext& pctx
+            const TKqpProviderContext& pctx,
+            const NMiniKQL::IFunctionRegistry* funcRegistry
         ) :
             TypeCtx(&typeCtx),
             Config(config),
             KqpCtx(*kqpCtx),
             KqpStats(&kqpCtx->KqpStats),
-            KqpPctx(pctx)
+            KqpPctx(pctx),
+            FuncRegistry(funcRegistry)
         {}
 
         // Main method of the transformer
@@ -64,6 +67,6 @@ class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx);
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx, const NMiniKQL::IFunctionRegistry* funcRegistry);
 }
 }

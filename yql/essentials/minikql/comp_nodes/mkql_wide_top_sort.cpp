@@ -23,6 +23,12 @@ namespace {
 static const TStatKey Sort_Spill_Count("Sort_Spill_Count", true);
 static const TStatKey Sort_Spill_Rows("Sort_Spill_Rows", true);
 static const TStatKey Sort_Spill_Bytes("Sort_Spill_Bytes", true);
+static const TStatKey Sort_Memory_Limit("Sort_Memory_Limit", false);
+static const TStatKey Sort_Memory_Used("Sort_Memory_Used", false);
+static const TStatKey Sort_Memory_Allocated("Sort_Memory_Allocated", false);
+static const TStatKey Sort_Memory_FreePages("Sort_Memory_FreePages", false);
+static const TStatKey Sort_Rows_In_Memory("Sort_Rows_In_Memory", false);
+static const TStatKey Sort_Spill_Runs("Sort_Spill_Runs", true);
 
 struct TKeyInfo {
     NUdf::EDataSlot Slot;
@@ -748,15 +754,11 @@ public:
                 return;
             }
 
-            const auto used = TlsAllocState->GetUsed();
-            const auto limit = TlsAllocState->GetLimit();
-
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit << ", rows in memory: " << rowsInMemory);
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
+            ReportMemoryStats(TStringBuf("BeforeSpill"));
 
             SwitchMode(EOperatingMode::Spilling);
             MKQL_INC_STAT(Ctx.Stats, Sort_Spill_Count);
-            MKQL_SET_MAX_STAT(Ctx.Stats, Sort_Spill_Bytes, static_cast<i64>(used));
+            MKQL_INC_STAT(Ctx.Stats, Sort_Spill_Runs);
         }
     }
 
@@ -806,6 +808,30 @@ private:
 
     bool IsReadFromChannelFinished() const {
         return InputStatus == EFetchResult::Finish;
+    }
+
+    void ReportMemoryStats(const TStringBuf& phase) const {
+        const auto used = TlsAllocState->GetUsed();
+        const auto limit = TlsAllocState->GetLimit();
+        const auto allocated = TlsAllocState->GetAllocated();
+        const auto freePages = TlsAllocState->GetFreePageCount();
+        const size_t rowsInMemory = Storage.size() / std::max<size_t>(Indexes.size(), 1);
+
+        MKQL_SET_STAT(Ctx.Stats, Sort_Memory_Limit, static_cast<i64>(limit));
+        MKQL_SET_MAX_STAT(Ctx.Stats, Sort_Memory_Used, static_cast<i64>(used));
+        MKQL_SET_MAX_STAT(Ctx.Stats, Sort_Memory_Allocated, static_cast<i64>(allocated));
+        MKQL_SET_MAX_STAT(Ctx.Stats, Sort_Rows_In_Memory, static_cast<i64>(rowsInMemory));
+        MKQL_SET_STAT(Ctx.Stats, Sort_Memory_FreePages, static_cast<i64>(freePages));
+
+        UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info,
+            TStringBuilder() << "Sort memory [" << phase << "]: "
+                << "used=" << (used / 1_MB) << "MB, "
+                << "limit=" << (limit / 1_MB) << "MB ("
+                << (limit > 0 ? (used * 100 / limit) : 0) << "%), "
+                << "allocated=" << (allocated / 1_MB) << "MB, "
+                << "freePages=" << freePages << ", "
+                << "rows=" << rowsInMemory << ", "
+                << "spilledRuns=" << SpilledStates.size());
     }
 
     void SwitchMode(EOperatingMode mode) {
@@ -864,6 +890,7 @@ private:
         TStorage().swap(Storage);
         Full.clear();
         Full.shrink_to_fit();
+        ReportMemoryStats(TStringBuf("AfterSpill"));
         return true;
     }
 

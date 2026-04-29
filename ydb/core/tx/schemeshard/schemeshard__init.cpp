@@ -1,3 +1,4 @@
+#include "schemeshard__backup_collection_common.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
@@ -5566,7 +5567,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                             // Set full backup table states using trimmed names
                             if (op.HasFullBackupTrimmedName()) {
-                                TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
+                                TString fullBackupName = NBackup::FullBackupDirName(op.GetFullBackupTrimmedName());
                                 TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
 
                                 // Set state for each table in the full backup
@@ -5587,7 +5588,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                             // Set incremental backup table states using trimmed names
                             for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
-                                TString incrBackupName = trimmedIncrName + "_incremental";
+                                TString incrBackupName = NBackup::IncrementalBackupDirName(trimmedIncrName);
                                 TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
 
                                 // Set state for each table in the incremental backup

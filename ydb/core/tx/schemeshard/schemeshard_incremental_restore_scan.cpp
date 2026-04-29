@@ -545,7 +545,7 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
         }
 
         auto& relativeItemPath = paths.second;
-        TString incrBackupPathStr = JoinPath({bcPath.PathString(), backupName + "_incremental", relativeItemPath});
+        TString incrBackupPathStr = JoinPath({bcPath.PathString(), NBackup::IncrementalBackupDirName(backupName), relativeItemPath});
         const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, this);
 
         if (!incrBackupPath.IsResolved()) {
@@ -641,7 +641,7 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
     }
     auto& relativeItemPath = paths.second;
 
-    TString incrBackupPathStr = JoinPath({bcPath.PathString(), backupName + "_incremental", relativeItemPath});
+    TString incrBackupPathStr = JoinPath({bcPath.PathString(), NBackup::IncrementalBackupDirName(backupName), relativeItemPath});
     const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, this);
 
     if (!incrBackupPath.IsResolved()) {
@@ -792,7 +792,7 @@ void TSchemeShard::EnqueueAndDiscoverIndexRestoreOperations(
     // Path to index metadata: {backup}/__ydb_backup_meta/indexes
     TString indexMetaBasePath = JoinPath({
         bcPath.PathString(),
-        backupName + "_incremental",
+        NBackup::IncrementalBackupDirName(backupName),
         "__ydb_backup_meta",
         "indexes"
     });
@@ -884,7 +884,7 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     TString srcIndexBackupPath = JoinPath({
         bcPath.PathString(),
-        backupName + "_incremental",
+        NBackup::IncrementalBackupDirName(backupName),
         "__ydb_backup_meta",
         "indexes",
         relativeTablePath,

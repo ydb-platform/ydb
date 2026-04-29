@@ -1146,7 +1146,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
         constexpr char secretPath[] = "eds_iam_token";
-        auto [location, databasePath] = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto location = GetKikimrRunner()->GetEndpoint();
         {
             NYdb::TDriver driver(
                 NYdb::TDriverConfig()

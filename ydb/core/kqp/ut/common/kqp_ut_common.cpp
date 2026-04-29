@@ -210,7 +210,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     Initialize(settings);
 }
 
-std::pair<TString, TString> TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
+TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
     TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
 
     Ydb::Cms::CreateDatabaseRequest request;
@@ -229,15 +229,12 @@ std::pair<TString, TString> TKikimrRunner::CreateDatabase(const TString& name, c
     }
     Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
 
-    auto port = PortManager.GetPort();
+    // Setup discovery
     for (auto nodeIdx : Tenants->List(databasePath)) {
-        GetTestServer().EnableGRpc(port, nodeIdx, databasePath);
+        GetTestServer().EnableGRpc(PortManager.GetPort(), nodeIdx, databasePath);
     }
 
-    TStringBuilder location;
-    location << "localhost:" << port;
-
-    return { location, databasePath };
+    return databasePath;
 }
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,

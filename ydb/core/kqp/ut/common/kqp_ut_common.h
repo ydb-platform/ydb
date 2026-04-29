@@ -208,7 +208,7 @@ public:
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
-    std::pair<TString, TString> CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount = 1, TDuration timeout = TDuration::Seconds(30), bool acceptIfExists = false);
+    TString CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount = 1, TDuration timeout = TDuration::Seconds(30), bool acceptIfExists = false);
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 

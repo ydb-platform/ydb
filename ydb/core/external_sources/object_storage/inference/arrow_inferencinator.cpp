@@ -139,7 +139,7 @@ std::variant<ArrowFields, TString> ReadFields(
     if (!readerResult.ok()) {
         return TStringBuilder{} << errorHeader << readerResult.status().ToString();
     }
-    auto reader = *std::move(readerResult);
+    auto reader = *readerResult;
 
     std::shared_ptr<arrow::Table> table;
     if (auto tableRes = reader->Read().Value(&table); !tableRes.ok()) {

@@ -216,8 +216,8 @@ TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storag
     Ydb::Cms::CreateDatabaseRequest request;
     request.set_path(databasePath);
 
-    for (auto& [name, value] : attributes) {
-        request.mutable_attributes()->emplace(name, value);
+    for (auto& [attrName, attrValue] : attributes) {
+        request.mutable_attributes()->emplace(attrName, attrValue);
     }
 
     auto& storage = *request.mutable_resources()->add_storage_units();

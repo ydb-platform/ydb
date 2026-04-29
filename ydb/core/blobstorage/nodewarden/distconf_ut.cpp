@@ -209,6 +209,228 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             " Ring { Node: 4 Node: 5 Node: 6 } Ring { Node: 7 Node: 8 Node: 9 } } }");
         CheckStateStorage2(GenerateSimpleStateStorage(16, {}, 0, 2, 5), "{ RingGroups { NToSelect: 1 Ring { Node: 1 Node: 2 Node: 3 Node: 4 } Ring { Node: 5 Node: 6 Node: 7 Node: 8 } } }");
     }
+
+Y_UNIT_TEST_SUITE(TDeriveStorageConfigCleanupTest) {
+
+    struct TTestSetup {
+        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        NKikimrConfig::TAppConfig AppConfig;
+
+        void AddNode(ui32 nodeId, const TString& host = "host", ui16 port = 19000) {
+            {
+                auto* node = StorageConfig.AddAllNodes();
+                node->SetNodeId(nodeId);
+                node->SetHost(host);
+                node->SetPort(port);
+            }
+            {
+                auto* node = AppConfig.MutableNameserviceConfig()->AddNode();
+                node->SetNodeId(nodeId);
+                node->SetInterconnectHost(host);
+                node->SetPort(port);
+            }
+        }
+
+        void RemoveNodeFromAppConfig(ui32 nodeId) {
+            auto* ns = AppConfig.MutableNameserviceConfig();
+            auto* nodes = ns->MutableNode();
+            for (int i = nodes->size() - 1; i >= 0; --i) {
+                if (nodes->Get(i).GetNodeId() == nodeId) {
+                    nodes->DeleteSubrange(i, 1);
+                }
+            }
+        }
+
+        void AddPDisk(ui32 nodeId, ui32 pdiskId, const TString& path = "/dev/disk") {
+            auto* pdisk = StorageConfig.MutableBlobStorageConfig()->MutableServiceSet()->AddPDisks();
+            pdisk->SetNodeID(nodeId);
+            pdisk->SetPDiskID(pdiskId);
+            pdisk->SetPath(path);
+            pdisk->SetPDiskGuid(nodeId * 1000 + pdiskId);
+        }
+
+        void AddVDisk(ui32 nodeId, ui32 pdiskId, ui32 vslotId, ui32 groupId, ui32 generation,
+                      ui32 domain, NKikimrBlobStorage::EEntityStatus status = NKikimrBlobStorage::EEntityStatus::INITIAL) {
+            auto* vdisk = StorageConfig.MutableBlobStorageConfig()->MutableServiceSet()->AddVDisks();
+            auto* vid = vdisk->MutableVDiskID();
+            vid->SetGroupID(groupId);
+            vid->SetGroupGeneration(generation);
+            vid->SetRing(0);
+            vid->SetDomain(domain);
+            vid->SetVDisk(0);
+            auto* loc = vdisk->MutableVDiskLocation();
+            loc->SetNodeID(nodeId);
+            loc->SetPDiskID(pdiskId);
+            loc->SetVDiskSlotID(vslotId);
+            loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+            if (status != NKikimrBlobStorage::EEntityStatus::INITIAL) {
+                vdisk->SetEntityStatus(status);
+            }
+        }
+
+        void AddGroup(ui32 groupId, ui32 generation, const std::vector<std::tuple<ui32, ui32, ui32>>& vdiskLocs) {
+            auto* group = StorageConfig.MutableBlobStorageConfig()->MutableServiceSet()->AddGroups();
+            group->SetGroupID(groupId);
+            group->SetGroupGeneration(generation);
+            group->SetErasureSpecies(4);
+            auto* ring = group->AddRings();
+            for (const auto& [nodeId, pdiskId, vslotId] : vdiskLocs) {
+                auto* fd = ring->AddFailDomains();
+                auto* loc = fd->AddVDiskLocations();
+                loc->SetNodeID(nodeId);
+                loc->SetPDiskID(pdiskId);
+                loc->SetVDiskSlotID(vslotId);
+                loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
+            }
+        }
+
+        void EnableSelfManagement() {
+            StorageConfig.MutableSelfManagementConfig()->SetEnabled(true);
+            AppConfig.MutableSelfManagementConfig()->SetEnabled(true);
+        }
+
+        void SyncAppConfigBlobStorage() {
+            AppConfig.MutableBlobStorageConfig()->MutableServiceSet();
+        }
+
+        void MirrorServiceSetIntoAppConfig() {
+            AppConfig.MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(
+                StorageConfig.GetBlobStorageConfig().GetServiceSet());
+        }
+
+        bool Derive(TString* error = nullptr) {
+            TString err;
+            if (!error) error = &err;
+            return NKikimr::NStorage::DeriveStorageConfig(AppConfig, &StorageConfig, error);
+        }
+
+        void AddDefineBoxHost(ui32 nodeId, ui64 hostConfigId = 1) {
+            auto* host = AppConfig.MutableBlobStorageConfig()->MutableDefineBox()->AddHost();
+            host->SetEnforcedNodeId(nodeId);
+            host->SetHostConfigId(hostConfigId);
+            auto* host2 = StorageConfig.MutableBlobStorageConfig()->MutableDefineBox()->AddHost();
+            host2->SetEnforcedNodeId(nodeId);
+            host2->SetHostConfigId(hostConfigId);
+        }
+
+        int CountPDisks() const { return StorageConfig.GetBlobStorageConfig().GetServiceSet().PDisksSize(); }
+        int CountVDisks() const { return StorageConfig.GetBlobStorageConfig().GetServiceSet().VDisksSize(); }
+        int CountDefineBoxHosts() const {
+            return StorageConfig.GetBlobStorageConfig().HasDefineBox()
+                ? StorageConfig.GetBlobStorageConfig().GetDefineBox().HostSize() : 0;
+        }
+
+        bool HasPDiskOnNode(ui32 nodeId) const {
+            for (const auto& p : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetPDisks()) {
+                if (p.GetNodeID() == nodeId) return true;
+            }
+            return false;
+        }
+
+        bool HasVDiskOnNode(ui32 nodeId) const {
+            for (const auto& v : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+                if (v.HasVDiskLocation() && v.GetVDiskLocation().GetNodeID() == nodeId) return true;
+            }
+            return false;
+        }
+
+        bool HasDefineBoxHostForNode(ui32 nodeId) const {
+            if (!StorageConfig.GetBlobStorageConfig().HasDefineBox()) return false;
+            for (const auto& host : StorageConfig.GetBlobStorageConfig().GetDefineBox().GetHost()) {
+                if (host.GetEnforcedNodeId() == nodeId) return true;
+            }
+            return false;
+        }
+    };
+
+    Y_UNIT_TEST(DestroyVDiskAndPDiskCleanedOnNodeRemoval) {
+        TTestSetup s;
+        s.EnableSelfManagement();
+        for (ui32 i = 1; i <= 8; ++i) {
+            s.AddNode(i, "host-" + std::to_string(i));
+            s.AddPDisk(i, 1, "/dev/disk" + std::to_string(i));
+            s.AddDefineBoxHost(i);
+        }
+
+        s.AddVDisk(1, 1, 1, 0, 1, 0, NKikimrBlobStorage::EEntityStatus::DESTROY);
+        for (ui32 i = 2; i <= 8; ++i) {
+            s.AddVDisk(i, 1, 1, 0, 2, i - 1);
+        }
+        std::vector<std::tuple<ui32, ui32, ui32>> groupLocs;
+        for (ui32 i = 2; i <= 8; ++i) {
+            groupLocs.emplace_back(i, 1, 1);
+        }
+        s.AddGroup(0, 2, groupLocs);
+        s.SyncAppConfigBlobStorage();
+
+        s.RemoveNodeFromAppConfig(1);
+
+        TString error;
+        UNIT_ASSERT_C(s.Derive(&error), "DeriveStorageConfig failed: " << error);
+
+        UNIT_ASSERT(!s.HasVDiskOnNode(1));
+        UNIT_ASSERT(!s.HasPDiskOnNode(1));
+        UNIT_ASSERT(!s.HasDefineBoxHostForNode(1));
+        UNIT_ASSERT(s.HasPDiskOnNode(2));
+        UNIT_ASSERT(s.HasVDiskOnNode(2));
+        UNIT_ASSERT(s.HasDefineBoxHostForNode(2));
+        UNIT_ASSERT_EQUAL(s.CountPDisks(), 7);
+        UNIT_ASSERT_EQUAL(s.CountVDisks(), 7);
+        UNIT_ASSERT_EQUAL(s.CountDefineBoxHosts(), 7);
+    }
+
+    Y_UNIT_TEST(LiveVDiskOnRemovedNodeBlocksCleanup) {
+        TTestSetup s;
+        s.EnableSelfManagement();
+        for (ui32 i = 1; i <= 4; ++i) {
+            s.AddNode(i, "host-" + std::to_string(i));
+            s.AddPDisk(i, 1, "/dev/disk" + std::to_string(i));
+            s.AddVDisk(i, 1, 1, 0, 1, i - 1);
+        }
+        std::vector<std::tuple<ui32, ui32, ui32>> groupLocs;
+        for (ui32 i = 1; i <= 4; ++i) {
+            groupLocs.emplace_back(i, 1, 1);
+        }
+        s.AddGroup(0, 1, groupLocs);
+        s.SyncAppConfigBlobStorage();
+        s.RemoveNodeFromAppConfig(1);
+
+        TString error;
+        bool ok = s.Derive(&error);
+        UNIT_ASSERT_C(ok, "DeriveStorageConfig failed: " << error);
+        UNIT_ASSERT(s.HasVDiskOnNode(1));
+        UNIT_ASSERT(s.HasPDiskOnNode(1));
+    }
+
+    Y_UNIT_TEST(NoCleanupWithoutSelfManagement) {
+        TTestSetup s;
+        for (ui32 i = 1; i <= 4; ++i) {
+            s.AddNode(i, "host-" + std::to_string(i));
+            s.AddPDisk(i, 1, "/dev/disk" + std::to_string(i));
+            s.AddDefineBoxHost(i);
+        }
+
+        s.AddVDisk(1, 1, 1, 0, 1, 0, NKikimrBlobStorage::EEntityStatus::DESTROY);
+        for (ui32 i = 2; i <= 4; ++i) {
+            s.AddVDisk(i, 1, 1, 0, 2, i - 1);
+        }
+        std::vector<std::tuple<ui32, ui32, ui32>> groupLocs;
+        for (ui32 i = 2; i <= 4; ++i) {
+            groupLocs.emplace_back(i, 1, 1);
+        }
+        s.AddGroup(0, 2, groupLocs);
+        s.MirrorServiceSetIntoAppConfig();
+        s.RemoveNodeFromAppConfig(1);
+
+        TString error;
+        UNIT_ASSERT_C(s.Derive(&error), "DeriveStorageConfig failed: " << error);
+
+        UNIT_ASSERT(s.HasVDiskOnNode(1));
+        UNIT_ASSERT(s.HasPDiskOnNode(1));
+        UNIT_ASSERT(s.HasDefineBoxHostForNode(1));
+    }
+}
+
 }
 }
 }

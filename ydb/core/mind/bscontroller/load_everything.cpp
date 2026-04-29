@@ -281,6 +281,33 @@ public:
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 
+        // when self-management is enabled, HostRecords may not contain nodes that are still referenced
+        // because of the race between HostRecords update in distconf and DefineBox transcation
+        if (Self->SelfManagementEnabled) {
+            for (auto& [boxId, box] : Self->Boxes) {
+                for (auto it = box.Hosts.begin(); it != box.Hosts.end(); ) {
+                    const auto& [host, value] = *it;
+                    std::optional<ui32> nodeId;
+                    if (value.EnforcedNodeId) {
+                        if (Self->HostRecords->GetHostId(*value.EnforcedNodeId)) {
+                            nodeId = *value.EnforcedNodeId;
+                        }
+                    } else if (const auto& resolved = Self->HostRecords->ResolveNodeId(host)) {
+                        nodeId = *resolved;
+                    }
+                    if (!nodeId) {
+                        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE06, "removing stale Box host for unresolvable node during load",
+                            (BoxId, boxId), (Fqdn, host.Fqdn), (IcPort, host.IcPort),
+                            (EnforcedNodeId, value.EnforcedNodeId));
+                        db.Table<Schema::BoxHostV2>().Key(host.BoxId, host.Fqdn, host.IcPort).Delete();
+                        it = box.Hosts.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+
         // create revmap
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
@@ -332,6 +359,13 @@ public:
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
+                } else if (Self->SelfManagementEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE07, "removing stale PDisk for unresolvable node during load",
+                        (NodeId, disks.GetValue<T::NodeID>()), (PDiskId, disks.GetValue<T::PDiskID>()));
+                    db.Table<T>().Key(disks.GetKey()).Delete();
+                    if (!disks.Next())
+                        return false;
+                    continue;
                 } else {
                     Y_ABORT("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
                 }
@@ -395,6 +429,13 @@ public:
             while (!slot.EndOfSet()) {
                 const TVSlotId& vslotId(slot.GetKey());
                 TPDiskInfo *pdisk = Self->FindPDisk(vslotId.ComprisingPDiskId());
+                if (!pdisk && Self->SelfManagementEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE09, "removing stale VSlot for missing PDisk during load", (VSlotId, vslotId));
+                    db.Table<Schema::VSlot>().Key(vslotId.GetKey()).Delete();
+                    if (!slot.Next())
+                        return false;
+                    continue;
+                }
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();

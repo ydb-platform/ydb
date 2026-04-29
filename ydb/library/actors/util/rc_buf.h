@@ -818,9 +818,11 @@ public:
 
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
-        , Begin(other.Begin)
-        , End(other.End)
-    {}
+    {
+        auto delta = Backend.GetData().data() - other.Backend.GetData().data();
+        Begin = other.Begin + delta;
+        End   = other.End   + delta;
+    }
 
     TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
@@ -828,7 +830,17 @@ public:
         , End(other.End)
     {}
 
-    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(const TRcBuf& other) {
+        if (this != &other) {
+            auto oldBase = other.Backend.GetData().data();
+            Backend = other.Backend;
+            auto delta = Backend.GetData().data() - oldBase;
+            Begin = other.Begin + delta;
+            End   = other.End   + delta;
+        }
+        return *this;
+    }
+
     TRcBuf& operator =(TRcBuf&&) = default;
 
     static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)

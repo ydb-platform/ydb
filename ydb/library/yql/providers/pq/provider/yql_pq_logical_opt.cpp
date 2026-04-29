@@ -358,8 +358,11 @@ public:
         }
 
         if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
+            Cerr << "PushFilterToPqTopicSource TCoVoid  " << Endl;
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
             if(compareArgsEvaluate) {
+                Cerr << "PushFilterToPqTopicSource compareArgsEvaluate  " << Endl;
+
 
                auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
                if (!maybeOptionalIf.IsValid()) { // Nothing to push
@@ -407,10 +410,14 @@ public:
             }
         }
 
+        Cerr << "PushFilterToPqTopicSource maybeLambda  " << Endl;
+
         auto maybeLambda = dqPqTopicSource.Predicate().Maybe<TCoLambda>();
         if (!maybeLambda) {
-            return node;
+            maybeLambda = flatmap.Lambda();
         }
+
+        Cerr << "PushFilterToPqTopicSource eplaceCompareNodes  " << Endl;
         auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
         ReplaceCompareNodes(maybeLambda.Cast(), ctx, list);
 
@@ -419,7 +426,7 @@ public:
             // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
             auto settings = TPushdownSettings();
 
-            settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
+            
             NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
             if (!sharedReadingPredicate.IsEmpty()) {
                 TStringBuilder err;
@@ -642,6 +649,7 @@ private:
          TExprContext& ctx) const {
         auto settings = TPushdownSettings();
         settings.EnableMember(memberName);
+        settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor); // TODO
         NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
         if (predicate.IsEmpty()) {
             return {};
@@ -650,12 +658,19 @@ private:
         TDisjointIntervalTree<ui64> tree;
         if (!NYql::CalculateFilterPredicate(ctx, predicate.ExprNode.Cast(), lambda.Args().Arg(0), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
+            Cerr << "Failed to calculate filter predicate  " << err << Endl;
             return {};
         }
         if (tree.Empty()) {
-            return {};
+            NPq::NProto::TOffsetPredicate proto;
+            auto* item = proto.AddItem();
+            item->SetBegin(0);
+            item->SetEnd(0);
+            TString result; 
+            YQL_ENSURE(proto.SerializeToString(&result));
+            return result;
         }
-        NPq::NProto::TOffsetPredicate proto;    
+        NPq::NProto::TOffsetPredicate proto;
         auto* item = proto.AddItem();
         item->SetBegin(tree.Min()); // Copy only one interval.
         item->SetEnd(tree.Max());

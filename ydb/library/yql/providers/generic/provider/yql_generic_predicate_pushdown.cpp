@@ -1229,12 +1229,12 @@ namespace NYql {
         return FromString<ui64>(atom.Cast().Literal().Value());          \
     }
 
-    std::optional<ui64> CalculateExpression(
+    std::optional<ui64> TryConvertExpressionToInt(
         const TExprBase& expression,
         TSerializationContext& ctx
     ) {
         if (auto just = expression.Maybe<TCoJust>()) {
-            return CalculateExpression(TExprBase(just.Cast().Input()), ctx);
+            return TryConvertExpressionToInt(TExprBase(just.Cast().Input()), ctx);
         }
         if (auto atom = expression.Maybe<TCoIntegralCtor>()) {
             bool hasSign;
@@ -1290,6 +1290,13 @@ namespace NYql {
             tree.InsertInterval(begin, end);
         }
     }
+
+    void InsertInterval(TDisjointIntervalTree<ui64>& tree, ui64 begin, ui64 end) {
+        if (begin == end) {
+            return;
+        }
+        tree.InsertInterval(begin, end);
+    }
     
     bool CalculateFilterPredicate(
         const TExprBase& predicate,
@@ -1310,7 +1317,7 @@ namespace NYql {
                 valueExpr = compare.Cast().Left();
             }
             
-            auto optValue = CalculateExpression(valueExpr, ctx);
+            auto optValue = TryConvertExpressionToInt(valueExpr, ctx);
             if (!optValue) {
                 return false;
             }
@@ -1321,35 +1328,35 @@ namespace NYql {
                 tree.Insert(value);
                 return true;
             } else if (compare.Cast().Maybe<TCoCmpNotEqual>()) {
-                tree.InsertInterval(std::numeric_limits<ui64>::min(), value);
-                tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());
+                InsertInterval(tree, std::numeric_limits<ui64>::min(), value);
+                InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());
                 return true;
             } else if (compare.Cast().Maybe<TCoCmpLess>()) {
                 if (!inverted) {
-                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value);             // a < 100
+                    InsertInterval(tree, std::numeric_limits<ui64>::min(), value);             // a < 100
                 } else {
-                    tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());         // 100 < a
+                    InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());         // 100 < a
                 }
                 return true;
             } else if (compare.Cast().Maybe<TCoCmpLessOrEqual>()) {
                 if (!inverted) {
-                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value + 1);         // a <= 100
+                    InsertInterval(tree, std::numeric_limits<ui64>::min(), value + 1);         // a <= 100
                 } else {
-                    tree.InsertInterval(value, std::numeric_limits<ui64>::max());             // 100 <= a
+                    InsertInterval(tree, value, std::numeric_limits<ui64>::max());             // 100 <= a
                 }
                 return true;
             } else if (compare.Cast().Maybe<TCoCmpGreater>()) {
                 if (!inverted) {
-                    tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());         // a > 100
+                    InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());         // a > 100
                 } else {
-                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value);             // 100 > a
+                    InsertInterval(tree, std::numeric_limits<ui64>::min(), value);             // 100 > a
                 }
                 return true;
             } else if (compare.Cast().Maybe<TCoCmpGreaterOrEqual>()) {
                 if (!inverted) {
-                    tree.InsertInterval(value, std::numeric_limits<ui64>::max());             // a >= 100
+                    InsertInterval(tree, value, std::numeric_limits<ui64>::max());             // a >= 100
                 } else {
-                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value + 1);         // 100 >= a
+                    InsertInterval(tree, std::numeric_limits<ui64>::min(), value + 1);         // 100 >= a
                 }
                 return true;
             }
@@ -1362,7 +1369,6 @@ namespace NYql {
             }
             return false;
         } else if (auto andExpr = predicate.Maybe<TCoAnd>()) {
-            tree.Clear();
             tree.InsertInterval(std::numeric_limits<ui64>::min(), std::numeric_limits<ui64>::max());
             for (const auto& child : andExpr.Cast().Ptr()->Children()) {
                 TDisjointIntervalTree<ui64> itemTree;
@@ -1373,7 +1379,6 @@ namespace NYql {
             }
             return true;
         } else if(auto orExpr = predicate.Maybe<TCoOr>()) {
-            tree.Clear();
             for (const auto& child : orExpr.Cast().Ptr()->Children()) {
                 TDisjointIntervalTree<ui64> itemTree;
                 if (!CalculateFilterPredicate(TExprBase(child), itemTree, ctx)) {
@@ -1381,6 +1386,39 @@ namespace NYql {
                 }
                 MergeIntervals(tree, itemTree);
             }
+            return true;
+        } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
+            Cerr << "TCoSqlIn " << Endl;
+            const TExprBase& expr = sqlIn.Cast().Collection();
+            const TExprBase& lookup = sqlIn.Cast().Lookup();
+            bool isMember = lookup.Maybe<TCoMember>().IsValid();
+            if (!isMember) {
+                return false;
+            }
+
+            TExprNode::TPtr collection;
+            if (expr.Ref().IsList()) {
+                collection = expr.Ptr();
+            } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
+                collection = maybeAsList.Cast().Ptr();
+            } else {
+                ctx.Err << "unknown source for in: " << expr.Ref().Content();
+                return false;
+            }
+            std::set<ui64> values;
+            for (auto& child : collection->Children()) {
+                auto value = TryConvertExpressionToInt(TExprBase(child), ctx);
+                if (!value){
+                    ctx.Err << "unknown value for in: " << child->Content();
+                    return false;
+                }
+                values.insert(*value);
+            }
+            if (values.empty()) {
+                ctx.Err << "TCoSqlIn with empty collection";
+                return false;
+            }
+            InsertInterval(tree, *values.begin(), *values.rbegin() + 1);
             return true;
         }
         ctx.Err << "unknown predicate: " << predicate.Raw()->Content();

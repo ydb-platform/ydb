@@ -1279,7 +1279,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
         auto future = received[3].second + TDuration::Seconds(100);
         test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
-        
     }
 
     Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {

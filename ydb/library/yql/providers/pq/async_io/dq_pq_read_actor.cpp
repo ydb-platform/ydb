@@ -310,7 +310,6 @@ public:
             if (predicateOffset.HasEnd()) {
                 EndOffset = predicateOffset.GetEnd();
             }
-            SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset);
         }
 
         YQL_ENSURE(SourceParams.GetWriteTimePredicate().ItemSize() <= 1, "Multiple WriteTimePredicate is not implemented");
@@ -1145,6 +1144,7 @@ private:
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            event.GetPartitionSession()->RequestStatus();
 
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.Offset && Self.BeginOffset) {
@@ -1185,7 +1185,18 @@ private:
             }
         }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent& event) {
+            const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " TPartitionSessionStatusEvent, WriteTimeHighWatermark " << event.GetWriteTimeHighWatermark());
+            auto& partitionInfo = Self.Partitions[partitionKey];
+            
+            if (Self.SourceParams.GetStopAtCurrentEndOffsets()
+                && partitionInfo.EndWriteTime
+                && event.GetWriteTimeHighWatermark() <= *partitionInfo.EndWriteTime) {
+                Self.FinishedPartitions.insert(partitionKey);
+            }
+        }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());

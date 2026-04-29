@@ -112,7 +112,15 @@
 
 1. В открывшемся окне **Add Repository** нажмите **Archive...**, укажите путь к скачанному ZIP-файлу и нажмите **Add**.
 
-1. В списке компонентов появится категория **DBeaver YDB Support**. Отметьте её и нажмите **Next >**.
+1. В списке компонентов появится категория **DBeaver YDB Support**. Отметьте её.
+
+    {% note warning %}
+
+    Перед нажатием **Next >** снимите флаг **Contact all update sites during install to find required software** в нижней части окна **Install New Software**. Если этот флаг включён, DBeaver при расчёте зависимостей обращается ко всем зарегистрированным P2-репозиториям (`dbeaver.io`, `eclipse.org` и другим), и при их недоступности или медленных ответах диалог установки зависает на этапе **Calculating requirements and dependencies**. Плагин использует только компоненты DBeaver, уже установленные локально, поэтому обращение к другим репозиториям при установке не требуется.
+
+    {% endnote %}
+
+1. Нажмите **Next >**.
 
 1. На экране **Install Details** убедитесь, что в списке присутствуют оба компонента (`org.jkiss.dbeaver.ext.ydb` и `org.jkiss.dbeaver.ext.ydb.ui`), и нажмите **Next >**.
 

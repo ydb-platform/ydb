@@ -223,6 +223,7 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
+
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
@@ -549,6 +550,11 @@ namespace NActors {
 
         const auto logPrio = ::ELogPriority(ui16(priority));
 
+        TLogRecord::TMetaFlags metaFlags;
+        if (structMessage.Defined()) {
+            StructMetaWriter.Write(metaFlags, structMessage.GetRef());
+        }
+
         char buf[TimeBufSize];
         switch (Settings->Format) {
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
@@ -567,8 +573,14 @@ namespace NActors {
                     logRecord << ": " << fileName << ":" << lineNumber;
                 }
                 logRecord << ": " << formatted;
+
+                if (structMessage.Defined()) {
+                    logRecord << " ";
+                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                }
+
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
@@ -576,11 +588,17 @@ namespace NActors {
                 logRecord
                     << Settings->ComponentName(component)
                     << ": " << formatted;
+
+                if (structMessage.Defined()) {
+                    logRecord << " ";
+                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                }
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
+
                 NJsonWriter::TBuf j;
                 j.BeginObject()
                     .WriteKey("@timestamp")
@@ -634,7 +652,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
         }
 

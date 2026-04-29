@@ -24,6 +24,15 @@ using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
+TStreamingTestFixture::~TStreamingTestFixture () {
+    if (InternalDriver) {
+        InternalDriver->Stop(true);
+    }
+    if (ExternalDriver) {
+        ExternalDriver->Stop(true);
+    }
+}
+
 // Local kikimr settings
 
 NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {

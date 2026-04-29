@@ -74,6 +74,8 @@ public:
     inline static constexpr TDuration TEST_OPERATION_TIMEOUT = TDuration::Seconds(10);
 
 public:
+    ~TStreamingTestFixture();
+
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig();

@@ -308,14 +308,16 @@ public:
             if (location.database().name()) {
                 id << '-' << crc32(location.database().name());
             }
-            if (location.storage().node().id()) {
-                id << '-' << location.storage().node().id();
-            } else {
-                if (location.storage().node().host()) {
-                    id << '-' << location.storage().node().host();
-                }
-                if (location.storage().node().port()) {
-                    id << '-' << location.storage().node().port();
+            if (!location.storage().node().empty()) {
+                if (location.storage().node()[0].id()) {
+                    id << '-' << location.storage().node()[0].id();
+                } else {
+                    if (location.storage().node()[0].host()) {
+                        id << '-' << location.storage().node()[0].host();
+                    }
+                    if (location.storage().node()[0].port()) {
+                        id << '-' << location.storage().node()[0].port();
+                    }
                 }
             }
             if (!location.storage().pool().group().vdisk().id().empty()) {
@@ -2618,15 +2620,15 @@ public:
 
         TNodeId nodeId = vSlot->GetKey().GetNodeId();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(GetVDiskId(vSlot->GetInfo()));
-        context.Location.mutable_storage()->mutable_node()->set_id(nodeId);
+        context.Location.mutable_storage()->add_node()->set_id(nodeId);
 
         auto itNodeInfo = MergedNodeInfo.find(nodeId);
         if (itNodeInfo != MergedNodeInfo.end()) {
-            context.Location.mutable_storage()->mutable_node()->set_host(itNodeInfo->second->Host);
-            context.Location.mutable_storage()->mutable_node()->set_port(itNodeInfo->second->Port);
+            context.Location.mutable_storage()->mutable_node(0)->set_host(itNodeInfo->second->Host);
+            context.Location.mutable_storage()->mutable_node(0)->set_port(itNodeInfo->second->Port);
         } else {
-            context.Location.mutable_storage()->mutable_node()->clear_host();
-            context.Location.mutable_storage()->mutable_node()->clear_port();
+            context.Location.mutable_storage()->mutable_node(0)->clear_host();
+            context.Location.mutable_storage()->mutable_node(0)->clear_port();
         }
 
         storageVDiskStatus.set_id(GetVSlotId(vSlot->GetKey()));
@@ -2746,15 +2748,15 @@ public:
             if (UnavailableStorageNodes.count(pDiskInfo.nodeid()) != 0) {
                 TSelfCheckContext nodeContext(&context, "STORAGE_NODE");
                 nodeContext.Location.mutable_storage()->clear_pool();
-                nodeContext.Location.mutable_storage()->mutable_node()->set_id(pDiskInfo.nodeid());
+                nodeContext.Location.mutable_storage()->add_node()->set_id(pDiskInfo.nodeid());
                 const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
                 auto itNodeInfo = MergedNodeInfo.find(pDiskInfo.nodeid());
                 if (itNodeInfo != MergedNodeInfo.end()) {
                     nodeInfo = itNodeInfo->second;
                 }
                 if (nodeInfo) {
-                    nodeContext.Location.mutable_storage()->mutable_node()->set_host(nodeInfo->Host);
-                    nodeContext.Location.mutable_storage()->mutable_node()->set_port(nodeInfo->Port);
+                    nodeContext.Location.mutable_storage()->mutable_node(0)->set_host(nodeInfo->Host);
+                    nodeContext.Location.mutable_storage()->mutable_node(0)->set_port(nodeInfo->Port);
                 }
                 nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
                                          TStringBuilder() << "Storage node is not available",
@@ -2933,6 +2935,9 @@ public:
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
+        if (context.Location.storage().node().empty()) {
+            context.Location.mutable_storage()->add_node();
+        }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
         if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk() && NodeWardenStorageConfig->Get()->BridgeInfo) {
             const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
@@ -2951,16 +2956,16 @@ public:
                 if (itNodeInfo != MergedNodeInfo.end()) {
                     nodeInfo = itNodeInfo->second;
                 }
-                context.Location.mutable_storage()->mutable_node()->set_id(nodeId);
+                context.Location.mutable_storage()->mutable_node(0)->set_id(nodeId);
             } else {
-                context.Location.mutable_storage()->mutable_node()->clear_id();
+                context.Location.mutable_storage()->mutable_node(0)->clear_id();
             }
             if (nodeInfo) {
-                context.Location.mutable_storage()->mutable_node()->set_host(nodeInfo->Host);
-                context.Location.mutable_storage()->mutable_node()->set_port(nodeInfo->Port);
+                context.Location.mutable_storage()->mutable_node(0)->set_host(nodeInfo->Host);
+                context.Location.mutable_storage()->mutable_node(0)->set_port(nodeInfo->Port);
             } else {
-                context.Location.mutable_storage()->mutable_node()->clear_host();
-                context.Location.mutable_storage()->mutable_node()->clear_port();
+                context.Location.mutable_storage()->mutable_node(0)->clear_host();
+                context.Location.mutable_storage()->mutable_node(0)->clear_port();
             }
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
             FillVDiskStatusWithWhiteboard(vDiskId, itVDisk != MergedVDiskState.end() ? *itVDisk->second : NKikimrWhiteboard::TVDiskStateInfo(), vDiskStatus, {&context, "VDISK"});
@@ -3121,7 +3126,11 @@ public:
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
                     && it->IssueLog.level() == similar.begin()->IssueLog.level();
                 if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
-                    isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                    const auto& itStorage = it->IssueLog.location().storage();
+                    const auto& similarStorage = similar.begin()->IssueLog.location().storage();
+                    isSimilar = itStorage.node_size() > 0
+                        && similarStorage.node_size() > 0
+                        && itStorage.node(0).id() == similarStorage.node(0).id();
                 }
                 if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
                     isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
@@ -3200,6 +3209,9 @@ public:
                     auto mainPdisk = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     auto donorPdisk = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     mainPdisk->Add(donorPdisk->begin(), donorPdisk->end());
+                    auto mainNode = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_node();
+                    auto donorNode = it->IssueLog.location().storage().node();
+                    mainNode->Add(donorNode.begin(), donorNode.end());
                     break;
                 }
                 default:
@@ -3217,6 +3229,11 @@ public:
             context.removeIssuesIds.insert(it->IssueLog.id());
             it = similar.erase(it);
         }
+
+        auto* storageNodes = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_node();
+        std::ranges::sort(*storageNodes, {}, &Ydb::Monitoring::LocationNode::id);
+        auto toRemove = std::ranges::unique(*storageNodes, {}, &Ydb::Monitoring::LocationNode::id);
+        storageNodes->erase(toRemove.begin(), toRemove.end());
 
         similar.begin()->IssueLog.set_count(ids.size());
         similar.begin()->IssueLog.set_listed(ids.size());
@@ -3371,7 +3388,7 @@ public:
             MergeLevelRecords(mergeContext, ETags::BridgeGroupState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
-            MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+            MergeLevelRecords(mergeContext, ETags::PDiskState);
             MergeLevelRecords(mergeContext, ETags::StateStorageRing);
             MergeLevelRecords(mergeContext, ETags::StateStorageNode, ETags::StateStorageRing);
         }

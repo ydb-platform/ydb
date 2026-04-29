@@ -494,8 +494,9 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     RegisterProducer(resourceIdxFetch, indexFetchNode.get());
 
     const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    auto resolvedColumnName = Resolver.GetColumnName(dataAddr->GetColumnId(), false);
     IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker,
-        Resolver.GetColumnName(dataAddr->GetColumnId(), false));
+        resolvedColumnName.empty()?"COLUMN_NAME_NOT_RESOLVED":resolvedColumnName);
     auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
         resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);

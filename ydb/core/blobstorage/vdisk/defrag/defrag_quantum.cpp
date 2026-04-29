@@ -89,12 +89,20 @@ namespace NKikimr {
 
                     stat.FoundChunksToDefrag = ChunksToDefrag->FoundChunksToDefrag;
                     stat.Eof = stat.FoundChunksToDefrag < maxChunksToDefrag;
-                    stat.FreedChunks = ChunksToDefrag->Chunks;
 
                     lockedChunks = LockChunks(*ChunksToDefrag);
+                    stat.FreedChunks = lockedChunks;
 
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD11, DCtx->VCtx->VDiskLogPrefix << "locked chunks",
                         (ActorId, SelfActorId), (LockedChunks, lockedChunks));
+
+                    if (lockedChunks.empty() && DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille != 0) {
+                        STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD18, DCtx->VCtx->VDiskLogPrefix
+                            << "no chunks were locked, skipping record scan while compaction is deferred",
+                            (ActorId, SelfActorId), (Stat, stat));
+                        Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
+                        return;
+                    }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 

@@ -246,13 +246,30 @@ namespace NKikimr {
             return PauseMin + TDuration::FromValue(RandomNumber<ui64>(delta.GetValue() + 1));
         }
 
+        void ScheduleNextScan(const TActorContext& ctx) const {
+            ctx.Schedule(GeneratePause(), new TEvents::TEvWakeup);
+        }
+
         void Handle(TEvDefragStartQuantum::TPtr ev, const TActorContext& ctx) {
             Y_VERIFY_S(ev->Sender == PlannerId, DCtx->VCtx->VDiskLogPrefix);
             PlannerId = {};
             if (ev->Get()->ChunksToDefrag) {
                 ctx.Send(new IEventHandle(DefragActorId, SelfId(), ev->ReleaseBase().Release()));
             } else {
-                ctx.Schedule(GeneratePause(), new TEvents::TEvWakeup);
+                ScheduleNextScan(ctx);
+            }
+        }
+
+        void Handle(TEvBlobStorage::TEvVDefragResult::TPtr ev, const TActorContext& ctx) {
+            const auto& record = ev->Get()->Record;
+            const bool noProgress = !record.GetRewrittenRecs() && !record.GetRewrittenBytes();
+            if (DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille != 0 && noProgress) {
+                STLOG(PRI_NOTICE, BS_VDISK_DEFRAG, BSVDD17, VDISKP(DCtx->VCtx->VDiskLogPrefix,
+                    "defrag quantum made no progress, delaying next scan"),
+                    (FoundChunksToDefrag, record.GetFoundChunksToDefrag()));
+                ScheduleNextScan(ctx);
+            } else {
+                RunDefragPlanner(ctx);
             }
         }
 
@@ -275,7 +292,7 @@ namespace NKikimr {
             CFunc(TEvents::TSystem::Poison, Die);
             CFunc(TEvents::TSystem::Wakeup, RunDefragPlanner);
             HFunc(TEvDefragStartQuantum, Handle);
-            CFunc(TEvBlobStorage::EvVDefragResult, RunDefragPlanner);
+            HFunc(TEvBlobStorage::TEvVDefragResult, Handle);
         )
 
     public:
@@ -387,22 +404,29 @@ namespace NKikimr {
             task.Stat.Eof = mstat.Eof;
             task.Stat.FreedChunks.insert(task.Stat.FreedChunks.end(), mstat.FreedChunks.begin(), mstat.FreedChunks.end());
 
+            auto fillResultStats = [&](NKikimrBlobStorage::TEvVDefragResult& record) {
+                record.SetFoundChunksToDefrag(task.Stat.FoundChunksToDefrag);
+                record.SetRewrittenRecs(task.Stat.RewrittenRecs);
+                record.SetRewrittenBytes(task.Stat.RewrittenBytes);
+                record.SetEof(task.Stat.Eof);
+                for (const auto& x : task.Stat.FreedChunks) {
+                    record.MutableFreedChunks()->Add(x.ChunkId);
+                }
+            };
+
             auto processQuantumResult = TOverloaded{
                 [&](TEvBlobStorage::TEvVDefrag::TPtr& ev) {
                     const auto& record = ev->Get()->Record;
                     auto reply = std::make_unique<TEvBlobStorage::TEvVDefragResult>(NKikimrProto::OK, record.GetVDiskID());
-                    reply->Record.SetFoundChunksToDefrag(task.Stat.FoundChunksToDefrag);
-                    reply->Record.SetRewrittenRecs(task.Stat.RewrittenRecs);
-                    reply->Record.SetRewrittenBytes(task.Stat.RewrittenBytes);
-                    reply->Record.SetEof(task.Stat.Eof);
-                    for (const auto& x : task.Stat.FreedChunks) {
-                        reply->Record.MutableFreedChunks()->Add(x.ChunkId);
-                    }
+                    fillResultStats(reply->Record);
                     Send(ev->Sender, reply.release());
                     return task.Stat.Eof || !record.GetFull();
                 },
                 [&](TEvDefragStartQuantum::TPtr& ev) {
-                    Send(ev->Sender, new TEvBlobStorage::TEvVDefragResult);
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVDefragResult>();
+                    reply->Record.SetStatus(NKikimrProto::OK);
+                    fillResultStats(reply->Record);
+                    Send(ev->Sender, reply.release());
                     return true; // this is always final quantum
                 },
                 [&](TEvHullShredDefrag::TPtr& ev) {

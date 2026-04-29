@@ -201,6 +201,7 @@ public:
     virtual TPtr WindowSpecFunc(const TPtr& type) const;
     virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
     virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
+    virtual bool SetYqlSelectWindowName(TContext& ctx, TString name);
     void UseAsInner();
     void DisableSort();
     virtual bool UsedSubquery() const;
@@ -1642,7 +1643,7 @@ TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
 TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
-TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call, bool isYqlSelect);
+TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
 TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
 
 TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);

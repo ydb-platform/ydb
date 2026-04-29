@@ -3875,14 +3875,8 @@ Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
 }
 
-Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
-#if ANTLR_VER == 3
-    ExpectFailWithFuzzyError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-                             "<main>:1:40: Error: with: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
-#else
-    ExpectFailWithError("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)",
-                        "<main>:1:40: Error: with: alternative is not implemented yet: \n");
-#endif
+Y_UNIT_TEST(AlterTableAddIndexWithIsSupported) {
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD INDEX idx GLOBAL ON (col) WITH (a=b)").IsOk());
 }
 
 Y_UNIT_TEST(AlterTableAddIndexLocalIsNotSupported) {
@@ -12790,9 +12784,30 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
         {TString("YqlSelect"), 0},
         {TString("Read!"), 0},
     };
-    VerifyProgram(res, stat);
+    TString program = VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"Input" '()))");
+}
+
+Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, b FROM plato.`/Root/Yql/Select`;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("Read!"), 0},
+    };
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
 }
 
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
@@ -14313,6 +14328,18 @@ Y_UNIT_TEST(WindowFrameRowsBetweenUnboundedPrecedingAndCurrentRowExcludeCurrentR
         SELECT Sum(a) OVER (ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW) FROM plato.x;
     )sql", settings);
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Frame exclusion is not supported yet");
+}
+
+Y_UNIT_TEST(WindowBad) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT ListLength(a) OVER () FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:27: Error: Expected a YqlSelect-compatible window function, but got Length");
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

@@ -96,8 +96,8 @@ message TFileWithMd5 {
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
-    optional string PerfToolsPath = 4; // Path to perftools libraries
-    optional bool PerfToolsFromPackage = 5; // Use perftools from package
+    reserved 4;
+    reserved 5;
     optional string MrJobBin = 6; // Path to mrjob executable. If not set then main executable will be used
     optional string MrJobBinMd5 = 13; // MD5 checksum of mrjob executable. Should not be specified directly
     optional string MrJobUdfsDir = 7; // Path to linux udfs. If not set then loaded into main executable will be used

@@ -33,15 +33,15 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1877c8c0d80d7b1ea728c21778641fa6
+KEEP     COPYRIGHT_SERVICE_LABEL 141782cfd91d3722aa5ecec13beef61c
 BELONGS ya.make
     License text:
-        //  (C) Copyright John Maddock 2000.
-        //  Use, modification and distribution are subject to the 
-        //  Boost Software License, Version 1.0. (See accompanying file 
+        // Copyright 2025 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/static_assert.hpp [1:3]
+        include/boost/static_assert/detail/backward.hpp [1:3]

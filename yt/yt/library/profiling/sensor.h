@@ -448,6 +448,12 @@ public:
      */
     TEventTimer TimeHistogram(const std::string& name, std::vector<TDuration> bounds) const;
 
+    //! TimeHistogram is used to measure distribution of event durations.
+    /*!
+     *  Allows to use fixed granularity buckets in [min, max] range.
+     */
+    TEventTimer TimeHistogram(const std::string& name, TDuration min, TDuration max, TDuration granularity) const;
+
     //! GaugeHistogram is used to measure distribution of set of samples.
     TGaugeHistogram GaugeHistogram(const std::string& name, std::vector<double> buckets) const;
 

@@ -30,7 +30,8 @@ public:
             .Database = Settings.Database,
             .Request = std::move(Settings.Request),
             .UserToken = std::move(Settings.UserToken),
-            .IfNotExists = Settings.IfNotExists
+            .IfNotExists = Settings.IfNotExists,
+            .PrepareOnly = Settings.PrepareOnly
         }));
     }
 

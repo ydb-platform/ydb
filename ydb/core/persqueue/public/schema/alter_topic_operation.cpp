@@ -164,12 +164,16 @@ private:
 
         ModifyScheme = modifyScheme;
 
-        RegisterWithSameMailbox(CreateSchemaOperation(
-            SelfId(),
-            TopicInfo.RealPath,
-            std::move(proposal),
-            Settings.Cookie
-        ));
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        } else {
+            RegisterWithSameMailbox(CreateSchemaOperation(
+                SelfId(),
+                TopicInfo.RealPath,
+                std::move(proposal),
+                Settings.Cookie
+            ));
+        }
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
@@ -188,7 +192,7 @@ private:
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
         LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
-        if (errorCode == Ydb::StatusIds::SUCCESS) {
+        if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }
         Send(ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);

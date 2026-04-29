@@ -1050,7 +1050,8 @@ public:
             .Database = Database,
             .Request = std::move(settings.Request),
             .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
-            .IfNotExists = settings.ExistingOk
+            .IfNotExists = settings.ExistingOk,
+            .PrepareOnly = true
         });
         RegisterActor(requestHandler);
         return schemaTxFuture;
@@ -1064,7 +1065,8 @@ public:
             .Database = Database,
             .Request = std::move(settings.Request),
             .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
-            .IfExists = settings.MissingOk
+            .IfExists = settings.MissingOk,
+            .PrepareOnly = true
         });
         RegisterActor(requestHandler);
         return schemaTxFuture;

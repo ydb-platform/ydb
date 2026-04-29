@@ -62,6 +62,7 @@ struct TAlterTopicSettings {
     Ydb::Topic::AlterTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 
@@ -123,6 +124,7 @@ struct TCreateTopicSettings {
     Ydb::Topic::CreateTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfNotExists = false;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 

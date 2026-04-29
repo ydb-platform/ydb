@@ -5800,6 +5800,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr{serverSettings};
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
         auto session = client.GetSession().GetValueSync().GetSession();
         auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),

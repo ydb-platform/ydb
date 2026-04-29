@@ -313,6 +313,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def stop(self):
         try:
             super(KiKiMRNode, self).stop()
+            if self.__configurator.use_log_files:
+                self.__log_file_name = None
         finally:
             logger.info("Stopped node %s", self)
 
@@ -347,6 +349,16 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def start(self):
         try:
+            if self.__configurator.use_log_files and self.__log_file_name is None:
+                log_file = tempfile.NamedTemporaryFile(
+                    dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False
+                )
+                self.__log_file_name = log_file.name
+                log_file.close()
+                self.set_aux_file(self.__log_file_name)
+
+                logger.info("restart node_id %s log_file %s", self.node_id, self.__log_file_name)
+
             self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:

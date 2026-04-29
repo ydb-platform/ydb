@@ -1464,11 +1464,11 @@ public:
                 TGenericResult result;
                 auto modifySchemeResult = future.GetValue();
                 if (modifySchemeResult.Status == Ydb::StatusIds::SUCCESS) {
-                    if (modifySchemeResult.ModifyScheme.HasAlterPersQueueGroup()) {
+                    if (modifySchemeResult.ModifyScheme.HasCreatePersQueueGroup()) {
                         auto* phyTx = phyQuery->AddTransactions();
                         phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                         phyTx->MutableSchemeOperation()->MutableCreateTopic()->Swap(&modifySchemeResult.ModifyScheme);
-                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->SetSuccessOnNotExist(existingOk);
+                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
                     }
                     result.SetSuccess();
 
@@ -1478,7 +1478,6 @@ public:
                 }
                 createPromise.SetValue(result);
             });
-
         } else {
             return Gateway->CreateTopic(cluster, std::move(request), existingOk);
         }
@@ -1517,7 +1516,6 @@ public:
                         phyTx->MutableSchemeOperation()->MutableAlterTopic()->SetSuccessOnNotExist(missingOk);
                     }
                     result.SetSuccess();
-
                 } else {
                     result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
                     result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));

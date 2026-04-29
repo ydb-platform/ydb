@@ -35,11 +35,12 @@ struct TCloudPermissionsSettings {
 
 template<typename TCtx>
 bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
+    IRequestProxyCtx* requestProxyCtx = ctx;
     TString validationError;
-    if (!ctx->Validate(validationError)) {
+    if (!requestProxyCtx->Validate(validationError)) {
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
-        ctx->RaiseIssue(issue);
-        ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        requestProxyCtx->RaiseIssue(issue);
+        requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         return false;
     } else {
         return true;
@@ -211,14 +212,15 @@ public:
         , GrpcRequestBaseCtx_(Request_->Get())
         , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
-        , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
         , CloudPermissionsSettings(cloudPermissionsSettings)
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            if (TlsActivationContext) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            }
             const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
             if (!clientCertificates.empty()) {
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
@@ -228,6 +230,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        Span_ = NWilson::TSpan(
+            TWilsonGrpc::RequestCheckActor,
+            GrpcRequestBaseCtx_->GetWilsonTraceId(),
+            "RequestCheckActor",
+            NWilson::EFlags::NONE,
+            ctx.ActorSystem());
+
         TBase::UnsafeBecome(&TSelf::DbAccessStateFunc);
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {

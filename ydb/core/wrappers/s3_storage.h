@@ -171,7 +171,7 @@ public:
             const TString& bucket,
             NMonitoring::TDynamicCounterPtr counters,
             const Aws::S3::Model::StorageClass storageClass,
-            bool verbose = true,
+            bool verbose = false,
             bool useVirtualAdressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,

@@ -2,7 +2,6 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
-#include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/aclib/user_context.h>
 

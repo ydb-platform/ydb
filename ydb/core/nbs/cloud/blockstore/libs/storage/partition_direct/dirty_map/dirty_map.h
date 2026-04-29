@@ -254,6 +254,8 @@ private:
     [[nodiscard]] TLocationMask FilterLocations(
         TLocationMask mask,
         TBlockRange64 range) const;
+
+    // Create single readRangeHint for specified parameters
     [[nodiscard]] TReadRangeHint MakeReadRangeHint(
         TLocationMask locationMask,
         ui64 lsn,

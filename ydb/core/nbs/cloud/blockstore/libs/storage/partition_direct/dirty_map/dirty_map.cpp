@@ -287,32 +287,6 @@ void TBlocksDirtyMap::RestorePBuffer(
     }
 }
 
-// create single readRangeHint for specified parameters
-TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
-    TLocationMask locationMask,
-    ui64 lsn,
-    TBlockRange64 range,
-    ui64 offsetBlocks)
-{
-    if (locationMask.Empty()) {
-        locationMask = FilterLocations(DesiredDDisks, range);
-    } else if (locationMask.HasDDisk()) {
-        locationMask = locationMask.LogicalAnd(DesiredDDisks);
-        locationMask = FilterLocations(locationMask, range);
-    }
-
-    locationMask = locationMask.Exclude(DisabledLocations);
-    Y_ABORT_UNLESS(!locationMask.Empty());
-
-    return {
-        locationMask,
-        lsn,
-        TBlockRange64::WithLength(offsetBlocks, range.Size()),
-        range,
-        locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
-                                 : TRangeLock(this, lsn)};
-}
-
 // Create multiple readRangeHints for specified range with possible overlapping
 // with inflight requests
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
@@ -775,6 +749,31 @@ TLocationMask TBlocksDirtyMap::FilterLocations(
         }
     }
     return result;
+}
+
+TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
+    TLocationMask locationMask,
+    ui64 lsn,
+    TBlockRange64 range,
+    ui64 offsetBlocks)
+{
+    if (locationMask.Empty()) {
+        locationMask = FilterLocations(DesiredDDisks, range);
+    } else if (locationMask.HasDDisk()) {
+        locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        locationMask = FilterLocations(locationMask, range);
+    }
+
+    locationMask = locationMask.Exclude(DisabledLocations);
+    Y_ABORT_UNLESS(!locationMask.Empty());
+
+    return {
+        locationMask,
+        lsn,
+        TBlockRange64::WithLength(offsetBlocks, range.Size()),
+        range,
+        locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
+                                 : TRangeLock(this, lsn)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

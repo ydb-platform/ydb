@@ -20,9 +20,9 @@ struct TWeightedRange
 };
 
 // The function splits overlapping ranges into non-overlapping ranges
-//   and calls cb for each of them on the same loop's iteration.
+//   and returns their in a container.
 // Result is continuous range's sequence, where original 'holes' are
-//   fullfilled with key == 0.
+//   fullfilled with ranges with a key == 0.
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     TBlockRange64 fullRange,
     const std::span<TWeightedRange> overlappingRanges);

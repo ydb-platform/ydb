@@ -1533,7 +1533,7 @@ def main():
                     '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
                     '--database', '/Root/db1',
                     'workload', 'log', 'init',
-                    '--min-partitions', '100',
+                    '--min-partitions', '64',
                     '--partition-size', '10',
                     '--auto-partition', '0',
                     '--store', store_type,

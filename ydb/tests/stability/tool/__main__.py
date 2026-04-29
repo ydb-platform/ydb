@@ -1550,21 +1550,23 @@ def main():
                         (
                             f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} '
                             f'--database /Root/db1 workload log run bulk-upsert --rows 2000 --threads 10 '
-                            f'--timestamp_deviation 180 --seconds 86400 --path log_workload_{store_type}'
+                            f'--timestamp_deviation 1 --seconds 86400 --path log_workload_{store_type}'
                         )
                     )
 
-                    node.ssh_command(['rm', '-f', f'/tmp/workload_log_{store_type}_select.out.log'], raise_on_error=False)
-                    stability_cluster._clean_and_start_workload(
-                        node,
-                        f'workload_log_{store_type}_select',
-                        (
-                            f'/Berkanavt/nemesis/bin/ydb_cli --verbose --endpoint grpc://localhost:{node.grpc_port} '
-                            f'--database /Root/db1 workload log run select --client-timeout 1800000 --threads 1 '
-                            f'--seconds 86400 --path log_workload_{store_type}'
-                        ),
-                        f'/tmp/workload_log_{store_type}_select.out.log'
-                    )
+                    # Run select workload only on every other node to halve select load on the cluster.
+                    if node_id % 2 == 0:
+                        node.ssh_command(['rm', '-f', f'/tmp/workload_log_{store_type}_select.out.log'], raise_on_error=False)
+                        stability_cluster._clean_and_start_workload(
+                            node,
+                            f'workload_log_{store_type}_select',
+                            (
+                                f'/Berkanavt/nemesis/bin/ydb_cli --verbose --endpoint grpc://localhost:{node.grpc_port} '
+                                f'--database /Root/db1 workload log run select --client-timeout 1800000 --threads 1 '
+                                f'--seconds 86400 --path log_workload_{store_type}'
+                            ),
+                            f'/tmp/workload_log_{store_type}_select.out.log'
+                        )
             stability_cluster.get_state()
         if action == "start_workload_topic":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):

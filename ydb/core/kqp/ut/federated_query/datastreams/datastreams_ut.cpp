@@ -1229,7 +1229,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         {
             const auto externalDataSourceDesc = Navigate(
                     GetRuntime(),
-                    GetRuntime().AllocateEdgeActor(), 
+                    GetRuntime().AllocateEdgeActor(),
                     TStringBuilder() << "/Root/" << sourceName,
                     NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);

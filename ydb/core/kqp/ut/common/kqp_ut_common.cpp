@@ -211,7 +211,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 }
 
 std::pair<TString, TString> TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
-    TString databasePath = TStringBuilder() << ServerSettings->DomainName << "/" << name;
+    TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
 
     Ydb::Cms::CreateDatabaseRequest request;
     request.set_path(databasePath);

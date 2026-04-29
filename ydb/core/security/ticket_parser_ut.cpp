@@ -2562,11 +2562,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    TEvTicketParser::TEvAuthorizeTicketResult::TPtr RunPeernameQuery(
+    THolder<TEvTicketParser::TEvAuthorizeTicketResult> RunPeernameQuery(
         TTestActorRuntime* runtime,
         const TString& peername) {
         TActorId sender = runtime->AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
 
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
@@ -2578,7 +2577,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 .Entries = {},
             })
         ), 0);
-        return runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        return runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>();
     }
 
     Y_UNIT_TEST(TicketParserPeerNameValidationWithFeatureFlagEnabled) {

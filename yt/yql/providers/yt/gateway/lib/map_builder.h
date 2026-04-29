@@ -87,6 +87,7 @@ public:
         mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
+        mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
     }
 
     template<class ExecCtxPtr>

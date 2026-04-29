@@ -6238,6 +6238,45 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus HostRuntimeSettingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto resultType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(resultType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+        if (!EnsureSpecificDataType(input->Head(), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(resultType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus UdfRuntimeSettingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto resultType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal ||
+            input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(resultType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+        if (!EnsureSpecificDataType(*input->Child(0), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!EnsureSpecificDataType(*input->Child(1), EDataSlot::String, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        input->SetTypeAnn(resultType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus TablePathWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (ctx.Types.StrictTableProps) {
@@ -16438,6 +16477,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["RandomNumber"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uint64>;
         ExtFunctions["RandomUuid"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uuid>;
         ExtFunctions["Now"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uint64>;
+        Functions["HostRuntimeSetting"] = &HostRuntimeSettingWrapper;
+        Functions["UdfRuntimeSetting"] = &UdfRuntimeSettingWrapper;
         ExtFunctions["CurrentUtcDate"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Date>;
         ExtFunctions["CurrentUtcDatetime"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Datetime>;
         ExtFunctions["CurrentUtcTimestamp"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Timestamp>;
@@ -16536,6 +16577,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
         ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
         ExtFunctions["YqlAggWin"] = &YqlAggWinWrapper;
+        ExtFunctions["YqlWin"] = &YqlWinWrapper;
         Functions["YqlWindow"] = &SqlWindowWrapper;
         Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 

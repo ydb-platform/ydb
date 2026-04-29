@@ -682,6 +682,24 @@ TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(const std::string& name, std::v
 }
 
 template <bool UseWeakPtr>
+TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(
+    const std::string& name,
+    TDuration min,
+    TDuration max,
+    TDuration granularity) const
+{
+    YT_VERIFY(granularity != TDuration::Zero());
+    YT_VERIFY(min <= max);
+
+    std::vector<TDuration> bounds;
+    for (auto bound = min; bound <= max; bound += granularity) {
+        bounds.push_back(bound);
+    }
+
+    return TimeHistogram(name, std::move(bounds));
+}
+
+template <bool UseWeakPtr>
 TGaugeHistogram TProfiler<UseWeakPtr>::GaugeHistogram(const std::string& name, std::vector<double> buckets) const
 {
     const auto& impl = GetRegistry();

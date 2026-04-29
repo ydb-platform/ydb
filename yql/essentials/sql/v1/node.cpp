@@ -1,5 +1,5 @@
 #include "node.h"
-#include "select_yql_aggregation.h"
+#include "select_yql_window.h"
 #include "source.h"
 #include "context.h"
 
@@ -288,6 +288,18 @@ bool INode::SetViewName(TContext& ctx, TPosition pos, const TString& view) {
 bool INode::SetPrimaryView(TContext& ctx, TPosition pos) {
     Y_UNUSED(pos);
     ctx.Error() << "Node not support primary views";
+    return false;
+}
+
+bool INode::SetYqlSelectWindowName(TContext& ctx, TString name) {
+    Y_UNUSED(name);
+
+    TString opName = GetOpName();
+    if (!opName.empty()) {
+        opName.prepend(", but got ");
+    }
+
+    ctx.Error() << "Expected a YqlSelect-compatible window function" << opName;
     return false;
 }
 
@@ -3419,10 +3431,7 @@ protected:
     TNodePtr FuncNode_;
 };
 
-TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call, bool isYqlSelect) {
-    if (isYqlSelect) {
-        return WrapYqlAggregationOverWindow(std::move(call), windowName);
-    }
+TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call) {
     return new TCalcOverWindow(pos, windowName, call);
 }
 

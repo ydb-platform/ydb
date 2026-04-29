@@ -43,6 +43,7 @@ void TReduceJobBuilder::SetReduceJobParams(
     reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
     reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
     reduceJob->SetLangVer(execCtx->Options_.LangVer());
+    reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
 }
 
 } // namespace NYql

@@ -247,6 +247,8 @@ public:
     TRuntimeNode RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes);
 
     TRuntimeNode Now(const TArrayRef<const TRuntimeNode>& dependentNodes);
+    TRuntimeNode HostRuntimeSetting(TRuntimeNode featureName);
+    TRuntimeNode UdfRuntimeSetting(TRuntimeNode module, TRuntimeNode featureName);
     TRuntimeNode CurrentUtcDate(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcDatetime(const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode CurrentUtcTimestamp(const TArrayRef<const TRuntimeNode>& dependentNodes);

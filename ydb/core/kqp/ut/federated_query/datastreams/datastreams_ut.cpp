@@ -1156,6 +1156,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             NYdb::NTopic::TTopicClient topicClient(driver);
             auto result = topicClient.CreateTopic(topicName).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
         }
         ExecQuery(fmt::format(R"(
             CREATE SECRET `{secret}` WITH (value = "{token}");

@@ -76,7 +76,6 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
                 WHEN String::Contains(String::AsciiToLower(COALESCE(status_description, '')), 'sanitizer')
                 THEN 'SANITIZER'
                 WHEN String::Contains(String::AsciiToLower(COALESCE(error_type, '')), 'timeout')
-                  OR String::Contains(String::AsciiToLower(COALESCE(status_description, '')), 'timeout')
                 THEN 'TIMEOUT'
                 ELSE ''
             END

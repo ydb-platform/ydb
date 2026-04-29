@@ -85,7 +85,7 @@ def get_unit_list_variable(unit, name):
 
 def get_values_list(unit, key):
     res = map(str.strip, (unit.get_subst(key) or '').strip().split())
-    return [r for r in res if r and r not in ['""', "''"]]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
 def _get_test_tags(unit, spec_args=None):

@@ -8,7 +8,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 template <typename T>
 void TestType(const std::vector<T>& values) {

@@ -5,7 +5,7 @@
 #include <cstring>
 #include <utility>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 class TKeyName {
 public:
@@ -42,7 +42,7 @@ public:
     }
 
     bool operator==(const TKeyName& value) const {
-        return Compare(*this, value) == TCompareResult::Equal;
+        return Compare(*this, value) == ECompareResult::Equal;
     }
 
     bool operator!=(const TKeyName& value) const {
@@ -50,16 +50,21 @@ public:
     }
 
     bool operator<(const TKeyName& value) const {
-        return Compare(*this, value) == TCompareResult::Less;
+        return Compare(*this, value) == ECompareResult::Less;
     }
 
     bool operator>(const TKeyName& value) const {
-        return Compare(*this, value) == TCompareResult::Great;
+        return Compare(*this, value) == ECompareResult::Great;
     }
 
     bool operator>(const TString& value) const {
-        auto cmp = Compare(CompileTime, CompileTimeLength, value.c_str(), value.size());
-        return cmp == TCompareResult::Great;
+        ECompareResult cmp;
+        if (CompileTime != nullptr) {
+            cmp = Compare(CompileTime, CompileTimeLength, value.c_str(), value.size());
+        } else {
+            cmp = Compare(RunTime.c_str(), RunTime.size(), value.c_str(), value.size());
+        }
+        return cmp == ECompareResult::Great;
     }
 
     TKeyName& operator=(const TKeyName& value) = default;
@@ -83,25 +88,25 @@ protected:
         Great,
     };
 
-    static TCompareResult Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
+    static ECompareResult Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
         auto minLength = std::min(lengthA, lengthB);
         int result = strncmp(a, b, minLength);
         if (result < 0) {
-            return TCompareResult::Less;
+            return ECompareResult::Less;
         } else if (result > 0) {
-            return TCompareResult::Great;
+            return ECompareResult::Great;
         }
 
         if (minLength < lengthB) {
-            return TCompareResult::Less;
+            return ECompareResult::Less;
         } else if (minLength < lengthA) {
-            return TCompareResult::Great;
+            return ECompareResult::Great;
         }
 
-        return TCompareResult::Equal;
+        return ECompareResult::Equal;
     }
 
-    static TCompareResult Compare(const TKeyName& a, const TKeyName& b) {
+    static ECompareResult Compare(const TKeyName& a, const TKeyName& b) {
         return Compare(a.GetData(), a.GetLength(), b.GetData(), b.GetLength());
     }
 };

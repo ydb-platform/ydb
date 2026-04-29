@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 using TBinaryData = std::vector<std::uint8_t>;
 

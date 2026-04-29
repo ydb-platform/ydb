@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 template <class... Types> struct TOverloaded : Types... { using Types:: operator ()...; };
 

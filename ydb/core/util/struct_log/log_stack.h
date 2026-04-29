@@ -2,7 +2,7 @@
 #include "create_message.h"
 #include "structured_message.h"
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 class TLogStack {
 

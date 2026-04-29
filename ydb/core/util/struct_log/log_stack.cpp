@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 namespace {
     thread_local std::vector<TStructuredMessage> LogStack;

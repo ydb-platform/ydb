@@ -80,7 +80,7 @@ namespace {
         }
     };
 
-    static const NKikimr::NStructLog::TJsonKeyValueWriter::TNameSet BusyJsonKeyNames{
+    static const NKikimr::NStructuredLog::TJsonKeyValueWriter::TNameSet BusyJsonKeyNames{
         "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
         "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
 }
@@ -544,7 +544,7 @@ namespace NActors {
         ui64 lineNumber,
         const TString& formatted,
         bool json,
-        const TMaybe<NKikimr::NStructLog::TStructuredMessage>& structMessage) noexcept
+        const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structMessage) noexcept
     try {
 
         const auto logPrio = ::ELogPriority(ui16(priority));

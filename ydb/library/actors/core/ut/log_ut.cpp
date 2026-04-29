@@ -11,7 +11,7 @@
 using namespace NMonitoring;
 using namespace NActors;
 using namespace NActors::NLog;
-using namespace NKikimr::NStructLog;
+using namespace NKikimr::NStructuredLog;
 
 namespace {
     const TString& ServiceToString(int) {
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TWriteLogTest) {
     }
 
     Y_UNIT_TEST(WriteWithContext) {
-        using namespace NKikimr::NStructLog;
+        using namespace NKikimr::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages();

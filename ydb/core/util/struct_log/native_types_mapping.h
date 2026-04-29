@@ -9,7 +9,7 @@
 #include <functional>
 #include <unordered_map>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 enum class TNativeTypeCode : std::uint8_t {
     Int8 = 0,

@@ -8,7 +8,7 @@
 #include <initializer_list>
 #include <utility>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 class TCreateMessageArg {
 public:
@@ -93,15 +93,15 @@ protected:
 };
 
 #define YDBLOG_CREATE_MESSAGE(...) [&]() -> TStructuredMessage { \
-    NKikimr::NStructLog::TCreateMessageArg::TGuard guard; \
-    std::initializer_list<NKikimr::NStructLog::TCreateMessageArg> args{__VA_ARGS__}; \
+    NKikimr::NStructuredLog::TCreateMessageArg::TGuard guard; \
+    std::initializer_list<NKikimr::NStructuredLog::TCreateMessageArg> args{__VA_ARGS__}; \
     Y_UNUSED(args); \
     return guard.Pop(); }()
 
 #define YDBLOG_UPDATE_MESSAGE(M, ...) { \
-    NKikimr::NStructLog::TCreateMessageArg::TGuard guard; \
-    std::initializer_list<NKikimr::NStructLog::TCreateMessageArg> args{__VA_ARGS__}; \
+    NKikimr::NStructuredLog::TCreateMessageArg::TGuard guard; \
+    std::initializer_list<NKikimr::NStructuredLog::TCreateMessageArg> args{__VA_ARGS__}; \
     Y_UNUSED(args); \
-    M.AppendMessage(guard.Pop()); }
+    M.AppendMessage(guard.Pop()); } Y_SEMICOLON_GUARD
 
 }

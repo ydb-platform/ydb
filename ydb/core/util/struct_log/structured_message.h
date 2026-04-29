@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 class TCreateMessageArg;
 class TStructuredMessage {

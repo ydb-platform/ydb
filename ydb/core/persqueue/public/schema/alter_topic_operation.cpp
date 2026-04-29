@@ -138,6 +138,7 @@ private:
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetAllowAccessToPrivatePaths(true);
+        modifyScheme.SetSuccessOnNotExist(Settings.IfExists);
 
         auto* config = modifyScheme.MutableAlterPersQueueGroup();
 

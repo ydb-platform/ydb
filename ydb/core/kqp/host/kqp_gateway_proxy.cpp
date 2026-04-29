@@ -1468,7 +1468,6 @@ public:
                         auto* phyTx = phyQuery->AddTransactions();
                         phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                         phyTx->MutableSchemeOperation()->MutableCreateTopic()->Swap(&modifySchemeResult.ModifyScheme);
-                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
                     }
                     result.SetSuccess();
 
@@ -1513,7 +1512,6 @@ public:
                         auto* phyTx = phyQuery->AddTransactions();
                         phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                         phyTx->MutableSchemeOperation()->MutableAlterTopic()->Swap(&modifySchemeResult.ModifyScheme);
-                        phyTx->MutableSchemeOperation()->MutableAlterTopic()->SetSuccessOnNotExist(missingOk);
                     }
                     result.SetSuccess();
                 } else {

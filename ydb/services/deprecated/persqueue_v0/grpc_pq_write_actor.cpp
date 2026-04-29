@@ -405,10 +405,6 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session without AuthInfo : " << DiscoveryConverter->GetPrintableString()
                                                          << " sourceId " << SourceId << " from " << PeerName);
         SessionsWithoutAuth.Inc();
-        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
-            return;
-        }
         if (FirstACLCheck) {
             FirstACLCheck = false;
             DiscoverPartition(ctx);
@@ -454,8 +450,10 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
                             << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
     if (ev->Get()->HasError()) {
-        CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
-        return;
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+            return;
+        }
     }
     Token = ev->Get()->Token;
 

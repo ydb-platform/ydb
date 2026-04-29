@@ -46,26 +46,32 @@
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-#### Работа с объектами базы данных (DDL) {#working-with-database-objects}
-
-Создание таблицы и добавление в неё вторичного индекса: 
+Совместное выполнение DDL + DML в одном запросе не поддерживается.
 
 ```bash
+# Создание таблицы
 {{ ydb-cli }} -p quickstart sql -s '
-    CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
-    ALTER TABLE series ADD INDEX `title_idx` GLOBAL ON (`title`);
-  '
-```
+  CREATE TABLE series (
+    series_id Uint64,
+    title Utf8,
+    series_info Utf8,
+    release_date Date,
+    PRIMARY KEY (series_id)
+  );
+'
 
-#### Работа с данными (DML) {#working-with-data}
-
-Заполнение таблицы данными и получение выборки из неё:
-
-```bash
+# Заполнение данными и получение выборки
 {{ ydb-cli }} -p quickstart sql -s '
-    UPSERT INTO series (series_id, title, series_info, release_date) VALUES (1, "Title1", "Info1", Cast("2026-04-20" as Date));
+    UPSERT INTO series (series_id, title, series_info, release_date) 
+    VALUES (1, "Title1", "Info1", Cast("2023-04-20" as Date));
     SELECT * FROM series;
-  '
+'
+
+# Добавление индекса
+{{ ydb-cli }} -p quickstart sql -s '
+    ALTER TABLE series 
+    ADD INDEX title_idx GLOBAL ON (title);
+'
 ```
 
 Вывод команды:
@@ -74,13 +80,11 @@
 ┌──────────────┬───────────┬─────────────┬──────────┐
 | release_date | series_id | series_info | title    |
 ├──────────────┼───────────┼─────────────┼──────────┤
-| "2026-04-20" | 1         | "Info1"     | "Title1" |
+| "2023-04-20" | 1         | "Info1"     | "Title1" |
 └──────────────┴───────────┴─────────────┴──────────┘
 ```
 
-#### Работа с запросами из файла {#working-with-query-from-file}
-
-Выполнение запроса из примера выше, записанного в файле `script1.yql`, с выводом результатов в формате `JSON`:
+Для выполнения запроса из файла (например, script1.yql) с выводом в формате JSON
 
 ```bash
 {{ ydb-cli }} -p quickstart sql -f script1.yql --format json-unicode
@@ -89,7 +93,7 @@
 Вывод команды:
 
 ```text
-{"release_date":"2026-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
+{"release_date":"2023-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
 ```
 
 Примеры передачи параметров в скрипты приведены в [статье о передаче параметров в команды исполнения запросов](parameterized-query-execution.md).

@@ -21,6 +21,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
+#include <util/stream/output.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
@@ -639,12 +640,37 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
     STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()),
         (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt));
+    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult"
+        << " LocalNodeId# " << LocalNodeId
+        << " VDiskId# " << msg.VDiskId
+        << " VSlotId# " << vslotId
+        << " Status# " << static_cast<int>(msg.Status)
+        << " SlayOwnerRound# " << msg.SlayOwnerRound
+        << " ExpectedRound# ";
+    if (it != SlayInFlight.end()) {
+        Cerr << it->second;
+    } else {
+        Cerr << "none";
+    }
+    Cerr << " LocalVDiskStillExists# " << LocalVDisks.contains(vslotId)
+        << Endl;
     if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult ignored outdated"
+            << " LocalNodeId# " << LocalNodeId
+            << " VDiskId# " << msg.VDiskId
+            << " VSlotId# " << vslotId
+            << Endl;
         return; // outdated response
     }
     switch (msg.Status) {
         case NKikimrProto::NOTREADY: {
             const ui64 round = NextLocalPDiskInitOwnerRound();
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult NOTREADY retry"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << msg.VDiskId
+                << " VSlotId# " << vslotId
+                << " NewRound# " << round
+                << Endl;
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(MakeBlobStoragePDiskID(LocalNodeId,
                 msg.PDiskId), SelfId(), new NPDisk::TEvSlay(msg.VDiskId, round, msg.PDiskId, msg.VSlotId)));
             it->second = round;
@@ -655,8 +681,18 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
         case NKikimrProto::ALREADY:
             SlayInFlight.erase(it);
             if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt == LocalVDisks.end()) {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult report DESTROYED"
+                    << " LocalNodeId# " << LocalNodeId
+                    << " VDiskId# " << msg.VDiskId
+                    << " VSlotId# " << vslotId
+                    << Endl;
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
             } else {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult report WIPED"
+                    << " LocalNodeId# " << LocalNodeId
+                    << " VDiskId# " << msg.VDiskId
+                    << " VSlotId# " << vslotId
+                    << Endl;
                 SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
                 TVDiskRecord& vdisk = vdiskIt->second;
                 StartLocalVDiskActor(vdisk); // restart actor after successful wiping
@@ -667,6 +703,12 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
         case NKikimrProto::ERROR:
             SlayInFlight.erase(it);
             STLOG(PRI_ERROR, BS_NODE, NW29, "Handle(NPDisk::TEvSlayResult) error", (Msg, msg.ToString()));
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW TEvSlayResult error"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << msg.VDiskId
+                << " VSlotId# " << vslotId
+                << " Status# " << static_cast<int>(msg.Status)
+                << Endl;
             SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;
 
@@ -985,6 +1027,14 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
     STLOG(PRI_NOTICE, BS_NODE, NW87, "SendDropDonorQuery", (NodeId, nodeId), (PDiskId, pdiskId), (VSlotId, vslotId),
         (VDiskId, vdiskId));
+    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW SendDropDonorQuery"
+        << " LocalNodeId# " << LocalNodeId
+        << " TargetNodeId# " << nodeId
+        << " PDiskId# " << pdiskId
+        << " VSlotId# " << vslotId
+        << " VDiskId# " << vdiskId
+        << " Backoff# " << backoff
+        << Endl;
     if (TGroupID groupId(vdiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static) {
         auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         auto *record = &ev->Record;
@@ -1001,6 +1051,13 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
             Send(DistributedConfigKeeperId, ev.release(), 0, cookie);
         }
         InvokeCallbacks.emplace(cookie, [=, this](TEvNodeConfigInvokeOnRootResult& msg) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW DropDonor result"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << vdiskId
+                << " VSlot# [" << nodeId << ':' << pdiskId << ':' << vslotId << ']'
+                << " Status# " << static_cast<int>(msg.Record.GetStatus())
+                << " ErrorReason# " << msg.Record.GetErrorReason()
+                << Endl;
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 for (const auto& vdisk : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
@@ -1032,9 +1089,21 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
 void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
         NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff) {
     STLOG(PRI_DEBUG, BS_NODE, NW32, "SendVDiskReport", (VSlotId, vslotId), (VDiskId, vDiskId), (Phase, phase));
+    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW SendVDiskReport"
+        << " LocalNodeId# " << LocalNodeId
+        << " VDiskId# " << vDiskId
+        << " VSlotId# " << vslotId
+        << " Phase# " << static_cast<int>(phase)
+        << " Backoff# " << backoff
+        << Endl;
 
     if (TGroupID groupId(vDiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static &&
             phase == NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED) {
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW SendVDiskReport static DESTROYED -> StaticVDiskSlain"
+            << " LocalNodeId# " << LocalNodeId
+            << " VDiskId# " << vDiskId
+            << " VSlotId# " << vslotId
+            << Endl;
         auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         auto *record = &ev->Record;
         auto *cmd = record->MutableStaticVDiskSlain();
@@ -1050,6 +1119,13 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
             Send(DistributedConfigKeeperId, ev.release(), 0, cookie);
         }
         InvokeCallbacks.emplace(cookie, [=, this](TEvNodeConfigInvokeOnRootResult& msg) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW StaticVDiskSlain result"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << vDiskId
+                << " VSlotId# " << vslotId
+                << " Status# " << static_cast<int>(msg.Record.GetStatus())
+                << " ErrorReason# " << msg.Record.GetErrorReason()
+                << Endl;
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 for (const auto& vdisk : StorageConfig->GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
@@ -1058,6 +1134,11 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
                             loc.GetPDiskID() == vslotId.PDiskId &&
                             loc.GetVDiskSlotID() == vslotId.VDiskSlotId &&
                             vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW StaticVDiskSlain retry"
+                            << " LocalNodeId# " << LocalNodeId
+                            << " VDiskId# " << vDiskId
+                            << " VSlotId# " << vslotId
+                            << Endl;
                         SendVDiskReport(vslotId, vDiskId, phase, TDuration::Seconds(3));
                         break;
                     }

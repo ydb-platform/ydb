@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/debug_tools/operation_log.h>
 
+#include <util/stream/output.h>
+
 namespace NKikimr::NBsController {
     enum class EGroupRepairOperation {
         SelfHeal = 0,
@@ -74,8 +76,32 @@ namespace NKikimr::NBsController {
             Become(&TThis::StateFunc, TDuration::Seconds(60), new TEvents::TEvWakeup);
 
             STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH01, "Reassigner starting", (GroupId, GroupId));
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC Reassigner Bootstrap"
+                << " GroupId# " << GroupId
+                << " VDiskToReplace# ";
+            if (VDiskToReplace) {
+                Cerr << *VDiskToReplace;
+            } else {
+                Cerr << "none";
+            }
+            Cerr << " IsSelfHealReasonDecommit# " << IsSelfHealReasonDecommit
+                << " IgnoreDegradedGroupsChecks# " << IgnoreDegradedGroupsChecks
+                << " DonorMode# " << DonorMode
+                << Endl;
 
             for (const auto& [vdiskId, vdisk] : Group.VDisks) {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC Reassigner input VDisk"
+                    << " GroupId# " << GroupId
+                    << " VDiskId# " << vdiskId
+                    << " Location# " << vdisk.Location
+                    << " RequiresReassignment# " << vdisk.RequiresReassignment
+                    << " UnavailabilityRisk# " << vdisk.UnavailabilityRisk
+                    << " Decommitted# " << vdisk.Decommitted
+                    << " IsSelfHealReasonDecommit# " << vdisk.IsSelfHealReasonDecommit
+                    << " OnlyPhantomsRemain# " << vdisk.OnlyPhantomsRemain
+                    << " IsReady# " << vdisk.IsReady
+                    << " VDiskStatus# " << static_cast<int>(vdisk.VDiskStatus)
+                    << Endl;
                 if (VDiskToReplace && vdiskId == *VDiskToReplace) {
                     FailedGroupDisks |= {Topology.get(), vdiskId};
                     continue; // skip disk we are going to replcate -- it will be wiped out anyway
@@ -157,6 +183,12 @@ namespace NKikimr::NBsController {
 
             if (VDiskToReplace && TGroupID(VDiskToReplace->GroupID).ConfigurationType() == EGroupConfigurationType::Static) {
                 // special treat for static groups
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC send static ReassignGroupDisk"
+                    << " GroupId# " << GroupId
+                    << " VDiskId# " << *VDiskToReplace
+                    << " ConvertToDonor# " << DonorMode
+                    << " IsSelfHealReasonDecommit# " << IsSelfHealReasonDecommit
+                    << Endl;
                 auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
                 auto& record = ev->Record;
                 auto *cmd = record.MutableReassignGroupDisk();
@@ -223,6 +255,18 @@ namespace NKikimr::NBsController {
 
         void Finish(bool success, ui64 configTxSeqNo, TString errorReason = "") {
             STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH08, "Reassigner finished", (GroupId, GroupId), (Success, success));
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC Reassigner Finish"
+                << " GroupId# " << GroupId
+                << " VDiskToReplace# ";
+            if (VDiskToReplace) {
+                Cerr << *VDiskToReplace;
+            } else {
+                Cerr << "none";
+            }
+            Cerr << " Success# " << success
+                << " ConfigTxSeqNo# " << configTxSeqNo
+                << " ErrorReason# " << errorReason
+                << Endl;
             auto operation = VDiskToReplace ? EGroupRepairOperation::SelfHeal : EGroupRepairOperation::GroupLayoutSanitizer;
             Send(SelfHealId, new TEvReassignerDone(GroupId, success, operation, configTxSeqNo, errorReason));
             PassAway();
@@ -342,6 +386,10 @@ namespace NKikimr::NBsController {
         }
 
         void Handle(TEvControllerUpdateSelfHealInfo::TPtr& ev) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC SelfHealActor update"
+                << " GroupsToUpdate# " << ev->Get()->GroupsToUpdate.size()
+                << " VDiskStatusUpdate# " << ev->Get()->VDiskStatusUpdate.size()
+                << Endl;
             if (const auto& setting = ev->Get()->GroupLayoutSanitizerEnabled) {
                 std::exchange(GroupLayoutSanitizerEnabled, *setting);
             }
@@ -360,7 +408,30 @@ namespace NKikimr::NBsController {
             for (const auto& [groupId, data] : ev->Get()->GroupsToUpdate) {
                 if (data) {
                     if (!data->VDisks) {
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC SelfHealActor skip virtual group"
+                            << " GroupId# " << groupId
+                            << Endl;
                         continue; // virtual-only group
+                    }
+
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC SelfHealActor group update"
+                        << " GroupId# " << groupId
+                        << " Generation# " << data->Generation
+                        << " VDisks# " << data->VDisks.size()
+                        << Endl;
+                    for (const auto& [vdiskId, vdisk] : data->VDisks) {
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC SelfHealActor group VDisk"
+                            << " GroupId# " << groupId
+                            << " VDiskId# " << vdiskId
+                            << " Location# " << vdisk.Location
+                            << " RequiresReassignment# " << vdisk.RequiresReassignment
+                            << " UnavailabilityRisk# " << vdisk.UnavailabilityRisk
+                            << " Decommitted# " << vdisk.Decommitted
+                            << " IsSelfHealReasonDecommit# " << vdisk.IsSelfHealReasonDecommit
+                            << " OnlyPhantomsRemain# " << vdisk.OnlyPhantomsRemain
+                            << " IsReady# " << vdisk.IsReady
+                            << " VDiskStatus# " << static_cast<int>(vdisk.VDiskStatus)
+                            << Endl;
                     }
 
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
@@ -539,6 +610,10 @@ namespace NKikimr::NBsController {
         std::optional<TVDiskID> FindVDiskToReplace(const TEvControllerUpdateSelfHealInfo::TGroupContent& content,
                 TMonotonic now, TBlobStorageGroupInfo::TTopology *topology, bool *isSelfHealReasonDecommit,
                 bool *ignoreDegradedGroupsChecks) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace begin"
+                << " Generation# " << content.Generation
+                << " VDisks# " << content.VDisks.size()
+                << Endl;
             // main idea of selfhealing is step-by-step healing of bad group; we can allow healing of group with more
             // than one disk missing, but we should not move next faulty disk until previous one is replicated, at least
             // partially (meaning only phantoms left)
@@ -550,6 +625,15 @@ namespace NKikimr::NBsController {
             bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
                 bool replicatingWithPhantomsOnly = false;
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace scan"
+                    << " VDiskId# " << vdiskId
+                    << " Location# " << vdisk.Location
+                    << " RequiresReassignment# " << vdisk.RequiresReassignment
+                    << " UnavailabilityRisk# " << vdisk.UnavailabilityRisk
+                    << " IsReadyNow# " << IsReady(vdisk, now)
+                    << " OnlyPhantomsRemain# " << vdisk.OnlyPhantomsRemain
+                    << " VDiskStatus# " << static_cast<int>(vdisk.VDiskStatus)
+                    << Endl;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
                         if (vdisk.OnlyPhantomsRemain && !alreadySeenReplicatingWithPhantomsOnly) {
@@ -559,6 +643,11 @@ namespace NKikimr::NBsController {
                         }
                         [[fallthrough]];
                     case NKikimrBlobStorage::EVDiskStatus::INIT_PENDING:
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace blocked by VDisk status"
+                            << " VDiskId# " << vdiskId
+                            << " VDiskStatus# " << static_cast<int>(vdisk.VDiskStatus)
+                            << " OnlyPhantomsRemain# " << vdisk.OnlyPhantomsRemain
+                            << Endl;
                         return std::nullopt; // don't touch group with replicating or starting disks
 
                     default:
@@ -580,17 +669,31 @@ namespace NKikimr::NBsController {
                 if (vdisk.RequiresReassignment) {
                     const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
                     if (!checker.CheckFailModelForGroup(newFailed)) {
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace skip fail model"
+                            << " VDiskId# " << vdiskId
+                            << Endl;
                         continue; // healing this disk would break the group
                     } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace skip degraded"
+                            << " VDiskId# " << vdiskId
+                            << Endl;
                         continue; // this group will become degraded when applying self-heal logic, skip disk
                     }
                     *isSelfHealReasonDecommit = vdisk.IsSelfHealReasonDecommit;
                     *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace choose"
+                        << " VDiskId# " << vdiskId
+                        << " IsSelfHealReasonDecommit# " << *isSelfHealReasonDecommit
+                        << " IgnoreDegradedGroupsChecks# " << *ignoreDegradedGroupsChecks
+                        << Endl;
                     return vdiskId;
                 }
             }
 
             // no options for this group
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC FindVDiskToReplace no options"
+                << " Generation# " << content.Generation
+                << Endl;
             return std::nullopt;
         }
 
@@ -726,6 +829,18 @@ namespace NKikimr::NBsController {
                 bool ignoreDegradedGroupsChecks) {
             group.ReassignStatus = EReassignStatus::Active;
             Y_ABORT_UNLESS(!ActiveReassignerActorId);
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC CreateReassignerActor"
+                << " GroupId# " << group.GroupId
+                << " VDiskId# ";
+            if (vdiskId) {
+                Cerr << *vdiskId;
+            } else {
+                Cerr << "none";
+            }
+            Cerr << " IsSelfHealReasonDecommit# " << isSelfHealReasonDecommit
+                << " IgnoreDegradedGroupsChecks# " << ignoreDegradedGroupsChecks
+                << " DonorMode# " << DonorMode
+                << Endl;
             ActiveReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
                     vdiskId, group.Topology, isSelfHealReasonDecommit, ignoreDegradedGroupsChecks, DonorMode,
                     SelfHealSettings.PreferLessOccupiedRack, SelfHealSettings.WithAttentionToReplication));
@@ -1054,6 +1169,12 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
         if (!SelfHealId || !StorageConfig || !StorageConfig->HasBlobStorageConfig() || !SelfManagementEnabled) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC PushStaticGroupsToSelfHeal skipped"
+                << " SelfHealId# " << SelfHealId
+                << " HasStorageConfig# " << static_cast<bool>(StorageConfig)
+                << " HasBlobStorageConfig# " << (StorageConfig ? StorageConfig->HasBlobStorageConfig() : false)
+                << " SelfManagementEnabled# " << SelfManagementEnabled
+                << Endl;
             return;
         }
 
@@ -1062,8 +1183,16 @@ namespace NKikimr::NBsController {
         if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
             const auto& smConfig = StorageConfig->GetSelfManagementConfig();
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC PushStaticGroupsToSelfHeal begin"
+                << " Groups# " << ss.GroupsSize()
+                << " VDisks# " << ss.VDisksSize()
+                << " PDisks# " << ss.PDisksSize()
+                << Endl;
             for (const auto& group : ss.GetGroups()) {
                 if (!group.RingsSize()) {
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC PushStaticGroupsToSelfHeal skip bridged group"
+                        << " GroupId# " << group.GetGroupID()
+                        << Endl;
                     continue; // bridged group probably
                 }
                 auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
@@ -1075,6 +1204,11 @@ namespace NKikimr::NBsController {
                 };
 
                 const TVDiskID vdiskId(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration(), 0, 0, 0);
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC PushStaticGroupsToSelfHeal group"
+                    << " GroupId# " << TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)
+                    << " Generation# " << group.GetGroupGeneration()
+                    << " Erasure# " << group.GetErasureSpecies()
+                    << Endl;
                 for (auto it = StaticVDiskMap.lower_bound(vdiskId); it != StaticVDiskMap.end() &&
                         it->first.GroupID.GetRawId() == group.GetGroupID() &&
                         it->first.GroupGeneration == group.GetGroupGeneration(); ++it) {
@@ -1098,6 +1232,18 @@ namespace NKikimr::NBsController {
                         info.ReadySince,
                         info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
                     };
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG BSC PushStaticGroupsToSelfHeal VDisk"
+                        << " GroupId# " << TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)
+                        << " VDiskId# " << it->first
+                        << " VSlotId# " << vslotId
+                        << " HasDynamicPDisk# " << static_cast<bool>(pdiskInfo)
+                        << " RequiresReassignment# " << vdiskInfo.RequiresReassignment
+                        << " UnavailabilityRisk# " << vdiskInfo.UnavailabilityRisk
+                        << " Decommitted# " << vdiskInfo.Decommitted
+                        << " IsSelfHealReasonDecommit# " << vdiskInfo.IsSelfHealReasonDecommit
+                        << " IsReady# " << vdiskInfo.IsReady
+                        << " VDiskStatus# " << static_cast<int>(vdiskInfo.VDiskStatus)
+                        << Endl;
                 }
             }
         }

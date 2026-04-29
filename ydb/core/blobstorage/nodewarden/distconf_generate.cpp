@@ -6,6 +6,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <util/stream/output.h>
+
 namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config,
@@ -145,6 +147,31 @@ namespace NKikimr::NStorage {
             bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
         using TPDiskId = NBsController::TPDiskId;
 
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup begin"
+            << " GroupId# " << groupId
+            << " NewGeneration# " << groupGeneration
+            << " ReplacedDisks# " << replacedDisks.size()
+            << " ForbiddenPDisks# " << forbid.size()
+            << " RequiredSpace# " << requiredSpace
+            << " HasBaseConfig# " << static_cast<bool>(baseConfig)
+            << " ConvertToDonor# " << convertToDonor
+            << " IgnoreVSlotQuotaCheck# " << ignoreVSlotQuotaCheck
+            << " IsSelfHealReasonDecommit# " << isSelfHealReasonDecommit
+            << " BridgePileId# " << bridgePileId
+            << " BridgeProxyGroupId# ";
+        if (bridgeProxyGroupId) {
+            Cerr << *bridgeProxyGroupId;
+        } else {
+            Cerr << "none";
+        }
+        Cerr << Endl;
+        for (const auto& [vdiskId, pdiskId] : replacedDisks) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup replaced disk input"
+                << " VDiskIdShort# " << vdiskId
+                << " TargetPDisk# " << pdiskId
+                << Endl;
+        }
+
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
 
         // build node location map
@@ -230,6 +257,12 @@ namespace NKikimr::NStorage {
                 }
 
                 const TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup base PDisk"
+                    << " PDisk# " << pdiskId
+                    << " DriveStatus# " << static_cast<int>(pdisk.GetDriveStatus())
+                    << " DecommitStatus# " << static_cast<int>(pdisk.GetDecommitStatus())
+                    << " Path# " << pdisk.GetPath()
+                    << Endl;
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                     TPDiskInfo& pdiskInfo = it->second;
                     auto& r = pdiskInfo.Record;
@@ -332,6 +365,11 @@ namespace NKikimr::NStorage {
                                 requiredPDiskIds.insert(pdiskId);
 
                                 if (const auto it = replacedDisks.find(vdiskId); it != replacedDisks.end()) {
+                                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup replace group slot"
+                                        << " VDiskIdShort# " << vdiskId
+                                        << " OldPDisk# " << pdiskId
+                                        << " NewPDiskBeforeAllocate# " << it->second
+                                        << Endl;
                                     usageIncr.emplace_back(pdiskId, -1); // drop usage count of current PDisk
                                     std::swap(pdiskId, it->second);
                                     if (pdiskId != TPDiskId()) {
@@ -352,6 +390,14 @@ namespace NKikimr::NStorage {
             for (const auto& vdisk : ss.GetVDisks()) {
                 const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
                 if (vdiskId.GroupID == groupId) {
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup existing VDisk"
+                        << " VDiskId# " << vdiskId
+                        << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
+                        << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
+                        << " HasDonorMode# " << vdisk.HasDonorMode()
+                        << " Replaced# " << replacedDisks.contains(vdiskId)
+                        << Endl;
                     if (!generation) {
                         throw TExConfigError() << "missing record for group being reconfigured";
                     } else if (vdiskId.GroupGeneration == *generation && !replacedDisks.contains(vdiskId)) {
@@ -368,6 +414,10 @@ namespace NKikimr::NStorage {
                     if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                         auto& r = it->second.Record;
                         r.CopyFrom(pdisk);
+                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup carry existing PDisk"
+                            << " PDisk# " << pdiskId
+                            << " Path# " << pdisk.GetPath()
+                            << Endl;
                     }
                 }
 
@@ -436,6 +486,9 @@ namespace NKikimr::NStorage {
         for (const auto& [pdiskId, item] : pdisks) {
             const auto it = nodeLocations.find(pdiskId.NodeId);
             if (it == nodeLocations.end()) {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup no node location"
+                    << " PDisk# " << pdiskId
+                    << Endl;
                 throw TExConfigError() << "no location for node";
             }
 
@@ -450,6 +503,15 @@ namespace NKikimr::NStorage {
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup register PDisk"
+                << " PDisk# " << pdiskId
+                << " Usable# " << item.Usable
+                << " PileFilter# " << pileFilter
+                << " UsedSlots# " << item.UsedSlots
+                << " MaxSlots# " << maxSlots
+                << " SpaceAvailable# " << item.SpaceAvailable
+                << " WhyUnusable# " << item.WhyUnusable
+                << Endl;
 
             mapper.RegisterPDisk({
                 .PDiskId = pdiskId,
@@ -487,9 +549,18 @@ namespace NKikimr::NStorage {
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
         if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
                 groupSizeInUnits, requiredSpace, false, {}, error)) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup allocation failed"
+                << " GroupId# " << groupId
+                << " Error# " << error.ErrorMessage
+                << " GroupDefinition# " << dumpGroupDefinition()
+                << Endl;
             throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup allocation succeeded"
+            << " GroupId# " << groupId
+            << " GroupDefinition# " << dumpGroupDefinition()
+            << Endl;
 
         auto *sSet = bsConfig->MutableServiceSet();
 
@@ -527,8 +598,14 @@ namespace NKikimr::NStorage {
             if (replacedDisks.contains(vdiskId)) {
                 if (m->HasDonorMode()) {
                     // this disk is already a donor, nothing to do about it
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup replaced VDisk already donor"
+                        << " VDiskId# " << vdiskId
+                        << Endl;
                 } else if (convertToDonor) {
                     // make this disk a donor
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup convert old VDisk to donor"
+                        << " VDiskId# " << vdiskId
+                        << Endl;
                     auto *donorMode = m->MutableDonorMode();
                     donorMode->SetNumFailRealms(groupDefinition.size());
                     donorMode->SetNumFailDomainsPerFailRealm(groupDefinition.front().size());
@@ -536,6 +613,11 @@ namespace NKikimr::NStorage {
                     donorMode->SetErasureSpecies(sGroup->GetErasureSpecies());
                     m->ClearDonors();
                 } else {
+                    const auto& loc = vdisk.GetVDiskLocation();
+                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup mark old VDisk DESTROY"
+                        << " VDiskId# " << vdiskId
+                        << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
+                        << Endl;
                     m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
                     continue;
                 }
@@ -543,6 +625,10 @@ namespace NKikimr::NStorage {
                 donor->MutableVDiskId()->CopyFrom(m->GetVDiskID());
                 donor->MutableVDiskLocation()->CopyFrom(m->GetVDiskLocation());
             } else {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup update VDisk generation"
+                    << " VDiskId# " << vdiskId
+                    << " NewGeneration# " << groupGeneration
+                    << Endl;
                 m->MutableVDiskID()->SetGroupGeneration(groupGeneration);
             }
         }
@@ -566,6 +652,10 @@ namespace NKikimr::NStorage {
             const auto& pdisk = pdiskIt->second.Record;
 
             if (addedPDisks.insert(pdiskId).second) {
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup add new PDisk to ServiceSet"
+                    << " PDisk# " << pdiskId
+                    << " Path# " << pdisk.GetPath()
+                    << Endl;
                 sSet->AddPDisks()->CopyFrom(pdisk);
             }
 
@@ -582,6 +672,11 @@ namespace NKikimr::NStorage {
                 VDiskIDFromVDiskID(TVDiskID(groupId, groupGeneration, vdiskId), sDisk->MutableVDiskID());
                 sDisk->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
                 sDisk->MutableVDiskLocation()->CopyFrom(*sLoc);
+                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW AllocateStaticGroup create new VDisk"
+                    << " VDiskId# " << TVDiskID(groupId, groupGeneration, vdiskId)
+                    << " Location# [" << sLoc->GetNodeID() << ':' << sLoc->GetPDiskID() << ':' << sLoc->GetVDiskSlotID() << ']'
+                    << " HasDonors# " << donors.contains(vdiskId)
+                    << Endl;
                 if (const auto it = donors.find(vdiskId); it != donors.end()) {
                     sDisk->MutableDonors()->Swap(&it->second);
                 }

@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
+#include <util/stream/output.h>
 #include <util/string/split.h>
 
 namespace NKikimr::NStorage {
@@ -411,6 +412,14 @@ namespace NKikimr::NStorage {
             if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != EGroupConfigurationType::Static) {
                 STLOG_DEBUG_FAIL(BS_NODE, NW31, "incorrect NodeId in VDisk configuration", (Record, vdisk), (NodeId, LocalNodeId));
             }
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ApplyLocalVDiskInfo skip foreign VDisk"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << VDiskIDFromVDiskID(vdisk.GetVDiskID())
+                << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
+                << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
+                << " DoDestroy# " << vdisk.GetDoDestroy()
+                << " HasDonorMode# " << vdisk.HasDonorMode()
+                << Endl;
             return;
         }
 
@@ -422,6 +431,17 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ApplyLocalVDiskInfo"
+            << " LocalNodeId# " << LocalNodeId
+            << " VDiskId# " << VDiskIDFromVDiskID(vdisk.GetVDiskID())
+            << " VSlotId# " << vslotId
+            << " Inserted# " << inserted
+            << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
+            << " DoDestroy# " << vdisk.GetDoDestroy()
+            << " DoWipe# " << vdisk.GetDoWipe()
+            << " HasDonorMode# " << vdisk.HasDonorMode()
+            << " UnderlyingPDiskDestroyed# " << record.UnderlyingPDiskDestroyed
+            << Endl;
 
         // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
         // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
@@ -434,6 +454,12 @@ namespace NKikimr::NStorage {
         }
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ApplyLocalVDiskInfo destroy path"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << record.GetVDiskId()
+                << " VSlotId# " << vslotId
+                << " UnderlyingPDiskDestroyed# " << record.UnderlyingPDiskDestroyed
+                << Endl;
             if (record.UnderlyingPDiskDestroyed) {
                 PoisonLocalVDisk(record);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
@@ -458,11 +484,24 @@ namespace NKikimr::NStorage {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
             (SlayInFlight, SlayInFlight.contains(vslotId)));
+        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW Slay"
+            << " LocalNodeId# " << LocalNodeId
+            << " VDiskId# " << vdisk.GetVDiskId()
+            << " VSlotId# " << vslotId
+            << " SlayInFlight# " << SlayInFlight.contains(vslotId)
+            << Endl;
         if (!SlayInFlight.contains(vslotId)) {
             PoisonLocalVDisk(vdisk);
             const TVSlotId vslotId = vdisk.GetVSlotId();
             const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
             const ui64 round = NextLocalPDiskInitOwnerRound();
+            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW Slay send TEvSlay"
+                << " LocalNodeId# " << LocalNodeId
+                << " VDiskId# " << vdisk.GetVDiskId()
+                << " VSlotId# " << vslotId
+                << " Round# " << round
+                << " PDiskServiceId# " << pdiskServiceId
+                << Endl;
             Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), round, vslotId.PDiskId, vslotId.VDiskSlotId));
             SlayInFlight.emplace(vslotId, round);
         }

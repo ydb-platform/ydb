@@ -123,7 +123,7 @@ struct TCreateTopicSettings {
     TString PeerName;
     Ydb::Topic::CreateTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    bool IfNotExists = false;
+    bool IfNotExists = true;
     bool PrepareOnly = false;
     ui64 Cookie = 0;
 };

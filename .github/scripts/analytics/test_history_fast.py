@@ -99,7 +99,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
             THEN TRUE
             ELSE FALSE
             END) = FALSE
-        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
         {dedup_where_clause}
     """
 

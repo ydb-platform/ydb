@@ -7,6 +7,7 @@ ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/ut_blobstorage Decommit3dc.Test
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
@@ -5522,8 +5523,10 @@ ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_validation.py.TestS3.test_nested_type[v2-client0]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/backup_collection basic_user_scenarios.py.TestBackupCollectionServiceObjectsRotation.test_service_schema_objects_cleanup_on_rotate
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealOverrides.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealPileupReplicas.test_state_storage
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption

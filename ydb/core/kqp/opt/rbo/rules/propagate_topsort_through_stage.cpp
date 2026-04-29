@@ -11,7 +11,7 @@ bool IsValidLimit(const TExpression& expression) {
 
 // Check that sort is a last operator in the stage.
 bool IsValidParent(const TIntrusivePtr<TOpSort>& sort) {
-    const auto parents = sort->Parents;
+    const auto& parents = sort->Parents;
     if (parents.empty()) {
         return true;
     }

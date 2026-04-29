@@ -33,6 +33,8 @@ items:
   href: scan_query.md
 - name: Ограничения базы данных
   href: limits-ydb.md
+- name: Резервное копирование и восстановление
+  href: backup.md  
 - name: Многоверсионное управление конкурентным доступом (MVCC)
   href: mvcc.md
 - name: Асинхронная репликация

@@ -2215,9 +2215,19 @@ struct Schema : NIceDb::Schema {
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
         struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
+        struct FinalStatus : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct FinalIssues : Column<6, NScheme::NTypeIds::String> {};
+        struct FinalizeTxId : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx, SerializedData>;
+        using TColumns = TableColumns<
+            OperationId,
+            State,
+            CurrentIncrementalIdx,
+            SerializedData,
+            FinalStatus,
+            FinalIssues,
+            FinalizeTxId>;
     };
 
     // Deprecated: kept for compatibility

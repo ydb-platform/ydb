@@ -1270,6 +1270,19 @@ public:
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
 
+    // Persists a terminal IncrementalRestoreState row (Completed or Failed) and the
+    // accompanying FinalStatus/FinalIssues atomically with the in-memory transition.
+    // Both sites that move state to a terminal value MUST go through this helper so
+    // a SchemeShard reboot between memory mutation and DB commit cannot leave the
+    // operation invisible to Get/List.
+    static void PersistTerminalState(
+        NIceDb::TNiceDb& db,
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::EState terminal,
+        ui32 finalStatus,
+        const TString& finalIssues = {});
+
     void EnqueueIncrementalRestoreOperations(
         const TPathId& backupCollectionPathId,
         ui64 operationId,

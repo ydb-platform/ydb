@@ -5,6 +5,7 @@
 #include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #if defined LOG_D || \
     defined LOG_W || \
@@ -90,11 +91,16 @@ public:
         } else {
             if (state.AllIncrementsProcessed()) {
                 LOG_W("All increments processed but state is still Running, triggering finalization");
+                // Bug #2: allocate FinalizeTxId BEFORE the State Update so the persisted
+                // row tells TTxInit which Operations entry to look for after a reboot.
+                const TTxId finalizeTxId = Self->GetCachedTxId(ctx);
                 state.State = TIncrementalRestoreState::EState::Finalizing;
+                state.FinalizeTxId = ui64(finalizeTxId);
                 db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State)),
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalizeTxId>(state.FinalizeTxId)
                 );
-                FinalizeIncrementalRestoreOperation(txc, ctx, state);
+                FinalizeIncrementalRestoreOperation(txc, ctx, state, finalizeTxId);
             } else {
                 LOG_I("No operations in progress, starting incremental backup #" << state.CurrentIncrementalIdx);
                 ProcessNextIncrementalBackup(state, ctx);
@@ -160,12 +166,16 @@ private:
                   << state.NonRetriableFailure
                   << " retryCount=" << state.CurrentIncrementalRetryCount
                   << " cap=" << cap);
-            state.State = TIncrementalRestoreState::EState::Failed;
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
-            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
-            );
+            // Route through PersistTerminalState so FinalStatus is durable across reboots.
+            const TString failureIssues = state.NonRetriableFailure
+                ? TString("Non-retriable failure during incremental restore")
+                : TString("Retry budget exhausted during incremental restore");
+            TSchemeShard::PersistTerminalState(db, OperationId, state,
+                TIncrementalRestoreState::EState::Failed,
+                static_cast<ui32>(Ydb::StatusIds::GENERIC_ERROR),
+                failureIssues);
             return true;
         }
 
@@ -227,11 +237,16 @@ private:
 
         if (state.AllIncrementsProcessed()) {
             LOG_I("All incremental backups processed, performing finalization");
+            // Bug #2: allocate FinalizeTxId BEFORE the State Update so the persisted
+            // row tells TTxInit which Operations entry to look for after a reboot.
+            const TTxId finalizeTxId = Self->GetCachedTxId(ctx);
             state.State = TIncrementalRestoreState::EState::Finalizing;
+            state.FinalizeTxId = ui64(finalizeTxId);
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State)),
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalizeTxId>(state.FinalizeTxId)
             );
-            FinalizeIncrementalRestoreOperation(txc, ctx, state);
+            FinalizeIncrementalRestoreOperation(txc, ctx, state, finalizeTxId);
             return true;
         }
 
@@ -314,18 +329,18 @@ private:
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
     }
     
-    void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
+    void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state, TTxId finalizeTxId) {
         Y_UNUSED(txc);
-        LOG_I("Starting finalization of incremental restore operation: " << OperationId);
-        
-        CreateFinalizationOperation(state, ctx);
+        LOG_I("Starting finalization of incremental restore operation: " << OperationId
+              << " finalizeTxId: " << finalizeTxId);
+
+        CreateFinalizationOperation(state, ctx, finalizeTxId);
     }
 
-    void CreateFinalizationOperation(TIncrementalRestoreState& state, const TActorContext& ctx) {
+    void CreateFinalizationOperation(TIncrementalRestoreState& state, const TActorContext& ctx, TTxId finalizeTxId) {
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
-        
-        TTxId finalizeTxId = Self->GetCachedTxId(ctx);
+
         record.SetTxId(ui64(finalizeTxId));
         
         auto& transaction = *record.AddTransaction();
@@ -416,6 +431,29 @@ private:
     }
 };
 
+void TSchemeShard::PersistTerminalState(
+    NIceDb::TNiceDb& db,
+    ui64 originalOpId,
+    TIncrementalRestoreState& state,
+    TIncrementalRestoreState::EState terminal,
+    ui32 finalStatus,
+    const TString& finalIssues)
+{
+    Y_ABORT_UNLESS(terminal == TIncrementalRestoreState::EState::Completed
+                || terminal == TIncrementalRestoreState::EState::Failed);
+
+    state.State = terminal;
+    state.FinalStatus = finalStatus;
+    state.FinalIssues = finalIssues;
+    state.FinalizeTxId = 0;
+
+    db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Update(
+        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(terminal)),
+        NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalStatus>(finalStatus),
+        NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalIssues>(finalIssues),
+        NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalizeTxId>(0));
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& backupCollectionPathId = msg->BackupCollectionPathId;
@@ -434,25 +472,23 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
         return;
     }
 
-    if (incrementalBackupNames.empty()) {
-        LOG_I("No incremental backups provided, nothing to restore");
-        return;
-    }
-
+    // Bug #3: register a state row even for full-only restores so Get/List have
+    // something to report. The orchestrator immediately drives the empty-increments
+    // case into Finalizing -> Completed.
     TIncrementalRestoreState state;
     state.BackupCollectionPathId = backupCollectionPathId;
     state.OriginalOperationId = ui64(operationId.GetTxId());
     state.CurrentIncrementalIdx = 0;
     state.CurrentIncrementalStarted = false;
-    
+
     for (const auto& backupName : incrementalBackupNames) {
         TPathId dummyPathId;
         state.AddIncrementalBackup(dummyPathId, backupName, 0);
         LOG_I("Handle(TEvRunIncrementalRestore) added incremental backup: '" << backupName << "'");
     }
-    
+
     LOG_I("Handle(TEvRunIncrementalRestore) state now has " << state.IncrementalBackups.size() << " incremental backups");
-    
+
     IncrementalRestoreStates[ui64(operationId.GetTxId())] = std::move(state);
 
     Execute(new TTxProgressIncrementalRestore(this, ui64(operationId.GetTxId())), ctx);

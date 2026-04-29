@@ -5477,10 +5477,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 stateValue = rowset.GetValue<Schema::IncrementalRestoreState::State>();
                 ui32 currentIdx = rowset.GetValue<Schema::IncrementalRestoreState::CurrentIncrementalIdx>();
                 TString serializedData = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::SerializedData>("");
+                ui32 finalStatus = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalStatus>(0);
+                TString finalIssues = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalIssues>("");
+                ui64 finalizeTxId = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalizeTxId>(0);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
+                state.FinalStatus = finalStatus;
+                state.FinalIssues = finalIssues;
+                state.FinalizeTxId = finalizeTxId;
 
                 // Do NOT restore CompletedOperations for Running states — after reboot we retry
                 // the current incremental from scratch (ops are idempotent; transient failure
@@ -5575,7 +5581,32 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        for (const auto& [operationId, state] : Self->IncrementalRestoreStates) {
+        for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
+            // Bug #2: a Finalizing row whose FinalizeTxId has no matching entry in
+            // Self->Operations means the finalize sub-op did not survive the reboot
+            // (or was never persisted on the pre-Bug-#2 codebase, where FinalizeTxId
+            // defaults to 0). Reset to Running so TTxProgressIncrementalRestore re-
+            // triggers AllIncrementsProcessed -> Finalizing transition with a fresh
+            // FinalizeTxId. Idempotent for double-restore — finalize re-execution is
+            // safe (SyncIndexSchemaVersions/ReleasePathState are no-ops the second time).
+            if (state.State == TIncrementalRestoreState::EState::Finalizing) {
+                const bool finalizeStillInFlight =
+                    state.FinalizeTxId != 0 && Self->Operations.contains(TTxId(state.FinalizeTxId));
+                if (!finalizeStillInFlight) {
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxInit resetting Finalizing -> Running because finalize sub-op missing"
+                        << ", operationId: " << operationId
+                        << ", FinalizeTxId: " << state.FinalizeTxId
+                        << ", at schemeshard: " << Self->TabletID());
+                    state.State = TIncrementalRestoreState::EState::Running;
+                    state.FinalizeTxId = 0;
+                    db.Table<Schema::IncrementalRestoreState>().Key(operationId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(
+                            static_cast<ui32>(state.State)),
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalizeTxId>(0));
+                }
+            }
+
             if (state.State == TIncrementalRestoreState::EState::Running ||
                 state.State == TIncrementalRestoreState::EState::Finalizing) {
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -88,10 +88,6 @@ public:
         Fill(*Response->Record.MutableBackupCollectionRestore(), incrementalRestore);
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
-        if (incrementalRestore.State == TIncrementalRestoreState::EState::Failed) {
-            Response->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
-            return Reply(Ydb::StatusIds::GENERIC_ERROR, "Incremental restore failed after exhausting retry budget");
-        }
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         return Reply();
     }

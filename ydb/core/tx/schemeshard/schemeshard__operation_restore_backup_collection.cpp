@@ -436,10 +436,12 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         if(!CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result)) {
             return result;
         }
-
-        // we don't need long op when we don't have incremental backups
-        CreateLongIncrementalRestoreOp(opId, bcPath, result);
     }
+
+    // Bug #3: always create the long-op so full-only restores have a state row that
+    // Get/List can surface. The handler for TEvRunIncrementalRestore (and TTxInit
+    // resume) drives empty-incrementals straight to Finalizing -> Completed.
+    CreateLongIncrementalRestoreOp(opId, bcPath, result);
 
     return result;
 }

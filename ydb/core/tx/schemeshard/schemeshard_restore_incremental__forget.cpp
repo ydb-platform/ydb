@@ -87,12 +87,13 @@ public:
         // 2. Either actual incremental processing progress has been made OR the operation is fully completed, AND
         // 3. There are no incremental operations still in progress
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
-        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 || 
+        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 ||
                                    !incrementalRestore.CompletedOperations.empty() ||
                                    incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
+                                   incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
                                    incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing);
         bool hasActiveIncrementalOperations = false;
-        
+
         // Check if any of the in-progress operations are still active
         for (const auto& opId : incrementalRestore.InProgressOperations) {
             if (Self->Operations.contains(opId.GetTxId())) {
@@ -100,8 +101,17 @@ public:
                 break;
             }
         }
-        
-        bool canForget = !mainOperationActive && actualProgressMade && !hasActiveIncrementalOperations;
+
+        // Note on the LongIncrementalRestoreOps presence after Bug #1: Persist of the
+        // terminal state row and the in-memory LongIncrementalRestoreOps.erase happen
+        // in the same finalize tx (PerformFinalCleanup), and TTabletFlatExecutor
+        // serializes TTxForget against TIncrementalRestoreFinalizeOp's TTransactionContext.
+        // So either FORGET observes State==Finalizing (and below blocks via the
+        // mainOperationActive / hasActiveIncrementalOperations checks) or it observes
+        // State==Completed/Failed with the long-op already released. No additional
+        // longOp-presence guard is needed here.
+        bool canForget = !mainOperationActive && actualProgressMade
+                      && !hasActiveIncrementalOperations;
         
         if (!canForget) {
             return Reply(

@@ -3767,6 +3767,15 @@ struct TIncrementalRestoreState {
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
 
+    // Persisted via PersistTerminalState alongside State == Completed/Failed.
+    // Stored as ui32 to avoid pulling Ydb::StatusIds into this header; the values
+    // map to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED).
+    ui32 FinalStatus = 0;
+    TString FinalIssues;
+    // Persisted alongside State == Finalizing so TTxInit can tell whether the
+    // finalize sub-op is still tracked in Self->Operations after a reboot.
+    ui64 FinalizeTxId = 0;
+
     // Returns progress within the current incremental as a fraction [0.0, 1.0]
     // based on per-shard completion across all table operations
     float CalcCurrentIncrementalProgress() const {

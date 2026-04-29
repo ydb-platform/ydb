@@ -20,11 +20,19 @@ inline void FillRestoreProgress(
         case TIncrementalRestoreState::EState::Completed:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
             restore.SetProgressPercent(100);
+            // Layer the persisted FinalStatus over the SUCCESS default if present,
+            // so terminal state restored from disk after a reboot reports the
+            // exact StatusCode the orchestrator decided.
+            if (restoreInfo.FinalStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                restore.SetStatus(static_cast<Ydb::StatusIds::StatusCode>(restoreInfo.FinalStatus));
+            }
             break;
         case TIncrementalRestoreState::EState::Failed:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
             restore.SetProgressPercent(100);
-            restore.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
+            restore.SetStatus(restoreInfo.FinalStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+                ? static_cast<Ydb::StatusIds::StatusCode>(restoreInfo.FinalStatus)
+                : Ydb::StatusIds::GENERIC_ERROR);
             break;
         case TIncrementalRestoreState::EState::Finalizing:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);

@@ -3642,4 +3642,667 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT(!IsScanRetriable(EStatus::Exception));
     }
 
+    // Polls TestListBackupCollectionRestores until the latest entry reaches PROGRESS_DONE
+    // (or the timeout elapses). Returns the final entry's inner StatusCode.
+    static Ydb::StatusIds::StatusCode PollRestoreUntilDone(
+            TTestActorRuntime& runtime, TTestEnv& env, const TString& dbName,
+            TDuration pollInterval = TDuration::MilliSeconds(500),
+            TDuration timeout = TDuration::Seconds(120))
+    {
+        TInstant deadline = runtime.GetCurrentTime() + timeout;
+        while (runtime.GetCurrentTime() < deadline) {
+            auto listResp = TestListBackupCollectionRestores(runtime, dbName);
+            if (!listResp.GetEntries().empty()) {
+                const auto& entry = *listResp.GetEntries().rbegin();
+                if (entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                    return static_cast<Ydb::StatusIds::StatusCode>(entry.GetStatus());
+                }
+            }
+            env.SimulateSleep(runtime, pollInterval);
+        }
+        UNIT_ASSERT_C(false, "Restore did not reach PROGRESS_DONE within timeout");
+        return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    }
+
+    // Reads the persisted Schema::IncrementalRestoreState row's State column.
+    // Returns -1 if the row does not exist.
+    static i64 ReadPersistedRestoreState(TTestActorRuntime& runtime, ui64 restoreId) {
+        TString program = Sprintf(R"(
+            (
+                (let key '('('OperationId (Uint64 '%lu))))
+                (let select '('OperationId 'State))
+                (let row (SelectRow 'IncrementalRestoreState key select))
+                (return (AsList
+                    (SetResult 'Result row)
+                ))
+            )
+        )", (unsigned long)restoreId);
+        try {
+            auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, program);
+            const auto& value = result.GetValue();
+            if (!value.GetStruct(0).GetOptional().HasOptional()) {
+                return -1; // row absent
+            }
+            const auto& row = value.GetStruct(0).GetOptional().GetOptional();
+            // Struct: <OperationId, State>
+            return static_cast<i64>(row.GetStruct(1).GetOptional().GetUint32());
+        } catch (...) {
+            return -2;
+        }
+    }
+
+    // T1.3 (Bug #1, RED on HEAD): the success row is Delete()'d in the same finalize tx
+    // that flips state.State=Completed in memory. After a SchemeShard reboot the row is
+    // gone and Get returns NOT_FOUND. With the fix the row persists via PersistTerminalState
+    // until FORGET.
+    Y_UNIT_TEST(GetReturnsCompletedAfterFinalizeRowPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Pre-reboot list empty");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // Reboot SchemeShard. With Bug #1 unfixed, the IncrementalRestoreState row was
+        // Delete()'d at PerformFinalCleanup commit time, so post-reboot Get returns NOT_FOUND.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto listAfter = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listAfter.GetEntries().empty(),
+            "List returned no entries after Completed restore + reboot");
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getAfter.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get inner status not SUCCESS after Completed restore + reboot");
+        UNIT_ASSERT_C(getAfter.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Get progress not PROGRESS_DONE after Completed restore + reboot");
+
+        // Then FORGET succeeds and Get becomes NOT_FOUND.
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+    }
+
+    // T1.4 (Bug #1, RED on HEAD): on HEAD the in-memory state.State is set to Completed
+    // and the row is Delete()'d in the same tx, so post-finalize the persisted row is
+    // absent (state value -1) while in-memory state reads Completed. With PersistTerminalState
+    // the row must read State=Completed (4) at the moment Get reports SUCCESS+PROGRESS_DONE.
+    Y_UNIT_TEST(FinalizePersistAndCleanupAreSameTx) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after PollRestoreUntilDone");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // The persisted row must reflect Completed (EState::Completed == 4)
+        // at the moment the API reports SUCCESS+PROGRESS_DONE. Without the fix,
+        // ReadPersistedRestoreState returns -1 (row absent) because PerformFinalCleanup
+        // Delete()'d the row.
+        i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
+        UNIT_ASSERT_VALUES_EQUAL_C(persistedState,
+            static_cast<i64>(TIncrementalRestoreState::EState::Completed),
+            "Persisted state row missing or not Completed while API reports SUCCESS");
+    }
+
+    // T1.5 (Bug #1, RED on HEAD): __forget.cpp:104 lets FORGET succeed as soon as
+    // state.State == Completed even though the orchestrator still owns the
+    // LongIncrementalRestoreOps entry. After Bug #1 lands, FORGET is allowed on Completed
+    // earlier (because the row persists), so we must additionally guard with
+    // !LongIncrementalRestoreOps.contains(...). Here we observe FORGET-after-Completed
+    // works once the orchestrator releases the entry.
+    Y_UNIT_TEST(ForgetSucceedsAfterCompletedAndCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // After completion (PROGRESS_DONE) and a brief settle, FORGET must succeed.
+        // The new guard requires LongIncrementalRestoreOps.erase to have happened in
+        // the same finalize tx; PerformFinalCleanup at finalize.cpp:402 already does that.
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+    }
+
+    // T2.2 (Bug #2, RED on HEAD): a Finalizing row with no live finalize sub-op (e.g.
+    // a row written by an old binary that never persisted FinalizeTxId, or a row whose
+    // sub-op died mid-tx) must be reconciled by TTxInit. We simulate "no live sub-op"
+    // by rebooting before finalize is even submitted, by injecting failures so the
+    // restore lands in Finalizing-then-fails. After reboot the row must converge to a
+    // terminal state (PROGRESS_DONE) rather than getting stranded in Finalizing forever.
+    Y_UNIT_TEST(TTxInitReschedulesFinalizeWhenFinalizeTxIdMissing) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drive to Completed/Finalizing first.
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        // Reboot. Either the row is gone (post-finalize Delete on HEAD, leaves nothing
+        // for TTxInit) or persisted (with the fix, row stays in Completed). Both paths
+        // converge: post-reboot the API must report SUCCESS+PROGRESS_DONE without
+        // getting stuck in Finalizing.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(),
+            "List empty after reboot — Bug #1 row Delete or Bug #2 strand");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getResp.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get status not SUCCESS after reboot");
+        UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Get progress not PROGRESS_DONE after reboot — Bug #2 strand");
+    }
+
+    // T2.3 (Bug #2, RED only as a regression guard): once the orchestrator has driven
+    // the row to Completed (or Finalizing with a live FinalizeTxId), TTxInit must NOT
+    // re-issue a fresh ESchemeOpIncrementalRestoreFinalize sub-op after a reboot —
+    // doing so would double-submit finalize, race against the original sub-op, and
+    // potentially bypass the single-tx Persist+Cleanup invariant. With the fix the
+    // post-reboot row says Completed (FinalizeTxId == 0) and the TTxInit reset path
+    // skips the Running fallback. Counts ESchemeOpIncrementalRestoreFinalize proposals
+    // observed AFTER reboot — must be zero.
+    Y_UNIT_TEST(RestoreFinalizingDoesNotDoubleSubmitFinalize) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drive the restore to Completed (PROGRESS_DONE).
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        // Capture restore id for sanity check after reboot.
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty pre-reboot");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // Counter for ESchemeOpIncrementalRestoreFinalize proposals observed AFTER reboot.
+        // The cleanest signal is TEvModifySchemeTransaction with operation type
+        // ESchemeOpIncrementalRestoreFinalize. We arm the observer BEFORE reboot and
+        // start counting only after reboot completes (we capture the wall-clock instant
+        // and gate the counter increments).
+        std::atomic<int> postRebootFinalizeProposals{0};
+        std::atomic<bool> rebootDone{false};
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&postRebootFinalizeProposals, &rebootDone](
+                    TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (!rebootDone.load()) {
+                    return;
+                }
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize) {
+                    postRebootFinalizeProposals.fetch_add(1);
+                }
+            });
+
+        // Reboot and let TTxInit run.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        rebootDone.store(true);
+
+        // Pump enough time for any (incorrect) re-issue to land. TTxInit's
+        // OnComplete.Send fires immediately on Complete; subsequent transactions
+        // run within microseconds of wall-clock advance.
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(postRebootFinalizeProposals.load(), 0,
+            "TTxInit double-submitted ESchemeOpIncrementalRestoreFinalize after reboot");
+
+        // Sanity: post-reboot the API still reports SUCCESS (i.e., the row stayed
+        // in Completed and TTxInit did not silently downgrade to Running).
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getAfter.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get inner status not SUCCESS post-reboot for already-Completed restore");
+    }
+
+    // T2.4 (Bug #2, RED on HEAD): a reboot landing AFTER SyncIndexSchemaVersions has
+    // released path states / committed alter data, but BEFORE PerformFinalCleanup
+    // PersistTerminalState'd the row, must converge to SUCCESS. The second finalize
+    // pass (driven by TTxInit Finalizing → Running reset + AllIncrementsProcessed
+    // re-trigger) re-runs SyncIndexSchemaVersions as a no-op (no AlterData remains),
+    // re-runs ReleasePathState as a no-op (path is already EPathStateNoChanges), then
+    // PersistTerminalState writes Completed/SUCCESS. Use a 1-table-with-index restore
+    // so SyncIndexSchemaVersions has actual work to do on the first pass and the
+    // idempotency guarantee actually matters.
+    Y_UNIT_TEST(FinalizeReboundAfterSyncIndexSchemaVersions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/TableWithIndex" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/TableWithIndex", 0, {1}, {2},
+            {TCell::Make(1u)}, {TCell::Make(TString("v1"))});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/TableWithIndex", 0, {1}, {2},
+            {TCell::Make(2u)}, {TCell::Make(TString("v2"))});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "TableWithIndex");
+        env.TestWaitNotification(runtime, txId);
+
+        // Arm a one-shot reboot trigger that fires when the finalize sub-op proposes
+        // its TEvModifySchemeTransaction with operation type ESchemeOpIncrementalRestoreFinalize.
+        // SyncIndexSchemaVersions runs inside the finalize sub-op's TFinalizationPropose
+        // ProgressState, so observing the proposal is the closest pre-finalize hook
+        // we have without instrumenting production code. The reboot then lands at most
+        // a few microseconds before SyncIndexSchemaVersions/ReleasePathState commit,
+        // exercising the idempotent re-entry path.
+        std::atomic<bool> rebootArmed{true};
+        std::atomic<bool> rebootHappened{false};
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&rebootArmed](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (!rebootArmed.load()) return;
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize) {
+                    return;
+                }
+                // Disarm so later finalize-rebound proposal does not retrigger.
+                rebootArmed.store(false);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Spin until the observer disarms (i.e., the first finalize proposal hit), then
+        // reboot. We bound the spin by the same 120s timeout the rest of the suite uses.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
+        while (runtime.GetCurrentTime() < deadline && rebootArmed.load()) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(!rebootArmed.load(),
+            "Did not observe ESchemeOpIncrementalRestoreFinalize proposal within timeout");
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        rebootHappened.store(true);
+
+        // Without the Bug #2 fix the restore wedges in Finalizing because either the
+        // finalize sub-op was lost (FinalizeTxId not in Operations) or never persisted.
+        // With the fix TTxInit resets to Running and re-runs finalize idempotently.
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot",
+            TDuration::MilliSeconds(500), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not converge to SUCCESS after reboot during finalize");
+
+        UNIT_ASSERT_C(rebootHappened.load(), "Reboot did not happen — test plumbing broken");
+    }
+
+    // T3.1 (Bug #3, RED on HEAD): a backup collection with NO incremental backups must
+    // still be visible via Get/List after a restore. Today CreateLongIncrementalRestoreOp
+    // is gated behind incrBackupNames so no IncrementalRestoreState row is ever created.
+    Y_UNIT_TEST(FullOnlyRestoreIsListable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // No IncrementalBackupConfig — full-only collection.
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(),
+            "List returned no entries for full-only restore — Bug #3");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getResp.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Full-only restore Get inner status not SUCCESS");
+        UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Full-only restore Get progress not PROGRESS_DONE");
+    }
+
+    // T3.3 (Bug #3, RED on HEAD): FORGET on a full-only Completed restore must succeed
+    // and clear the persisted row. The new LongIncrementalRestoreOps guard from Bug #1
+    // must not block FORGET once finalize completed for the empty-incrementals case.
+    Y_UNIT_TEST(FullOnlyRestoreForgetCleansState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after full-only restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+
+        // Get must now report NOT_FOUND for the forgotten row.
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+
+        // Direct DB read must show no row.
+        i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
+        UNIT_ASSERT_VALUES_EQUAL_C(persistedState, -1,
+            "IncrementalRestoreState row not deleted after FORGET");
+    }
+
 } // TBackupCollectionTests

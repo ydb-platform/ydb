@@ -8,14 +8,18 @@ def format_bullet_list(tests):
 COMMENT_ENTER = """🚀 **Fast-unmute started**
 
 {closer_mention_line}
-**Status** → **Watching**
+**Status** → **Observation**
 
-These tests will be monitored in CI for {window_days} days. If they pass cleanly at least {min_runs} times — they'll be unmuted:
+These tests will be monitored in CI for {window_days} days:
 
 {tests_bullet_list}
 
-If everything goes green before the deadline — issue closes, status **Unmuted**.
-If any test stays red — issue reopens, status **Muted**.
+**Two ways to get unmuted early**
+- **Test was deleted** — no runs at all in the window → unmuted.
+- **Test is stable** — at least {min_runs} clean runs in the window → unmuted.
+
+If all tests meet the criteria before the deadline — **Status** → **Unmuted**.
+If any test stays red — **Status** → **Muted** (the issue may reopen).
 
 > ✋ No action needed — the bot will handle everything. Please don't edit `muted_ya.txt` manually.
 

@@ -96,12 +96,16 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), notFinishedInterval, streamingPageAck,
                 source->GetDeprecatedPortionId()));
-            // In streaming mode, prefetch the next page while the current one is being
-            // sent to the client, up to MaxPagesInFlight pages in flight. If the limit
-            // is reached, Continue() will resume fetching once a page is acked via
-            // OnPageSent(). Note: we use HasMorePages() instead of !isFinished because
-            // streaming builds one page per StageResult, so isFinished is true after
-            // every built page even when more pages remain in the portion.
+            // In streaming mode, prefetch the next page once the current one has been
+            // emitted to the compute actor, up to MaxPagesInFlight pages outstanding in
+            // the producer pipeline. PagesInFlightCount counts pages built but not yet
+            // handed off to ScanComputeActor (ready-to-send), not pages acked by KQP;
+            // it is decremented by OnPageSent(), which fires right after SendResult()
+            // emits the batch — not on TEvScanDataAck. If the limit is reached we skip
+            // prefetch and resume on the next OnPageSent().
+            // Note: we use HasMorePages() instead of !isFinished because streaming
+            // builds one page per StageResult, so isFinished is true after every built
+            // page even when more pages remain in the portion.
             if (isStreamingMode && hasMorePages) {
                 if (Collection->GetPagesInFlightCount() < Collection->GetMaxPagesInFlight()) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "prefetch_next_page")

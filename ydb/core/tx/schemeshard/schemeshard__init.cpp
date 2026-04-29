@@ -5669,7 +5669,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& state = Self->IncrementalRestoreStates[operationId];
 
                 // Populate IncrementalBackups using trimmed names
-                // Same pattern as Handle(TEvRunIncrementalRestore) at scan.cpp:424-426
                 for (const auto& backupName : op.GetIncrementalBackupTrimmedNames()) {
                     TPathId dummyPathId;
                     state.AddIncrementalBackup(dummyPathId, backupName, 0);

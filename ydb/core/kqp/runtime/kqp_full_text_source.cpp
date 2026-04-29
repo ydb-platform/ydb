@@ -3115,9 +3115,11 @@ public:
         }
     }
 
-    void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus) {
+    void ScheduleReadRetry(ui64 readId, ui64 shardId, bool allowInstantRetry, NYql::NDqProto::StatusIds::StatusCode errorStatus,
+        bool isThrottled = false)
+    {
         auto maxRetries = MaxShardRetries();
-        if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+        if (!isThrottled && ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
             RuntimeError(TStringBuilder() << "Max retries (" << maxRetries << ") exceeded for read " << readId
                 << " on shard " << shardId, errorStatus);
             return;
@@ -3145,7 +3147,8 @@ public:
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
-                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED);
+                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
+                ScheduleReadRetry(readId, shardId, false, NYql::NDqProto::StatusIds::OVERLOADED, isThrottled);
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {

@@ -16,12 +16,12 @@ public:
     TCreateMessageArg() = default;
 
     // Native types support
-    template <typename T, typename K = TKeyName, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
+    template <typename T, typename K = TKeyName, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
     TCreateMessageArg(K&& name, const T& value) {
         GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value);
     }
 
-    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
+    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
     TCreateMessageArg(TKeyName&& name, const TMaybe<T>& value) {
         if (value.Defined()) {
             GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value.GetRef());
@@ -29,8 +29,7 @@ public:
     }
 
     template<unsigned N>
-    TCreateMessageArg(TKeyName&& name, const char(&value)[N])
-    {
+    TCreateMessageArg(TKeyName&& name, const char(&value)[N]) {
         GetBuildMessage().AppendFixedValue({std::forward<TKeyName>(name)}, value);
     }
 

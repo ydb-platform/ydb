@@ -44,6 +44,9 @@ namespace NKikimr {
             if (!ChunksToDelete.empty()) {
                 DelayedActions.SetDeleteChunk();
             }
+            if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages) {
+                DelayedActions.SetMemOverflow();
+            }
         }
 
         // Calculate first lsn in recovery log we must to keep
@@ -314,6 +317,9 @@ namespace NKikimr {
                             info.ToString().data(), SyncLogMaxEntryPointSize));
             }
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
+            if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages) {
+                DelayedActions.SetMemOverflow();
+            }
             return firstLsnToKeep;
         }
 
@@ -352,8 +358,7 @@ namespace NKikimr {
                 const ui64 freeUpToLsn = wantToCutRecoveryLog ? FreeUpToLsn : 0;
 
                 const ui32 pagesInChunk = SyncLogPtr->GetChunkSize() / SyncLogPtr->GetAppendBlockSize();
-                const ui32 maxCutLogSwapPages = Max<ui32>(1, Min(MaxMemPages, pagesInChunk));
-                const ui32 maxSwapPages = wantToCutRecoveryLog ? maxCutLogSwapPages : Max<ui32>();
+                const ui32 maxSwapPages = Max<ui32>(1, Min(MaxMemPages, pagesInChunk));
 
                 // build swap snap
                 swapSnap = SyncLogPtr->BuildMemSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages, maxSwapPages);

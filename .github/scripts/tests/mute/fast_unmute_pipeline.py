@@ -10,11 +10,13 @@ from github_issue_utils import (
 )
 
 from mute.constants import (
+    get_manual_delete_window_days,
     get_manual_unmute_issue_closed_lookback_days,
     get_manual_unmute_min_runs,
     get_manual_unmute_ttl_calendar_days,
     get_manual_unmute_window_days,
     get_mute_window_days,
+    get_unmute_window_days,
 )
 from mute.fast_unmute_comments import (
     COMMENT_ABANDON_NOT_COMPLETED,
@@ -317,6 +319,8 @@ def enter_manual_unmute(ydb_wrapper, table_path, issues_table_path, tests_monito
                 closer_login=raw_login or 'unknown',
                 window_days=window_days,
                 min_runs=min_runs,
+                fast_delete_window_days=get_manual_delete_window_days(),
+                unmute_window_days=get_unmute_window_days(),
                 tests_bullet_list=format_bullet_list(r['full_name'] for r in issue_rows),
                 workflow_run_url=run_url,
             ),

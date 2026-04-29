@@ -10,16 +10,19 @@ COMMENT_ENTER = """🚀 **Fast-unmute started**
 {closer_mention_line}
 **Status** → **Observation**
 
-These tests are still listed in `muted_ya`, but CI will try to unmute them sooner ({window_days} days window, at least {min_runs} clean runs):
+These tests stay in `muted_ya` until the mute automation removes the line:
+
+- **Fast-unmute:** in the last **{window_days}** days, at least **{min_runs}** runs with no failures or mutes
+- **Fast-delete:** in the last **{fast_delete_window_days}** days, zero pass/fail/mute outcomes
 
 {tests_bullet_list}
 
 **What to expect**
 
-- If tests go green in CI before the limit → board **Unmuted**, label removed.
-- If the limit passes and something is still red → this issue **reopens**, board **Muted**, label removed.
-
-You do not need to do anything. Please do not edit `muted_ya.txt` by hand.
+- Wait — nothing for you to do; do not edit `muted_ya.txt`.
+- Unmute checks use **{window_days}** days of history here instead of the usual **{unmute_window_days}** for the normal mute job (faster path). Still need **{min_runs}** clean runs in that window for fast-unmute.
+- If the test had no CI activity, fast-delete can remove the line after **{fast_delete_window_days}** days with zero outcomes.
+- Miss the deadline with failures → this issue may reopen.
 
 🔗 Workflow run: {workflow_run_url}
 """
@@ -27,7 +30,7 @@ You do not need to do anything. Please do not edit `muted_ya.txt` by hand.
 
 COMMENT_SUCCESS = """✅ **Fast-unmute completed**
 
-Every test on this issue is green in CI before the time limit. The mute list in the repo will catch up on the next routine update.
+All tests finished tracking (runs went green and/or the mute job dropped idle lines).
 
 **Status** → **Unmuted**. Label `manual-fast-unmute` removed.
 
@@ -37,9 +40,11 @@ Every test on this issue is green in CI before the time limit. The mute list in 
 
 COMMENT_PROGRESS = """⏱️ **Fast-unmute: progress**
 
-These already show as unmuted in CI. Other tests on this issue are still in the shorter window:
+Done for:
 
 {unmuted_bullets}
+
+Other tests on this issue are still in the window.
 
 🔗 Workflow run: {workflow_run_url}
 """

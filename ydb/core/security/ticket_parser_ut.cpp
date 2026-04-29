@@ -2607,158 +2607,158 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // IPv4
         {
-            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            auto res = RunPeernameQuery(runtime, "192.168.1.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            auto res = RunPeernameQuery(runtime, "10.0.0.1:65535");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            auto res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            auto res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
             UNIT_ASSERT(!res->HasError());
         }
 
         // IPv6
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            auto res = RunPeernameQuery(runtime, "2001:db8::1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]");
+            auto res = RunPeernameQuery(runtime, "[::1]");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            auto res = RunPeernameQuery(runtime, "[::1]:0");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            auto res = RunPeernameQuery(runtime, "[fe80::1]:22");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            auto res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            auto res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
             UNIT_ASSERT(!res->HasError());
         }
 
         // Invalid peername formats
         {
-            auto* res = RunPeernameQuery(runtime, "");
+            auto res = RunPeernameQuery(runtime, "");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            auto res = RunPeernameQuery(runtime, "invalid_format");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            auto res = RunPeernameQuery(runtime, "[127.0.0.1]");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            auto res = RunPeernameQuery(runtime, "127.0.0.1:65536");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            auto res = RunPeernameQuery(runtime, "256.1.1.1");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            auto res = RunPeernameQuery(runtime, "1.-1.1.1");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            auto res = RunPeernameQuery(runtime, "ipv4:");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            auto res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            auto res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            auto res = RunPeernameQuery(runtime, "[::1]:");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            auto res = RunPeernameQuery(runtime, "[::1]:65536");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            auto res = RunPeernameQuery(runtime, "[::1]:port");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, ":::1");
+            auto res = RunPeernameQuery(runtime, ":::1");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime,  "ipv6:");
+            auto res = RunPeernameQuery(runtime,  "ipv6:");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            auto res = RunPeernameQuery(runtime, "ipv6:invalid");
             UNIT_ASSERT(res->HasError());
             UNIT_ASSERT(!res->Error.Retryable);
         }
@@ -2790,139 +2790,139 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // IPv4
         {
-            auto* res = RunPeernameQuery(runtime, "192.168.1.1");
+            auto res = RunPeernameQuery(runtime, "192.168.1.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "10.0.0.1:65535");
+            auto res = RunPeernameQuery(runtime, "10.0.0.1:65535");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
+            auto res = RunPeernameQuery(runtime, "ipv4:127.0.0.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
+            auto res = RunPeernameQuery(runtime, "ipv4:172.10.0.1:1234");
             UNIT_ASSERT(!res->HasError());
         }
 
         // IPv6
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:db8::1");
+            auto res = RunPeernameQuery(runtime, "2001:db8::1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[fe80::1]:22");
+            auto res = RunPeernameQuery(runtime, "[fe80::1]:22");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
+            auto res = RunPeernameQuery(runtime, "ipv6:2001:db8::1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
+            auto res = RunPeernameQuery(runtime, "ipv6:[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:80");
             UNIT_ASSERT(!res->HasError());
         }
 
         // Invalid peername formats
         {
-            auto* res = RunPeernameQuery(runtime, "");
+            auto res = RunPeernameQuery(runtime, "");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "invalid_format");
+            auto res = RunPeernameQuery(runtime, "invalid_format");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[127.0.0.1]");
+            auto res = RunPeernameQuery(runtime, "[127.0.0.1]");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "127.0.0.1:65536");
+            auto res = RunPeernameQuery(runtime, "127.0.0.1:65536");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "256.1.1.1");
+            auto res = RunPeernameQuery(runtime, "256.1.1.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "1.-1.1.1");
+            auto res = RunPeernameQuery(runtime, "1.-1.1.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:");
+            auto res = RunPeernameQuery(runtime, "ipv4:");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
+            auto res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
+            auto res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]");
+            auto res = RunPeernameQuery(runtime, "[::1]");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
+            auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:");
+            auto res = RunPeernameQuery(runtime, "[::1]:");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:0");
+            auto res = RunPeernameQuery(runtime, "[::1]:0");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:65536");
+            auto res = RunPeernameQuery(runtime, "[::1]:65536");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "[::1]:port");
+            auto res = RunPeernameQuery(runtime, "[::1]:port");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, ":::1");
+            auto res = RunPeernameQuery(runtime, ":::1");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:");
+            auto res = RunPeernameQuery(runtime, "ipv6:");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:0");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
+            auto res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
             UNIT_ASSERT(!res->HasError());
         }
         {
-            auto* res = RunPeernameQuery(runtime, "ipv6:invalid");
+            auto res = RunPeernameQuery(runtime, "ipv6:invalid");
             UNIT_ASSERT(!res->HasError());
         }
     }

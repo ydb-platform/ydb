@@ -756,12 +756,9 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
-        TYqlSource source;
-
-        if (auto result = Build(rule.GetRule_single_source1())) {
-            source.Node = std::move(*result);
-        } else {
-            return std::unexpected(result.error());
+        TSQLResult<TYqlSource> source = Build(rule.GetRule_single_source1());
+        if (!source) {
+            return std::unexpected(source.error());
         }
 
         if (rule.HasBlock2()) {
@@ -771,16 +768,16 @@ private:
         if (rule.HasBlock3()) {
             const auto& block = rule.GetBlock3();
 
-            source.Alias.ConstructInPlace();
+            source->Alias.ConstructInPlace();
 
             if (auto name = TableAlias(block.GetBlock1())) {
-                source.Alias->Name = std::move(*name);
+                source->Alias->Name = std::move(*name);
             } else {
                 return std::unexpected(ESQLError::Basic);
             }
 
             if (block.HasBlock2()) {
-                source.Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
+                source->Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
             }
         }
 
@@ -791,20 +788,22 @@ private:
         return source;
     }
 
-    TNodeResult Build(const TRule_single_source& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_single_source& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
                 return Build(rule.GetAlt_single_source1().GetRule_table_ref1());
             case NSQLv1Generated::TRule_single_source::kAltSingleSource2:
-                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2());
+                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
-                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
+                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(const TRule_table_ref& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_table_ref& rule) {
         const bool isCluterExplicit = rule.HasBlock1();
 
         TString service = Ctx_.Scoped->CurrService;
@@ -831,7 +830,7 @@ private:
             isCluterExplicit);
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -848,20 +847,19 @@ private:
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
-                return Build(
-                    block.GetAlt3(),
-                    isAnonymous,
-                    isClusterExplicit);
+                return Build(block.GetAlt3(), isAnonymous, isClusterExplicit)
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_key& rule,
         TString service,
         TDeferredAtom cluster,
-        bool isAnonymous) {
+        bool isAnonymous)
+    {
         if (cluster.Empty()) {
             Ctx_.Error() << "No cluster name given and no default cluster is selected";
             return std::unexpected(ESQLError::Basic);
@@ -880,11 +878,16 @@ private:
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = *cluster.GetLiteral(),
-            .Key = std::move(key),
+            .Key = key,
             .IsAnonymous = isAnonymous,
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        TYqlSource source = {
+            .Node = BuildYqlTableRef(Ctx_.Pos(), std::move(args)),
+            .Alias = TYqlSourceAlias{.Name = std::move(key)},
+        };
+
+        return std::move(source);
     }
 
     TNodeResult Build(

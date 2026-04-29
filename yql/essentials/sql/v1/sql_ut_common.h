@@ -12784,9 +12784,30 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
         {TString("YqlSelect"), 0},
         {TString("Read!"), 0},
     };
-    VerifyProgram(res, stat);
+    TString program = VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"Input" '()))");
+}
+
+Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, b FROM plato.`/Root/Yql/Select`;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("Read!"), 0},
+    };
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
 }
 
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {

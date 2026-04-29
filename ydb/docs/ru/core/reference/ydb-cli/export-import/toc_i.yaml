@@ -13,8 +13,5 @@ items:
   href: import-s3.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md
-<<<<<<< HEAD
-=======
 - name: Коллекции резервных копий
   href: ../../../devops/backup-and-recovery/index.md
->>>>>>> aebbe3e3080 (Add system tablet backup docs (#38408))

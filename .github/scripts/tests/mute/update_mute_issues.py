@@ -439,6 +439,9 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     - ``stateReason`` is empty and the body has the mute list marker (GraphQL/export may omit reason briefly).
 
     Other closed cards (e.g. ``NOT_PLANNED``) are skipped.
+
+    Reservation for ``get_muted_tests_from_issues``: closed ``COMPLETED`` + project **Unmuted** does not
+    reserve tests (see there).
     """
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
     all_issues_with_contet = {}
@@ -544,7 +547,7 @@ def get_muted_tests_from_issues(issues_dict=None):
 
         # Open issues: reserve (test, build_type) for mute/issue automation.
         # Closed issues with manual-fast-unmute label, COMPLETED reason, or empty reason + mute body:
-        # do not open a duplicate.
+        # do not open a duplicate — except when the mute cycle finished (see below).
         if state == 'CLOSED':
             labels = info.get('labels') or []
             closed_ok = (
@@ -553,6 +556,10 @@ def get_muted_tests_from_issues(issues_dict=None):
                 or (not state_reason and info.get('has_mute_body'))
             )
             if not closed_ok:
+                continue
+            # Closed as Completed + project Status Unmuted: workflow finished; allow a new mute issue later.
+            project_status = (info.get('status') or '').strip().lower()
+            if state_reason == 'COMPLETED' and project_status == 'unmuted':
                 continue
             for test in info['tests']:
                 key = (test, bt)

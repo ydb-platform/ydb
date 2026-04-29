@@ -37,7 +37,7 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     CpuActualDemand = 0;
 
     // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
-    const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load();
+    const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load() + ReadBurstUsage.load();
     const auto burstThrottle = CpuBurstThrottle.load();
     newQuery->CpuBurstUsage += burstUsage - PrevCpuBurstUsage;
     newQuery->CpuBurstThrottle = burstThrottle - PrevCpuBurstThrottle;
@@ -114,6 +114,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
+    Counters->Read         = group->GetCounter("Read",         true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
     Counters->FairShare    = group->GetCounter("FairShare",    true);  // snapshot
 
@@ -133,6 +134,7 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
         Counters->Waiting->Set(CpuThrottle * 1'000'000);
         Counters->Usage->Set(CpuBurstUsage);
         Counters->UsageResume->Set(CpuBurstUsageResume);
+        Counters->Read->Set(ReadBurstUsage);
         Counters->Throttle->Set(CpuBurstThrottle);
     }
 

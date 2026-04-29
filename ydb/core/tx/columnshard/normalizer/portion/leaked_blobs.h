@@ -364,6 +364,7 @@ private:
     TBatchCursor BatchCursor{1000000};
     TLeakedBlobsStats Stats;
     THashSet<TLogoBlobID> Result;
+    THashSet<TLogoBlobID> ResultToDelete;
     ui64 TablePathId = 0;
     TString TablePath = "<unknown>";
 

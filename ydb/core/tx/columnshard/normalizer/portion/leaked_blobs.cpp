@@ -251,6 +251,7 @@ class TRemoveLeakedBlobsActor: public TActorBootstrapped<TRemoveLeakedBlobsActor
 private:
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIds;
+    THashSet<TLogoBlobID> CSBlobIdsToDelete;
     THashSet<TLogoBlobID> BSBlobIds;
     ui64 TotalBlobsCount = 0;
     ui64 TotalBlobsSize = 0;
@@ -278,7 +279,10 @@ private:
     void PrintFoundLeakedBlobsStats() const {
         const ui64 leakedBlobsSize = CalculateBlobsSize(BSBlobIds);
         const ui64 csBlobsSize = CalculateBlobsSize(CSBlobIds);
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "found_leaked_blobs_stats")("analyze_leaked_blobs", 1)("leaked_blobs_count", BSBlobIds.size())("leaked_blobs_size", leakedBlobsSize)("cs_blob_ids_count", CSBlobIds.size())("cs_blob_ids_size", csBlobsSize)("bs_total_blobs_count", TotalBlobsCount)("bs_total_blobs_size", TotalBlobsSize)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount);
+        const ui64 csBlobsToDeleteSize = CalculateBlobsSize(CSBlobIdsToDelete);
+        const ui64 csBlobsTotalCount = CSBlobIds.size() + CSBlobIdsToDelete.size();
+        const ui64 csBlobsTotalSize = csBlobsSize + csBlobsToDeleteSize;
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("table_path_id", TablePathId)("table_path", TablePath)("event", "found_leaked_blobs_stats")("analyze_leaked_blobs", 1)("leaked_blobs_count", BSBlobIds.size())("leaked_blobs_size", leakedBlobsSize)("cs_blob_ids_count", csBlobsTotalCount)("cs_blob_ids_size", csBlobsTotalSize)("cs_blob_ids_active_count", CSBlobIds.size())("cs_blob_ids_active_size", csBlobsSize)("cs_blob_ids_to_delete_count", CSBlobIdsToDelete.size())("cs_blob_ids_to_delete_size", csBlobsToDeleteSize)("bs_total_blobs_count", TotalBlobsCount)("bs_total_blobs_size", TotalBlobsSize)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount);
     }
 
     void PrintLeakedBlobIdsChunks() const {
@@ -314,9 +318,11 @@ private:
         if (WaitingCount || !HiveHistoryCollector.IsFinished()) {
             return;
         }
-        AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())("error", "have to use broken blobs repair");
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
+        }
+        for (auto&& i : CSBlobIdsToDelete) {
+            BSBlobIds.erase(i);
         }
         PrintFoundLeakedBlobsStats();
         PrintLeakedBlobIdsChunks();
@@ -332,11 +338,12 @@ private:
     }
 
 public:
-    TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, const ui64 tablePathId, TString tablePath, TActorId csActorId, ui64 csTabletId,
+    TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, THashSet<TLogoBlobID>&& csBlobIDsToDelete, const ui64 tablePathId, TString tablePath, TActorId csActorId, ui64 csTabletId,
         const ui32 tabletGeneration, const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds,
         const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIds(std::move(csBlobIDs))
+        , CSBlobIdsToDelete(std::move(csBlobIDsToDelete))
         , CSActorId(csActorId)
         , CSTabletId(csTabletId)
         , TablePathId(tablePathId)
@@ -428,6 +435,7 @@ public:
 class TRemoveLeakedBlobsTask: public INormalizerTask {
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIDs;
+    THashSet<TLogoBlobID> CSBlobIDsToDelete;
     ui64 TablePathId = 0;
     TString TablePath;
     ui64 TabletId;
@@ -438,11 +446,12 @@ class TRemoveLeakedBlobsTask: public INormalizerTask {
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
 public:
-    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, const ui64 tablePathId, TString tablePath, ui64 tabletId, ui32 tabletGeneration,
+    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, THashSet<TLogoBlobID>&& csBlobIDsToDelete, const ui64 tablePathId, TString tablePath, ui64 tabletId, ui32 tabletGeneration,
         TActorId actorId,
         const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIDs(std::move(csBlobIDs))
+        , CSBlobIDsToDelete(std::move(csBlobIDsToDelete))
         , TablePathId(tablePathId)
         , TablePath(std::move(tablePath))
         , TabletId(tabletId)
@@ -455,7 +464,7 @@ public:
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
         NActors::TActivationContext::Register(
             new TRemoveLeakedBlobsActor(
-                std::move(Channels), std::move(CSBlobIDs), TablePathId, std::move(TablePath), ActorId, TabletId, TabletGeneration, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
+                std::move(Channels), std::move(CSBlobIDs), std::move(CSBlobIDsToDelete), TablePathId, std::move(TablePath), ActorId, TabletId, TabletGeneration, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
     }
 };
 
@@ -505,7 +514,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     Stats.OnCompleted();
     Stats.PrintToLog();
     return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(Result), TablePathId, TablePath, TabletId, txc.Generation, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
+        std::move(Channels), std::move(Result), std::move(ResultToDelete), TablePathId, TablePath, TabletId, txc.Generation, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
 }
 
 void TLeakedBlobsNormalizer::LoadTableIdentity(NIceDb::TNiceDb& db) {
@@ -671,7 +680,8 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadBlobsToDelete(NIceDb::TNiceDb& db)
         TString error;
         TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
         AFL_VERIFY(blobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-        Result.emplace(blobId.GetLogoBlobId());
+        AFL_VERIFY(!Result.contains(blobId.GetLogoBlobId()))("blob_id", blobId.GetLogoBlobId())("error", "blob id is in both IndexColumnsV2 and BlobsToDeleteWT tables");
+        ResultToDelete.emplace(blobId.GetLogoBlobId());
         if (!rowset.Next()) {
             Stats.OnStoppedOnBlobsToDelete();
             return TConclusionStatus::Fail("Local table is not loaded: BlobsToDeleteWT");

@@ -52,9 +52,9 @@ void ISourcesCollection::OnPageCreated() {
 }
 
 void ISourcesCollection::OnPageSent() {
-    // PagesInFlightCount must be > 0 here: OnPageSent is only called from
-    // OnSentDataFromInterval when sourceAddress.IsStreamingPage() is true,
-    // which is set only when OnPageCreated() was called for this page.
+    // PagesInFlightCount must be > 0 here: OnPageSent is only invoked via
+    // TPlainReadData::OnStreamingPageSent, which fires only when the result
+    // carries a StreamingPageAck — set only after OnPageCreated() ran.
     // TPositiveControlInteger::Dec() will AFL_VERIFY on underflow.
     PagesInFlightCount.Dec();
     NYDBTest::TControllers::GetColumnShardController()->OnPageSent(PagesInFlightCount.Val());

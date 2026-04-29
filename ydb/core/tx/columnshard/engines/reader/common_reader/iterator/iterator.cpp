@@ -36,6 +36,10 @@ void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddr
     return IndexedData->OnSentDataFromInterval(address);
 }
 
+void TColumnShardScanIterator::DoOnStreamingPageSent(const TPartialSourceAddress& address) {
+    return IndexedData->OnStreamingPageSent(address);
+}
+
 TColumnShardScanIterator::~TColumnShardScanIterator() {
     if (!IndexedData->IsFinished()) {
         IndexedData->Abort("iterator destructor");

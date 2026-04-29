@@ -65,6 +65,7 @@ public:
         return *Scanner;
     }
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
+    virtual void OnStreamingPageSent(const TPartialSourceAddress& sourceAddress) override;
 
     void OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result);
 

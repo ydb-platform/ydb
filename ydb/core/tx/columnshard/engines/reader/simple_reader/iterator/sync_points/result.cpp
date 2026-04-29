@@ -42,18 +42,35 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
         auto resultChunk = source->MutableStageResult().ExtractResultChunk();
         const bool isFinished = source->GetStageResult().IsFinished();
         if (resultChunk && resultChunk->HasData()) {
-            // partialSourceAddress is the handle that lets OnSentDataFromInterval()
-            // route the client ack back to this sync point (Continue / OnPageSent).
+            // Two independent address fields are attached to the result:
             //
-            // Streaming mode: set unconditionally for every page so each page is
-            //   paired with OnPageCreated()/OnPageSent() for backpressure accounting.
-            //   For the very last page Continue() becomes a no-op (HasMorePages()==false).
-            // Non-streaming mode: set only when more chunks remain in StageResult
-            //   (!isFinished); the final chunk needs no Continue() callback.
+            //   notFinishedInterval (continuation marker)
+            //     Set iff Continue() must be invoked once the client has acked
+            //     this result, i.e. the source still has more chunks/pages.
+            //     - Non-streaming: set when !isFinished (more chunks in StageResult).
+            //     - Streaming:    set when HasMorePages() is true; the final
+            //                     streaming page leaves it empty.
+            //
+            //   streamingPageAck (backpressure marker)
+            //     Set iff this page was tracked via OnPageCreated() and the
+            //     matching OnPageSent() must be invoked when the client acks.
+            //     Only meaningful in streaming mode; set for every streaming
+            //     page including the last one.
+            //
+            // The two fields are independent:
+            //   - early streaming page  -> both set
+            //   - last  streaming page  -> only streamingPageAck
+            //   - non-final non-stream  -> only notFinishedInterval
+            //   - final non-stream chunk-> neither
             const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
-            std::optional<TPartialSourceAddress> partialSourceAddress;
+            const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
+            std::optional<TPartialSourceAddress> notFinishedInterval;
+            std::optional<TPartialSourceAddress> streamingPageAck;
             if (isStreamingMode) {
-                partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex(), /*streamingPage=*/true);
+                streamingPageAck = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
+                if (hasMorePages) {
+                    notFinishedInterval = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
+                }
                 Collection->OnPageCreated();
                 // Track resource guard counts per streaming page for diagnostics.
                 // A monotonically growing count indicates guards are leaking across pages.
@@ -62,9 +79,9 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_created")
                     ("source_idx", source->GetSourceIdx())("pages_in_flight", Collection->GetPagesInFlightCount());
             } else if (!isFinished) {
-                partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
+                notFinishedInterval = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex());
             }
-            
+
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())
                 ("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished)("streaming", isStreamingMode)
                 ("resource_guards_count", source->GetResourceGuards().size())
@@ -77,14 +94,14 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetDeprecatedPortionId()));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), notFinishedInterval, streamingPageAck,
+                source->GetDeprecatedPortionId()));
             // In streaming mode, prefetch the next page while the current one is being
             // sent to the client, up to MaxPagesInFlight pages in flight. If the limit
             // is reached, Continue() will resume fetching once a page is acked via
             // OnPageSent(). Note: we use HasMorePages() instead of !isFinished because
             // streaming builds one page per StageResult, so isFinished is true after
             // every built page even when more pages remain in the portion.
-            const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
             if (isStreamingMode && hasMorePages) {
                 if (Collection->GetPagesInFlightCount() < Collection->GetMaxPagesInFlight()) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "prefetch_next_page")

@@ -56,6 +56,7 @@ public:
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
     virtual void DoOnSentDataFromInterval(const TPartialSourceAddress& address) override;
+    virtual void DoOnStreamingPageSent(const TPartialSourceAddress& address) override;
 
 protected:
     ui64 ItemsRead = 0;

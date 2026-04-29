@@ -336,6 +336,9 @@ bool TColumnShardScan::ProduceResults() noexcept {
     }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
     SendResult(false, false, result.GetSourceId());
+    // Streaming-page ack first so the pages-in-flight counter is up to date
+    // before any continuation work is scheduled by OnSentDataFromInterval().
+    ScanIterator->OnStreamingPageSent(result.GetStreamingPageAck());
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedInterval());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;

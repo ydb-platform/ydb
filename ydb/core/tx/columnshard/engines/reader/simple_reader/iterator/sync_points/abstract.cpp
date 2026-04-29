@@ -93,7 +93,6 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     if (SourcesSequentially.empty() || SourcesSequentially.front()->GetSourceIdx() != continueAddress.GetSourceIdx()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source_already_finished")
             ("continue_source_idx", continueAddress.GetSourceIdx())
-            ("streaming_page", continueAddress.IsStreamingPage())
             ("queue_empty", SourcesSequentially.empty())
             ("front_source_idx", SourcesSequentially.empty() ? Max<ui32>() : SourcesSequentially.front()->GetSourceIdx());
         return;

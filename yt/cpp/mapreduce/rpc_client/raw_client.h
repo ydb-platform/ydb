@@ -9,6 +9,15 @@
 
 #include <yt/yt/client/api/public.h>
 
+// Forward declaration as we don't want to include yt/yt/core/tracing/trace_context.h to avoid possible namespaces conflicts
+namespace NYT::NTracing {
+
+class TCurrentTraceContextGuard;
+
+} // namespace NYT::NTracing
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -413,6 +422,8 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    NTracing::TCurrentTraceContextGuard CreateTraceContext(const std::string& spanName);
+
     const TApiClients Clients_;
     const TConfigPtr Config_;
 };

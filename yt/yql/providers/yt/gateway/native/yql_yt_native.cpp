@@ -1422,11 +1422,10 @@ public:
                 }
             }
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             res.Server = execCtx->YtServer_;
             res.Path = NYT::AddPathPrefix(out.Path, NYT::TConfig::Get()->Prefix);
             res.RefName = out.Path;
-            res.CodecSpec = execCtx->GetOutSpec(false, nativeTypeCompat);
+            res.CodecSpec = execCtx->GetOutSpec(false);
             res.TableAttrs = NYT::NodeToYsonString(attrs);
 
             res.SetSuccess();
@@ -2419,7 +2418,7 @@ private:
         NYT::TNode& rowSpecNode = yqlAttrs[YqlRowSpecAttribute];
         const auto nativeYtTypeCompatibility = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-        rowSpec->FillAttrNode(rowSpecNode, nativeYtTypeCompatibility, rowSpecCompactForm);
+        rowSpec->FillAttrNode(rowSpecNode, rowSpecCompactForm);
 
         const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
 
@@ -3210,7 +3209,7 @@ private:
         const auto sequenceItemType = GetSequenceItemType(node.Pos(), node.GetTypeAnn(), false, ctx);
 
         auto rowSpecInfo = MakeIntrusive<TYqlRowSpecInfo>();
-        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config()));
         if (columns) {
             rowSpecInfo->SetColumnOrder(columns);
         }
@@ -3362,8 +3361,7 @@ private:
         if (useSkiff) {
             specs.SetUseSkiff(execCtx->Options_.OptLLVM(), testRun ? TMkqlIOSpecs::ESystemField(0) : TMkqlIOSpecs::ESystemField::RangeIndex | TMkqlIOSpecs::ESystemField::RowIndex);
         }
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        specs.Init(codecCtx, execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false), tables, columns);
+        specs.Init(codecCtx, execCtx->GetInputSpec(!useSkiff, false), tables, columns);
 
         auto run = [&] (IExecuteResOrPull& pullData)  {
             TMkqlIOCache specsCache(specs, holderFactory);
@@ -4257,21 +4255,19 @@ private:
             NYT::TNode mapSpec = intermediateMeta;
             mapSpec.AsMap().erase(YqlSysColumnPrefix);
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-
             NYT::TNode mapOutSpec = NYT::TNode::CreateMap();
             mapOutSpec[YqlIOSpecTables] = NYT::TNode::CreateList();
             mapOutSpec[YqlIOSpecTables].Add(mapSpec);
             TString mapOutSpecStr;
             if (mapDirectOutputs) {
-                mapOutSpecStr = execCtx->GetOutSpec(0, mapDirectOutputs, mapOutSpec, !reduceUseSkiff, nativeTypeCompat);
+                mapOutSpecStr = execCtx->GetOutSpec(0, mapDirectOutputs, mapOutSpec, !reduceUseSkiff);
             } else {
                 mapOutSpecStr = NYT::NodeToYsonString(mapOutSpec);
             }
 
             auto mapJob = MakeIntrusive<TYqlUserJob>();
             mapJob->SetInputType(mapInputType);
-            mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
+            mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
             mapJob->SetOutSpec(mapOutSpecStr);
             if (!groups.empty() && groups.back() != 0) {
                 mapJob->SetInputGroups(groups);
@@ -4285,7 +4281,7 @@ private:
             auto reduceJob = MakeIntrusive<TYqlUserJob>();
             reduceJob->SetInputType(reduceInputType);
             reduceJob->SetInputSpec(NYT::NodeToYsonString(NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(intermediateMeta))));
-            reduceJob->SetOutSpec(execCtx->GetOutSpec(mapDirectOutputs, execCtx->OutTables_.size(), {}, !reduceUseSkiff, nativeTypeCompat));
+            reduceJob->SetOutSpec(execCtx->GetOutSpec(mapDirectOutputs, execCtx->OutTables_.size(), {}, !reduceUseSkiff));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
             if (!sortBy.empty()) {
@@ -4470,9 +4466,8 @@ private:
 
             const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, !useIntermediateStreams));
-            reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, !useIntermediateStreams));
+            reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
             if (!sortBy.empty()) {
@@ -4827,7 +4822,6 @@ private:
                 }
 
                 if (!hasLayerPaths && transform.CanExecuteInternally() && !testRun) {
-                    const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
                     execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                     TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
@@ -4840,7 +4834,7 @@ private:
                         );
                     }
 
-                    ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
+                    ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
 
@@ -4860,8 +4854,7 @@ private:
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
             job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
             job->SetLangVer(execCtx->Options_.LangVer());
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
             job->SetUseSkiff(useSkiff, 0);
 
             mapOpSpec.AddInput(tmpTable);

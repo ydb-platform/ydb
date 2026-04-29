@@ -1232,9 +1232,6 @@
             "checksum": "67d3d621bb4b9e3207fb9e5b73532ef0",
             "size": 7788,
             "uri": "https://{canondata_backend}/1847551/378b3bd63cdb48c05228707db1486e34df62729c/resource.tar.gz#test.test_params-primitives--Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_params-primitives--Results_/extracted"
         }
     ],
     "test.test[pg-YQL_20895_projection_depth_2-default.txt-Debug]": [

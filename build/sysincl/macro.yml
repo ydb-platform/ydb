@@ -1225,3 +1225,7 @@
     - CUDA_STD_HEADER(tuple):         $U/cuda/std/tuple
     - CUDA_STD_HEADER(type_traits):   $U/cuda/std/type_traits
     - CUDA_STD_HEADER(utility):       $U/cuda/std/utility
+
+- source_filter: "^contrib/restricted/libgpg-error"
+  includes:
+    - _ESTREAM_PRINTF_EXTRA_INCLUDE: $U/gpgrt-int.h

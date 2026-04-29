@@ -1169,13 +1169,13 @@ template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable,
                                                    const TType* type,
                                                    TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* ppol,
+                                                   arrow::MemoryPool* pool,
                                                    TMaybe<ui8> minFillPercentage)
     : TValuePackerTransport(stable,
                             type,
                             EValuePackerVersion::V0,
                             bufferPageAllocSize,
-                            ppol,
+                            pool,
                             minFillPercentage)
 {
 }
@@ -1284,11 +1284,11 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TU
 }
 
 template <bool Fast>
-TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 width) {
+TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 count) {
     Y_DEBUG_ABORT_UNLESS(Type_->IsMulti());
-    Y_DEBUG_ABORT_UNLESS(static_cast<const TMultiType*>(Type_)->GetElementsCount() == width);
+    Y_DEBUG_ABORT_UNLESS(static_cast<const TMultiType*>(Type_)->GetElementsCount() == count);
     if (IsBlock_) {
-        return AddWideItemBlocks(values, width);
+        return AddWideItemBlocks(values, count);
     }
 
     const TMultiType* itemType = static_cast<const TMultiType*>(Type_);
@@ -1296,7 +1296,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf
         StartPack();
     }
 
-    for (ui32 i = 0; i < width; ++i) {
+    for (ui32 i = 0; i < count; ++i) {
         PackImpl<Fast, false>(itemType->GetElementType(i), *Buffer_, values[i], IncrementalState_);
     }
     ++ItemCount_;
@@ -1304,8 +1304,8 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf
 }
 
 template <bool Fast>
-TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 width) {
-    MKQL_ENSURE(width == BlockSerializers_.size(), "Invalid width");
+TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 count) {
+    MKQL_ENSURE(count == BlockSerializers_.size(), "Invalid width");
     const ui64 len = TArrowBlock::From(values[BlockLenIndex_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
     auto metadataBuffer = std::make_shared<TBuffer>();
@@ -1317,7 +1317,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     }
 
     ui32 totalMetadataCount = 0;
-    for (size_t i = 0; i < width; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         if (i != BlockLenIndex_) {
             MKQL_ENSURE(BlockSerializers_[i], "Invalid serializer");
             totalMetadataCount += BlockSerializers_[i]->ArrayMetadataCount();
@@ -1328,7 +1328,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     const size_t metadataReservedSize =
         MAX_PACKED64_SIZE +                                   // block len
         MAX_PACKED64_SIZE +                                   // feature flags
-        GetTopLevelOffsetsCount(ValuePackerVersion_, width) + // 1-byte offsets for V0, empty for higher versions.
+        GetTopLevelOffsetsCount(ValuePackerVersion_, count) + // 1-byte offsets for V0, empty for higher versions.
         MAX_PACKED32_SIZE +                                   // metadata words count
         MAX_PACKED64_SIZE * totalMetadataCount;               // metadata words
     metadataBuffer->Reserve(len ? metadataReservedSize : MAX_PACKED64_SIZE);
@@ -1344,9 +1344,9 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     PackData<false>(flags.Data(), *metadataBuffer);
 
-    TVector<std::shared_ptr<arrow::ArrayData>> arrays(width);
+    TVector<std::shared_ptr<arrow::ArrayData>> arrays(count);
     // save reminder of original offset for each column - it is needed to properly handle offset in bitmaps
-    for (size_t i = 0; i < width; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         if (i == BlockLenIndex_) {
             continue;
         }
@@ -1384,7 +1384,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     // save metadata itself
     ui32 savedMetadata = 0;
-    for (size_t i = 0; i < width; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         if (i != BlockLenIndex_) {
             BlockSerializers_[i]->StoreMetadata(*arrays[i], [&](ui64 meta) {
                 PackData<false>(meta, *metadataBuffer);
@@ -1398,7 +1398,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     BlockBuffer_.Append(TStringBuf(metadataBuffer->data(), metadataBuffer->size()), metadataBuffer);
     // save buffers
-    for (size_t i = 0; i < width; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         if (i != BlockLenIndex_) {
             BlockSerializers_[i]->StoreArray(*arrays[i], BlockBuffer_);
         }

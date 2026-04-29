@@ -658,7 +658,7 @@ TEST(TErrorTest, TruncateWhitelistSaveInnerError)
     EXPECT_EQ(error.InnerErrors()[0], whitelistedInner);
     EXPECT_EQ(error.InnerErrors()[1], genericInner);
 
-    // TODO: error_helpers???
+    // TODO(arkady-e1ppa): error_helpers???
     EXPECT_TRUE(FindAttributeRecursive<int>(error, "whitelisted_key"));
     EXPECT_FALSE(FindAttributeRecursive<int>(error, "foo"));
 }

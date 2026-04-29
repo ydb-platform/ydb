@@ -694,7 +694,7 @@ public:
                           TRuntimeNode handle,
                           TRuntimeNode isIncremental,
                           TRuntimeNode isRange,
-                          TRuntimeNode isSignleElement,
+                          TRuntimeNode isSingleElement,
                           const TArrayRef<const TRuntimeNode>& dependentNodes,
                           TType* returnType);
 

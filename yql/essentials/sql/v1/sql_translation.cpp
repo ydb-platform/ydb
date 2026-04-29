@@ -926,16 +926,16 @@ TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_va
 }
 
 bool TSqlTranslation::AddIndexSetting(const TIdentifier& id,
-                                      const TRule_index_setting_value& node,
+                                      const TRule_index_setting_value& value,
                                       TIndexDescription::TIndexSettings& indexSettings) {
     // TODO: remove to_lower transformation after the next release to keep backward compatibility
     const auto name = to_lower(id.Name);
-    const auto value = to_lower(GetIndexSettingStringValue(node));
+    const auto strValue = to_lower(GetIndexSettingStringValue(value));
 
     TIndexDescription::TIndexSetting indexSetting{
         .Name = name,
         .NamePosition = id.Pos,
-        .Value = value,
+        .Value = strValue,
         .ValuePosition = Ctx_.Pos()};
 
     if (!indexSettings.emplace(name, indexSetting).second) {
@@ -3260,14 +3260,14 @@ bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAl
     return true;
 }
 
-bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTopicSettings& settings) {
+bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTopicSettings& params) {
     const auto& firstEntry = node.GetRule_topic_settings_entry1();
     TSqlExpression expr(*this);
 
     if (!StoreTopicSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_setting_value3(),
-            expr, settings, false)) {
+            expr, params, false)) {
         return false;
     }
     for (auto& block : node.GetBlock2()) {
@@ -3275,7 +3275,7 @@ bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTop
         if (!StoreTopicSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_setting_value3(),
-                expr, settings, false)) {
+                expr, params, false)) {
             return false;
         }
     }
@@ -4993,10 +4993,10 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
     return true;
 }
 
-bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize) {
+bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize) {
     // window_frame_clause: window_frame_units window_frame_extent window_frame_exclusion?;
     frameSpec = new TFrameSpecification;
-    const TString frameUnitStr = to_lower(Token(rule.GetRule_window_frame_units1().GetToken1()));
+    const TString frameUnitStr = to_lower(Token(node.GetRule_window_frame_units1().GetToken1()));
     if (frameUnitStr == "rows") {
         frameSpec->FrameType = EFrameType::FrameByRows;
     } else if (frameUnitStr == "range") {
@@ -5006,7 +5006,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
         frameSpec->FrameType = EFrameType::FrameByGroups;
     }
 
-    auto frameExtent = rule.GetRule_window_frame_extent2();
+    auto frameExtent = node.GetRule_window_frame_extent2();
     // window_frame_extent: window_frame_bound | window_frame_between;
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {
@@ -5041,9 +5041,9 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
         return false;
     }
 
-    if (rule.HasBlock3()) {
+    if (node.HasBlock3()) {
         // window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXCLUDE NO OTHERS;
-        switch (rule.GetBlock3().GetRule_window_frame_exclusion1().Alt_case()) {
+        switch (node.GetBlock3().GetRule_window_frame_exclusion1().Alt_case()) {
             case TRule_window_frame_exclusion::kAltWindowFrameExclusion1:
                 frameSpec->FrameExclusion = FrameExclCurRow;
                 break;

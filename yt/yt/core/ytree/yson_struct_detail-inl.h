@@ -1268,7 +1268,7 @@ DEFINE_POSTPROCESSOR(
 
 DEFINE_POSTPROCESSOR(
     NonEmpty(),
-    actual.size() > 0,
+    !actual.empty(),
     TError("Value must not be empty")
 )
 

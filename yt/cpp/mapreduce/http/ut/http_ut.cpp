@@ -168,7 +168,7 @@ TEST(TWrapSystemErrorTest, ConnectTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.StartRequest(),
-        TTransportError,
+        TErrorResponse,
         "can not connect to");
 }
 
@@ -184,7 +184,7 @@ TEST(TWrapSystemErrorTest, ConnectAcceptTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -201,7 +201,7 @@ TEST(TWrapSystemErrorTest, WriteTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         *requestStream << data,
-        TTransportError,
+        TErrorResponse,
         "can not writev to socket output stream");
 }
 
@@ -217,7 +217,7 @@ TEST(TWrapSystemErrorTest, FirstLineTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -233,7 +233,7 @@ TEST(TWrapSystemErrorTest, EmptyFirstLine)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "Failed to get first line");
 }
 
@@ -249,7 +249,7 @@ TEST(TWrapSystemErrorTest, HeaderTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -265,7 +265,7 @@ TEST(TWrapSystemErrorTest, InvalidHeader)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not parse http header");
 }
 
@@ -281,6 +281,6 @@ TEST(TWrapSystemErrorTest, BodyTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }

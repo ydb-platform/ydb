@@ -4,13 +4,13 @@ GENERATE_ENUM_SERIALIZATION(dirty_map.h)
 
 SRCS(
     dirty_map.cpp
-    host_status.cpp
     inflight_info.cpp
     range_locker.cpp
 )
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host
 
     library/cpp/threading/future
 )

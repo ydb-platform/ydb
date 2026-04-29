@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -37,7 +37,10 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{BlockSize, DefaultVChunkSize / BlockSize};
+    TBlocksDirtyMap DirtyMap{
+        BlockSize,
+        DefaultVChunkSize / BlockSize,
+        FixtureHostCount};
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
@@ -45,6 +48,19 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         NThreading::NewPromise<TDBGReadBlocksResponse>();
     NThreading::TPromise<TDBGWriteBlocksResponse> WritePromise =
         NThreading::NewPromise<TDBGWriteBlocksResponse>();
+
+    [[nodiscard]] THostMask DDiskReadable() const
+    {
+        return VChunkConfig.DDiskHosts.GetActive();
+    }
+    [[nodiscard]] THostMask DDiskFlushTargets() const
+    {
+        return VChunkConfig.DDiskHosts.GetPrimary();
+    }
+    [[nodiscard]] THostMask PBufferActive() const
+    {
+        return VChunkConfig.PBufferHosts.GetActive();
+    }
 
     virtual void Init();
 

@@ -45,18 +45,8 @@ void TBaseFixture::Init()
         65536,
         1024,
         DefaultVChunkSize);
-    auto ddiskHosts = THostStatusList::MakeRotating(
-        FixtureHostCount,
-        FixtureVChunkIndex,
-        FixturePrimaryCount);
-    ddiskHosts.Set(4, EHostStatus::Disabled);   // matches old "HO1 absent"
-
-    DirtyMap.UpdateHostStatuses(
-        THostStatusList::MakeRotating(
-            FixtureHostCount,
-            FixtureVChunkIndex,
-            FixturePrimaryCount),
-        std::move(ddiskHosts));
+    // Fixture's DirtyMap is sized for FixtureHostCount; statuses are not
+    // tracked inside dirty_map any more — callers pass masks at each call.
 
     DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //

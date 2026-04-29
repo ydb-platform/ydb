@@ -27,7 +27,7 @@ bool TVChunkConfig::IsValid() const
     {
         return false;
     }
-    return !PBufferHosts.Active().Empty() && !DDiskHosts.Active().Empty();
+    return !PBufferHosts.GetActive().Empty() && !DDiskHosts.GetActive().Empty();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

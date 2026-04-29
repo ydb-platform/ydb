@@ -1,6 +1,6 @@
 #pragma once
 
-#include "host_status.h"
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 

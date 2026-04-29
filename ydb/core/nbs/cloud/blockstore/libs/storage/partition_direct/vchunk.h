@@ -97,7 +97,10 @@ private:
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
-    const ui32 VChunkIndex;
+    const TVChunkConfig VChunkConfig;
+    const THostMask DDiskReadable;
+    const THostMask DDiskFlushTargets;
+    const THostMask PBufferActive;
     const ui32 BlockSize;
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
@@ -105,7 +108,7 @@ private:
     const TDuration WriteRequestTimeout;
     const TDuration TraceSamplePeriod;
 
-    TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
+    TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 
     TVChunkCounters Counters;

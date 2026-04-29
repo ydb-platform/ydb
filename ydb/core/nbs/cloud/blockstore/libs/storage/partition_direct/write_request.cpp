@@ -111,7 +111,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     }
 
     const auto candidates =
-        VChunkConfig.PBufferHosts.HandOff().Exclude(RequestedWrites);
+        VChunkConfig.PBufferHosts.GetHandOff().Exclude(RequestedWrites);
     if (auto next = candidates.First()) {
         LOG_WARN(
             *ActorSystem,
@@ -165,7 +165,7 @@ TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const
 {
     TVector<THostIndex> hosts;
     const auto candidates =
-        VChunkConfig.PBufferHosts.HandOff().Exclude(RequestedWrites);
+        VChunkConfig.PBufferHosts.GetHandOff().Exclude(RequestedWrites);
     for (auto h: candidates) {
         hosts.push_back(h);
     }

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "host_status.h"
 #include "inflight_info.h"
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -14,10 +14,6 @@
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -180,21 +176,21 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
-    TBlocksDirtyMap(ui32 blockSize, ui64 blockCount);
+    TBlocksDirtyMap(ui32 blockSize, ui64 blockCount, size_t hostCount);
     ~TBlocksDirtyMap() override;
-
-    void UpdateHostStatuses(
-        THostStatusList pbufferHosts,
-        THostStatusList ddiskHosts);
-
-    [[nodiscard]] TVChunkConfig MakeVChunkConfigSnapshot(
-        ui32 vChunkIndex) const;
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 
-    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
-    [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
-    [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
+    [[nodiscard]] TReadHint MakeReadHint(
+        TBlockRange64 range,
+        THostMask ddiskReadable,
+        THostMask pbufferReadable);
+    [[nodiscard]] TFlushHints MakeFlushHint(
+        size_t batchSize,
+        THostMask ddiskFlushTargets);
+    [[nodiscard]] TEraseHints MakeEraseHint(
+        size_t batchSize,
+        THostMask pbufferEraseTargets);
 
     void WriteFinished(
         ui64 lsn,
@@ -265,10 +261,6 @@ private:
 
     const ui32 BlockSize;
     const ui64 BlockCount;
-
-    // Sized at first UpdateHostStatuses.
-    THostStatusList PBufferHosts;
-    THostStatusList DDiskHosts;
 
     // Inflight write requests.
     TInflightMap Inflight;

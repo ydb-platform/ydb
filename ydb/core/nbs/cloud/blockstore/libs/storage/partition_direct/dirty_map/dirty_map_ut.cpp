@@ -1,6 +1,7 @@
 #include "dirty_map.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,6 +10,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+constexpr size_t HostCount = 5;
 
 TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
 {
@@ -31,11 +34,12 @@ THostStatusList MakeStatuses(
     bool disabled3 = false,
     bool disabled4 = false)
 {
-    THostStatusList result(5);
-    const bool desired[5] = {desired0, desired1, desired2, desired3, desired4};
-    const bool disabled[5] =
+    THostStatusList result(HostCount);
+    const bool desired[HostCount] =
+        {desired0, desired1, desired2, desired3, desired4};
+    const bool disabled[HostCount] =
         {disabled0, disabled1, disabled2, disabled3, disabled4};
-    for (THostIndex i = 0; i < 5; ++i) {
+    for (THostIndex i = 0; i < HostCount; ++i) {
         if (disabled[i]) {
             result.Set(i, EHostStatus::Disabled);
         } else if (desired[i]) {
@@ -53,9 +57,25 @@ THostStatusList MakeDefaultStatuses()
     return MakeStatuses(true, true, true, false, false);
 }
 
-void SetupDefault(TBlocksDirtyMap& dm)
+struct TMasks
 {
-    dm.UpdateHostStatuses(MakeDefaultStatuses(), MakeDefaultStatuses());
+    THostMask DDiskReadable;
+    THostMask DDiskFlushTargets;
+    THostMask PBufferReadable;
+};
+
+TMasks MakeMasks(const THostStatusList& pbuffer, const THostStatusList& ddisk)
+{
+    return TMasks{
+        .DDiskReadable = ddisk.GetActive(),
+        .DDiskFlushTargets = ddisk.GetPrimary(),
+        .PBufferReadable = pbuffer.GetActive(),
+    };
+}
+
+TMasks DefaultMasks()
+{
+    return MakeMasks(MakeDefaultStatuses(), MakeDefaultStatuses());
 }
 
 THostMask MakePrimaryHosts()
@@ -94,42 +114,37 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         // We should be able to get read hints (active = primary + handoff).
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2,H3,H4][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0, demote host 4 to disabled, promote host 3 to
         // primary.
-        dirtyMap.UpdateHostStatuses(
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                true),
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                true));
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        const auto newStatuses = MakeStatuses(
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            true);
+        m = MakeMasks(newStatuses, newStatuses);
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -139,8 +154,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.MarkFresh(THostIndex{0}, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(THostIndex{2}, 40 * DefaultBlockSize);
@@ -154,26 +170,37 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Read below fresh watermark
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2,H3,H4][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Read crossed fresh watermark
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(25, 10));
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(25, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2,H3,H4][25..34][0..9]};",
             readHint.DebugPrint());
 
         // Read above fresh watermark
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(30, 10));
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(30, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2,H3,H4][30..39][0..9]};",
             readHint.DebugPrint());
 
         // Read above fresh watermark
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(40, 10));
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(40, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H3,H4][40..49][0..9]};",
             readHint.DebugPrint());
@@ -183,8 +210,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.WriteFinished(
             123,
@@ -194,38 +222,32 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // After write, we should be able to get read hints (read from
         // confirmed PBuffers — hosts {0,1,2}).
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0, promote host 3 to primary.
-        dirtyMap.UpdateHostStatuses(
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                false),
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                false));
+        const auto newStatuses = MakeStatuses(
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false);
+        m = MakeMasks(newStatuses, newStatuses);
 
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         // WriteConfirmed mask is {0,1,2}; host 0 is disabled, so it is
         // excluded from the read mask.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -256,8 +278,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // post-flush states.
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         const ui64 lsn = 123;
         const auto range = TBlockRange64::WithLength(10, 10);
@@ -269,7 +292,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Run flush to completion: the inflight item transitions to
         // PBufferFlushed (state where ReadMask must produce a DDisk-side
         // read).
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
             dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
@@ -278,7 +301,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Read the same range. The inflight is in PBufferFlushed; the read
         // should target DDisk hosts (all active DDisks) and use a DDisk
         // range lock.
-        auto readHint = dirtyMap.MakeReadHint(range);
+        auto readHint =
+            dirtyMap.MakeReadHint(range, m.DDiskReadable, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(1u, readHint.RangeHints.size());
 
         const auto& rh = readHint.RangeHints[0];
@@ -296,8 +320,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.WriteFinished(
             123,
@@ -312,38 +337,32 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePBufferMask(true, true, false, true, false));
 
         // After write, we should be able to get read hints
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "124{[H0,H1,H3][10..19][0..9]};",
             readHint.DebugPrint());
 
         // Disable host 0, promote host 3 to primary.
-        dirtyMap.UpdateHostStatuses(
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                false),
-            MakeStatuses(
-                false,
-                true,
-                true,
-                true,
-                false,
-                true,
-                false,
-                false,
-                false,
-                false));
+        const auto newStatuses = MakeStatuses(
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false);
+        m = MakeMasks(newStatuses, newStatuses);
 
-        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "124{[H1,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -382,11 +401,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         // Without write, we should not get flush hints
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         const THostMask requested = MakePrimaryHosts();
@@ -403,7 +423,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // WriteFinished should generate one inflight item
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
 
-        flushHint = dirtyMap.MakeFlushHint(2);
+        flushHint = dirtyMap.MakeFlushHint(2, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         dirtyMap.WriteFinished(
@@ -415,19 +435,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Second writeFinished should generate one more inflight item
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap.GetInflightCount());
 
-        flushHint = dirtyMap.MakeFlushHint(2);
+        flushHint = dirtyMap.MakeFlushHint(2, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[10..19],124[20..29];"
             "H1->H1:123[10..19],124[20..29];"
             "H2->H2:123[10..19],124[20..29];",
             flushHint.DebugPrint());
         // Erase hints should be generated after completing flushing.
-        auto eraseHints = dirtyMap.MakeEraseHint(2);
+        auto eraseHints = dirtyMap.MakeEraseHint(2, m.PBufferReadable);
         UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
 
         // After getting flush hints, we should not get it once again
         {
-            auto flushHint = dirtyMap.MakeFlushHint(2);
+            auto flushHint = dirtyMap.MakeFlushHint(2, m.DDiskFlushTargets);
             UNIT_ASSERT_EQUAL(true, flushHint.Empty());
         }
 
@@ -445,7 +465,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             {},
             {123, 124});
 
-        flushHint = dirtyMap.MakeFlushHint(2);
+        flushHint = dirtyMap.MakeFlushHint(2, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         UNIT_ASSERT_VALUES_EQUAL(
             "H2->H2:123[10..19],124[20..29];",
@@ -459,7 +479,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Erase hints should be generated after completing the required
         // number of write operations.
-        eraseHints = dirtyMap.MakeEraseHint(2);
+        eraseHints = dirtyMap.MakeEraseHint(2, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0:123[10..19],124[20..29];"
             "H1:123[10..19],124[20..29];"
@@ -468,7 +488,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // After getting erase hints, we should not get it once again
         {
-            auto eraseHint = dirtyMap.MakeEraseHint(2);
+            auto eraseHint = dirtyMap.MakeEraseHint(2, m.PBufferReadable);
             UNIT_ASSERT_EQUAL(true, eraseHint.Empty());
         }
 
@@ -477,7 +497,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.EraseFinished(THostIndex{1}, {123, 124}, {});
         dirtyMap.EraseFinished(THostIndex{2}, {}, {123, 124});
 
-        eraseHints = dirtyMap.MakeEraseHint(2);
+        eraseHints = dirtyMap.MakeEraseHint(2, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H2:123[10..19],124[20..29];",
             eraseHints.DebugPrint());
@@ -487,7 +507,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Complete erasing from third pbuffer
         dirtyMap.EraseFinished(THostIndex{2}, {123, 124}, {});
-        eraseHints = dirtyMap.MakeEraseHint(2);
+        eraseHints = dirtyMap.MakeEraseHint(2, m.PBufferReadable);
         UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
 
         // Should remove inflight items
@@ -507,12 +527,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
 
         // Enable additional Hand-off: hosts 0,1,2,3 are primary, host 4 is
         // hand-off.
         const auto statuses = MakeStatuses(true, true, true, true, false);
-        dirtyMap.UpdateHostStatuses(statuses, statuses);
+        const auto m = MakeMasks(statuses, statuses);
 
         // Written to 2 primary and 1 hand-off
         const THostMask requested =
@@ -525,7 +546,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H1->H0:123[10..19];"   // Cross-node
             "H1->H1:123[10..19];"
@@ -539,7 +560,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 
         // Erase hints
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H1:123[10..19];"
             "H2:123[10..19];"
@@ -556,7 +577,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
 
         // Enable Hand-off-0 instead of DDisk0: host 0 disabled,
         // hosts 1,2,3 primary, host 4 hand-off.
@@ -571,7 +593,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             false,
             false,
             false);
-        dirtyMap.UpdateHostStatuses(statuses, statuses);
+        const auto m = MakeMasks(statuses, statuses);
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -584,7 +606,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H1->H1:123[10..19];"
             "H2->H2:123[10..19];"
@@ -597,7 +619,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 
         // Erase hints
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H1:123[10..19];"
             "H2:123[10..19];"
@@ -614,7 +636,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
 
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         const auto statuses = MakeStatuses(
@@ -628,7 +651,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             false,
             false,
             false);
-        dirtyMap.UpdateHostStatuses(statuses, statuses);
+        const auto m = MakeMasks(statuses, statuses);
 
         // Written to one primary and two hand-off
         const THostMask requested =
@@ -641,7 +664,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H2->H2:123[10..19];"
             "H3->H3:123[10..19];"
@@ -654,7 +677,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 
         // Erase hints
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H2:123[10..19];"
             "H3:123[10..19];"
@@ -671,7 +694,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
 
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
         const auto statuses = MakeStatuses(
@@ -685,7 +709,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             false,
             false,
             false);
-        dirtyMap.UpdateHostStatuses(statuses, statuses);
+        const auto m = MakeMasks(statuses, statuses);
 
         // Written to all 3 primary PBuffers (hosts 0,1,2). Host 0 is
         // disabled in the new layout, but the data is still on its PBuffer.
@@ -699,7 +723,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H3:123[10..19];"
             "H1->H1:123[10..19];"
@@ -712,7 +736,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 
         // Erase hints
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H1:123[10..19];"
             "H2:123[10..19];",
@@ -731,12 +755,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
 
         // Enable 4 DDisks (hosts 0,1,2,3 primary). Available DDisks is
         // enough for a quorum.
         const auto statuses = MakeStatuses(true, true, true, true, false);
-        dirtyMap.UpdateHostStatuses(statuses, statuses);
+        const auto m = MakeMasks(statuses, statuses);
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
 
@@ -763,7 +788,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(3);
+        auto flushHint = dirtyMap.MakeFlushHint(3, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[10..19],124[95..104],125[100..109];"
             "H0->H3:123[10..19],124[95..104],125[100..109];"
@@ -776,8 +801,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         // Only 3 DDisks available by default. For some requests, ddisk will not
         // be sufficient for quorum.
@@ -806,7 +832,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             confirmed);
 
-        auto flushHint = dirtyMap.MakeFlushHint(3);
+        auto flushHint = dirtyMap.MakeFlushHint(3, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[10..19],124[95..104];"
             "H1->H1:123[10..19],124[95..104];"
@@ -818,8 +844,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.WriteFinished(
             123,
@@ -827,7 +854,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         for (const auto& [route, flush]: flushHint.GetAllHints()) {
             dirtyMap.FlushFinished(route, {GetLsns(flush.Segments)}, {});
@@ -837,14 +864,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.LockPBuffer(123);
 
         // Erase hints should not be generated when PBuffer is locked.
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
 
         // UnLock pbuffer
         dirtyMap.UnlockPBuffer(123);
 
         // Erase hints should be generated when PBuffer is unlocked.
-        eraseHints = dirtyMap.MakeEraseHint(1);
+        eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
     }
 
@@ -852,8 +879,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
         const THostMask mask = MakePrimaryHosts();
 
         dirtyMap.WriteFinished(
@@ -867,14 +895,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
 
         // Flush hints should not be generated when DDisk is locked.
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
         // Lock pbuffer
         dirtyMap.UnLockDDiskRange(lockHandle);
 
         // FLush hints should be generated when DDisk is unlocked.
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
     }
 
@@ -882,8 +910,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.RestorePBuffer(
             123,
@@ -899,7 +928,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             THostIndex{2});
 
         // Flush hints should be generated when has quorum PBuffers.
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -913,8 +942,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         // Block written to four PBuffers
         dirtyMap.RestorePBuffer(
@@ -935,7 +965,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             THostIndex{3});
 
         // Flush hints should be generated when has quorum PBuffers.
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -944,8 +974,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2->H2:123[10..19];",
             flushHint.DebugPrint());
 
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[H0,H1,H2,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -965,8 +997,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         // Block written to two primary PBuffers and one hand-off PBuffer
         dirtyMap.RestorePBuffer(
@@ -983,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             THostIndex{3});
 
         // Flush hints should be generated when has quorum PBuffers.
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -992,8 +1025,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2->H2:123[10..19];",
             flushHint.DebugPrint());
 
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[H1,H2,H3][10..19][0..9]};",
             readHint.DebugPrint());
@@ -1003,8 +1038,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.WriteFinished(
             123,
@@ -1012,7 +1048,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        auto flushHint = dirtyMap.MakeFlushHint(1);
+        auto flushHint = dirtyMap.MakeFlushHint(1, m.DDiskFlushTargets);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[0..99];"
             "H1->H1:123[0..99];"
@@ -1032,7 +1068,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             {123},
             {});
 
-        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        auto eraseHints = dirtyMap.MakeEraseHint(1, m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0:123[0..99];"
             "H1:123[0..99];"
@@ -1047,8 +1083,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        auto readHint =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
+        auto readHint = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(0, 100),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2,H3,H4][0..99][0..99]};",
             readHint.DebugPrint());
@@ -1058,15 +1096,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
-        SetupDefault(dirtyMap);
+            DefaultVChunkSize / DefaultBlockSize,
+            HostCount);
+        auto m = DefaultMasks();
 
         dirtyMap.RestorePBuffer(
             123,
             TBlockRange64::WithLength(10, 10),
             THostIndex{0});
-        auto readHint1 =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint1 = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint1.DebugPrint());
         UNIT_ASSERT_VALUES_EQUAL(false, readHint1.WaitReady.IsReady());
 
@@ -1074,8 +1115,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             123,
             TBlockRange64::WithLength(10, 10),
             THostIndex{1});
-        auto readHint2 =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint2 = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL("WaitReady:NotReady", readHint2.DebugPrint());
         UNIT_ASSERT_VALUES_EQUAL(false, readHint2.WaitReady.IsReady());
 
@@ -1083,8 +1126,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             123,
             TBlockRange64::WithLength(10, 10),
             THostIndex{2});
-        auto readHint3 =
-            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        auto readHint3 = dirtyMap.MakeReadHint(
+            TBlockRange64::WithLength(10, 10),
+            m.DDiskReadable,
+            m.PBufferReadable);
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[H0,H1,H2][10..19][0..9]};",
             readHint3.DebugPrint());

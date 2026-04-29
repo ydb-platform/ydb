@@ -4,7 +4,7 @@
 #include "read_request.h"
 #include "vchunk_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

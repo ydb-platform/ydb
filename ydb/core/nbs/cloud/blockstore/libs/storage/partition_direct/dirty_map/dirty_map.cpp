@@ -1,7 +1,6 @@
 #include "dirty_map.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -217,10 +216,21 @@ void TDDiskState::UpdateState()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBlocksDirtyMap::TBlocksDirtyMap(ui32 blockSize, ui64 blockCount)
+TBlocksDirtyMap::TBlocksDirtyMap(
+    ui32 blockSize,
+    ui64 blockCount,
+    size_t hostCount)
     : BlockSize(blockSize)
     , BlockCount(blockCount)
-{}
+{
+    Y_ABORT_UNLESS(hostCount > 0);
+    Y_ABORT_UNLESS(hostCount <= MaxHostCount);
+    DDiskStates.resize(hostCount);
+    for (auto& s: DDiskStates) {
+        s.Init(BlockCount, BlockCount);
+    }
+    PBufferCounters.resize(hostCount);
+}
 
 TBlocksDirtyMap::~TBlocksDirtyMap()
 {
@@ -231,34 +241,6 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
 
             return TInflightMap::EEnumerateContinuation::Continue;
         });
-}
-
-void TBlocksDirtyMap::UpdateHostStatuses(
-    THostStatusList pbufferHosts,
-    THostStatusList ddiskHosts)
-{
-    Y_ABORT_UNLESS(pbufferHosts.HostCount() == ddiskHosts.HostCount());
-    if (PBufferHosts.HostCount() == 0) {
-        const size_t hostCount = pbufferHosts.HostCount();
-        Y_ABORT_UNLESS(hostCount > 0);
-        DDiskStates.resize(hostCount);
-        for (auto& s: DDiskStates) {
-            s.Init(BlockCount, BlockCount);
-        }
-        PBufferCounters.resize(hostCount);
-    } else {
-        Y_ABORT_UNLESS(pbufferHosts.HostCount() == PBufferHosts.HostCount());
-    }
-    PBufferHosts = std::move(pbufferHosts);
-    DDiskHosts = std::move(ddiskHosts);
-}
-
-TVChunkConfig TBlocksDirtyMap::MakeVChunkConfigSnapshot(ui32 vChunkIndex) const
-{
-    return TVChunkConfig{
-        .VChunkIndex = vChunkIndex,
-        .PBufferHosts = PBufferHosts,
-        .DDiskHosts = DDiskHosts};
 }
 
 void TBlocksDirtyMap::RestorePBuffer(
@@ -279,13 +261,16 @@ void TBlocksDirtyMap::RestorePBuffer(
     }
 }
 
-TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
+TReadHint TBlocksDirtyMap::MakeReadHint(
+    TBlockRange64 range,
+    THostMask ddiskReadable,
+    THostMask pbufferReadable)
 {
     TReadHint result;
 
-    auto makeDefaultHint = [this](TBlockRange64 range)
+    auto makeDefaultHint = [this, ddiskReadable](TBlockRange64 range)
     {
-        auto hostMask = FilterDDiskHosts(DDiskHosts.Active(), range);
+        auto hostMask = FilterDDiskHosts(ddiskReadable, range);
         Y_ABORT_UNLESS(!hostMask.Empty());
 
         return TReadRangeHint(
@@ -297,15 +282,18 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             TRangeLock(this, range, hostMask));
     };
 
-    auto makeHint = [this](TReadSource src, ui64 lsn, TBlockRange64 range)
+    auto makeHint =
+        [this,
+         ddiskReadable,
+         pbufferReadable](TReadSource src, ui64 lsn, TBlockRange64 range)
     {
         auto hostMask = src.Mask;
         Y_ABORT_UNLESS(!hostMask.Empty());
 
         if (src.FromDDisk) {
-            hostMask = hostMask.LogicalAnd(DDiskHosts.Active());
+            hostMask = hostMask.LogicalAnd(ddiskReadable);
         } else {
-            hostMask = hostMask.LogicalAnd(PBufferHosts.Active());
+            hostMask = hostMask.LogicalAnd(pbufferReadable);
         }
         Y_ABORT_UNLESS(!hostMask.Empty());
 
@@ -343,14 +331,14 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    if (item->Value.ReadMask(DDiskHosts.Active()).Mask.Empty()) {
+    if (item->Value.ReadMask(ddiskReadable).Mask.Empty()) {
         // Reading from range without quorum is forbidden.
         // Caller should wait until PBuffers quorum will be made.
         result.WaitReady = item->Value.GetQuorumReadyFuture();
         Y_ABORT_UNLESS(result.RangeHints.empty());
     } else {
         result.RangeHints.push_back(makeHint(
-            item->Value.ReadMask(DDiskHosts.Active()),
+            item->Value.ReadMask(ddiskReadable),
             item->Key,
             item->Range));
     }
@@ -358,7 +346,9 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     return result;
 }
 
-TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
+TFlushHints TBlocksDirtyMap::MakeFlushHint(
+    size_t batchSize,
+    THostMask ddiskFlushTargets)
 {
     TFlushHints result;
 
@@ -372,7 +362,7 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
     auto countReadyToFlush = [&](TBlockRange64 range)
     {
         size_t result = 0;
-        for (THostIndex destination: DDiskHosts.Primary()) {
+        for (THostIndex destination: ddiskFlushTargets) {
             result += DDiskStates[destination].NeedFlushToDDisk(range) ? 1 : 0;
         }
         return result;
@@ -395,7 +385,7 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
             continue;
         }
 
-        for (THostIndex destination: DDiskHosts.Primary()) {
+        for (THostIndex destination: ddiskFlushTargets) {
             if (!DDiskStates[destination].NeedFlushToDDisk(item->Range)) {
                 continue;
             }
@@ -410,7 +400,9 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
     return result;
 }
 
-TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
+TEraseHints TBlocksDirtyMap::MakeEraseHint(
+    size_t batchSize,
+    THostMask pbufferEraseTargets)
 {
     TEraseHints result;
 
@@ -427,10 +419,8 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
-        for (THostIndex h = 0; h < PBufferHosts.HostCount(); ++h) {
-            if (PBufferHosts.Get(h) != EHostStatus::Disabled &&
-                val.RequestErase(h))
-            {
+        for (THostIndex h: pbufferEraseTargets) {
+            if (val.RequestErase(h)) {
                 result.AddHint(h, item->Key, item->Range);
             }
         }
@@ -719,7 +709,7 @@ TString TBlocksDirtyMap::DebugPrintLockedDDiskRanges()
 TString TBlocksDirtyMap::DebugPrintDDiskState() const
 {
     TStringBuilder result;
-    for (size_t h = 0; h < DDiskHosts.HostCount(); ++h) {
+    for (size_t h = 0; h < DDiskStates.size(); ++h) {
         result << "H" << h << DDiskStates[h].DebugPrint() << ";";
     }
     return result;

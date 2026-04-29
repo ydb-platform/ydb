@@ -43,7 +43,7 @@ void TWriteWithPbReplicationRequestExecutor::Run()
     ScheduleHedging();
 
     TVector<THostIndex> primaries;
-    for (auto h: VChunkConfig.PBufferHosts.Primary()) {
+    for (auto h: VChunkConfig.PBufferHosts.GetPrimary()) {
         primaries.push_back(h);
     }
     SendWriteRequestToManyPBuffers(std::move(primaries));
@@ -65,13 +65,13 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
                 if (!self->CompletedWrites.Count()) {
                     TVector<THostIndex> secondWave;
                     std::optional<THostIndex> lastPrimary;
-                    for (auto h: self->VChunkConfig.PBufferHosts.Primary()) {
+                    for (auto h: self->VChunkConfig.PBufferHosts.GetPrimary()) {
                         lastPrimary = h;
                     }
                     if (lastPrimary) {
                         secondWave.push_back(*lastPrimary);
                     }
-                    for (auto h: self->VChunkConfig.PBufferHosts.HandOff()) {
+                    for (auto h: self->VChunkConfig.PBufferHosts.GetHandOff()) {
                         secondWave.push_back(h);
                     }
                     self->SendWriteRequestToManyPBuffers(std::move(secondWave));

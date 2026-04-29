@@ -45,19 +45,23 @@ TVChunk::TVChunk(
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , VChunkIndex(vChunkConfig.VChunkIndex)
+    , VChunkConfig(vChunkConfig)
+    , DDiskReadable(VChunkConfig.DDiskHosts.GetActive())
+    , DDiskFlushTargets(VChunkConfig.DDiskHosts.GetPrimary())
+    , PBufferActive(VChunkConfig.PBufferHosts.GetActive())
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHedgingDelay(writeHedgingDelay)
     , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
+    , BlocksDirtyMap(
+          BlockSize,
+          BlocksCount,
+          VChunkConfig.PBufferHosts.HostCount())
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
-    BlocksDirtyMap.UpdateHostStatuses(
-        vChunkConfig.PBufferHosts,
-        vChunkConfig.DDiskHosts);
 }
 
 TVChunk::~TVChunk() = default;
@@ -89,7 +93,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
         "TVChunk.Read",
         NWilson::EFlags::AUTO_END,
         ActorSystem));
-    span->Attribute("VChunkIndex", VChunkIndex);
+    span->Attribute("VChunkIndex", VChunkConfig.VChunkIndex);
 
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
@@ -158,7 +162,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
         "TVChunk.Write",
         NWilson::EFlags::AUTO_END,
         ActorSystem));
-    span->Attribute("VChunkIndex", VChunkIndex);
+    span->Attribute("VChunkIndex", VChunkConfig.VChunkIndex);
 
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
@@ -223,12 +227,11 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const auto cfg = BlocksDirtyMap.MakeVChunkConfigSnapshot(VChunkIndex);
     for (const auto& meta: response.Meta) {
-        if (meta.HostIndex >= cfg.PBufferHosts.HostCount()) {
+        if (meta.HostIndex >= MaxHostCount) {
             continue;
         }
-        if (cfg.PBufferHosts.Get(meta.HostIndex) == EHostStatus::Disabled) {
+        if (!PBufferActive.Test(meta.HostIndex)) {
             continue;
         }
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
@@ -243,7 +246,8 @@ void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto future = DirectBlockGroup->RestoreDBGPBuffers(VChunkIndex);
+    auto future =
+        DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.VChunkIndex);
     future.Subscribe(
         [weakSelf = weak_from_this()]   //
         (const TFuture<TDBGRestoreResponse>& f) mutable
@@ -277,7 +281,10 @@ void TVChunk::DoReadBlocksLocal(
             "TVChunk.DirtyMap.ReadHint",
             NWilson::EFlags::AUTO_END);
 
-        readHint = BlocksDirtyMap.MakeReadHint(vchunkRange);
+        readHint = BlocksDirtyMap.MakeReadHint(
+            vchunkRange,
+            DDiskReadable,
+            PBufferActive);
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -317,7 +324,7 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    const auto cfg = BlocksDirtyMap.MakeVChunkConfigSnapshot(VChunkIndex);
+    const auto& cfg = VChunkConfig;
     auto requestExecutor = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
         cfg,
@@ -364,7 +371,7 @@ void TVChunk::DoWriteBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const auto cfg = BlocksDirtyMap.MakeVChunkConfigSnapshot(VChunkIndex);
+    const auto& cfg = VChunkConfig;
     std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
@@ -459,9 +466,10 @@ void TVChunk::DoFlush()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto flushBatch = BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize);
+    auto flushBatch =
+        BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize, DDiskFlushTargets);
 
-    const auto cfg = BlocksDirtyMap.MakeVChunkConfigSnapshot(VChunkIndex);
+    const auto& cfg = VChunkConfig;
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {
         auto flushExecutor = std::make_shared<TFlushRequestExecutor>(
             ActorSystem,
@@ -510,9 +518,10 @@ void TVChunk::DoErase()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto hints = BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize);
+    auto hints =
+        BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize, PBufferActive);
 
-    const auto cfg = BlocksDirtyMap.MakeVChunkConfigSnapshot(VChunkIndex);
+    const auto& cfg = VChunkConfig;
     for (auto& [host, hint]: hints.TakeAllHints()) {
         auto eraseExecutor = std::make_shared<TEraseRequestExecutor>(
             ActorSystem,

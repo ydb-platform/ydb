@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // While the destination DDisk is fresh, flushing cannot reach a
         // primary-DDisk quorum, so MakeFlushHint stays empty regardless of
         // which writes overlap the copied range.
-        auto flushHints = DirtyMap.MakeFlushHint(1);
+        auto flushHints = DirtyMap.MakeFlushHint(1, DDiskFlushTargets());
         UNIT_ASSERT_VALUES_EQUAL("", flushHints.DebugPrint());
 
         // Read range #0 - OK.
@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // After range #0 is copied, the destination's flushable watermark
         // advanced past lsn 123's range, so the quorum is met and flush hints
         // for the non-overlapping lsn 123 are produced.
-        flushHints = DirtyMap.MakeFlushHint(1);
+        flushHints = DirtyMap.MakeFlushHint(1, DDiskFlushTargets());
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:123[10..19];"
             "H1->H1:123[10..19];"
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // flushable watermark. The new dirty_map kept lsn 125 in ReadyToFlush
         // through the earlier checks (it could not reach a primary-only quorum
         // while DDisk1 was fresh), so it is reported together with lsn 124.
-        flushHints = DirtyMap.MakeFlushHint(1);
+        flushHints = DirtyMap.MakeFlushHint(1, DDiskFlushTargets());
         UNIT_ASSERT_VALUES_EQUAL(
             "H0->H0:124[250..259],125[260..269];"
             "H1->H1:124[250..259],125[260..269];"

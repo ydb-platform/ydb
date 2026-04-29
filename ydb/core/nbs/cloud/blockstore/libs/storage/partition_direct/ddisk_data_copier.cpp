@@ -146,7 +146,10 @@ void TDDiskDataCopier::StartCopyRange()
 
     DirtyMap->SetFlushWatermark(Destination, futureWatermark);
 
-    auto readHint = DirtyMap->MakeReadHint(range);
+    auto readHint = DirtyMap->MakeReadHint(
+        range,
+        VChunkConfig.DDiskHosts.GetActive(),
+        VChunkConfig.PBufferHosts.GetActive());
     Y_ABORT_UNLESS(!readHint.RangeHints.empty());
 
     const ui64 requestId = Random();

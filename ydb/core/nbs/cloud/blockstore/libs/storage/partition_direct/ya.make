@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
@@ -53,6 +54,7 @@ END()
 
 RECURSE(
     dirty_map
+    host
     model
 )
 

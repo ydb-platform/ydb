@@ -21,7 +21,8 @@ protected:
 public:
     TStatusType Execute() {
         ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
-        auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
+
+        [[maybe_unused]] auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
         auto& parentSpan = ParentSpan_;
 
         try {
@@ -95,7 +96,7 @@ private:
 
     TStatusType RunAttempt(std::int64_t backoffMs) {
         auto attemptSpan = Client_.Impl_->CreateRetryAttemptSpan(this->RetryNumber_, backoffMs, ParentSpan_);
-        std::unique_ptr<NTrace::IScope> scope;
+        [[maybe_unused]] std::unique_ptr<NTrace::IScope> scope;
         if (attemptSpan) {
             scope = attemptSpan->Activate();
         }

@@ -29,7 +29,7 @@ public:
     TAsyncStatusType Execute() {
         ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
 
-        auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
+        [[maybe_unused]] auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
 
         this->RetryStartTime_ = TInstant::Now();
         TPtr self(this);
@@ -75,7 +75,8 @@ protected:
 
     static void DoRetry(TPtr self) {
         self->StartAttemptSpan();
-        auto scope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
+
+        [[maybe_unused]] auto scope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
         self->Retry();
     }
 
@@ -122,6 +123,11 @@ protected:
                 }
             }
         );
+    }
+
+protected:
+    std::unique_ptr<NTrace::IScope> ActivateAttemptSpan() {
+        return AttemptSpan_ ? AttemptSpan_->Activate() : nullptr;
     }
 
 private:
@@ -202,6 +208,7 @@ public:
 
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
+                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {

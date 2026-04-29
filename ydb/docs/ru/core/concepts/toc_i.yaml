@@ -32,6 +32,8 @@ items:
   href: limits-ydb.md
 - name: Асинхронная репликация
   href: async-replication.md
+- name: Резервное копирование и восстановление
+  href: backup.md  
 - name: Режим bridge
   href: bridge.md
 - name: Трансфер данных

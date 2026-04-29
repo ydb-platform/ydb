@@ -5,7 +5,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/library/formats/arrow/size_calcer.h>

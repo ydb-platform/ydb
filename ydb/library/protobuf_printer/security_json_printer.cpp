@@ -85,6 +85,8 @@ private:
         }
 
         bool shouldPrint = reflection->HasField(proto, &field);
+        // Sensitive required fields without defaults are silently skipped rather than throwing.
+        // It differs from the base class TProto2JsonPrinter behavior, because we don't want to fail on printing
         shouldPrint = shouldPrint ||
             (GetConfig().MissingSingleKeyMode == NProtobufJson::TProto2JsonConfig::MissingKeyDefault && !field.containing_oneof());
 
@@ -102,14 +104,14 @@ private:
     }
 };
 
-} // anonymous namespace
-
 void SecureProto2JsonImpl(const NProtoBuf::Message& proto,
                           NProtobufJson::IJsonOutput& jsonOut,
                           const NProtobufJson::TProto2JsonConfig& config) {
     TSecurityProto2JsonPrinter printer(config);
     printer.Print(proto, jsonOut, /* closeMap */ true);
 }
+
+} // anonymous namespace
 
 void SecureProto2Json(const NProtoBuf::Message& proto,
                       NJson::TJsonWriter& writer,

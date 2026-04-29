@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package NKikimr.NDataShard.NPhysicalBackup;
+
+import "ydb/core/tablet_flat/flat_executor.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+
+// ============================================================================
+// Physical SST Backup/Restore Proto Definitions
+//
+// These messages define the S3 file format for physical (SST-level) backup
+// of YDB DataShard tables. Instead of exporting rows as CSV, this format
+// stores raw SST parts (TBundle protos + blob data) that can be restored
+// via the LoanTable/Database::Merge() path at near-download speed.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// Top-level export metadata (one per export, stored as export_metadata.pb)
+// ---------------------------------------------------------------------------
+
+message TExportMetadata {
+    // Table schema (CreateTableRequest-compatible description)
+    NKikimrSchemeOp.TTableDescription table_schema = 1;
+
+    // Table path in the source database
+    string source_path = 2;
+
+    // Total number of shards in the export
+    uint32 shard_count = 3;
+
+    // Export timestamp (wall clock, informational only)
+    uint64 export_timestamp_us = 4;
+
+    // YDB version that produced this export (for compatibility checks)
+    string ydb_version = 5;
+
+    // Partition configuration (boundaries, split policy)
+    NKikimrSchemeOp.TPartitionConfig partition_config = 6;
+
+    // Key column types (ordered by key position)
+    repeated uint32 key_column_ids = 7;
+}
+
+// ---------------------------------------------------------------------------
+// Per-shard manifest (one per shard, stored as shard_NNNNNN/manifest.pb)
+// ---------------------------------------------------------------------------
+
+message TShardManifest {
+    // Shard index (0-based, matches S3 prefix shard_NNNNNN)
+    uint32 shard_index = 1;
+
+    // Key range this shard covers
+    TKeyRange key_range = 2;
+
+    // List of SST parts in this shard
+    repeated TPartEntry parts = 3;
+
+    // TxStatus parts
+    repeated TTxStatusEntry tx_status_parts = 4;
+
+    // MVCC state at the time of snapshot
+    TMVCCState mvcc_state = 5;
+
+    // Shard-level statistics
+    TShardStats stats = 6;
+
+    // Snapshot coordinates (epoch after memtable flush)
+    uint64 snapshot_step = 7;
+    uint64 snapshot_tx_id = 8;
+
+    // Source tablet ID (informational)
+    uint64 source_tablet_id = 9;
+}
+
+// Key range boundaries for a shard
+message TKeyRange {
+    // Serialized key cells (TSerializedCellVec format)
+    bytes from_key = 1;
+    bytes to_key = 2;
+
+    bool from_inclusive = 3;
+    bool to_inclusive = 4;
+}
+
+// A single SST part entry in the manifest
+message TPartEntry {
+    // Part index within this shard (maps to S3 path: parts/part_N.*)
+    uint32 part_index = 1;
+
+    // The TBundle proto (PageCollections + Opaque/Slices + Epoch)
+    // Same format as TDatabaseBorrowPart.TPartInfo.Bundle
+    NKikimrExecutorFlat.TBundle bundle = 2;
+
+    // List of all blob IDs that make up this part's data
+    repeated TBlobEntry blobs = 3;
+
+    // Total size of all blob data for this part
+    uint64 total_blob_bytes = 4;
+
+    // Part statistics
+    uint64 row_count = 5;
+    uint64 data_bytes = 6;
+}
+
+// A single blob within a part
+message TBlobEntry {
+    // Full TLogoBlobID components
+    uint64 raw_x1 = 1;
+    uint64 raw_x2 = 2;
+    uint64 raw_x3 = 3;
+
+    // Offset and size within the part_N.blobs.bin file
+    uint64 offset = 4;
+    uint64 size = 5;
+}
+
+// TxStatus part entry
+message TTxStatusEntry {
+    uint32 tx_status_index = 1;
+
+    // LargeGlobId for the TxStatus data
+    NKikimrExecutorFlat.TLargeGlobId data_id = 2;
+
+    // Epoch
+    int64 epoch = 3;
+
+    // Inline data (small enough to embed)
+    bytes data = 4;
+}
+
+// MVCC state snapshot
+message TMVCCState {
+    uint64 complete_edge_step = 1;
+    uint64 complete_edge_tx_id = 2;
+    uint64 incomplete_edge_step = 3;
+    uint64 incomplete_edge_tx_id = 4;
+    uint64 immediate_write_edge_step = 5;
+    uint64 immediate_write_edge_tx_id = 6;
+    uint64 min_write_version_step = 7;
+    uint64 min_write_version_tx_id = 8;
+}
+
+// Shard statistics
+message TShardStats {
+    uint64 row_count = 1;
+    uint64 data_size = 2;
+    uint64 part_count = 3;
+    uint64 tx_status_part_count = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Blob index file (one per part, stored as parts/part_N.blobs.index)
+// ---------------------------------------------------------------------------
+
+message TBlobIndex {
+    // Ordered list matching the blobs in part_N.blobs.bin
+    repeated TBlobEntry entries = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Physical export task (sent from SchemeShard to DataShard)
+// ---------------------------------------------------------------------------
+
+message TPhysicalExportTask {
+    // S3 connection settings
+    NKikimrSchemeOp.TS3Settings s3_settings = 1;
+
+    // S3 prefix for this shard's data
+    string shard_prefix = 2;
+
+    // Table ID within the datashard
+    uint64 table_id = 3;
+
+    // Shard index for manifest
+    uint32 shard_index = 4;
+
+    // Number of retries for S3 operations
+    uint32 number_of_retries = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Physical restore task (sent from SchemeShard to DataShard)
+// ---------------------------------------------------------------------------
+
+message TPhysicalRestoreTask {
+    // S3 connection settings
+    NKikimrSchemeOp.TS3Settings s3_settings = 1;
+
+    // S3 prefix for this shard's data
+    string shard_prefix = 2;
+
+    // Table ID within the datashard
+    uint64 table_id = 3;
+
+    // Number of retries for S3 operations
+    uint32 number_of_retries = 4;
+}

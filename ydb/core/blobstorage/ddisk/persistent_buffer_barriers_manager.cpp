@@ -1,14 +1,15 @@
+#include "ddisk.h"
 #include "persistent_buffer_barriers_manager.h"
 
-#include <queue>
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr::NDDisk {
 
-    bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId) {
+    bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId, ui32 barriersLimit) {
         return !PersistentBufferBarrierHoles.empty()
             || PersistentBufferBarriersLocation.find(tabletId) != PersistentBufferBarriersLocation.end()
             || FreeBarrierPosition < TPersistentBufferHeader::MaxBarriersPerHeader // all barriers sectors are full
-            || PersistentBufferBarriers.size() < PersistentBufferFormat.MaxBarriersLimit; // max barrier sectors limit reached
+            || PersistentBufferBarriers.size() < barriersLimit; // max barrier sectors limit reached
     }
 
     std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() {
@@ -24,7 +25,7 @@ namespace NKikimr::NDDisk {
     }
 
     std::tuple<ui32, ui32, TEraseBarrier&> TPersistentBufferBarriersManager::MoveBarrier(ui64 tabletId, ui64 lsn, const TPersistentBufferSectorInfo& newSector) {
-        auto it = PersistentBufferBarriersLocation.find(creds.TabletId);
+        auto it = PersistentBufferBarriersLocation.find(tabletId);
         ui32 barrierIdx = 0;
         ui32 pos = 0;
         if (it == PersistentBufferBarriersLocation.end()) {
@@ -32,7 +33,7 @@ namespace NKikimr::NDDisk {
                 barrierIdx = std::get<0>(PersistentBufferBarrierHoles.back());
                 pos = std::get<1>(PersistentBufferBarrierHoles.back());
                 PersistentBufferBarrierHoles.pop_back();
-                PersistentBufferBarriersLocation[creds.TabletId] = {barrierIdx, pos};
+                PersistentBufferBarriersLocation[tabletId] = {barrierIdx, pos};
             } else {
                 if (FreeBarrierPosition >= TPersistentBufferHeader::MaxBarriersPerHeader || PersistentBufferBarriers.empty()) {
                     FreeBarrierPosition = 0;
@@ -47,7 +48,7 @@ namespace NKikimr::NDDisk {
                 }
                 barrierIdx = PersistentBufferBarriers.size() - 1;
                 pos = FreeBarrierPosition;
-                PersistentBufferBarriersLocation[creds.TabletId] = {barrierIdx, pos};
+                PersistentBufferBarriersLocation[tabletId] = {barrierIdx, pos};
                 FreeBarrierPosition++;
             }
         } else {
@@ -65,13 +66,13 @@ namespace NKikimr::NDDisk {
         if (barrier.Header.Barrier.Barriers[pos].Lsn >= lsn) {
             STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::RestoreBarriers tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barrier.Barriers[pos].Lsn));
         }
-        barrier.Header.Barrier.Barriers[pos] = {creds.TabletId, lsn};
+        barrier.Header.Barrier.Barriers[pos] = {tabletId, lsn};
         barrier.Header.Barrier.BarrierLsn++;
 
         return {oldChunkIdx, oldSectorIdx, barrier};
     }
 
-    void TPersistentBufferBarriersManager::RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers   ) {
+    void TPersistentBufferBarriersManager::RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
             auto& b = PersistentBufferBarriers[pos];
             allocator.MarkOccupied({{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx}});
@@ -116,7 +117,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    bool TPersistentBufferBarriersManager::AddBarrier(const TPersistentBufferHeader* header) {
+    bool TPersistentBufferBarriersManager::AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx) {
         if (header->Flags & TPersistentBufferHeader::IS_BARRIER == 0) {
             return false;
         }

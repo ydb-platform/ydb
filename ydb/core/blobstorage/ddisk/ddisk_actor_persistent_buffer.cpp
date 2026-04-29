@@ -189,7 +189,7 @@ namespace NKikimr::NDDisk {
                     STLOG(PRI_ERROR, BS_DDISK, BSDD11, "TDDiskActor::StartRestorePersistentBuffer header checksum failed", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
                     continue;
                 }
-                if (PersistentBufferBarriersManager.AddBarrier(header)) {
+                if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
                     continue;
                 }
                 auto& buffer = PersistentBuffers[{header->Record.TabletId, header->Record.Generation}];
@@ -922,7 +922,8 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
             return;
         }
-        if (erases.size() < 2 || PersistentBufferSpaceAllocator.GetFreeSpace() < 2 || !PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId)) {
+        if (erases.size() < 2 || PersistentBufferSpaceAllocator.GetFreeSpace() < 2
+            || !PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId, PersistentBufferFormat.MaxBarriersLimit)) {
             ErasePersistentBuffer(*ev, creds, erases);
         } else {
             BarrierErasePersistentBuffer(*ev, creds, erases, lsn);

@@ -942,7 +942,7 @@ private:
                         SendProxySessionIfNotSent(resState);
                     } else {
                         // TODO: make cache with error results.
-                        KESUS_PROXY_LOG_WARN("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                        KESUS_PROXY_LOG_INFO("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
                         ProcessSubscribeResourceError(resResult.GetError().GetStatus(), resState);
                     }
                 }

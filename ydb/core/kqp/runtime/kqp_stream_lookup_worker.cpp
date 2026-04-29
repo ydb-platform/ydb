@@ -455,6 +455,11 @@ private:
             *record.MutableVectorTopK() = *Settings.VectorTopK;
         }
 
+        if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
+            record.SetPoolId(Settings.PoolId);
+        }
+
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
             request->Keys.reserve(ranges.size());
@@ -1097,7 +1102,7 @@ private:
             return row;
         }
 
-        bool Completed() {
+        bool Completed() const {
             return PendingReads.empty();
         }
     };
@@ -1139,6 +1144,11 @@ private:
                     request->Ranges.emplace_back(TSerializedTableRange(range));
                 }
             }
+        }
+
+        if (!Settings.PoolId.empty()) {
+            record.SetDatabaseId(Settings.Database);
+            record.SetPoolId(Settings.PoolId);
         }
     }
 
@@ -1214,6 +1224,11 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     TLookupSettings preparedSettings;
     preparedSettings.TablePath = std::move(settings.GetTable().GetPath());
     preparedSettings.TableId = MakeTableId(settings.GetTable());
+
+    if (settings.HasPoolId()) {
+        preparedSettings.Database = settings.GetDatabase();
+        preparedSettings.PoolId = settings.GetPoolId();
+    }
 
     preparedSettings.AllowNullKeysPrefixSize = settings.HasAllowNullKeysPrefixSize() ? settings.GetAllowNullKeysPrefixSize() : 0;
     preparedSettings.KeepRowsOrder = settings.HasKeepRowsOrder() && settings.GetKeepRowsOrder();

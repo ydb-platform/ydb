@@ -44,6 +44,14 @@ public:
         return *ColumnIds.begin();
     }
 
+    std::optional<ui32> GetSingleColumnId() const override {
+        if (ColumnIds.size() == 1) {
+            return *ColumnIds.begin();
+        }
+
+        return std::nullopt;
+    }
+
     const std::set<ui32>& GetColumnIds() const {
         return ColumnIds;
     }

@@ -336,6 +336,10 @@ def _wrap_file_path(s: str) -> str:
     return f"'{s}'" if " " in s else s
 
 
+def _escape_space(s: str) -> str:
+    return s.replace(' ', '\\ ')
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -446,16 +450,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 16:
+    if major < 20:
         raise Exception(
-            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
+            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major)
         )
 
-    if major < 20:
+    if major < 22:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/LVuJXYQ47adsqL".format(major),
             ]
         )
 
@@ -1025,15 +1029,21 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
 def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
+    is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
 
     if not ts_outputs:
-        ymake.report_configure_error(
-            "\n"
-            "Module outputs are not set.\n"
-            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
-        )
-        return
+        if is_ts_package:
+            # it is possible for TS_PACKAGE to be without outdirs.
+            # we put fake value here in order to have a proper exclude value in _SET_TS_INPUTS_EXCLUDES
+            unit.set(["_TS_OUTPUTS_JOINED", "__ts_package_fake_output__"])
+        else:
+            ymake.report_configure_error(
+                "\n"
+                "Module outputs are not set.\n"
+                f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+            )
+            return
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -1062,12 +1072,18 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_ts_check_configure(unit: NotsUnitType) -> None:
+def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
+        if validation_mode == "TS_TEST_FOR":
+            ymake.report_configure_error(
+                f"{COLORS.red}Missing test script{COLORS.reset} \n"
+                f"{COLORS.cyan}TS_TEST_FOR{COLORS.reset} requires to use at least one {COLORS.cyan}TS_TEST{COLORS.reset} macro \n"
+                "https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR"
+            )
         return
 
     test_files = df.TestFiles.ts_check_srcs(unit, (), {})
@@ -1234,13 +1250,6 @@ def on_ts_test_for_configure(
         unit.set_property(["DART_DATA", data])
 
 
-def on__ts_test_for_configure(unit: NotsUnitType) -> None:
-    # it has to be here because it uses TS_TEST_FOR_PATH that is set in plugin.
-    # if you call _SET_TS_TEST_FOR_INPUTS() directly
-    # from _TS_TEST_FOR_EPILOGUE(), TS_TEST_FOR_PATH is not set yet.
-    unit.on_set_ts_test_for_inputs()
-
-
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
@@ -1250,11 +1259,21 @@ def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) ->
 
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
+    forbid_rel = unit.get("_ALLOW_REL_FOR_PATH") == "no"
+
+    if forbid_rel and not is_arc_root:
+        arc_path = os.path.normpath(rootrel_arc_src(f"{root}/{for_mod}", unit))
+        ymake.report_configure_error(
+            "TS_TEST_FOR does not support RELATIVE path.\n"
+            f"Update your module to {COLORS.cyan}TS_TEST_FOR({arc_path}){COLORS.reset}\n"
+            "See more details in https://st.yandex-team.ru/FBP-3073"
+        )
+        return
 
     if is_arc_root and is_rel_for_mod:
         ymake.report_configure_error(
             "You are using a relative path for a module. "
-            + "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
+            "You have to add RELATIVE key, like (RELATIVE {})".format(for_mod)
         )
 
 
@@ -1309,18 +1328,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
 
 @_with_report_configure_error
-def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_INOUTS")
-    if ts_files == "":
-        ymake.report_configure_error(
-            "\n"
-            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
-            "If you use the TS_FILES_GLOB, check the expression. For example, use `src/**/*` instead of `src/*`.\n"
-            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
-        )
-
-
-@_with_report_configure_error
 def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
@@ -1366,3 +1373,17 @@ def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
         unit.set([var_name, "experimental-compile"])
     else:
         raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
+
+
+@_with_report_configure_error
+def on_escape_spaces(unit: NotsUnitType, var_name: str) -> None:
+    prefix = "${ARCADIA_ROOT}/"
+    files = __strip_prefix(prefix, unit.get(var_name)).split(f" {prefix}")
+    unit.set([var_name, ""])
+    __set_append(unit, var_name, [prefix + _escape_space(f) for f in files])
+
+
+@_with_report_configure_error
+def on_ts_conf_error(unit: NotsUnitType, *messages: str) -> None:
+    msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
+    ymake.report_configure_error(msg)

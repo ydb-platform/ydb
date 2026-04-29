@@ -3594,10 +3594,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, TString()); // Fail if user set empty token
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
 
-        auto driver = server.AnnoyingClient->GetDriver();
+        const auto& driver = server.GetDriver();
 
 
-        ModifyTopicACL(driver, "/Root/PQ/" + DEFAULT_TOPIC_NAME, {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
+        ModifyTopicACL(&driver, "/Root/PQ/" + DEFAULT_TOPIC_NAME, {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
 
 
         writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -3608,7 +3608,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             std::shared_ptr<NYdb::ICredentialsProviderFactory> creds = std::make_shared<TTestCredentialsProviderFactory>("topic1@" BUILTIN_ACL_DOMAIN);
             dynamic_cast<TTestCredentialsProviderFactory*>(creds.get())->SetToken("topic1@" BUILTIN_ACL_DOMAIN);
 
-            auto writer = CreateWriter(*driver, SHORT_TOPIC_NAME, "123", {}, {}, {}, creds);
+            auto writer = CreateWriter(driver, SHORT_TOPIC_NAME, "123", {}, {}, {}, creds);
 
             auto msg = writer->GetEvent(true);
             UNIT_ASSERT(msg); // ReadyToAcceptEvent
@@ -3678,9 +3678,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
-        auto driver = server.AnnoyingClient->GetDriver();
+        const auto& driver = server.GetDriver();
 
-        ModifyTopicACL(driver, "/Root/PQ/" + topic2, {{"1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
+        ModifyTopicACL(&driver, "/Root/PQ/" + topic2, {{"1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
                                                       {"2@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
                                                       {"user1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
                                                       {"user2@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
@@ -3699,7 +3699,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         writer.Read(shortTopic2Name, "user5", ticket1, true, false, true);
         writer.Read(shortTopic2Name, "user5", ticket2, true, false, true);
 
-        ModifyTopicACL(driver, "/Root/PQ/" + topic2, {{"user3@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
+        ModifyTopicACL(&driver, "/Root/PQ/" + topic2, {{"user3@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
 
 
         Cerr << "==== Writer - read\n";
@@ -3754,6 +3754,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             request.set_get_only_original(true);
             request.add_topics()->set_path(shortTopic2Name);
             grpc::ClientContext rcontext;
+            rcontext.AddMetadata("x-ydb-database", "/Root");
             if (i == 0) {
                 rcontext.AddMetadata("x-ydb-auth-ticket", "user_without_rights@" BUILTIN_ACL_DOMAIN);
             }
@@ -5703,6 +5704,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
 
             grpc::ClientContext rcontext;
+            rcontext.AddMetadata("x-ydb-database", "/Root");
             rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
             auto status = TopicStubP_->CreateTopic(&rcontext, request, &response);
@@ -5770,6 +5772,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::AlterTopicResponse response;
 
             grpc::ClientContext rcontext;
+            rcontext.AddMetadata("x-ydb-database", "/Root");
             if (auth)
                 rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
@@ -5901,7 +5904,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     RequireAuthWrite: true
     RequireAuthRead: false
     Producer: "acc"
-    Ident: "acc"
     Topic: "topic3"
     DC: "dc1"
     FormatVersion: 0
@@ -5954,6 +5956,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::DescribeTopicResponse response;
             request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);
             grpc::ClientContext rcontext;
+            rcontext.AddMetadata("x-ydb-database", "/Root");
             rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
             auto status = TopicStubP_->DescribeTopic(&rcontext, request, &response);
@@ -6463,7 +6466,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             settings.PQConfig.AddClientServiceType()->SetName("SecondType");
         }
         NPersQueue::TTestServer server(settings);
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_SCHEMA, NKikimrServices::BLACKBOX_VALIDATOR });
 
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
 
@@ -6573,7 +6576,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             CreateTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.operation().ShortDebugString());
         }
         checkDescribe({
             {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams", .Important = true, .AvailabilityPeriod = TDuration::Zero()},
@@ -8137,6 +8140,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 
         grpc::ClientContext rcontext;
+        rcontext.AddMetadata("x-ydb-database", "/Root");
         rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
         auto readStream = StubP_->StreamRead(&rcontext);
         UNIT_ASSERT(readStream);

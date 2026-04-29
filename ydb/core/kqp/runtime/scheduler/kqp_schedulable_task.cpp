@@ -27,7 +27,6 @@ void TSchedulableTask::Resume() {
     NActors::TActivationContext::Send(ActorId, GetResumeEvent());
 }
 
-// TODO: referring to the pool's usage - to support all-equal fair-share query mode.
 bool TSchedulableTask::TryIncreaseUsage() {
     bool increased = false;
     ui64 fairShare = 0;
@@ -36,6 +35,14 @@ bool TSchedulableTask::TryIncreaseUsage() {
     if (const auto snapshot = Query->GetSnapshot()) {
         fairShare = snapshot->FairShare;
         poolOrQuery = Query->GetParent();
+
+        // Special case for zero demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
+        if (fairShare == 0 && snapshot->CpuDemand == 0) {
+            auto prevDemand = snapshot->CpuDemand.fetch_add(1);
+            if (prevDemand == 0) {
+                fairShare = Query->AllowMinFairShare;
+            }
+        }
     } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
         fairShare = Query->AllowMinFairShare;
         poolOrQuery = Query.get();
@@ -68,13 +75,19 @@ void TSchedulableTask::IncreaseUsage() {
     }
 }
 
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
+void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usageType) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->CpuUsage;
-        if (forcedResume) {
-            parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
-        } else {
-            parent->CpuBurstUsage += burstUsage.MicroSeconds();
+        switch(usageType) {
+            case CPU_DEFAULT:
+                parent->CpuBurstUsage += burstUsage.MicroSeconds();
+                break;
+            case CPU_RESUMED:
+                parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
+                break;
+            case READ_DEFAULT:
+                parent->ReadBurstUsage += burstUsage.MicroSeconds();
+                break;
         }
     }
 }

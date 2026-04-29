@@ -3,6 +3,8 @@ items:
   href: actor_system_config.md
 - name: auth_config
   href: auth_config.md
+- name: aws_client_config
+  href: aws_client_config.md
 - name: blob_storage_config
   href: blob_storage_config.md
 - name: bridge_config
@@ -39,6 +41,8 @@ items:
   href: resource_broker_config.md
 - name: security_config
   href: security_config.md
+- name: system_tablet_backup_config
+  href: system_tablet_backup_config.md
 - name: tls
   href: tls.md
 - name: table_service_config

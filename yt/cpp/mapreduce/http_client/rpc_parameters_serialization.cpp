@@ -925,6 +925,7 @@ TNode SerializeParamsForGetTablePartitions(
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
     result["enable_cookies"] = options.EnableCookies_;
+    result["fetch_cookie_node_descriptors"] = options.FetchCookieNodeDescriptors_;
     return result;
 }
 

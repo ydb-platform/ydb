@@ -78,7 +78,7 @@ void TSchedulableActorBase::StopExecution(bool& forcedResume) {
         TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
         SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
         LastExecutionTime = timePassed;
-        SchedulableTask->DecreaseUsage(timePassed, forcedResume);
+        SchedulableTask->DecreaseUsage(timePassed, forcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
         forcedResume = false;
         Executed = false;
 

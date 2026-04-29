@@ -14,11 +14,10 @@ TString GetFullName(const TInfoUnit& name);
 
 TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos);
 bool IsMultiConsumerHandlerNeeded(const TIntrusivePtr<IOperator>& op);
-
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx);
-
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false);
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members);
+TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx);
 
 template <typename T>
 TExprNode::TPtr BuildExpandMapForNarrowInput(TExprNode::TPtr input, const TVector<T>& inputs, TExprContext& ctx) {
@@ -94,4 +93,4 @@ TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<
     .Build();
     // clang-format on
 }
-}
+} // namespace NKikimr::NKqp::NPhysicalConvertionUtils

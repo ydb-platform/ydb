@@ -1747,13 +1747,13 @@ template NUdf::TCastResultOptions CastResult<true>(const TTypeAnnotationNode* so
 template NUdf::TCastResultOptions CastResult<false>(const TTypeAnnotationNode* source, const TTypeAnnotationNode* target);
 
 template <bool Equality>
-ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right) {
-    if (!(left && right)) {
+ECompareOptions CanCompare(const TTypeAnnotationNode* source, const TTypeAnnotationNode* target) {
+    if (!(source && target)) {
         return ECompareOptions::Null;
     }
 
-    const auto lKind = left->GetKind();
-    const auto rKind = right->GetKind();
+    const auto lKind = source->GetKind();
+    const auto rKind = target->GetKind();
     if (lKind == ETypeAnnotationKind::Universal || rKind == ETypeAnnotationKind::Universal) {
         return ECompareOptions::Comparable;
     }
@@ -1777,46 +1777,46 @@ ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotatio
             case ETypeAnnotationKind::EmptyList: return ECompareOptions::Comparable;
             case ETypeAnnotationKind::EmptyDict: return Equality ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
             case ETypeAnnotationKind::Optional:
-                return CanCompare<Equality>(left->Cast<TOptionalExprType>(), right->Cast<TOptionalExprType>());
+                return CanCompare<Equality>(source->Cast<TOptionalExprType>(), target->Cast<TOptionalExprType>());
             case ETypeAnnotationKind::List:
-                return CanCompare<Equality>(left->Cast<TListExprType>(), right->Cast<TListExprType>());
+                return CanCompare<Equality>(source->Cast<TListExprType>(), target->Cast<TListExprType>());
             case ETypeAnnotationKind::Dict:
-                return CanCompare<Equality>(left->Cast<TDictExprType>(), right->Cast<TDictExprType>());
+                return CanCompare<Equality>(source->Cast<TDictExprType>(), target->Cast<TDictExprType>());
             case ETypeAnnotationKind::Tuple:
-                return CanCompare<Equality>(left->Cast<TTupleExprType>(), right->Cast<TTupleExprType>());
+                return CanCompare<Equality>(source->Cast<TTupleExprType>(), target->Cast<TTupleExprType>());
             case ETypeAnnotationKind::Struct:
-                return CanCompare<Equality>(left->Cast<TStructExprType>(), right->Cast<TStructExprType>());
+                return CanCompare<Equality>(source->Cast<TStructExprType>(), target->Cast<TStructExprType>());
             case ETypeAnnotationKind::Variant:
-                return CanCompare<Equality>(left->Cast<TVariantExprType>(), right->Cast<TVariantExprType>());
+                return CanCompare<Equality>(source->Cast<TVariantExprType>(), target->Cast<TVariantExprType>());
             case ETypeAnnotationKind::Tagged:
-                return CanCompare<Equality>(left->Cast<TTaggedExprType>(), right->Cast<TTaggedExprType>());
+                return CanCompare<Equality>(source->Cast<TTaggedExprType>(), target->Cast<TTaggedExprType>());
             case ETypeAnnotationKind::Data:
-                return CanCompare(left->Cast<TDataExprType>(), right->Cast<TDataExprType>());
+                return CanCompare(source->Cast<TDataExprType>(), target->Cast<TDataExprType>());
             case ETypeAnnotationKind::Pg:
-                return CanCompare<Equality>(left->Cast<TPgExprType>(), right->Cast<TPgExprType>());
+                return CanCompare<Equality>(source->Cast<TPgExprType>(), target->Cast<TPgExprType>());
             default: break;
         }
     } else if (lKind == ETypeAnnotationKind::Null || rKind == ETypeAnnotationKind::Null) {
         return ECompareOptions::Null;
     } else if (lKind == ETypeAnnotationKind::Optional) {
-        return AddOptional(CanCompare<Equality>(left->Cast<TOptionalExprType>()->GetItemType(), right));
+        return AddOptional(CanCompare<Equality>(source->Cast<TOptionalExprType>()->GetItemType(), target));
     } else if (rKind == ETypeAnnotationKind::Optional) {
-        return AddOptional(CanCompare<Equality>(left, right->Cast<TOptionalExprType>()->GetItemType()));
+        return AddOptional(CanCompare<Equality>(source, target->Cast<TOptionalExprType>()->GetItemType()));
     } else if (lKind == ETypeAnnotationKind::EmptyList && rKind == ETypeAnnotationKind::List) {
-        return CanCompare<Equality>(right->Cast<TListExprType>(), right->Cast<TListExprType>());
+        return CanCompare<Equality>(target->Cast<TListExprType>(), target->Cast<TListExprType>());
     } else if (rKind == ETypeAnnotationKind::EmptyList && lKind == ETypeAnnotationKind::List) {
-        return CanCompare<Equality>(left->Cast<TListExprType>(), left->Cast<TListExprType>());
+        return CanCompare<Equality>(source->Cast<TListExprType>(), source->Cast<TListExprType>());
     } else if (lKind == ETypeAnnotationKind::EmptyDict && rKind == ETypeAnnotationKind::Dict) {
-        return CanCompare<Equality>(right->Cast<TDictExprType>(), right->Cast<TDictExprType>());
+        return CanCompare<Equality>(target->Cast<TDictExprType>(), target->Cast<TDictExprType>());
     } else if (rKind == ETypeAnnotationKind::EmptyDict && lKind == ETypeAnnotationKind::Dict) {
-        return CanCompare<Equality>(left->Cast<TDictExprType>(), left->Cast<TDictExprType>());
+        return CanCompare<Equality>(source->Cast<TDictExprType>(), source->Cast<TDictExprType>());
     }
 
     return ECompareOptions::Uncomparable;
 }
 
-template ECompareOptions CanCompare<true>(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right);
-template ECompareOptions CanCompare<false>(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right);
+template ECompareOptions CanCompare<true>(const TTypeAnnotationNode* source, const TTypeAnnotationNode* target);
+template ECompareOptions CanCompare<false>(const TTypeAnnotationNode* source, const TTypeAnnotationNode* target);
 
 const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOptional, TExprContext& ctx) {
     if (type) {
@@ -2056,18 +2056,45 @@ void EnsureAllNodesTypeAnnotated(const TExprNode& root) {
 
 namespace {
 
+bool HasError(const TTypeAnnotationNode* type, TIssue* errIssue) {
+    if (errIssue) {
+        *errIssue = {};
+    }
+
+    if (!type) {
+        return false;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Error) {
+        if (errIssue) {
+            *errIssue = type->Cast<TErrorExprType>()->GetError();
+        }
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Type) {
+        return HasError(type->Cast<TTypeExprType>()->GetType(), errIssue);
+    }
+
+    return false;
+}
+
 bool IsPg(
     TPosition pos,
     const TTypeAnnotationNode* typeAnnotation,
     const TPgExprType*& pgType,
-    TIssue& err,
+    TIssue* err,
     bool& hasErrorType)
 {
-    err = {};
+    if (err) {
+        *err = {};
+    }
     hasErrorType = false;
 
     if (!typeAnnotation) {
-        err = TIssue(pos, TStringBuilder() << "Expected pg, but got lambda");
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected pg, but got lambda");
+        }
         return false;
     }
 
@@ -2077,7 +2104,9 @@ bool IsPg(
     }
 
     if (!HasError(typeAnnotation, err)) {
-        err = TIssue(pos, TStringBuilder() << "Expected pg, but got: " << *typeAnnotation);
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected pg, but got: " << *typeAnnotation);
+        }
     } else {
         hasErrorType = true;
     }
@@ -2085,16 +2114,21 @@ bool IsPg(
 }
 
 bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnotation, bool& isOptional,
-    const TDataExprType*& dataType, TIssue& err, bool& hasErrorType, bool* isUniversal = nullptr)
+    const TDataExprType*& dataType, TIssue* err, bool& hasErrorType, bool* isUniversal = nullptr)
 {
-    err = {};
+    if (err) {
+        *err = {};
+    }
+
     hasErrorType = false;
     if (isUniversal) {
         *isUniversal = false;
     }
 
     if (!typeAnnotation) {
-        err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got lambda");
+        if (err) {
+            *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got lambda");
+        }
         return false;
     }
 
@@ -2111,7 +2145,9 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
                 return true;
             }
 
-            err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got: " << *typeAnnotation);
+            if (err) {
+                *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got: " << *typeAnnotation);
+            }
         } else {
             hasErrorType = true;
         }
@@ -2126,7 +2162,9 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
                 return true;
             }
 
-            err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got optional of: " << *itemType);
+            if (err) {
+                *err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got optional of: " << *itemType);
+            }
         } else {
             hasErrorType = true;
         }
@@ -2138,13 +2176,12 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
     return true;
 }
 
-}
+} // anonymous namespace
 
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation, bool& isOptional, const TDataExprType*& dataType)
 {
-    TIssue err;
     bool hasErrorType;
-    return IsDataOrOptionalOfData({}, typeAnnotation, isOptional, dataType, err, hasErrorType);
+    return IsDataOrOptionalOfData({}, typeAnnotation, isOptional, dataType, nullptr, hasErrorType);
 }
 
 bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
@@ -2154,9 +2191,8 @@ bool IsDataOrOptionalOfData(const TTypeAnnotationNode* typeAnnotation) {
 }
 
 bool IsPg(const TTypeAnnotationNode* typeAnnotation, const TPgExprType*& pgType) {
-    TIssue err;
     bool hasErrorType;
-    return IsPg({}, typeAnnotation, pgType, err, hasErrorType);
+    return IsPg({}, typeAnnotation, pgType, nullptr, hasErrorType);
 }
 
 bool IsDataOrOptionalOfDataOrPg(const TTypeAnnotationNode* typeAnnotation) {
@@ -3868,13 +3904,13 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
     TPosition pos = ctx.GetPosition(position);
     if (type.GetKind() == ETypeAnnotationKind::Tuple) {
         for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
-            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType);
+            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, &err, hasErrorType);
             if (!ok) {
                 break;
             }
         }
     } else {
-        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType);
+        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, &err, hasErrorType);
     }
 
     if (!ok) {
@@ -3898,7 +3934,7 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
     TPosition pos = ctx.GetPosition(position);
     if (type.GetKind() == ETypeAnnotationKind::Tuple) {
         for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
-            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType, &isUniversal);
+            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, &err, hasErrorType, &isUniversal);
             if (!ok) {
                 break;
             }
@@ -3907,7 +3943,7 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
             }
         }
     } else {
-        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType, &isUniversal);
+        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, &err, hasErrorType, &isUniversal);
         if (isUniversal) {
             return true;
         }
@@ -4077,7 +4113,7 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
 {
     TIssue err;
     bool hasErrorType;
-    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, err, hasErrorType)) {
+    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, &err, hasErrorType)) {
         ctx.AddError(err);
         return false;
     }
@@ -4095,7 +4131,7 @@ bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const T
 bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal) {
     TIssue err;
     bool hasErrorType;
-    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, err, hasErrorType, &isUniversal)) {
+    if (!IsDataOrOptionalOfData(ctx.GetPosition(position), type, isOptional, dataType, &err, hasErrorType, &isUniversal)) {
         ctx.AddError(err);
         return false;
     }
@@ -6074,22 +6110,7 @@ bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx) {
 }
 
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue) {
-    errIssue = {};
-
-    if (!type) {
-        return false;
-    }
-
-    if (type->GetKind() == ETypeAnnotationKind::Error) {
-        errIssue = type->Cast<TErrorExprType>()->GetError();
-        return true;
-    }
-
-    if (type->GetKind() == ETypeAnnotationKind::Type) {
-        return HasError(type->Cast<TTypeExprType>()->GetType(), errIssue);
-    }
-
-    return false;
+    return HasError(type, &errIssue);
 }
 
 bool IsNull(const TExprNode& node) {
@@ -6721,8 +6742,8 @@ IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input,
     return IGraphTransformer::TStatus::Ok;
 }
 
-std::optional<ui32> GetFieldPosition(const TMultiExprType& multiType, const TStringBuf& field) {
-    if (ui32 pos; TryFromString(field, pos) && pos < multiType.GetSize())
+std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field) {
+    if (ui32 pos; TryFromString(field, pos) && pos < tupleType.GetSize())
         return {pos};
     return std::nullopt;
 }
@@ -6739,9 +6760,9 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
     return std::nullopt;
 }
 
-std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& multiType, const TStringBuf& field) {
-    YQL_ENSURE(multiType.GetSize() >= 1);
-    if (ui32 pos; TryFromString(field, pos) && pos < multiType.GetSize() - 1)
+std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field) {
+    YQL_ENSURE(tupleType.GetSize() >= 1);
+    if (ui32 pos; TryFromString(field, pos) && pos < tupleType.GetSize() - 1)
         return {pos};
     return std::nullopt;
 }

@@ -101,10 +101,10 @@ public:
     bool OnString(const TStringBuf& value) override {
         if constexpr (DecodeUtf8) {
             if (const auto from = AsciiSize(value); from < value.size()) {
-                return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder_));
+                return PushToCurrentCollection(SetUtf8Mark(MakeString(DecodeUtf(value, from), ValueBuilder_)));
             }
         }
-        return PushToCurrentCollection(MakeString(value, ValueBuilder_));
+        return PushToCurrentCollection(SetUtf8Mark(MakeString(value, ValueBuilder_)));
     }
 
     bool OnOpenMap() override {
@@ -300,7 +300,8 @@ template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
     switch (GetNodeType(value)) {
         case ENodeType::String: {
-            const TStringBuf str = value.AsStringRef();
+            const auto cleanValue = ClearUtf8Mark(value);
+            const TStringBuf str = cleanValue.AsStringRef();
             if constexpr (EncodeUtf8) {
                 if (const auto from = AsciiSize(str); from < str.size()) {
                     return writer.Write(EncodeUtf(str, from));
@@ -340,9 +341,9 @@ bool IsValidJson(const TStringBuf json) {
     return ReadJson(&input, &callbacks);
 }
 
-TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool dencodeUtf8) {
+TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool decodeUtf8) {
     TMemoryInput input(json.data(), json.size());
-    if (dencodeUtf8) {
+    if (decodeUtf8) {
         TDomCallbacks<true> callbacks(valueBuilder, /* throwException */ true);
         if (!ReadJson(&input, &callbacks)) {
             UdfTerminate("Internal error: parser error occurred but corresponding callback was not called");

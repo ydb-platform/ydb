@@ -1,0 +1,4 @@
+USE plato;
+
+INSERT INTO @tmp
+SELECT * FROM AS_TABLE([]);

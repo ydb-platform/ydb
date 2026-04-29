@@ -162,6 +162,24 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
 
         }
 
+        auto checkCounter = [&](ui64 value) {
+            static constexpr int MAX_RETRIES = 10;
+            int i = 0;
+            while (true) {
+                auto rootCounter = GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN);
+                auto tenantCounter = GetSimpleCounter(runtime, tenantHiveTablet, NHive::COUNTER_NODES_DOWN);
+                if (rootCounter == value && tenantCounter == value) {
+                    return;
+                }
+                if (++i == MAX_RETRIES) {
+                    UNIT_ASSERT_VALUES_EQUAL(rootCounter, value);
+                    UNIT_ASSERT_VALUES_EQUAL(tenantCounter, value);
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+        };
+
         const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").front());
 
         {
@@ -180,8 +198,7 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             Cerr << "Cordon result: " << reply->Record.ShortDebugString() << Endl;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, tenantHiveTablet, NHive::COUNTER_NODES_DOWN), 1);
+        checkCounter(1);
 
         {
             Ydb::Maintenance::DropMaintenanceTaskRequest request;
@@ -195,7 +212,6 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             Cerr << "Uncordon result: " << reply->Record.ShortDebugString() << Endl;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 0);
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, tenantHiveTablet, NHive::COUNTER_NODES_DOWN), 0);
+        checkCounter(0);
     }
 }

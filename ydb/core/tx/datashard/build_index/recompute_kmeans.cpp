@@ -51,6 +51,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    TString InvalidEmbeddingError;
 
     bool InForeign = false;
     NTable::TPos IsForeignPos = 0;
@@ -123,6 +124,11 @@ public:
             FillResponse();
         }
 
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
+        }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -169,6 +175,10 @@ public:
 
         Feed(key, *row);
 
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
+
         return EScan::Feed;
     }
 
@@ -202,6 +212,16 @@ protected:
                 // Skip rows from "non-domestic" clusters to not affect K-means centroids
                 return;
             }
+        }
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
+            return;
         }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());

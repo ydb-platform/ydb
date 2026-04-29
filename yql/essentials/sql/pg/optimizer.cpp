@@ -151,10 +151,10 @@ Var* TPgOptimizer::MakeVar(TVarId varId) {
                : (var = ::NYql::MakeVar(std::get<0>(varId), std::get<1>(varId)));
 }
 
-EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
+EquivalenceClass* TPgOptimizer::MakeEqClass(int eqId) {
     EquivalenceClass* eq = makeNode(EquivalenceClass);
 
-    for (auto [relno, varno] : Input_.EqClasses[i].Vars) {
+    for (auto [relno, varno] : Input_.EqClasses[eqId].Vars) {
         EquivalenceMember* m = makeNode(EquivalenceMember);
         m->em_expr = (Expr*)MakeVar(TVarId{relno, varno});
         m->em_relids = bms_add_member(nullptr, relno);

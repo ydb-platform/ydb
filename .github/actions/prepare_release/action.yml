@@ -111,7 +111,7 @@ runs:
         echo "$NEW_VERSION" > ${{ inputs.version-artifact-file }}
         echo "Created ${{ inputs.version-artifact-file }} with version: $NEW_VERSION"
     - name: Upload version artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.version-artifact-name }}
         path: ${{ inputs.version-artifact-file }}

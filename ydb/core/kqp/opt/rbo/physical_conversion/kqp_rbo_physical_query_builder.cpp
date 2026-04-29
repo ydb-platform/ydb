@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_query_builder.h"
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -35,15 +36,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             }
             processedInputsIds.insert(inputStageId);
 
-            auto inputStage = finalizedStages.at(inputStageId);
+            const auto inputStage = finalizedStages.at(inputStageId);
             const auto connections = Graph.GetConnections(inputStageId, id);
             for (const auto& connection : connections) {
                 YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                TExprNode::TPtr newStage;
-                auto dqConnection = connection->BuildConnection(inputStage, StagePos.at(inputStageId), newStage, ctx);
-                if (newStage) {
-                    phyStages.emplace_back(newStage);
-                }
+                auto dqConnection = connection->BuildConnection(inputStage, StagePos.at(inputStageId), ctx);
                 YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
                 inputConnections.push_back(dqConnection);
             }
@@ -60,8 +57,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                 stageInputArgs = StageArgs.at(id);
             }
 
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().BuildNode(ctx, StagePos.at(id)), ctx,
-                                    StagePos.at(id));
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New().BuildNode(ctx, StagePos.at(id)),
+                                    ctx, StagePos.at(id));
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
@@ -71,11 +68,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             if (readPtr) {
                 auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
                 if (!read.Ranges().Maybe<TCoVoid>()) {
-                    auto precomputeResult = BuildMaterialize(read.Ranges().Ptr());
+                    const auto materializeResult = BuildMaterialize(read.Ranges().Ptr());
                     // clang-fomrat off
-                    auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
+                    const auto newRead = Build<TKqpBlockReadOlapTableRanges>(ctx, readPtr->Pos())
                         .Table(read.Table())
-                        .Ranges(precomputeResult)
+                        .Ranges(materializeResult)
                         .Columns(read.Columns())
                         .Settings(read.Settings())
                         .ExplainPrompt(read.ExplainPrompt())
@@ -149,13 +146,17 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
     return param;
 }
 
+bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const {
+    return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr finalStage;
     bool needFinalUnionStage = false;
     // Final stage, which is input for DqCnResult, should have only one 1 task.
     for (const auto& input : TDqPhyStage(stage).Inputs()) {
-        if (!input.Maybe<TDqCnUnionAll>()) {
+        if (!IsSingleTaskConnection(input)) {
             needFinalUnionStage = true;
             break;
         }

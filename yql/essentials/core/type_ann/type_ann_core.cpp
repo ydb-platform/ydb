@@ -2834,6 +2834,18 @@ namespace NTypeAnnImpl {
 
     // Using to detect warnings when operating (+, /, %, -, *) with integral types
     namespace {
+        bool IsEffectivelyUnsigned(const TExprNode* node, EDataSlot slot) {
+            if (node->IsCallable("Just")) {
+                node = node->Child(0);
+            }
+
+            if (!node->IsCallable(GetDataTypeInfo(slot).Name)) {
+                return false;
+            }
+
+            return !node->Head().Content().StartsWith('-');
+        }
+
         IGraphTransformer::TStatus CheckIntegralsWidth(const TExprNode::TPtr& input, TContext& ctx, EDataSlot first, EDataSlot second, TExprNode::TPtr& output) {
             if (!input->Content().EndsWith("MayWarn")) {
                 return IGraphTransformer::TStatus::Ok;
@@ -2845,20 +2857,22 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            ui32 first_width = GetDataTypeInfo(first).FixedSize;
-            ui32 second_width = GetDataTypeInfo(second).FixedSize;
+            ui32 firstWidth = GetDataTypeInfo(first).FixedSize;
+            ui32 secondWidth = GetDataTypeInfo(second).FixedSize;
+            ui32 secondIndex = 1;
 
-            // invariant: first_width >= second_width
-            if (first_width < second_width) {
+            // invariant: firstWidth >= secondWidth
+            if (firstWidth < secondWidth) {
                 std::swap(first, second);
-                std::swap(first_width, second_width);
+                std::swap(firstWidth, secondWidth);
+                secondIndex = 0;
             }
 
-            bool first_signed = IsDataTypeSigned(first);
-            bool second_signed = IsDataTypeSigned(second);
+            bool firstSigned = IsDataTypeSigned(first);
+            bool secondSigned = IsDataTypeSigned(second);
 
-            if (first_width > second_width && !first_signed && second_signed ||
-                first_width == second_width && first_signed != second_signed)
+            if (firstWidth > secondWidth && !firstSigned && secondSigned && !IsEffectivelyUnsigned(input->Child(secondIndex), second) ||
+                firstWidth == secondWidth && firstSigned != secondSigned)
             {
                 auto issue = TIssue(
                         ctx.Expr.GetPosition(input->Pos()),
@@ -16092,6 +16106,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["WinOnRows"] = &WinOnWrapper;
         ExtFunctions["WinOnGroups"] = &WinOnWrapper;
         ExtFunctions["WinOnRange"] = &WinOnWrapper;
+        ExtFunctions["WinFilter"] = &WinOnWrapper;
         ExtFunctions["WindowTraits"] = &WindowTraitsWrapper;
         Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;
@@ -16147,7 +16162,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgWhere"] = &SqlWhereWrapper;
         Functions["PgSort"] = &SqlSortWrapper;
         Functions["PgGroup"] = &SqlWhereWrapper;
-        Functions["PgWindow"] = &PgWindowWrapper;
+        Functions["PgWindow"] = &SqlWindowWrapper;
         Functions["PgAnonWindow"] = &PgAnonWindowWrapper;
         Functions["PgConst"] = &PgConstWrapper;
         Functions["PgType"] = &PgTypeWrapper;
@@ -16303,8 +16318,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListTopSort"] = &ListTopSortWrapper;
         Functions["ListTopSortAsc"] = &ListTopSortWrapper;
         Functions["ListTopSortDesc"] = &ListTopSortWrapper;
-        Functions["ListSample"] = &ListSampleWrapper;
-        Functions["ListSampleN"] = &ListSampleNWrapper;
+        ExtFunctions["ListSample"] = &ListSampleWrapper;
+        ExtFunctions["ListSampleN"] = &ListSampleNWrapper;
         Functions["ListShuffle"] = &ListShuffleWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
@@ -16519,6 +16534,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlGroupingSet"] = &SqlGroupingSetWrapper;
         ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
+        ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
+        ExtFunctions["YqlAggWin"] = &YqlAggWinWrapper;
+        Functions["YqlWindow"] = &SqlWindowWrapper;
         Functions["YqlReplaceUnknown"] = &SqlReplaceUnknownWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
@@ -16768,8 +16786,8 @@ IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& input, TExprC
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
-    output = input;
+IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    output = node;
     if (ctx.Step.IsDone(TExprStep::ValidateProviders)) {
         return IGraphTransformer::TStatus::Ok;
     }

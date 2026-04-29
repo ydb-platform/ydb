@@ -7,14 +7,16 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/query_stats.pb.h>
-
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -292,6 +294,7 @@ void TDataShard::Die(const TActorContext& ctx) {
 
     NTabletPipe::CloseAndForgetClient(SelfId(), SchemeShardPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BuildIndexPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), DbStatsReportPipe);
     NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
 
@@ -395,6 +398,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
+
+        // Get factory from KQP Scheduler and schedule delayed empty response as fail-safe measure
+        ctx.Send(NKqp::MakeKqpSchedulerServiceId(ctx.SelfID.NodeId()), new NKqp::NScheduler::TEvGetReadFactory, IEventHandle::FlagTrackDelivery);
+        ctx.Schedule(TDuration::Seconds(1), new NKqp::NScheduler::TEvReadFactoryResponse);
     } else {
         SyncConfig();
         State = TShardState::Readonly;
@@ -1625,10 +1632,20 @@ void TDataShard::PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperati
     );
 }
 
+void TDataShard::SendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
+    for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
+        auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        copy->Record = response->Record;
+        SendViaSchemeshardPipe(ctx, CurrentSchemeShardId, BuildIndexPipe, std::move(copy));
+    }
+}
+
 void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     if (!txId) {
-        for (const auto& op : TransQueue.GetSchemaOperations())
+        for (const auto& op : TransQueue.GetSchemaOperations()) {
             NotifySchemeshard(ctx, op.first);
+        }
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -2831,6 +2848,10 @@ bool TDataShard::NeedMediatorStateRestored() const {
 }
 
 void TDataShard::CheckMediatorStateRestored() {
+    if (!SchedulableReadFactory) {
+        return;
+    }
+
     if (!MediatorStateWaiting ||
         !RegistrationSended ||
         !MediatorTimeCastEntry ||
@@ -3614,6 +3635,14 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         return;
     }
 
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            BuildIndexPipe = TActorId();
+            SendPendingBuildIndexFinalResponses(ctx);
+        }
+        return;
+    }
+
     if (ev->Get()->ClientId == DbStatsReportPipe) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             DbStatsReportPipe = TActorId();
@@ -3678,6 +3707,12 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (ev->Get()->ClientId == StateReportPipe) {
         StateReportPipe = TActorId();
         ReportState(ctx, State);
+        return;
+    }
+
+    if (ev->Get()->ClientId == BuildIndexPipe) {
+        BuildIndexPipe = TActorId();
+        SendPendingBuildIndexFinalResponses(ctx);
         return;
     }
 
@@ -4022,6 +4057,10 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     if (CurrentKeySampler == EnabledKeySampler && ctx.Now() > StopKeyAccessSamplingAt) {
         CurrentKeySampler = DisabledKeySampler;
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Stoped key access sampling at datashard: " << TabletID());
+    }
+
+    if (SchedulableReadFactory && *SchedulableReadFactory) {
+        (*SchedulableReadFactory)->CleanupReadsCache();
     }
 
     if (!PeriodicWakeupPending) {
@@ -4465,9 +4504,7 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
     Execute(new TTxDiscardVolatileSnapshot(this, std::move(ev)), ctx);
 }
 
-void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
-                               const TActorContext &ctx)
-{
+void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());
@@ -4915,6 +4952,20 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
         // Make sure older versions restore mediator state in that case
         PersistUnprotectedReadsEnabled(txc);
         SendRegistrationRequestTimeCast(ctx);
+    }
+}
+
+void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
+    if (!SchedulableReadFactory) {
+        SchedulableReadFactory = std::move(ev->Get()->Factory);
+    }
+    CheckMediatorStateRestored();
+}
+
+void TDataShard::HandleInactive(TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Get()->SourceType == NKqp::NScheduler::TEvGetReadFactory::EventType) {
+        SchedulableReadFactory = nullptr;
+        CheckMediatorStateRestored();
     }
 }
 

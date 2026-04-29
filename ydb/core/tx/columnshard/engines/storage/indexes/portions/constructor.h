@@ -39,6 +39,33 @@ public:
         return ColumnName;
     }
 
+protected:
+    TConclusion<TString> ResolveColumnNameForAlterIndex(
+        const NSchemeShard::TOlapSchema& currentSchema,
+        const IIndexMeta& existingMeta) const;
+
+    template <class TDerived>
+    std::shared_ptr<IIndexMeta> DoCreateOrPatchSingleColumnIndexMeta(
+        const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+        const IIndexMeta& existingMeta) const {
+        if (!ColumnName.empty()) {
+            return DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+        }
+
+        auto resolvedColumnName = ResolveColumnNameForAlterIndex(currentSchema, existingMeta);
+        if (resolvedColumnName.IsFail()) {
+            errors.AddError(resolvedColumnName.GetErrorMessage());
+            return nullptr;
+        }
+
+        TDerived patched = static_cast<const TDerived&>(*this);
+        patched.ColumnName = *resolvedColumnName;
+        const TColumnIndexConstructor& patchedBase = patched;
+        return patchedBase.DoCreateIndexMeta(indexId, indexName, currentSchema, errors);
+    }
+
+public:
     const TReadDataExtractorContainer& GetDataExtractor() const {
         AFL_VERIFY(!!DataExtractor);
         return DataExtractor;

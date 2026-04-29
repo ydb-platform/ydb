@@ -725,7 +725,7 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
     auto frameSpec = node.Child(0);
     bool isCompact = GetSettingByName(frameSpec->Children(), "compact") != nullptr;
 
-    if (node.IsCallable("WinOnRows")) {
+    if (node.IsCallable({"WinOnRows", "WinFilter"})) {
         if (!GetSettingByName(frameSpec->Children(), "begin") || !GetSettingByName(frameSpec->Children(), "end")) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
                                 TStringBuilder() << "Expected begin and end for row frames."));
@@ -783,6 +783,16 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             return {};
         }
         return TryParseWindowFrameSettingsFromList(node, ctx);
+    } else if (frameSpec->IsCallable("Void")) {
+        // Void means default frame: ROWS UNBOUNDED PRECEDING to CURRENT ROW (used in deprecated SQL)
+        if (node.IsCallable("WinOnRows")) {
+            auto rowFrame = TWindowFrameSettings::TRowFrame{TMaybe<i32>(), TMaybe<i32>(0)};
+            return TWindowFrameSettings(rowFrame, /*neverEmpty=*/CheckRowFrameNeverEmpty(rowFrame), /*compact=*/false, /*isAlwaysEmpty=*/false);
+        }
+        const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
+        ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
+                            TStringBuilder() << "Invalid window frame - expecting Tuple, but got: " << (type ? FormatType(type) : "lambda")));
+        return {};
     } else {
         const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
         ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),

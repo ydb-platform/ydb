@@ -1379,16 +1379,16 @@ bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear
     return TDateTable::Instance().EnrichByOffset(value, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
 }
 
-bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear,
+bool SplitDate32(i32 date, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear,
                  ui32& weekOfYearIso8601, ui32& dayOfWeek) {
-    TDateTable::Instance().SplitDate32(value, year, month, day, dayOfYear, weekOfYear,
+    TDateTable::Instance().SplitDate32(date, year, month, day, dayOfYear, weekOfYear,
                                        weekOfYearIso8601, dayOfWeek);
     return true;
 }
 
-bool SplitTzDate32(i32 value, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear,
+bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear,
                    ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) {
-    return TDateTable::Instance().SplitTzDate32(value, year, month, day, dayOfYear,
+    return TDateTable::Instance().SplitTzDate32(date, year, month, day, dayOfYear,
                                                 weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
 }
 

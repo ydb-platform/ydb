@@ -1727,6 +1727,34 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
+        # /pdisk/restart had undefined behavior when pdisk_id is empty or had more than two '-' parts
+        result['restart_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['restart_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-2-3',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['restart_pdisk_missing_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={}, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+
+        result['status_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '',
+            'status': 'ACTIVE',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['status_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '1-2-3',
+            'status': 'ACTIVE',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={

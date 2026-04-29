@@ -3,6 +3,7 @@
 #include "structured_message.h"
 
 namespace NKikimr::NStructLog {
+
 class TLogStack {
 
 public:
@@ -32,4 +33,5 @@ public:
 
 #define YDBLOG_UPDATE_CONTEXT(...) YDBLOG_UPDATE_MESSAGE(TLogStack::GetTop(), __VA_ARGS__)
 #define YDBLOG_REMOVE_CONTEXT(...) TLogStack::GetTop().RemoveValues({__VA_ARGS__})
+
 }

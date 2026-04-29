@@ -1,6 +1,6 @@
 #include "create_message.h"
 
-namespace NKikimr::NStructLog {
+namespace NKikimr::NStructuredLog {
 
 namespace {
     thread_local std::vector<TStructuredMessage> BuildMessageStack;

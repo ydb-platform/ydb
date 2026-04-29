@@ -1,10 +1,11 @@
 #include "log_stack.h"
 
 #include <vector>
+
 namespace NKikimr::NStructLog {
 
 namespace {
-thread_local std::vector<TStructuredMessage> LogStack;
+    thread_local std::vector<TStructuredMessage> LogStack;
 }
 
 TStructuredMessage& TLogStack::GetTop() {

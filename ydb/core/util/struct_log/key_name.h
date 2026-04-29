@@ -71,15 +71,16 @@ public:
         }
         return RunTime.empty();
     }
+
 protected:
     const char* CompileTime{nullptr};
     std::size_t CompileTimeLength{0};
     TString RunTime;
 
-    enum class TCompareResult {
+    enum class ECompareResult {
         Less,
         Equal,
-        Great
+        Great,
     };
 
     static TCompareResult Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
@@ -101,7 +102,7 @@ protected:
     }
 
     static TCompareResult Compare(const TKeyName& a, const TKeyName& b) {
-        return Compare(a.GetData(), a.GetLength(), b.GetData(), b.GetLength() );
+        return Compare(a.GetData(), a.GetLength(), b.GetData(), b.GetLength());
     }
 };
 

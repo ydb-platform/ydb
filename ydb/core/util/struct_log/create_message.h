@@ -13,7 +13,7 @@ namespace NKikimr::NStructLog {
 class TCreateMessageArg {
 public:
 
-    TCreateMessageArg(){ }
+    TCreateMessageArg() = default;
 
     // Native types support
     template <typename T, typename K = TKeyName, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >

@@ -59,6 +59,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallB
 ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorrruptedMain
 ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorruptedHandoff
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
+ydb/core/client/ut TObjectStorageListingTest.TombstoneRestarts
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
@@ -123,7 +124,22 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_LargeTable
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_LargeTable_Limit
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly_Multistatement
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SmallChannelBufferSize
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_Stress
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SchemaInclusionMode_Always
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SchemaInclusionMode_FirstOnly
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SchemaInclusionMode_FirstOnly_Multistatement
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SchemaInclusionMode_Unspecified
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SmallChannelBufferSize
+ydb/core/kqp/ut/batch_operations KqpBatchDelete.Large_3
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
+ydb/core/kqp/ut/batch_operations KqpBatchUpdate.Large_3
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryUnderTimeout
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryDdlRetriesUnderSchemeShardRestarts
@@ -131,20 +147,60 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
+ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextDeliveryProblem+LimitRowsPerRequest
+ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextReadResultStatusRetry+LimitRowsPerRequest
+ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextReadResultStatusRetryL2+LimitRowsPerRequest
+ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FulltextRelevanceL2Reads+LimitRowsPerRequest+InjectFail
+ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FulltextRelevanceL2Reads+LimitRowsPerRequest-InjectFail
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
+ydb/core/kqp/ut/join/index_lookup KqpJoin.StreamLookupJoinOverloadDeadlock
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapTiering.ReconfigureTier
+ydb/core/kqp/ut/opt KqpKv.ReadRows_ExternalBlobs-UseExtBlobsPrecharge
+ydb/core/kqp/ut/opt KqpNewEngine.DqSourceCount
+ydb/core/kqp/ut/opt KqpNewEngine.DqSourceLimit
+ydb/core/kqp/ut/opt KqpNewEngine.FullScanCount
 ydb/core/kqp/ut/pg KqpPg.AlterColumnSetDefaultFromSequenceWithSchemaname
 ydb/core/kqp/ut/pg KqpPg.TempTablesWithCache
+ydb/core/kqp/ut/query KqpLimits.DataShardReplySizeExceeded
+ydb/core/kqp/ut/query KqpLimits.DatashardReplySize
+ydb/core/kqp/ut/query KqpLimits.QSReplySize
+ydb/core/kqp/ut/query KqpLimits.QueryReplySize
+ydb/core/kqp/ut/query KqpLimits.ReplySizeExceeded
+ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
+ydb/core/kqp/ut/query KqpQuery.ExecuteWriteQuery
+ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin+EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
+ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine+EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
+ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly
+ydb/core/kqp/ut/runtime KqpScanSpilling.SelfJoinQueryService
+ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes+EnabledSpilling
+ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes-EnabledSpilling
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
+ydb/core/kqp/ut/scan KqpSplit.AfterResult+Ascending
+ydb/core/kqp/ut/scan KqpSplit.AfterResult+Descending
+ydb/core/kqp/ut/scan KqpSplit.AfterResult+Unspecified
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRange+Ascending
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRange+Descending
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRange+Unspecified
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRangeSegmentPartition+Ascending
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRangeSegmentPartition+Descending
+ydb/core/kqp/ut/scan KqpSplit.AfterResultMultiRangeSegmentPartition+Unspecified
+ydb/core/kqp/ut/scan KqpSplit.BorderKeys+Ascending
+ydb/core/kqp/ut/scan KqpSplit.BorderKeys+Unspecified
+ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Ascending
+ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Descending
+ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Unspecified
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupRetryAttemptForFinishedRead
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultCancellation
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
+ydb/core/kqp/ut/service KqpQueryService.LargeUpsert
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtl
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtlAndForgetAfter
 ydb/core/kqp/ut/tli KqpTli.Basic
@@ -160,6 +216,8 @@ ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
+ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
+ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterateMoreThanRows
 ydb/core/mind/hive/ut TScaleRecommenderTest.RollingRestartNoLastRecommendation
 ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario3
 ydb/core/mind/hive/ut unittest.[*/*] chunk
@@ -194,6 +252,12 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosti
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.SkipForeign
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
+ydb/core/tx/datashard/ut_followers DataShardFollowers.FollowerReadDuringSplit
+ydb/core/tx/datashard/ut_snapshot DataShardSnapshots.ReadIteratorLocalSnapshotThenRestart
+ydb/core/tx/datashard/ut_snapshot DataShardSnapshots.ReadIteratorLocalSnapshotThenWrite
+ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteCommitConflictThenRead
+ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteCommitConflictWhileReading
+ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteObserveOwnChanges
 ydb/core/tx/datashard/ut_stats DataShardStats.BackupTableStatsReportInterval
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-1
@@ -207,6 +271,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
+ydb/core/tx/datashard/ut_volatile DataShardVolatile.DistributedWriteThenReadIteratorStream
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
@@ -5499,6 +5564,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.BulkUpsert
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_ComplexLambdaInsideUsingReplace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
@@ -5541,6 +5607,8 @@ ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDist
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
+ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
+ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
@@ -5697,14 +5765,22 @@ ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_ex
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
+ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
+ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/result_set_format/tests py3test.sole chunk
+ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
+ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
+ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[row]
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_kafka/tests test_workload_topic.py.TestYdbTopicWorkload.test
+ydb/tests/stress/transfer/tests test_workload.py.TestYdbWorkload.test[row-local]
+ydb/tests/stress/transfer/tests test_workload.py.TestYdbWorkload.test[row-remote]
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite

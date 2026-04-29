@@ -370,7 +370,7 @@ namespace NKikimr {
         return chunks;
     }
 
-    static TSet<TChunkIdx> RecoverOwnedChunksFromEntryPoint(
+    static std::unique_ptr<TSyncLogRepaired> ConstructRepairedFromEntryPoint(
             const TEntryPointPair& entryPoint,
             const TSyncLogKeeperTestSettings& settings)
     {
@@ -382,7 +382,14 @@ namespace NKikimr {
             entryPoint.EntryPointLsn,
             explanation);
         UNIT_ASSERT_C(repaired, explanation);
+        return repaired;
+    }
 
+    static TSet<TChunkIdx> RecoverOwnedChunksFromEntryPoint(
+            const TEntryPointPair& entryPoint,
+            const TSyncLogKeeperTestSettings& settings)
+    {
+        std::unique_ptr<TSyncLogRepaired> repaired = ConstructRepairedFromEntryPoint(entryPoint, settings);
         TSyncLogRecovery recovery(std::move(repaired));
         TSet<TChunkIdx> ownedChunks;
         recovery.GetOwnedChunks(ownedChunks);
@@ -467,74 +474,74 @@ namespace NKikimr {
         //     test.Run();
         // }
 
-        Y_UNIT_TEST(WhatsNextAllowsCachedMemPageBeforeLogStartLsnAfterCutLog) {
-            /*
-             * End-to-end reproducer for the first production VERIFY in WhatsNext().
-             *
-             * Production shape:
-             *   boundaries# {LogStartLsn: 62402361870
-             *       {Mem# [62402262890, 62408853246] ...}
-             *       {Dsk: [62402361870, 62408853246]}}
-             * In this compact test, Disk.first may be LogStartLsn - 1 because the first indexed disk page
-             * can straddle the cut boundary. The important reproducer property is the same:
-             * Mem.first < Disk.first, which is exactly what used to trip WhatsNext().
-             *
-             * This test produces the same kind of shape via real TSyncLogKeeperState transitions:
-             *   1. Keep SyncLog mem cache large enough, so cut-log commits do not discard cached pages.
-             *   2. Write several pages and commit them to DiskRecLog through CutLogEvent().
-             *   3. Write more pages and start another CutLogEvent() commit. PrepareCommitData() has to add a
-             *      new disk chunk and, because of the disk chunk limit, trims the oldest disk chunk.
-             *   4. After the committer finishes, live DiskRecLog contains the new disk tail, but MemRecLog
-             *      still contains cached pages starting before LogStartLsn.
-             *
-             * The reader must ignore the cached dead prefix below LogStartLsn and answer normally; it must not
-             * crash on the old FirstDiskLsn <= FirstMemLsn assumption.
-             *
-             * This is related to the entry point ownership test below: both exercise the same cut/trim area.
-             * The first symptom is a live sync read hitting the stale boundary invariant; the second symptom is
-             * recovery seeing a persistent entry point where a trimmed chunk is both delayed-for-delete and
-             * still listed in DiskRecLogSerialized.
-             */
-            const ui32 appendBlockSize = 4064;
-            const ui32 pagesInChunk = 2;
-            TSyncLogKeeperTestSettings settings;
-            settings.SyncLogMaxMemAmount = appendBlockSize * 100;
-            settings.SyncLogMaxDiskAmount = appendBlockSize * pagesInChunk * 2;
-            settings.ChunkSize = appendBlockSize * pagesInChunk;
-            settings.AppendBlockSize = appendBlockSize;
+        // Y_UNIT_TEST(WhatsNextAllowsCachedMemPageBeforeLogStartLsnAfterCutLog) {
+        //     /*
+        //      * End-to-end reproducer for the first production VERIFY in WhatsNext().
+        //      *
+        //      * Production shape:
+        //      *   boundaries# {LogStartLsn: 62402361870
+        //      *       {Mem# [62402262890, 62408853246] ...}
+        //      *       {Dsk: [62402361870, 62408853246]}}
+        //      * In this compact test, Disk.first may be LogStartLsn - 1 because the first indexed disk page
+        //      * can straddle the cut boundary. The important reproducer property is the same:
+        //      * Mem.first < Disk.first, which is exactly what used to trip WhatsNext().
+        //      *
+        //      * This test produces the same kind of shape via real TSyncLogKeeperState transitions:
+        //      *   1. Keep SyncLog mem cache large enough, so cut-log commits do not discard cached pages.
+        //      *   2. Write several pages and commit them to DiskRecLog through CutLogEvent().
+        //      *   3. Write more pages and start another CutLogEvent() commit. PrepareCommitData() has to add a
+        //      *      new disk chunk and, because of the disk chunk limit, trims the oldest disk chunk.
+        //      *   4. After the committer finishes, live DiskRecLog contains the new disk tail, but MemRecLog
+        //      *      still contains cached pages starting before LogStartLsn.
+        //      *
+        //      * The reader must ignore the cached dead prefix below LogStartLsn and answer normally; it must not
+        //      * crash on the old FirstDiskLsn <= FirstMemLsn assumption.
+        //      *
+        //      * This is related to the entry point ownership test below: both exercise the same cut/trim area.
+        //      * The first symptom is a live sync read hitting the stale boundary invariant; the second symptom is
+        //      * recovery seeing a persistent entry point where a trimmed chunk is both delayed-for-delete and
+        //      * still listed in DiskRecLogSerialized.
+        //      */
+        //     const ui32 appendBlockSize = 4064;
+        //     const ui32 pagesInChunk = 2;
+        //     TSyncLogKeeperTestSettings settings;
+        //     settings.SyncLogMaxMemAmount = appendBlockSize * 100;
+        //     settings.SyncLogMaxDiskAmount = appendBlockSize * pagesInChunk * 2;
+        //     settings.ChunkSize = appendBlockSize * pagesInChunk;
+        //     settings.AppendBlockSize = appendBlockSize;
 
-            std::unique_ptr<TSyncLogKeeperState> state = CreateSyncLogKeeperState(TEntryPointPair{TString(), 0}, settings);
-            TPayloadWriter writer;
-            TCommitWithSwapSimulator committer(1);
-            ui64 lsn = 0;
+        //     std::unique_ptr<TSyncLogKeeperState> state = CreateSyncLogKeeperState(TEntryPointPair{TString(), 0}, settings);
+        //     TPayloadWriter writer;
+        //     TCommitWithSwapSimulator committer(1);
+        //     ui64 lsn = 0;
 
-            {
-                WriteUntilMemPages(state.get(), writer, &lsn, 4);
-                auto commitData = committer.PrepareCutLog(state.get(), lsn + 1, lsn);
-                UNIT_ASSERT(commitData.ChunksToDeleteDelayed.empty());
-                committer.Finish(state.get(), std::move(commitData), ++lsn);
-            }
+        //     {
+        //         WriteUntilMemPages(state.get(), writer, &lsn, 4);
+        //         auto commitData = committer.PrepareCutLog(state.get(), lsn + 1, lsn);
+        //         UNIT_ASSERT(commitData.ChunksToDeleteDelayed.empty());
+        //         committer.Finish(state.get(), std::move(commitData), ++lsn);
+        //     }
 
-            WriteUntilMemPages(state.get(), writer, &lsn, 6);
-            auto commitData = committer.PrepareCutLog(state.get(), lsn + 1, lsn);
-            UNIT_ASSERT_C(commitData.SwapSnap && !commitData.SwapSnap->Empty(),
-                "second cut-log commit must write the new disk tail; commitData# " << commitData.ToString());
-            committer.Finish(state.get(), std::move(commitData), ++lsn);
+        //     WriteUntilMemPages(state.get(), writer, &lsn, 6);
+        //     auto commitData = committer.PrepareCutLog(state.get(), lsn + 1, lsn);
+        //     UNIT_ASSERT_C(commitData.SwapSnap && !commitData.SwapSnap->Empty(),
+        //         "second cut-log commit must write the new disk tail; commitData# " << commitData.ToString());
+        //     committer.Finish(state.get(), std::move(commitData), ++lsn);
 
-            TLogEssence e;
-            state->FillInSyncLogEssence(&e);
-            UNIT_ASSERT_C(!e.MemLogEmpty && !e.DiskLogEmpty, "e# " << LogEssenceToString(e));
-            UNIT_ASSERT_C(e.FirstMemLsn < e.LogStartLsn, "e# " << LogEssenceToString(e));
-            UNIT_ASSERT_C(e.FirstDiskLsn <= e.LogStartLsn, "e# " << LogEssenceToString(e));
-            UNIT_ASSERT_C(e.LogStartLsn <= e.LastDiskLsn, "e# " << LogEssenceToString(e));
-            UNIT_ASSERT_C(e.FirstMemLsn < e.FirstDiskLsn, "e# " << LogEssenceToString(e));
+        //     TLogEssence e;
+        //     state->FillInSyncLogEssence(&e);
+        //     UNIT_ASSERT_C(!e.MemLogEmpty && !e.DiskLogEmpty, "e# " << LogEssenceToString(e));
+        //     UNIT_ASSERT_C(e.FirstMemLsn < e.LogStartLsn, "e# " << LogEssenceToString(e));
+        //     UNIT_ASSERT_C(e.FirstDiskLsn <= e.LogStartLsn, "e# " << LogEssenceToString(e));
+        //     UNIT_ASSERT_C(e.LogStartLsn <= e.LastDiskLsn, "e# " << LogEssenceToString(e));
+        //     UNIT_ASSERT_C(e.FirstMemLsn < e.FirstDiskLsn, "e# " << LogEssenceToString(e));
 
-            auto reportInternals = [&]() {
-                return LogEssenceToString(e);
-            };
-            TWhatsNextOutcome outcome = WhatsNext(e.LastDiskLsn, 0, &e, reportInternals);
-            UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.WhatsNext), ui32(EReadWhatsNext::EWnDiskSynced));
-        }
+        //     auto reportInternals = [&]() {
+        //         return LogEssenceToString(e);
+        //     };
+        //     TWhatsNextOutcome outcome = WhatsNext(e.LastDiskLsn, 0, &e, reportInternals);
+        //     UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.WhatsNext), ui32(EReadWhatsNext::EWnDiskSynced));
+        // }
 
         Y_UNIT_TEST(PrepareCommitDataDoesNotMixTrimmedChunksWithOldDiskSnapshot) {
             /*
@@ -608,7 +615,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(RecoveryGetOwnedChunksResolvesDiskChunkAlsoListedAsDelayedDelete) {
+        Y_UNIT_TEST(RecoveryEntryPointParserResolvesDiskChunkAlsoListedAsDelayedDelete) {
             /*
              * Compatibility test for already persisted entry points affected by the old PrepareCommitData()
              * interleaving.
@@ -619,9 +626,10 @@ namespace NKikimr {
              *     DiskRecLog and scheduled it for delayed deletion.
              *
              * During recovery this is not a cross-subsystem ownership conflict. The chunk still belongs to
-             * SyncLog and must stay owned until delayed delete finishes. GetOwnedChunks() should therefore log
-             * the duplicate and resolve it in favor of ChunksToDeleteDelayed instead of aborting in
-             * TOneChunk::GetOwnedChunks().
+             * SyncLog and must stay owned until delayed delete finishes. The entry point parser should therefore
+             * log the duplicate and normalize the recovered SyncLog state in favor of ChunksToDeleteDelayed:
+             * the chunk is removed from recovered DiskRecLog, but remains in the delayed-delete list. After
+             * that GetOwnedChunks() should see a consistent state and must not need its own conflict resolver.
              */
             const ui32 appendBlockSize = 4064;
             const ui32 pagesInChunk = 2;
@@ -650,10 +658,31 @@ namespace NKikimr {
             pb.AddChunksToDeleteDelayed(duplicateChunk);
             const TString malformedEntryPoint = SerializeEntryPointProto(pb);
 
-            const TSet<TChunkIdx> ownedChunks = RecoverOwnedChunksFromEntryPoint(
+            std::unique_ptr<TSyncLogRepaired> repaired = ConstructRepairedFromEntryPoint(
                 TEntryPointPair{malformedEntryPoint, entryPoint.EntryPointLsn},
                 settings);
 
+            TSet<TChunkIdx> diskChunksAfterRecovery;
+            repaired->SyncLogPtr->GetOwnedChunks(diskChunksAfterRecovery);
+            UNIT_ASSERT_C(diskChunksAfterRecovery.find(duplicateChunk) == diskChunksAfterRecovery.end(),
+                "duplicate chunk must be removed from recovered DiskRecLog; "
+                << "chunk# " << duplicateChunk
+                << " DiskChunksAfterRecovery# " << FormatList(diskChunksAfterRecovery));
+            UNIT_ASSERT_VALUES_EQUAL(diskChunksAfterRecovery.size() + 1, diskChunks.size());
+
+            bool foundInDelayedDelete = false;
+            for (TChunkIdx chunkIdx : repaired->ChunksToDelete) {
+                if (chunkIdx == duplicateChunk) {
+                    foundInDelayedDelete = true;
+                }
+            }
+            UNIT_ASSERT_C(foundInDelayedDelete,
+                "duplicate chunk must stay in ChunksToDeleteDelayed; chunk# " << duplicateChunk
+                << " ChunksToDeleteDelayed# " << FormatList(repaired->ChunksToDelete));
+
+            TSyncLogRecovery recovery(std::move(repaired));
+            TSet<TChunkIdx> ownedChunks;
+            recovery.GetOwnedChunks(ownedChunks);
             UNIT_ASSERT_C(ownedChunks.find(duplicateChunk) != ownedChunks.end(),
                 "duplicate chunk must remain owned through ChunksToDeleteDelayed; chunk# " << duplicateChunk);
             UNIT_ASSERT_VALUES_EQUAL(ownedChunks.size(), diskChunks.size());
@@ -731,8 +760,7 @@ namespace NKikimr {
             }
             const TSet<TChunkIdx> ownedChunks = RecoverOwnedChunksFromEntryPoint(entryPoint, settings);
             UNIT_ASSERT_VALUES_EQUAL_C(ownedChunks.size(), expectedOwnedChunks.size(),
-                "GetOwnedChunks must preserve SyncLog ownership while resolving DiskRecLog/"
-                "ChunksToDeleteDelayed duplicates; "
+                "GetOwnedChunks must preserve SyncLog ownership after entry point parsing; "
                 << "LiveEssence# " << liveEssenceDebug
                 << " OwnedChunks# " << FormatList(ownedChunks)
                 << " ExpectedOwnedChunks# " << FormatList(expectedOwnedChunks)

@@ -87,7 +87,7 @@ TReadRequestExecutor::TReadRequestExecutor(
     size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
 
     for (auto& hint: readHint.RangeHints) {
-        // Вычислить смещение для Sglist
+        // Computing offset for Sglist
         const size_t offsetBlocks = hint.RequestRelativeRange.Start;
         const size_t offsetBytes = offsetBlocks * blockSize;
         const size_t sizeBytes = hint.RequestRelativeRange.Size() * blockSize;
@@ -95,7 +95,7 @@ TReadRequestExecutor::TReadRequestExecutor(
         auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
             Request->Headers.Clone(hint.VChunkRange));
 
-        // Создать подбуфер Sglist для данного диапазона
+        // Create subbuffer Sglist for current range
         {
             auto guard = Request->Sglist.Acquire();
             if (guard) {
@@ -103,7 +103,7 @@ TReadRequestExecutor::TReadRequestExecutor(
                 TSgList subSgList =
                     CreateSgListSubRange(fullSgList, offsetBytes, sizeBytes);
                 subRequest->Sglist =
-                    Request->Sglist.Create(std::move(subSgList));
+                    Request->Sglist.CreateDepender(std::move(subSgList));
             } else {
                 auto error =
                     MakeError(E_CANCELLED, "Failed to acquire sglist guard");
@@ -143,7 +143,7 @@ TReadRequestExecutor::~TReadRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor. Reply has not sent %s %s",
+            "TReadRequestExecutor. Reply has not been sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
@@ -168,7 +168,7 @@ void TReadRequestExecutor::OnSubRequestComplete(
     size_t index)
 {
     if (HasError(response.Error)) {
-        // Даже при ошибке одного подзапроса завершаем весь запрос ошибкой
+        // Complete full request with an error in case of subrequest's error
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,

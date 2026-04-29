@@ -770,8 +770,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler.UpdateFairShare();
 
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto querySnapshot = queries[queryId]->GetSnapshot();
+        for (const auto& querie : queries) {
+            auto querySnapshot = querie->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, kInternalLimit, "With zero limit overlimit should be ignored");
         }
@@ -1007,8 +1007,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler->AddOrUpdateDatabase(databaseId, {});
 
         std::vector<TString> pools = {"pool1", "pool2", "pool3"};
-        for (size_t i = 0; i < pools.size(); ++i) {
-            scheduler->AddOrUpdatePool(databaseId, pools[i], {});
+        for (const auto& pool : pools) {
+            scheduler->AddOrUpdatePool(databaseId, pool, {});
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
@@ -1020,8 +1020,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        for (const auto & query : queries) {
-             auto querySnapshot = query->GetSnapshot();
+        for (const auto& query : queries) {
+            auto querySnapshot = query->GetSnapshot();
 
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kQueryDemand);
@@ -1043,8 +1043,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        for (const auto & query : queries) {
-             auto querySnapshot = query->GetSnapshot();
+        for (const auto& query : queries) {
+            auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kRoundedDemand);
 
@@ -1135,7 +1135,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         std::atomic<NHdrf::TQueryId> queryId = 1;
         std::atomic<bool> shutdown = false;
 
-        auto updateFairShare = [&] {
+        auto updateFairShare = [&]() -> void {
             while(!shutdown) {
                 scheduler.UpdateFairShare();
             }

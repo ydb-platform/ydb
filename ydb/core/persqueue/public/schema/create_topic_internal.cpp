@@ -26,13 +26,7 @@ public:
     void Bootstrap() {
         Become(&TCreateTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
-            .Database = Settings.Database,
-            .Request = std::move(Settings.Request),
-            .UserToken = std::move(Settings.UserToken),
-            .IfNotExists = Settings.IfNotExists,
-            .PrepareOnly = Settings.PrepareOnly
-        }));
+        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {

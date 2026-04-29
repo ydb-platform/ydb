@@ -26,13 +26,7 @@ public:
     void Bootstrap() {
         Become(&TAlterTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = Settings.Database,
-            .Request = std::move(Settings.Request),
-            .UserToken = std::move(Settings.UserToken),
-            .IfExists = Settings.IfExists,
-            .PrepareOnly = Settings.PrepareOnly
-        }));
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {

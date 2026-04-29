@@ -748,6 +748,10 @@ def apply_and_add_mutes(
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
 
+        # Manual fast-delete (zero CI activity) merges into to_delete, not to_unmute (workflow labels).
+        manual_fast_delete_lines = []
+        manual_fast_delete_debug = []
+
         # 2a. Manual fast-unmute candidates.
         # A test is considered under manual fast-unmute when its full_name is
         # registered in `fast_unmute_active` (populated when a
@@ -823,25 +827,21 @@ def apply_and_add_mutes(
             to_unmute_manual_stable, to_unmute_manual_stable_debug = file_set_from_rows(
                 manual_stable_rows, ' [fast-unmute]'
             )
-            to_unmute_manual_zero_activity, to_unmute_manual_zero_activity_debug = file_set_from_rows(
+            manual_fast_delete_lines, manual_fast_delete_debug = file_set_from_rows(
                 manual_zero_rows, ' [fast-delete]'
             )
-            to_unmute_manual = sorted(
-                set(to_unmute_manual_stable) | set(to_unmute_manual_zero_activity)
-            )
-            to_unmute_manual_debug = sorted(
-                set(to_unmute_manual_stable_debug) | set(to_unmute_manual_zero_activity_debug)
-            )
-            if to_unmute_manual:
+            if to_unmute_manual_stable:
                 logging.info(
-                    'Manual fast-unmute added %d test(s) to to_unmute '
-                    '(%d stable [fast-unmute], %d zero-runs [fast-delete])',
-                    len(to_unmute_manual),
+                    'Manual fast-unmute added %d test(s) to to_unmute [fast-unmute]',
                     len(to_unmute_manual_stable),
-                    len(to_unmute_manual_zero_activity),
                 )
-            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
-            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
+            if manual_fast_delete_lines:
+                logging.info(
+                    'Manual fast-delete (no CI activity) added %d test(s) to to_delete',
+                    len(manual_fast_delete_lines),
+                )
+            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual_stable)))
+            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_stable_debug)))
 
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
@@ -866,7 +866,10 @@ def apply_and_add_mutes(
         # Merge per-test and wildcard results.
         to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
-        
+
+        to_delete = sorted(list(set(to_delete) | set(manual_fast_delete_lines)))
+        to_delete_debug = sorted(list(set(to_delete_debug) | set(manual_fast_delete_debug)))
+
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
         # 4. muted_ya (all currently muted tests).

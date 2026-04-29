@@ -9,6 +9,7 @@
 #include <library/cpp/testing/gtest/gtest.h>
 #include <library/cpp/testing/gtest_extensions/assertions.h>
 
+#include <util/generic/size_literals.h>
 #include <util/system/byteorder.h>
 
 using namespace NYT;
@@ -197,10 +198,17 @@ TEST(TWrapSystemErrorTest, WriteTimeout)
     THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
     auto requestStream = request.StartRequest();
 
-    auto data = TString(100000, 'x');
+    auto data = TString(1_MB, 'x');
 
+    // Server doesn't read; we need writev to block past SocketTimeout.
+    // In order to make sure that we overrflow system buffer
+    // we send ~ 100mb.
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        *requestStream << data,
+        [&] {
+            for (int i = 0; i < 128; ++i) {
+                *requestStream << data;
+            }
+        }(),
         TErrorResponse,
         "can not writev to socket output stream");
 }

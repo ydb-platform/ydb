@@ -58,7 +58,7 @@ ydb_wait_ready() {
     local try=0
 
     while [ $try -lt $max_tries ]; do
-        if /health_check >/dev/null 2>&1; then
+        if /health_readiness >/dev/null 2>&1; then
             log init "YDB is ready"
             return 0
         fi

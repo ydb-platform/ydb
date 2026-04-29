@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# Readiness probe for local-ydb container.
+# Goal: verify YDB is not only alive, but actually ready to serve basic operations.
+#
+# This is a heavier check than liveness: it exercises SQL and scheme operations,
+# and optionally performs a small DDL create/drop in `.sys_health`.
+#
+# Tunables (env):
+#   GRPC_PORT                    (default: 2136)
+#   YDB_ENDPOINT                 (default: grpc://localhost:${GRPC_PORT})
+#   YDB_DATABASE                 (default: /local)
+#   YDB_READINESS_TIMEOUT        (default: 10s)  # timeout(1) format
+#   YDB_READINESS_RETRIES        (default: 2)
+#   YDB_READINESS_SLEEP          (seconds, default: 1)
+#   YDB_READINESS_ENABLE_DDL     (default: true)
+#   DEBUG                        (true enables `set -x`)
+#
+set -euo pipefail
+
+if [ "${DEBUG:-false}" = "true" ]; then
+  set -x
+fi
+
+: "${GRPC_PORT:=2136}"
+: "${YDB_ENDPOINT:=grpc://localhost:${GRPC_PORT}}"
+: "${YDB_DATABASE:=/local}"
+
+: "${YDB_READINESS_TIMEOUT:=10s}"
+: "${YDB_READINESS_RETRIES:=2}"
+: "${YDB_READINESS_SLEEP:=1}"
+: "${YDB_READINESS_ENABLE_DDL:=true}"
+
+
+
+ydb_cli() {
+  /ydb --endpoint "${YDB_ENDPOINT}" --database "${YDB_DATABASE}" --no-discovery "$@"
+}
+
+deep_once() {
+  timeout "${YDB_READINESS_TIMEOUT}" ydb_cli sql -s "select 1" >/dev/null
+  timeout "${YDB_READINESS_TIMEOUT}" ydb_cli scheme ls "${YDB_DATABASE}" >/dev/null
+
+  if [ "${YDB_READINESS_ENABLE_DDL}" = "true" ]; then
+    # Use a deterministic table under `.sys_health`.
+    # Keep table name stable so the probe is idempotent.
+    local test_table_path
+    test_table_path="${YDB_DATABASE%/}/.sys_health/test"
+
+    timeout "${YDB_READINESS_TIMEOUT}" \
+      ydb_cli sql -s "create table if not exists \`${test_table_path}\` (key int32, value utf8, primary key(key))" >/dev/null
+    timeout "${YDB_READINESS_TIMEOUT}" \
+      ydb_cli sql -s "drop table \`${test_table_path}\`" >/dev/null
+  fi
+}
+
+main() {
+  local tries="${YDB_READINESS_RETRIES}"
+  local sleep_s="${YDB_READINESS_SLEEP}"
+  local i=1
+
+  while [ "${i}" -le "${tries}" ]; do
+    if deep_once; then
+      exit 0
+    fi
+
+    if [ "${i}" -lt "${tries}" ]; then
+      sleep "${sleep_s}"
+    fi
+
+    i=$((i + 1))
+  done
+
+  exit 1
+}
+
+main "$@"

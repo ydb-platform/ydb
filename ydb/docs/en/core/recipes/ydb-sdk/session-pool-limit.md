@@ -150,4 +150,48 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        with ydb.QuerySessionPool(driver, size=500) as pool:
+            # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            async with ydb.aio.QuerySessionPool(driver, size=500) as pool:
+                # ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    Setting the pool size is not currently supported.
+
+  {% endlist %}
+
 {% endlist %}

@@ -4,11 +4,13 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-* [Connecting to YDB](#connect-ydb)
-* [Creating a table for storing vectors](#create-table)
-* [Inserting vectors into the table](#insert-vectors)
-* [Adding a vector index](#add-vector-index)
-* [Searching for nearest vectors](#search-by-vector)
+- [Vector search](#vector-search)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -212,42 +214,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
-
-- JavaScript
-
-  ```javascript
-  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
-    id Utf8,
-    document Utf8,
-    embedding String,
-    PRIMARY KEY (id)
-  );`
-  ```
-
-- Java
-
-  ```java
-  import tech.ydb.common.transaction.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.table.query.Params;
-
-  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-      String query = String.format("""
-              CREATE TABLE IF NOT EXISTS `%s` (
-                  id Utf8,
-                  document Utf8,
-                  embedding String,
-                  PRIMARY KEY (id)
-              );""", tableName);
-
-      retryCtx.supplyResult(session -> QueryReader.readFrom(
-              session.createQuery(query, TxMode.NONE, Params.empty())
-      )).join().getValue();
-
-      System.out.println("Vector table created: " + tableName);
-  }
-  ```
 
 - C++
 
@@ -936,8 +902,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters},
-            overlap_clusters=3
+            clusters={clusters}
         );
         """
 
@@ -1192,6 +1157,60 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 - Python
 
     {% cut "asyncio" %}
+
+    ```python
+    import ydb
+
+    async def search_items_vector_as_bytes(
+        pool: ydb.aio.QuerySessionPool,
+        table_name: str,
+        embedding: list[float],
+        strategy: str = "CosineSimilarity",
+        limit: int = 1,
+        index_name: str | None = None,
+    ) -> list[dict]:
+        view_index = f"VIEW {index_name}" if index_name else ""
+
+        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+        query = f"""
+        DECLARE $embedding as String;
+
+        SELECT
+            id,
+            document,
+            Knn::{strategy}(embedding, $embedding) as score
+        FROM {table_name} {view_index}
+        ORDER BY score {sort_order}
+        LIMIT {limit};
+        """
+
+        result = await pool.execute_with_retries(
+            query,
+            {
+                "$embedding": (
+                    convert_vector_to_bytes(embedding),
+                    ydb.PrimitiveType.String,
+                ),
+            },
+        )
+
+        items = []
+
+        for result_set in result:
+            for row in result_set.rows:
+                items.append(
+                    {
+                        "id": row["id"],
+                        "document": row["document"],
+                        "score": row["score"],
+                    }
+                )
+
+        return items
+    ```
+
+    {% endcut %}
 
     ```python
     import ydb
@@ -1509,6 +1528,60 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 - Python (alternative)
 
     {% cut "asyncio" %}
+
+    ```python
+    import ydb
+
+    async def search_items_vector_as_float_list(
+        pool: ydb.aio.QuerySessionPool,
+        table_name: str,
+        embedding: list[float],
+        strategy: str = "CosineSimilarity",
+        limit: int = 1,
+        index_name: str | None = None,
+    ) -> list[dict]:
+        view_index = f"VIEW {index_name}" if index_name else ""
+
+        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+        query = f"""
+        DECLARE $embedding as List<Float>;
+
+        $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+        SELECT
+            id,
+            document,
+            Knn::{strategy}(embedding, $target_embedding) as score
+        FROM {table_name} {view_index}
+        ORDER BY score
+        {sort_order}
+        LIMIT {limit};
+        """
+
+        result = await pool.execute_with_retries(
+            query,
+            {
+                "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+            },
+        )
+
+        items = []
+
+        for result_set in result:
+            for row in result_set.rows:
+                items.append(
+                    {
+                        "id": row["id"],
+                        "document": row["document"],
+                        "score": row["score"],
+                    }
+                )
+
+        return items
+    ```
+
+    {% endcut %}
 
     ```python
     import ydb

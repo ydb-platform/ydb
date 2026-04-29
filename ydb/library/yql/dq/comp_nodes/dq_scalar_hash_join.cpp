@@ -36,8 +36,7 @@ IComputationWideFlowNode* LocateWideFlowJoinInput(
     if (rootNode->GetType()->IsCallable()) {
         const auto* callableType = AS_TYPE(TCallableType, rootNode->GetType());
         if (callableType->GetName() == TStringBuf("FromFlow")) {
-            auto* fromFlow = dynamic_cast<TCallable*>(rootNode);
-            MKQL_ENSURE(fromFlow, "Expected TCallable for FromFlow wrapper");
+            auto* fromFlow = AsCallable("FromFlow", callable.GetInput(inputIndex), __LOCATION__);
             MKQL_ENSURE(fromFlow->GetInputsCount() == 1, "FromFlow expects one argument");
             TNode& inner = *fromFlow->GetInput(0).GetNode();
             MKQL_ENSURE(inner.GetType()->IsFlow(), "FromFlow argument must be Flow");

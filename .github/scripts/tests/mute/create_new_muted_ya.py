@@ -30,6 +30,8 @@ from mute.update_mute_issues import (
 )
 from mute.constants import (
     get_delete_window_days,
+    get_manual_delete_ttl_calendar_days,
+    get_manual_delete_window_days,
     get_manual_unmute_min_runs,
     get_manual_unmute_window_days,
     get_mute_window_days,
@@ -70,6 +72,8 @@ def tests_monitor_query_days_window():
         get_unmute_window_days(),
         get_delete_window_days(),
         get_manual_unmute_window_days(),
+        get_manual_delete_window_days(),
+        get_manual_delete_ttl_calendar_days(),
     )
 
 
@@ -609,6 +613,7 @@ def is_delete_candidate(test):
 
     return result
 
+
 def create_file_set(
     aggregated_for_mute,
     filter_func,
@@ -795,7 +800,59 @@ def apply_and_add_mutes(
         # Merge per-test and wildcard results.
         to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
-        
+
+        # 3b. Fast-delete (same ``fast_unmute_active`` gate as 2a): zero p+f+m in
+        # ``manual_delete_window_days`` → ``to_delete`` (non-wildcard only; step 3 covers wildcards).
+        if (
+            manual_unmute_full_names
+            and aggregated_for_manual_unmute is not None
+            and manual_unmute_min_runs
+        ):
+            fast_delete_window_days = get_manual_delete_window_days()
+            aggregated_for_fast_delete = aggregate_test_data(all_data, fast_delete_window_days)
+
+            def is_fast_delete_candidate(test):
+                fn = test.get('full_name')
+                if not fn or fn not in manual_unmute_full_names:
+                    return False
+                total_runs = (
+                    test.get('pass_count', 0)
+                    + test.get('fail_count', 0)
+                    + test.get('mute_count', 0)
+                )
+                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
+                ok = total_runs == 0
+                logging.info(
+                    'FAST_DELETE_CHECK: %s - runs:%s, fails:%s, window_days=%s, result:%s',
+                    fn,
+                    total_runs,
+                    total_fails,
+                    fast_delete_window_days,
+                    ok,
+                )
+                return ok
+
+            def is_fast_delete_non_chunk(test):
+                if is_chunk_test(test):
+                    return False
+                return is_fast_delete_candidate(test)
+
+            to_delete_fast, to_delete_fast_debug = create_file_set(
+                aggregated_for_fast_delete,
+                is_fast_delete_non_chunk,
+                mute_check,
+                resolution='to_delete',
+                debug_suffix=' [fast-delete]',
+            )
+            if to_delete_fast:
+                logging.info(
+                    'Fast-delete: window_days=%s, lines=%d',
+                    fast_delete_window_days,
+                    len(to_delete_fast),
+                )
+            to_delete = sorted(list(set(to_delete) | set(to_delete_fast)))
+            to_delete_debug = sorted(list(set(to_delete_debug) | set(to_delete_fast_debug)))
+
         write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         
         # 4. muted_ya (all currently muted tests).

@@ -10,6 +10,8 @@ _MUTE_CONFIG_PATH = os.path.normpath(
 _REQUIRED_KEYS = (
     'manual_unmute_window_days',
     'manual_unmute_min_runs',
+    'manual_delete_window_days',
+    'manual_delete_ttl_calendar_days',
     'manual_unmute_ttl_calendar_days',
     'mute_window_days',
     'unmute_window_days',
@@ -82,6 +84,18 @@ def get_manual_unmute_window_days():
 
 def get_manual_unmute_min_runs():
     return _positive_int('manual_unmute_min_runs')
+
+
+def get_manual_delete_window_days():
+    """``tests_monitor`` window for fast-delete (zero p+f+m → ``to_delete``)."""
+
+    return _positive_int('manual_delete_window_days')
+
+
+def get_manual_delete_ttl_calendar_days():
+    """Paired calendar horizon with ``manual_delete_window_days`` (tests_monitor query span)."""
+
+    return _positive_int('manual_delete_ttl_calendar_days')
 
 
 def get_manual_unmute_ttl_calendar_days():

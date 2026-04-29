@@ -4,3 +4,5 @@ items:
     include:
       mode: link
       path: datasets/toc_p.yaml
+  - name: Limitations
+    href: limitations.md

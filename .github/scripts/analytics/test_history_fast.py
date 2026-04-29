@@ -40,7 +40,19 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table):
+def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table, full_day_refresh=False):
+    join_clause = ""
+    dedup_where_clause = ""
+    if not full_day_refresh:
+        join_clause = f"""
+    LEFT JOIN (
+        select distinct test_id  from `{test_history_fast_table}`
+        where run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
+    ) as fast_data_missed
+    ON all_data.test_id = fast_data_missed.test_id
+"""
+        dedup_where_clause = "and fast_data_missed.test_id is NULL"
+
     query = f"""
        SELECT 
         build_type, 
@@ -59,12 +71,14 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         status_description,
         CAST(
             CASE
-                WHEN String::Contains(String::ToLower(COALESCE(status_description, '')), 'sanitizer')
+                WHEN String::AsciiToLower(COALESCE(status, '')) NOT IN ('failure', 'mute')
+                THEN ''
+                WHEN String::Contains(String::AsciiToLower(COALESCE(status_description, '')), 'sanitizer')
                 THEN 'SANITIZER'
-                WHEN String::Contains(String::ToLower(COALESCE(error_type, '')), 'timeout')
-                  OR String::Contains(String::ToLower(COALESCE(status_description, '')), 'timeout')
+                WHEN String::Contains(String::AsciiToLower(COALESCE(error_type, '')), 'timeout')
+                  OR String::Contains(String::AsciiToLower(COALESCE(status_description, '')), 'timeout')
                 THEN 'TIMEOUT'
-                ELSE 'REGULAR'
+                ELSE ''
             END
             AS Utf8
         ) AS error_type,
@@ -74,11 +88,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         stderr,
         stdout
     FROM `{test_runs_table}`  as all_data
-    LEFT JOIN (
-        select distinct test_id  from `{test_history_fast_table}`
-        where run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
-    ) as fast_data_missed
-    ON all_data.test_id = fast_data_missed.test_id
+    {join_clause}
     WHERE
         all_data.run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
@@ -89,8 +99,8 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
             THEN TRUE
             ELSE FALSE
             END) = FALSE
-        and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
-        and fast_data_missed.test_id is NULL
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
+        {dedup_where_clause}
     """
 
     print(f'missed data capturing')
@@ -99,6 +109,15 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--full-day-refresh",
+        action="store_true",
+        help="Re-upload all data for the last day (disable dedup by existing test_id in fast table)",
+    )
+    args = parser.parse_args()
+
     with YDBWrapper() as ydb_wrapper:
         
         
@@ -117,7 +136,12 @@ def main():
         create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
-        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table)
+        prepared_for_upload_rows = get_missed_data_for_upload(
+            ydb_wrapper,
+            test_runs_table,
+            test_history_fast_table,
+            full_day_refresh=args.full_day_refresh,
+        )
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:

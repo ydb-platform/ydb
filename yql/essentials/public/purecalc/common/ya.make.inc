@@ -8,6 +8,7 @@ ADDINCL(
 
 SRCS(
     compile_mkql.cpp
+    default_runtime_settings.cpp
     fwd.cpp
     inspect_input.cpp
     interface.cpp

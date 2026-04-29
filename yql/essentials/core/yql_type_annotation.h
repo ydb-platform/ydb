@@ -510,7 +510,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
-    TRuntimeSettings::TPtr RuntimeSettings;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

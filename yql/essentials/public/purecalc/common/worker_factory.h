@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <utility>
 
 namespace NYql::NPureCalc {
@@ -109,6 +110,7 @@ protected:
     bool UseSystemColumns_;
     bool UseWorkerPool_;
     TLangVersion LangVer_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TVector<THolder<IWorker>> WorkerPool_;
     const TString IssueReportTarget_;
 

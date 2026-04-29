@@ -1145,9 +1145,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char cloudId[] =  "testcloud4";
 
         constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
-        CreateTopic(topicName);
         constexpr char secretPath[] = "eds_iam_token";
         auto [location, databasePath] = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        {
+            NYdb::TDriver driver(
+                NYdb::TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase(databasePath)
+            );
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            auto result = topicClient.CreateTopic(topicName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
         ExecQuery(fmt::format(R"(
             CREATE SECRET `{secret}` WITH (value = "{token}");
             )",

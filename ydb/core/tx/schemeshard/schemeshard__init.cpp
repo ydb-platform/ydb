@@ -4770,7 +4770,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Metadata>()) {
-                        item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
+                        item.Metadata = ::NKikimr::NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
@@ -4808,7 +4808,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
-                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                        item.ExportItemIV = ::NKikimr::NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }
 
                     if (item.WaitTxId != InvalidTxId) {
@@ -5541,73 +5541,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 // Restore table path states based on the operation
                 if (op.HasBackupCollectionPathId()) {
-                    TPathId backupCollectionPathId = TPathId(
-                        op.GetBackupCollectionPathId().GetOwnerId(),
-                        op.GetBackupCollectionPathId().GetLocalId()
-                    );
-
-                    // Set target tables to EPathStateIncomingIncrementalRestore
-                    for (const auto& tablePath : op.GetTablePathList()) {
-                        TPath resolvedPath = TPath::Resolve(tablePath, Self);
-                        if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
-                            auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
-                            targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
-                        }
-                    }
-
-                    // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
-                    if (Self->PathsById.contains(backupCollectionPathId)) {
-                        auto sourcePath = Self->PathsById.at(backupCollectionPathId);
-                        sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
-
-                        // Get the backup collection path to construct backup table paths
-                        TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
-                        if (backupCollectionPath.IsResolved()) {
-                            TString backupCollectionPathStr = backupCollectionPath.PathString();
-
-                            // Set full backup table states using trimmed names
-                            if (op.HasFullBackupTrimmedName()) {
-                                TString fullBackupName = NBackup::FullBackupDirName(op.GetFullBackupTrimmedName());
-                                TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
-
-                                // Set state for each table in the full backup
-                                for (const auto& tablePath : op.GetTablePathList()) {
-                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
-                                    if (originalTablePath.IsResolved()) {
-                                        TString tableName = originalTablePath.LeafName();
-                                        TString fullBackupTablePath = fullBackupPath + "/" + tableName;
-
-                                        TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
-                                        if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
-                                            auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
-                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Set incremental backup table states using trimmed names
-                            for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
-                                TString incrBackupName = NBackup::IncrementalBackupDirName(trimmedIncrName);
-                                TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
-
-                                // Set state for each table in the incremental backup
-                                for (const auto& tablePath : op.GetTablePathList()) {
-                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
-                                    if (originalTablePath.IsResolved()) {
-                                        TString tableName = originalTablePath.LeafName();
-                                        TString incrBackupTablePath = incrBackupPath + "/" + tableName;
-
-                                        TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
-                                        if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
-                                            auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
-                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    RestoreIncrementalRestoreOpPathStates(op);
                 }
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -5631,35 +5565,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     continue;
                 }
 
-                bool controlOperationExists = false;
-
-                for (const auto& [txOpId, txState] : Self->TxInFlight) {
-                    if (txOpId.GetTxId() == txId) {
-                        controlOperationExists = true;
-                        break;
-                    }
-                }
-
-                if (!controlOperationExists) {
-                    TPathId backupCollectionPathId;
-                    backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
-                    backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
-
-                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit detected orphaned incremental restore operation during recovery"
-                            << ", operationId: " << opId
-                            << ", txId: " << txId
-                            << ", backupCollectionPathId: " << backupCollectionPathId
-                            << ", scheduling TTxProgress to continue operation"
-                            << ", at schemeshard: " << Self->TabletID());
-
-                    TVector<TString> backupNames;
-                    for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
-                        backupNames.push_back(name);
-                    }
-                    OnComplete.Send(Self->SelfId(),
-                        new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
-                }
+                ScheduleOrphanedIncrementalRestoreOp(opId, op, OnComplete, ctx);
             }
         }
 
@@ -5880,6 +5786,109 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         OnComplete.ApplyOnExecute(Self, txc, ctx);
         DbChanges.Apply(Self, txc, ctx);
         return true;
+    }
+
+    void RestoreIncrementalRestoreOpPathStates(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+        TPathId backupCollectionPathId = TPathId(
+            op.GetBackupCollectionPathId().GetOwnerId(),
+            op.GetBackupCollectionPathId().GetLocalId()
+        );
+
+        // Set target tables to EPathStateIncomingIncrementalRestore
+        for (const auto& tablePath : op.GetTablePathList()) {
+            TPath resolvedPath = TPath::Resolve(tablePath, Self);
+            if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
+                auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
+            }
+        }
+
+        // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
+        if (Self->PathsById.contains(backupCollectionPathId)) {
+            auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+            sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+
+            // Get the backup collection path to construct backup table paths
+            TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
+            if (backupCollectionPath.IsResolved()) {
+                TString backupCollectionPathStr = backupCollectionPath.PathString();
+
+                // Set full backup table states using trimmed names
+                if (op.HasFullBackupTrimmedName()) {
+                    TString fullBackupName = NBackup::FullBackupDirName(op.GetFullBackupTrimmedName());
+                    TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
+
+                    // Set state for each table in the full backup
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                        if (originalTablePath.IsResolved()) {
+                            TString tableName = originalTablePath.LeafName();
+                            TString fullBackupTablePath = fullBackupPath + "/" + tableName;
+
+                            TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
+                            if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
+                                auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                            }
+                        }
+                    }
+                }
+
+                // Set incremental backup table states using trimmed names
+                for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
+                    TString incrBackupName = NBackup::IncrementalBackupDirName(trimmedIncrName);
+                    TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
+
+                    // Set state for each table in the incremental backup
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                        if (originalTablePath.IsResolved()) {
+                            TString tableName = originalTablePath.LeafName();
+                            TString incrBackupTablePath = incrBackupPath + "/" + tableName;
+
+                            TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
+                            if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
+                                auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void ScheduleOrphanedIncrementalRestoreOp(const TOperationId& opId, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op, TSideEffects& onComplete, const TActorContext& ctx) {
+        TTxId txId = opId.GetTxId();
+
+        bool controlOperationExists = false;
+        for (const auto& [txOpId, txState] : Self->TxInFlight) {
+            if (txOpId.GetTxId() == txId) {
+                controlOperationExists = true;
+                break;
+            }
+        }
+
+        if (!controlOperationExists) {
+            TPathId backupCollectionPathId;
+            backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
+            backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TTxInit detected orphaned incremental restore operation during recovery"
+                    << ", operationId: " << opId
+                    << ", txId: " << txId
+                    << ", backupCollectionPathId: " << backupCollectionPathId
+                    << ", scheduling TTxProgress to continue operation"
+                    << ", at schemeshard: " << Self->TabletID());
+
+            TVector<TString> backupNames;
+            for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+                backupNames.push_back(name);
+            }
+            onComplete.Send(Self->SelfId(),
+                new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
+        }
     }
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }

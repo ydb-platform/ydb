@@ -1304,6 +1304,15 @@ public:
         const TString& accumulatedRelativePath,
         const TActorContext& ctx);
 
+    // Register subOpId in the orchestrator maps and populate ExpectedShards/InvolvedShards
+    // from the target table's Shard2PartitionIdx. Called by both CreateSingleTableRestoreOperation
+    // and CreateSingleIndexRestoreOperation after building the sub-op request.
+    void TrackSubOpAndExpectedShards(
+        TOperationId subOpId,
+        TPathId tablePathId,
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state);
+
     // Per-table dispatch helper invoked by DispatchPendingTables for a TPendingRestoreOp
     // of kind=Table. Sends the schemeshard MultiIncrementalRestore sub-op for one entry.
     void CreateSingleTableRestoreOperation(

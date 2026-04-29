@@ -79,104 +79,13 @@ public:
               
         if (state.AreAllCurrentOperationsComplete()) {
             if (state.RetryNeeded) {
-                const i64 cap = Self->IncrementalRestoreSettings.MaxIncrementalRestoreRetriesPerIncremental;
-                // Skip budget check while a retry is in flight — count is
-                // incremented at scheduling time, so re-entries between schedule
-                // and run would otherwise fail prematurely.
-                const bool budgetExceeded = (cap != -1)
-                    && !state.RetryScheduled
-                    && (i64)state.CurrentIncrementalRetryCount >= cap;
-                if (state.NonRetriableFailure || budgetExceeded) {
-                    LOG_E("Incremental #" << state.CurrentIncrementalIdx
-                          << " short-circuiting to Failed: nonRetriable="
-                          << state.NonRetriableFailure
-                          << " retryCount=" << state.CurrentIncrementalRetryCount
-                          << " cap=" << cap);
-                    state.State = TIncrementalRestoreState::EState::Failed;
-                    state.RetryScheduled = false;
-                    state.NextRetryAttemptAt = TInstant::Zero();
-                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
-                    );
-                    // State is persisted as Failed — callers polling via GetRestore/ListRestores
-                    // will see PROGRESS_DONE + GENERIC_ERROR. No finalization needed.
+                if (HandleRetryPath(state, db, ctx)) {
                     return true;
                 }
-
-                // Two-phase backoff: Phase 1 (!RetryScheduled) increments counter +
-                // schedules timer; Phase 2 (timer fired) re-dispatches; concurrent
-                // completion events arriving mid-window bail out without double-counting.
-                if (state.RetryScheduled) {
-                    if (ctx.Now() < state.NextRetryAttemptAt) {
-                        LOG_I("Backoff window in flight for incremental #"
-                              << state.CurrentIncrementalIdx
-                              << " (retry " << state.CurrentIncrementalRetryCount
-                              << ", until " << state.NextRetryAttemptAt
-                              << "), skipping concurrent retry trigger");
-                        return true;
-                    }
-
-                    // Phase 2: timer event has arrived. Drain into the retry body.
-                    LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
-                          << ", proceeding with retry attempt " << state.CurrentIncrementalRetryCount);
-                    state.RetryScheduled = false;
-                    state.NextRetryAttemptAt = TInstant::Zero();
-                    state.RetryNeeded = false;
-
-                    // Reset operation tracking for retry (don't advance index)
-                    state.InProgressOperations.clear();
-                    state.CompletedOperations.clear();
-                    state.PendingTables.clear();
-                    state.CurrentIncrementalStarted = false;
-
-                    // Persist cleared state
-                    TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
-                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                        NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
-                    );
-
-                    // Retry: process same incremental again
-                    ProcessNextIncrementalBackup(state, ctx);
-                    return true;
-                }
-
-                // Phase 1: schedule the backoff.
-                state.CurrentIncrementalRetryCount++;
-                auto delay = NDataShard::GetRetryWakeupTimeoutBackoff(state.CurrentIncrementalRetryCount);
-                state.NextRetryAttemptAt = ctx.Now() + delay;
-                state.RetryScheduled = true;
-                LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
-                      << ", retry attempt " << state.CurrentIncrementalRetryCount
-                      << "/" << (cap == -1 ? "unlimited" : ToString(cap))
-                      << " scheduled in " << delay);
-                Self->Schedule(delay,
-                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
-                return true;
             } else {
-                LOG_I("All operations for current incremental backup completed, moving to next");
-                state.MarkCurrentIncrementalComplete();
-                state.MoveToNextIncremental();
-
-                // Persist CurrentIncrementalIdx advance
-                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
-                );
-
-                LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
-                      << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
-
-                if (state.AllIncrementsProcessed()) {
-                    LOG_I("All incremental backups processed, performing finalization");
-                    state.State = TIncrementalRestoreState::EState::Finalizing;
-                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
-                    );
-                    FinalizeIncrementalRestoreOperation(txc, ctx, state);
+                if (HandleAllOperationsComplete(state, txc, ctx)) {
                     return true;
                 }
-
-                // Start processing next incremental backup
-                ProcessNextIncrementalBackup(state, ctx);
             }
         } else if (!state.InProgressOperations.empty()) {
             // Fallback heartbeat. The hot path is the immediate ctx.Send in
@@ -250,6 +159,113 @@ private:
         return operations;
     }
     
+    // Returns true if Execute should also return true (retry handled this tick).
+    bool HandleRetryPath(TIncrementalRestoreState& state, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+        const i64 cap = Self->IncrementalRestoreSettings.MaxIncrementalRestoreRetriesPerIncremental;
+        // Skip budget check while a retry is in flight — count is
+        // incremented at scheduling time, so re-entries between schedule
+        // and run would otherwise fail prematurely.
+        const bool budgetExceeded = (cap != -1)
+            && !state.RetryScheduled
+            && (i64)state.CurrentIncrementalRetryCount >= cap;
+        if (state.NonRetriableFailure || budgetExceeded) {
+            LOG_E("Incremental #" << state.CurrentIncrementalIdx
+                  << " short-circuiting to Failed: nonRetriable="
+                  << state.NonRetriableFailure
+                  << " retryCount=" << state.CurrentIncrementalRetryCount
+                  << " cap=" << cap);
+            state.State = TIncrementalRestoreState::EState::Failed;
+            state.RetryScheduled = false;
+            state.NextRetryAttemptAt = TInstant::Zero();
+            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+            );
+            // State is persisted as Failed — callers polling via GetRestore/ListRestores
+            // will see PROGRESS_DONE + GENERIC_ERROR. No finalization needed.
+            return true;
+        }
+
+        // Two-phase backoff: Phase 1 (!RetryScheduled) increments counter +
+        // schedules timer; Phase 2 (timer fired) re-dispatches; concurrent
+        // completion events arriving mid-window bail out without double-counting.
+        if (state.RetryScheduled) {
+            if (ctx.Now() < state.NextRetryAttemptAt) {
+                LOG_I("Backoff window in flight for incremental #"
+                      << state.CurrentIncrementalIdx
+                      << " (retry " << state.CurrentIncrementalRetryCount
+                      << ", until " << state.NextRetryAttemptAt
+                      << "), skipping concurrent retry trigger");
+                return true;
+            }
+
+            // Phase 2: timer event has arrived. Drain into the retry body.
+            LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
+                  << ", proceeding with retry attempt " << state.CurrentIncrementalRetryCount);
+            state.RetryScheduled = false;
+            state.NextRetryAttemptAt = TInstant::Zero();
+            state.RetryNeeded = false;
+
+            // Reset operation tracking for retry (don't advance index)
+            state.InProgressOperations.clear();
+            state.CompletedOperations.clear();
+            state.PendingTables.clear();
+            state.CurrentIncrementalStarted = false;
+
+            // Persist cleared state
+            TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
+            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
+            );
+
+            // Retry: process same incremental again
+            ProcessNextIncrementalBackup(state, ctx);
+            return true;
+        }
+
+        // Phase 1: schedule the backoff.
+        state.CurrentIncrementalRetryCount++;
+        auto delay = NDataShard::GetRetryWakeupTimeoutBackoff(state.CurrentIncrementalRetryCount);
+        state.NextRetryAttemptAt = ctx.Now() + delay;
+        state.RetryScheduled = true;
+        LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
+              << ", retry attempt " << state.CurrentIncrementalRetryCount
+              << "/" << (cap == -1 ? "unlimited" : ToString(cap))
+              << " scheduled in " << delay);
+        Self->Schedule(delay,
+            new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
+        return true;
+    }
+
+    // Returns true if Execute should also return true (finalization fired).
+    bool HandleAllOperationsComplete(TIncrementalRestoreState& state, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+        LOG_I("All operations for current incremental backup completed, moving to next");
+        state.MarkCurrentIncrementalComplete();
+        state.MoveToNextIncremental();
+
+        // Persist CurrentIncrementalIdx advance
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
+        );
+
+        LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
+              << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
+
+        if (state.AllIncrementsProcessed()) {
+            LOG_I("All incremental backups processed, performing finalization");
+            state.State = TIncrementalRestoreState::EState::Finalizing;
+            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+            );
+            FinalizeIncrementalRestoreOperation(txc, ctx, state);
+            return true;
+        }
+
+        // Start processing next incremental backup
+        ProcessNextIncrementalBackup(state, ctx);
+        return false;
+    }
+
     void CheckForCompletedOperations(TIncrementalRestoreState& state, const TActorContext& ctx) {
         THashSet<TOperationId> stillInProgress;
         bool operationsCompleted = false;
@@ -622,6 +638,29 @@ void TSchemeShard::DispatchPendingTables(
           << " cap=" << cap);
 }
 
+void TSchemeShard::TrackSubOpAndExpectedShards(
+    TOperationId subOpId,
+    TPathId tablePathId,
+    ui64 incrementalRestoreId,
+    TIncrementalRestoreState& state)
+{
+    IncrementalRestoreOperationToState[subOpId] = incrementalRestoreId;
+    TxIdToIncrementalRestore[subOpId.GetTxId()] = incrementalRestoreId;
+
+    state.InProgressOperations.insert(subOpId);
+
+    auto& tableOpState = state.TableOperations[subOpId];
+    tableOpState.OperationId = subOpId;
+
+    auto tableInfoPtr = Tables.FindPtr(tablePathId);
+    if (tableInfoPtr) {
+        for (const auto& [shardIdx, partitionIdx] : (*tableInfoPtr)->GetShard2PartitionIdx()) {
+            tableOpState.ExpectedShards.insert(shardIdx);
+            state.InvolvedShards.insert(shardIdx);
+        }
+    }
+}
+
 // Send the schemeshard MultiIncrementalRestore sub-op for one table entry.
 // Extracted from the old CreateIncrementalRestoreOperation per-entry loop body.
 void TSchemeShard::CreateSingleTableRestoreOperation(
@@ -667,28 +706,16 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
     tableRestore.SetDstTablePath(targetTablePath);
 
     TOperationId tableRestoreOpId(tableTxId, 0);
-    IncrementalRestoreOperationToState[tableRestoreOpId] = operationId;
-    TxIdToIncrementalRestore[tableTxId] = operationId;
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt != IncrementalRestoreStates.end()) {
-        stateIt->second.InProgressOperations.insert(tableRestoreOpId);
-
-        auto& tableOpState = stateIt->second.TableOperations[tableRestoreOpId];
-        tableOpState.OperationId = tableRestoreOpId;
-
         TPath itemPath = TPath::Resolve(targetTablePath, this);
-        if (itemPath.IsResolved() && itemPath.Base()->IsTable()) {
-            auto tableInfo = Tables.FindPtr(itemPath.Base()->PathId);
-            if (tableInfo) {
-                for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
-                    tableOpState.ExpectedShards.insert(shardIdx);
-                    stateIt->second.InvolvedShards.insert(shardIdx);
-                }
-                LOG_I("Table operation " << tableRestoreOpId << " expects " << tableOpState.ExpectedShards.size() << " shards");
-            }
-        }
-
+        TPathId tablePathId = (itemPath.IsResolved() && itemPath.Base()->IsTable())
+            ? itemPath.Base()->PathId
+            : TPathId{};
+        TrackSubOpAndExpectedShards(tableRestoreOpId, tablePathId, operationId, stateIt->second);
+        LOG_I("Table operation " << tableRestoreOpId << " expects "
+              << stateIt->second.TableOperations[tableRestoreOpId].ExpectedShards.size() << " shards");
         LOG_I("Tracking operation " << tableRestoreOpId << " for incremental restore " << operationId);
     }
 
@@ -922,27 +949,12 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     // Track this operation as part of incremental restore
     TOperationId indexRestoreOpId(indexTxId, 0);
-    IncrementalRestoreOperationToState[indexRestoreOpId] = operationId;
-    TxIdToIncrementalRestore[indexTxId] = operationId;
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt != IncrementalRestoreStates.end()) {
-        // Add to in-progress operations (will be tracked alongside table operations)
-        stateIt->second.InProgressOperations.insert(indexRestoreOpId);
-
-        // Track expected shards for this index impl table
-        auto& indexOpState = stateIt->second.TableOperations[indexRestoreOpId];
-        indexOpState.OperationId = indexRestoreOpId;
-
-        if (Tables.contains(indexImplTablePathId)) {
-            auto indexImplTable = Tables.at(indexImplTablePathId);
-            for (const auto& [shardIdx, partitionIdx] : indexImplTable->GetShard2PartitionIdx()) {
-                indexOpState.ExpectedShards.insert(shardIdx);
-                stateIt->second.InvolvedShards.insert(shardIdx);
-            }
-            LOG_I("Index operation " << indexRestoreOpId << " expects " << indexOpState.ExpectedShards.size() << " shards");
-        }
-
+        TrackSubOpAndExpectedShards(indexRestoreOpId, indexImplTablePathId, operationId, stateIt->second);
+        LOG_I("Index operation " << indexRestoreOpId << " expects "
+              << stateIt->second.TableOperations[indexRestoreOpId].ExpectedShards.size() << " shards");
         LOG_I("Tracking index operation " << indexRestoreOpId << " for incremental restore " << operationId);
     }
 

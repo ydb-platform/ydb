@@ -7,6 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <atomic>
+#include <climits>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -30,31 +31,97 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             "Incremental backup did not reach PROGRESS_DONE within timeout");
     }
 
-    void WaitForRestoreDone(TTestActorRuntime& runtime, TTestEnv* testEnv, const TString& dbName,
+    // List-based poll: TestGetBackupCollectionRestore asserts inner Status, which flips
+    // to GENERIC_ERROR when the orchestrator transitions to Failed.
+    Ydb::StatusIds::StatusCode WaitForRestoreDone(TTestActorRuntime& runtime, TTestEnv* testEnv, const TString& dbName,
             bool expectRegistered,
             TDuration pollInterval = TDuration::Seconds(1), TDuration timeout = TDuration::Seconds(30)) {
-        auto listResp = TestListBackupCollectionRestores(runtime, dbName);
-        const auto& entries = listResp.GetEntries();
-        if (entries.empty()) {
+        auto initialList = TestListBackupCollectionRestores(runtime, dbName);
+        if (initialList.GetEntries().empty()) {
             if (expectRegistered) {
                 UNIT_ASSERT_C(false, "Restore was expected to be registered, but list returned no entries");
             }
-            return;
+            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         }
-        ui64 restoreId = entries.rbegin()->GetId();
 
         TInstant deadline = runtime.GetCurrentTime() + timeout;
         while (runtime.GetCurrentTime() < deadline) {
-            auto resp = TestGetBackupCollectionRestore(runtime, restoreId, dbName);
-            if (resp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
-                return;
+            auto listResp = TestListBackupCollectionRestores(runtime, dbName);
+            if (!listResp.GetEntries().empty()) {
+                const auto& entry = *listResp.GetEntries().rbegin();
+                if (entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                    return static_cast<Ydb::StatusIds::StatusCode>(entry.GetStatus());
+                }
             }
             testEnv->SimulateSleep(runtime, pollInterval);
         }
-        auto resp = TestGetBackupCollectionRestore(runtime, restoreId, dbName);
-        UNIT_ASSERT_C(resp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
-            "Restore did not reach PROGRESS_DONE within timeout");
+        UNIT_ASSERT_C(false, "Restore did not reach PROGRESS_DONE within timeout");
+        return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     }
+
+    // Inject TEvFinished failures into the scan completion path. Returns the
+    // observer holder; when 'counter' is captured externally, the caller can
+    // inspect how many failures were actually injected. Skips internal
+    // TEvFinished() events (TxId=0) emitted by change_sender_incr_restore.
+    TTestActorRuntime::TEventObserverHolder InjectScanFailures(
+        TTestActorRuntime& runtime,
+        std::atomic<int>& counter,
+        int maxFailures,
+        bool retriable,
+        const TString& errorMessage)
+    {
+        return runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
+            [&counter, maxFailures, retriable, errorMessage](
+                    NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
+                if (ev->Get()->TxId == 0) {
+                    return;
+                }
+                if (counter.fetch_add(1) < maxFailures) {
+                    ev->Get()->Success = false;
+                    ev->Get()->Retriable = retriable;
+                    ev->Get()->Error = errorMessage;
+                }
+            });
+    }
+
+    // Counts in-flight ESchemeOpRestoreMultipleIncrementalBackups sub-ops by
+    // observing TEvModifySchemeTransaction (start) and TEvModifySchemeTransactionResult
+    // (end). Used by the rate-limiter cap tests to assert the in-flight count never
+    // exceeds the configured cap.
+    struct TInFlightTracker {
+        std::atomic<i32> InFlight{0};
+        std::atomic<i32> PeakInFlight{0};
+        TMutex Mutex;
+        THashSet<ui64> RestoreTxIds;
+
+        std::pair<TTestActorRuntime::TEventObserverHolder, TTestActorRuntime::TEventObserverHolder>
+        AttachObservers(TTestActorRuntime& runtime) {
+            auto start = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+                [this](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                    const auto& rec = ev->Get()->Record;
+                    if (rec.TransactionSize() == 0) return;
+                    if (rec.GetTransaction(0).GetOperationType()
+                            != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                        return;
+                    }
+                    { TGuard<TMutex> g(Mutex); RestoreTxIds.insert(rec.GetTxId()); }
+                    i32 cur = InFlight.fetch_add(1) + 1;
+                    i32 peak;
+                    do {
+                        peak = PeakInFlight.load();
+                        if (cur <= peak) break;
+                    } while (!PeakInFlight.compare_exchange_weak(peak, cur));
+                });
+            auto end = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                [this](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+                    ui64 txId = ev->Get()->Record.GetTxId();
+                    bool isRestore;
+                    { TGuard<TMutex> g(Mutex); isRestore = RestoreTxIds.contains(txId); }
+                    if (isRestore) InFlight.fetch_sub(1);
+                });
+            return {std::move(start), std::move(end)};
+        }
+    };
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RestoreFromFullShouldSucceed, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
@@ -689,41 +756,18 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // We rewrite the FIRST TEvFinished from the IncrementalRestoreScan to carry success=false
         // and let subsequent retries succeed.
         std::atomic<int> failuresInjected{0};
-        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {  // skip change_sender's internal TEvFinished()
-                    return;
-                }
-                if (failuresInjected.fetch_add(1) == 0) {
-                    // First TEvFinished: rewrite to failure
-                    ev->Get()->Success = false;
-                    ev->Get()->Error = "Injected scan failure for retry test";
-                }
-            });
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/true, "Injected scan failure for retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
         // Wait for restore to complete via the retry path
-        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
-        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Restore was never registered");
-        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
-
-        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
-        while (runtime.GetCurrentTime() < deadline) {
-            auto resp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
-            if (resp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
-                break;
-            }
-            env.SimulateSleep(runtime, TDuration::Seconds(1));
-        }
-
-        auto finalResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
-        UNIT_ASSERT_C(finalResp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
-            "Restore did not reach PROGRESS_DONE after retry");
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
         // Status must be SUCCESS — retry path recovered from the injected failure
-        UNIT_ASSERT_C(finalResp.GetBackupCollectionRestore().GetStatus() == Ydb::StatusIds::SUCCESS,
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
             "Restore status is not SUCCESS after retry");
 
         // Ensure exactly 1 failure was injected (the retry must have succeeded on attempt 2)
@@ -805,14 +849,12 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // Observer: count concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
         // Increments on TEvModifySchemeTransaction (op start), decrements on
         // TEvModifySchemeTransactionResult (op accepted/done).
-        std::atomic<i32> inFlight{0};
-        std::atomic<i32> peakInFlight{0};
         std::atomic<i32> totalSeen{0};
-        // Track which TxIds are restore sub-ops so we know which results to count.
-        TMutex restoreTxIdsMutex;
-        THashSet<ui64> restoreTxIds;
-
-        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+        TInFlightTracker tracker;
+        // Also count total seen via an extra start observer.
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+        // Wrap start observer to also count totalSeen.
+        auto observerTotalSeen = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
             [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
                 if (rec.TransactionSize() == 0) return;
@@ -820,30 +862,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                         != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
                     return;
                 }
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    restoreTxIds.insert(rec.GetTxId());
-                }
-                i32 cur = inFlight.fetch_add(1) + 1;
                 totalSeen.fetch_add(1);
-                i32 peak;
-                do {
-                    peak = peakInFlight.load();
-                    if (cur <= peak) break;
-                } while (!peakInFlight.compare_exchange_weak(peak, cur));
-            });
-
-        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    isRestore = restoreTxIds.contains(txId);
-                }
-                if (isRestore) {
-                    inFlight.fetch_sub(1);
-                }
             });
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
@@ -854,8 +873,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         UNIT_ASSERT_C(totalSeen.load() >= 8,
             "Expected at least 8 restore sub-ops, saw " << totalSeen.load());
-        UNIT_ASSERT_C(peakInFlight.load() <= 2,
-            "Expected peak in-flight <= 2 (cap=2), saw " << peakInFlight.load());
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 2,
+            "Expected peak in-flight <= 2 (cap=2), saw " << tracker.PeakInFlight.load());
 
         // Sanity: each table has 1 row from full + 1 row from incremental
         for (ui32 i = 0; i < 8; ++i) {
@@ -874,43 +893,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
 
-        std::atomic<i32> inFlight{0};
-        std::atomic<i32> peakInFlight{0};
-        TMutex restoreTxIdsMutex;
-        THashSet<ui64> restoreTxIds;
-
-        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    restoreTxIds.insert(rec.GetTxId());
-                }
-                i32 cur = inFlight.fetch_add(1) + 1;
-                i32 peak;
-                do {
-                    peak = peakInFlight.load();
-                    if (cur <= peak) break;
-                } while (!peakInFlight.compare_exchange_weak(peak, cur));
-            });
-
-        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    isRestore = restoreTxIds.contains(txId);
-                }
-                if (isRestore) {
-                    inFlight.fetch_sub(1);
-                }
-            });
+        TInFlightTracker tracker;
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -920,8 +904,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         // With cap=-1 we expect to observe all 8 in-flight at peak (best-effort:
         // require >2 to prove the cap is actually disabled).
-        UNIT_ASSERT_C(peakInFlight.load() > 2,
-            "Expected peak in-flight > 2 with unbounded cap, saw " << peakInFlight.load());
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() > 2,
+            "Expected peak in-flight > 2 with unbounded cap, saw " << tracker.PeakInFlight.load());
     }
 
     // Test 4: cap survives reboots. ICB lives in AppData which persists across
@@ -1021,14 +1005,16 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
 
-        std::atomic<i32> inFlight{0};
-        std::atomic<i32> peakInFlight{0};
         std::atomic<i32> peakAfterRaise{0};
         std::atomic<bool> raised{false};
-        TMutex restoreTxIdsMutex;
-        THashSet<ui64> restoreTxIds;
-
-        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+        TInFlightTracker tracker;
+        // Attach base observers for in-flight tracking.
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+        // Extra observer to track peak after cap raise.
+        // Note: this observer fires alongside the base tracker's start observer
+        // on the same event; we use tracker.PeakInFlight as a proxy for the
+        // post-increment value since both observers update it concurrently.
+        auto observerAfterRaise = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
             [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
                 const auto& rec = ev->Get()->Record;
                 if (rec.TransactionSize() == 0) return;
@@ -1036,35 +1022,14 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                         != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
                     return;
                 }
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    restoreTxIds.insert(rec.GetTxId());
-                }
-                i32 cur = inFlight.fetch_add(1) + 1;
-                i32 peak;
-                do {
-                    peak = peakInFlight.load();
-                    if (cur <= peak) break;
-                } while (!peakInFlight.compare_exchange_weak(peak, cur));
                 if (raised.load()) {
+                    // Read the current peak from tracker (updated by the base observer).
+                    i32 cur = tracker.PeakInFlight.load();
                     i32 peak2;
                     do {
                         peak2 = peakAfterRaise.load();
                         if (cur <= peak2) break;
                     } while (!peakAfterRaise.compare_exchange_weak(peak2, cur));
-                }
-            });
-
-        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    isRestore = restoreTxIds.contains(txId);
-                }
-                if (isRestore) {
-                    inFlight.fetch_sub(1);
                 }
             });
 
@@ -1080,8 +1045,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
 
         // Verify cap was respected: peak <= 8 (the raised value).
-        UNIT_ASSERT_C(peakInFlight.load() <= 8,
-            "Peak in-flight exceeded cap=8, saw " << peakInFlight.load());
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 8,
+            "Peak in-flight exceeded cap=8, saw " << tracker.PeakInFlight.load());
 
         // Sanity: restore finished
         for (ui32 i = 0; i < 8; ++i) {
@@ -1102,56 +1067,13 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
 
-        std::atomic<i32> inFlight{0};
-        std::atomic<i32> peakInFlight{0};
-        TMutex restoreTxIdsMutex;
-        THashSet<ui64> restoreTxIds;
-
-        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
-                const auto& rec = ev->Get()->Record;
-                if (rec.TransactionSize() == 0) return;
-                if (rec.GetTransaction(0).GetOperationType()
-                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
-                    return;
-                }
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    restoreTxIds.insert(rec.GetTxId());
-                }
-                i32 cur = inFlight.fetch_add(1) + 1;
-                i32 peak;
-                do {
-                    peak = peakInFlight.load();
-                    if (cur <= peak) break;
-                } while (!peakInFlight.compare_exchange_weak(peak, cur));
-            });
-
-        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-                ui64 txId = ev->Get()->Record.GetTxId();
-                bool isRestore;
-                {
-                    TGuard<TMutex> g(restoreTxIdsMutex);
-                    isRestore = restoreTxIds.contains(txId);
-                }
-                if (isRestore) {
-                    inFlight.fetch_sub(1);
-                }
-            });
+        TInFlightTracker tracker;
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
 
         // Inject one TEvFinished failure (same pattern as IncrementalRestoreShardFailureTriggersRetry).
         std::atomic<int> failuresInjected{0};
-        auto failureObserver = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {  // skip change_sender's internal TEvFinished()
-                    return;
-                }
-                if (failuresInjected.fetch_add(1) == 0) {
-                    ev->Get()->Success = false;
-                    ev->Get()->Error = "Injected scan failure for cap+retry test";
-                }
-            });
+        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/true, "Injected scan failure for cap+retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1160,8 +1082,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
 
         // Cap respected during retry wave.
-        UNIT_ASSERT_C(peakInFlight.load() <= 2,
-            "Peak in-flight exceeded cap=2 during retry, saw " << peakInFlight.load());
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 2,
+            "Peak in-flight exceeded cap=2 during retry, saw " << tracker.PeakInFlight.load());
         UNIT_ASSERT_GE(failuresInjected.load(), 1);
 
         // All 4 tables restored despite injected failure.
@@ -1249,43 +1171,16 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
         std::atomic<int> failuresInjected{0};
-        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {
-                    return;
-                }
-                // Inject failure on every attempt — never let the restore succeed.
-                failuresInjected.fetch_add(1);
-                ev->Get()->Success = false;
-                ev->Get()->Retriable = true;
-                ev->Get()->Error = "Injected retriable failure for budget test";
-            });
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
+            /*retriable=*/true, "Injected retriable failure for budget test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
-        // List-based poll: Get's helper asserts inner Status, which flips on Failed.
-        auto initialList = TestListBackupCollectionRestores(runtime, "/MyRoot");
-        UNIT_ASSERT_C(!initialList.GetEntries().empty(), "Restore was never registered");
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
 
-        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
-        bool reachedDone = false;
-        Ydb::StatusIds::StatusCode finalStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        while (runtime.GetCurrentTime() < deadline) {
-            auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
-            if (!listResp.GetEntries().empty()) {
-                const auto& entry = *listResp.GetEntries().rbegin();
-                if (entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
-                    reachedDone = true;
-                    finalStatus = entry.GetStatus();
-                    break;
-                }
-            }
-            env.SimulateSleep(runtime, TDuration::Seconds(1));
-        }
-
-        UNIT_ASSERT_C(reachedDone, "Restore never reached PROGRESS_DONE under retry-budget cap");
         // Budget exhausted → GENERIC_ERROR (NOT SUCCESS).
         UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
             "Restore status was SUCCESS under exhausted retry budget");
@@ -1311,17 +1206,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         constexpr int FailuresBeforeSuccess = 20;
         std::atomic<int> failuresInjected{0};
-        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {
-                    return;
-                }
-                if (failuresInjected.fetch_add(1) < FailuresBeforeSuccess) {
-                    ev->Get()->Success = false;
-                    ev->Get()->Retriable = true;
-                    ev->Get()->Error = "Injected retriable failure for unlimited-cap test";
-                }
-            });
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
+            /*retriable=*/true, "Injected retriable failure for unlimited-cap test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1354,43 +1240,16 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
         std::atomic<int> failuresInjected{0};
-        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {
-                    return;
-                }
-                if (failuresInjected.fetch_add(1) == 0) {
-                    ev->Get()->Success = false;
-                    ev->Get()->Retriable = false;  // <-- the key bit
-                    ev->Get()->Error = "Injected non-retriable failure for short-circuit test";
-                }
-            });
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/false, "Injected non-retriable failure for short-circuit test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
-        auto initialList = TestListBackupCollectionRestores(runtime, "/MyRoot");
-        UNIT_ASSERT(!initialList.GetEntries().empty());
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
 
-        // List-based poll: Get's helper asserts inner Status, which flips on Failed.
-        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
-        bool reachedDone = false;
-        Ydb::StatusIds::StatusCode finalStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        while (runtime.GetCurrentTime() < deadline) {
-            auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
-            if (!listResp.GetEntries().empty()) {
-                const auto& entry = *listResp.GetEntries().rbegin();
-                if (entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
-                    reachedDone = true;
-                    finalStatus = entry.GetStatus();
-                    break;
-                }
-            }
-            env.SimulateSleep(runtime, TDuration::Seconds(1));
-        }
-
-        UNIT_ASSERT_C(reachedDone, "Restore never reached PROGRESS_DONE on non-retriable failure");
         UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
             "Restore status was SUCCESS despite a non-retriable failure");
 
@@ -1452,19 +1311,12 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
                 // Inject one retriable failure to drive the orchestrator into
                 // its backoff window — then a reboot may land mid-window.
+                // static is required here: the reboot-bucket lambda may re-enter
+                // this scope, so the counter must survive across bucket iterations.
                 static std::atomic<int> failuresInjected{0};
                 failuresInjected.store(0);
-                auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-                    [](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                        if (ev->Get()->TxId == 0) {
-                            return;
-                        }
-                        if (failuresInjected.fetch_add(1) == 0) {
-                            ev->Get()->Success = false;
-                            ev->Get()->Retriable = true;
-                            ev->Get()->Error = "Injected retriable failure for reboot-backoff test";
-                        }
-                    });
+                auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+                    /*retriable=*/true, "Injected retriable failure for reboot-backoff test");
 
                 TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot",
                     R"(Name: ".backups/collections/MyCollection1")");
@@ -1508,17 +1360,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // Inject failure on the FIRST attempt of each table only (first 4 events).
         // Subsequent attempts succeed → restore finishes after exactly 1 retry.
         std::atomic<int> failuresInjected{0};
-        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-                if (ev->Get()->TxId == 0) {
-                    return;
-                }
-                if (failuresInjected.fetch_add(1) < 4) {
-                    ev->Get()->Success = false;
-                    ev->Get()->Retriable = true;
-                    ev->Get()->Error = "Injected retriable failure for double-fire test";
-                }
-            });
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
+            /*retriable=*/true, "Injected retriable failure for double-fire test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");

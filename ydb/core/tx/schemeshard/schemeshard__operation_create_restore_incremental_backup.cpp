@@ -416,21 +416,14 @@ public:
         }
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const auto& workingDir = Transaction.GetWorkingDir();
-        const auto& op = Transaction.GetRestoreMultipleIncrementalBackups();
+    bool ValidateProposePaths(
+            const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups& op,
+            const TString& workingDir,
+            TOperationContext& context,
+            THolder<TProposeResponse>& result)
+    {
         const auto& srcTablePathStrs = op.GetSrcTablePaths();
         const auto& dstTablePathStr = op.GetDstTablePath();
-
-        LOG_N("TNewRestoreFromAtTable Propose"
-            << ": opId# " << OperationId
-            << ", srcs# " << "[" << Join(",", srcTablePathStrs) << "]"
-            << ", dst# " << dstTablePathStr);
-
-        auto result = MakeHolder<TProposeResponse>(
-            NKikimrScheme::StatusAccepted,
-            ui64(OperationId.GetTxId()),
-            context.SS->TabletID());
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
@@ -446,7 +439,7 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
+                return false;
             }
         }
 
@@ -467,7 +460,7 @@ public:
 
                 if (!checks) {
                     result->SetError(checks.GetStatus(), checks.GetError());
-                    return result;
+                    return false;
                 }
             }
         }
@@ -492,19 +485,43 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
+                return false;
             }
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return false;
+        }
+
+        return true;
+    }
+
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        const auto& workingDir = Transaction.GetWorkingDir();
+        const auto& op = Transaction.GetRestoreMultipleIncrementalBackups();
+        const auto& srcTablePathStrs = op.GetSrcTablePaths();
+        const auto& dstTablePathStr = op.GetDstTablePath();
+
+        LOG_N("TNewRestoreFromAtTable Propose"
+            << ": opId# " << OperationId
+            << ", srcs# " << "[" << Join(",", srcTablePathStrs) << "]"
+            << ", dst# " << dstTablePathStr);
+
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            ui64(OperationId.GetTxId()),
+            context.SS->TabletID());
+
+        if (!ValidateProposePaths(op, workingDir, context, result)) {
             return result;
         }
 
         // we do not need snapshot as far as source table is under operation
         // and guaranteed to be unchanged
 
+        const auto dstTablePath = TPath::Resolve(dstTablePathStr, context.SS);
         const auto txType = TTxState::TxRestoreIncrementalBackupAtTable;
 
         auto guard = context.DbGuard();

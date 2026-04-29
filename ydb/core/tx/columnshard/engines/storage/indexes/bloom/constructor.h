@@ -1,4 +1,7 @@
 #pragma once
+
+#include "const.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
@@ -16,12 +19,16 @@ public:
     }
 
 private:
-    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:
     virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const TString& indexName,
         const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const override;
+
+    virtual std::shared_ptr<IIndexMeta> DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+        const IIndexMeta& existingMeta) const override;
 
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
 

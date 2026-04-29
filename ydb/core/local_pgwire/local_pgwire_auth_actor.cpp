@@ -71,8 +71,10 @@ public:
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         if (ev->Get()->HasError()) {
-            SendResponseAndDie(ev->Get()->Error.Message);
-            return;
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                SendResponseAndDie(ev->Get()->Error.Message);
+                return;
+            }
         }
 
         SerializedToken = ev->Get()->SerializedToken;

@@ -1,14 +1,10 @@
 LIBRARY()
-
-PEERDIR(
-    yql/essentials/providers/common/proto
-)
-
 END()
 
 RECURSE(
     dummy
     full
+    proto
 )
 
 IF (NOT OPENSOURCE)

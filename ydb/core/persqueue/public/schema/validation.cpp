@@ -179,4 +179,20 @@ TResult ValidateConsumersConfig(
     return {};
 }
 
+TResult ValidateDuration(const google::protobuf::Duration& duration, const TString& name) {
+    if (duration.seconds() < 0 || duration.nanos() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << name << " can't be negative, provided "
+            << duration.seconds() << " seconds and " << duration.nanos() << " nanos"};
+    }
+    return {};
+}
+
+ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration) {
+    auto r = duration.seconds() * 1'000 + duration.nanos() / 1'000'000;
+    if (r <= 0) {
+        return 0;
+    }
+    return r > Max<ui32>() ? Max<ui32>() : r;
+}
+
 } // namespace NKikimr::NPQ::NSchema

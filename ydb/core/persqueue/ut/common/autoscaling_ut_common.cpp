@@ -1,6 +1,41 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
+#include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+
 namespace NKikimr::NPQ::NTest {
+
+namespace {
+
+class TAlterTopicSetPartitionWriteSpeedInMessagesStrategy : public NKikimr::NPQ::NSchema::IAlterTopicStrategy {
+public:
+    TAlterTopicSetPartitionWriteSpeedInMessagesStrategy(TString topicName, ui64 writeSpeedInMessagesPerSecond)
+        : TopicName_(std::move(topicName))
+        , WriteSpeedInMessagesPerSec_(writeSpeedInMessagesPerSecond)
+    {}
+
+    const TString& GetTopicName() const override {
+        return TopicName_;
+    }
+
+    NKikimr::NPQ::NSchema::TResult ApplyChanges(
+        const TString& /*localCluster*/,
+        const NKikimr::NPQ::NDescriber::TTopicInfo& /*topicInfo*/,
+        NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
+        NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
+    ) override
+    {
+        NKikimr::NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
+        targetConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(WriteSpeedInMessagesPerSec_);
+        return {};
+    }
+
+private:
+    TString TopicName_;
+    ui64 WriteSpeedInMessagesPerSec_;
+};
+
+} // namespace
 
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
@@ -100,17 +135,40 @@ void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionL
     DoRequest(setup, txId, scheme);
 }
 
+void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopicSdkTestSetup& setup, ui64 writeSpeedInMessagesPerSecond) {
+    auto& runtime = setup.GetRuntime();
+    const auto parent = runtime.AllocateEdgeActor();
+    TString database(setup.GetDatabase());
+    const auto aid = runtime.Register(NKikimr::NPQ::NSchema::CreateAlterTopicOperationActor(parent, {
+        .Database = std::move(database),
+        .Strategy = std::make_unique<TAlterTopicSetPartitionWriteSpeedInMessagesStrategy>(TString{TEST_TOPIC}, writeSpeedInMessagesPerSecond),
+    }));
+    runtime.EnableScheduleForActor(aid);
+    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvAlterTopicResponse>(parent, TDuration::Seconds(120));
+    UNIT_ASSERT(reply);
+    const auto& alter = *reply->Get();
+    UNIT_ASSERT_C(alter.Status == Ydb::StatusIds::SUCCESS,
+        "AlterTopicOperation (partition write speed in messages/sec): " << alter.ErrorMessage);
+}
+
 TWriteMessage Msg(const TString& data, ui64 seqNo) {
     TWriteMessage msg(data);
     msg.SeqNo(seqNo);
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority, bool enableTopicPartitionSplitBasedOnKllSketch) {
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority,
+    bool enableTopicPartitionSplitBasedOnKllSketch,
+    bool enableTopicPartitionSplitBasedOnMessages)
+{
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicAutopartitioningForReplication(true);
     if (enableTopicPartitionSplitBasedOnKllSketch) {
         ff.SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (enableTopicPartitionSplitBasedOnMessages) {
+        ff.SetEnableTopicPartitionSplitBasedOnMessages(true);
     }
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();

@@ -7,9 +7,13 @@ SPLIT_FACTOR(60)
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
+    ydb/core/formats/arrow
+    ydb/core/kqp/ut/common
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
+    ydb/core/tx/columnshard/engines/predicate
     yql/essentials/sql/pg_dummy
     yql/essentials/core/arrow_kernels/request
     ydb/core/testlib/default
@@ -36,6 +40,7 @@ SRCS(
     ut_snapshot_holders.cpp
     ut_script.cpp
     ut_minmax_serialization.cpp
+    ut_predicate_ranges_builder.cpp
     helper.cpp
 )
 

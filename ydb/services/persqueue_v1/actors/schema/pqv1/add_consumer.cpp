@@ -21,6 +21,7 @@ struct TAddConsumerStrategy: public NPQ::NSchema::IAlterTopicStrategy {
     }
 
     NPQ::NSchema::TResult ApplyChanges(
+        const TString& /*localCluster*/,
         const NPQ::NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,

@@ -32,6 +32,34 @@ void CopyConfig(
     targetConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
 }
 
+TString GetLocalClusterName(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList) {
+    return clustersList && clustersList->LocalCluster ? clustersList->LocalCluster->Name : "";
+}
+
+TResult ValidateLocalCluster(NPQ::NClusterTracker::TClustersList::TConstPtr clustersList, const NKikimrPQ::TPQTabletConfig& config) {
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {};
+    }
+
+    AFL_ENSURE(clustersList);
+
+    const auto localCluster = GetLocalClusterName(clustersList);
+    const auto& cluster = config.GetDC();
+
+    if (config.GetLocalDC() && !localCluster.empty() && cluster != localCluster) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Local cluster is not correct - provided '"
+            << config.GetDC() << "' instead of '" << localCluster << "'"};
+    }
+
+    const auto clusterFound = CountIf(clustersList->Clusters, [&](const auto& c) { return c.Name == cluster; });
+    if (!clusterFound)  {
+        return {Ydb::StatusIds::BAD_REQUEST,
+            TStringBuilder() << "Unknown cluster '" << cluster << "'"};
+    }
+
+    return {};
+}
+
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
         return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());
@@ -286,31 +314,8 @@ TResult AddConsumer(
 
     consumer->SetName(consumerName);
 
-    if (consumerConfig.has_shared_consumer_type()) {
-        if (!AppData()->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "shared consumers is disabled"};
-        }
-        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-
-        consumer->SetKeepMessageOrder(consumerConfig.shared_consumer_type().keep_messages_order());
-        consumer->SetDefaultProcessingTimeoutSeconds(consumerConfig.shared_consumer_type().default_processing_timeout().seconds());
-
-        consumer->SetDeadLetterPolicyEnabled(consumerConfig.shared_consumer_type().dead_letter_policy().enabled());
-        consumer->SetMaxProcessingAttempts(consumerConfig.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
-
-        consumer->SetDefaultDelayMessageTimeMs(consumerConfig.shared_consumer_type().receive_message_delay().seconds() * 1'000 + consumerConfig.shared_consumer_type().receive_message_delay().nanos() / 1'000'000);
-        consumer->SetDefaultReceiveMessageWaitTimeMs(consumerConfig.shared_consumer_type().receive_message_wait_time().seconds() * 1'000 + consumerConfig.shared_consumer_type().receive_message_wait_time().nanos() / 1'000'000);
-
-        if (consumerConfig.shared_consumer_type().dead_letter_policy().has_move_action()) {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-            consumer->SetDeadLetterQueue(consumerConfig.shared_consumer_type().dead_letter_policy().move_action().dead_letter_queue());
-        } else if (consumerConfig.shared_consumer_type().dead_letter_policy().has_delete_action()) {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-        } else {
-            consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
-        }
-    } else {
-        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+    if (auto r = ProcessConsumerType(consumer, consumerConfig); !r) {
+        return r;
     }
 
     if (consumerConfig.read_from().seconds() < 0) {

@@ -7,6 +7,29 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+namespace {
+
+bool IsSupportedTypeForEquals(const NScheme::TTypeId typeId) {
+    if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        return false;
+    }
+
+    switch (typeId) {
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::Json:
+            return false;
+        default:
+            return true;
+    }
+}
+
+bool IsSupportedColumnType(const NScheme::TTypeId typeId, const TReadDataExtractorContainer& dataExtractor) {
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && dataExtractor.HasSubColumn();
+    return IsSupportedTypeForEquals(typeId) || isJsonSubColumn;
+}
+
+} // namespace
+
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
@@ -14,18 +37,34 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         errors.AddError("no column with name " + GetColumnName());
         return nullptr;
     }
+
+    if (!IsSupportedColumnType(columnInfo->GetType().GetTypeId(), GetDataExtractor())) {
+        errors.AddError(Sprintf("inappropriate column type for bloom index: %s", columnInfo->GetTypeName().c_str()));
+        return nullptr;
+    }
+
+    if (auto c = ValidateRequest(Request); c.IsFail()) {
+        errors.AddError(c.GetErrorMessage());
+        return nullptr;
+    }
+
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        GetInheritPortionStorage().value_or(false), columnId,
+        Request,
+        GetDataExtractor(),
         TBase::GetBitsStorageConstructor());
 }
 
-TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
-    if (FalsePositiveProbability <= 0 || FalsePositiveProbability >= 1) {
-        return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field in interval (0, 1)");
-    }
+std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+    const IIndexMeta& existingMeta) const {
+    return DoCreateOrPatchSingleColumnIndexMeta<TBloomIndexConstructor>(
+        indexId, indexName, currentSchema, errors, existingMeta);
+}
 
-    return TConclusionStatus::Success();
+TConclusionStatus TBloomIndexConstructor::ValidateValues() const {
+    return ValidateRequest(Request);
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -40,7 +79,7 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
 
-    FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
+    Request.FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
     return ValidateValues();
 }
 
@@ -50,25 +89,24 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
-    
-    auto& bFilter = proto.GetBloomFilter();
-    
+
+    const auto& bFilter = proto.GetBloomFilter();
+
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
             return conclusion;
         }
     }
-    
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                     : NDefaults::FalsePositiveProbability;
+
+    Request = TRequestSettings::FromProtoFilter(bFilter);
     return ValidateValues();
 }
 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomFilter();
     TBase::SerializeToProtoImpl(*filterProto);
-    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    Request.SerializeToProtoFilter(*filterProto);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

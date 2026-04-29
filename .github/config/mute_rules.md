@@ -192,7 +192,7 @@ graph TB
     
     CommentMergedPR --> UpdateAnalyticsAfterMerge[📊 Same three scripts<br/>upload_muted_tests<br/>flaky_tests_history<br/>tests_monitor]
     
-    UpdateAnalyticsAfterMerge --> AsyncAnalytics[⏱️ export_issues / mappings /<br/>test_muted_monitor_mart …<br/>collect_analytics_fast<br/>~every 30 min, separate workflow]
+    UpdateAnalyticsAfterMerge --> AsyncAnalytics[⏱️ export_issues / mappings /<br/>muted_tests_with_issue_and_area …<br/>collect_analytics_fast<br/>~every 30 min, separate workflow]
     
     DigestQ --> SendDigest[📤 telegram_scheduled_notifications.yml<br/>job Mute digest to Telegram<br/>send_digest.py ~30 min UTC]
     SendDigest --> TG[Telegram per team]

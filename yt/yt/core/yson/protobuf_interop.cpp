@@ -1170,7 +1170,7 @@ protected:
             if (!std::binary_search(numbers.begin(), numbers.end(), number)) {
                 const auto* field = type->FindFieldByNumber(number);
                 YT_VERIFY(field);
-                YPathStack_.Push(TString{field->GetYsonName()});
+                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
                 THROW_ERROR_EXCEPTION("Missing required field %v",
                     YPathStack_.GetHumanReadablePath())
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
@@ -1187,7 +1187,7 @@ protected:
         for (auto index = 0; index + 1 < std::ssize(numbers); ++index) {
             if (numbers[index] == numbers[index + 1]) {
                 const auto* field = type->GetFieldByNumber(numbers[index]);
-                YPathStack_.Push(TString{field->GetYsonName()});
+                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
                 THROW_ERROR_EXCEPTION("Duplicate field %v",
                     YPathStack_.GetHumanReadablePath())
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
@@ -1570,7 +1570,7 @@ private:
 
         const auto* valueField = field->GetYsonMapValueField();
         FieldStack_.emplace_back(valueField);
-        YPathStack_.Push(TString(key));
+        YPathStack_.Push(key);
         TryWriteCustomlyConvertibleType();
     }
 
@@ -1598,7 +1598,7 @@ private:
                 WriteKeyValuePair(UnknownYsonFieldKey_, UnknownYsonFieldValueString_);
             };
             if (unknownYsonFieldsMode == EUnknownYsonFieldsMode::Keep) {
-                UnknownYsonFieldKey_ = TString(key);
+                UnknownYsonFieldKey_ = key;
                 UnknownYsonFieldValueString_.clear();
                 Forward(
                     &UnknownYsonFieldValueStringWriter_,
@@ -1610,9 +1610,9 @@ private:
 
             if (unknownYsonFieldsMode == EUnknownYsonFieldsMode::Forward) {
                 ForwardingUnknownYsonFieldValueWriter_.YPathStack() = YPathStack_;
-                ForwardingUnknownYsonFieldValueWriter_.YPathStack().Push(TString(key));
+                ForwardingUnknownYsonFieldValueWriter_.YPathStack().Push(key);
                 ForwardingUnknownYsonFieldValueWriter_.ResetMode();
-                UnknownYsonFieldKey_ = TString(key);
+                UnknownYsonFieldKey_ = key;
                 UnknownYsonFieldValueString_.clear();
                 Forward(
                     &ForwardingUnknownYsonFieldValueWriter_,
@@ -1642,7 +1642,7 @@ private:
             typeEntry.NonRequiredFieldNumbers.push_back(number);
         }
         FieldStack_.emplace_back(field);
-        YPathStack_.Push(TString{field->GetYsonName()});
+        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
 
         if (field->IsYsonString()) {
             YsonString_.clear();
@@ -2257,7 +2257,6 @@ private:
     std::vector<char> PooledKey_;
     std::vector<char> PooledValue_;
 
-
     void OnBeginMap()
     {
         Consumer_->OnBeginMap();
@@ -2266,13 +2265,13 @@ private:
     void OnKeyedItem(const TProtobufField* field)
     {
         Consumer_->OnKeyedItem(field->GetYsonName());
-        YPathStack_.Push(TString{field->GetYsonName()});
+        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
     }
 
-    void OnKeyedItem(TString key)
+    void OnKeyedItem(TStringBuf key)
     {
         Consumer_->OnKeyedItem(key);
-        YPathStack_.Push(std::move(key));
+        YPathStack_.Push(key);
     }
 
     void OnEndMap()
@@ -2421,6 +2420,15 @@ private:
                                 << TErrorAttribute("proto_field", field->GetFullName());
                         }
 
+                        constexpr ui64 MaxMapKeyLength = 1_MB;
+                        if (keyLength > MaxMapKeyLength) {
+                            THROW_ERROR_EXCEPTION("Protobuf map key length exceeds limit")
+                                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                                << TErrorAttribute("proto_field", field->GetFullName())
+                                << TErrorAttribute("key_length", keyLength)
+                                << TErrorAttribute("limit", MaxMapKeyLength);
+                        }
+
                         PooledString_.resize(keyLength);
                         if (!CodedStream_.ReadRaw(PooledString_.data(), keyLength)) {
                             THROW_ERROR_EXCEPTION("Error reading \"string\" value for protobuf map key")
@@ -2437,7 +2445,7 @@ private:
                             << TErrorAttribute("proto_field", field->GetFullName());
                 }
 
-                OnKeyedItem(TString(PooledString_.data(), PooledString_.size()));
+                OnKeyedItem(TStringBuf(PooledString_.data(), PooledString_.size()));
                 break;
             }
 

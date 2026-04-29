@@ -44,11 +44,7 @@ void TrackIncrementalRestoreShardReply(
     if (opIt == restoreIt->second.TableOperations.end()) {
         return;
     }
-    if (failed) {
-        opIt->second.FailedShards.insert(*shardIdx);
-    } else {
-        opIt->second.CompletedShards.insert(*shardIdx);
-    }
+    opIt->second.RecordShardResult(*shardIdx, !failed);
 }
 
 } // anonymous namespace

@@ -3571,4 +3571,52 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(drain(state, 0), 0u);
     }
 
+    // Contract test for TTableOperationState::RecordShardResult. Documents the
+    // invariant: per-shard reports are recorded exactly once. Re-deliveries —
+    // common in practice (DataShard tablet restart, schemeshard reboot,
+    // interconnect retransmits) — are dropped, even if they carry a different
+    // success value. This guards AllShardsComplete()'s sum invariant against
+    // double-counting that would otherwise hang the orchestrator.
+    Y_UNIT_TEST(IncrementalRestoreShardResultIdempotent) {
+        using namespace NKikimr::NSchemeShard;
+        using TTableOp = TIncrementalRestoreState::TTableOperationState;
+
+        TTableOp op;
+        op.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        op.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+
+        // Initial success report — recorded.
+        UNIT_ASSERT(op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Re-delivered identical reply — silently dropped.
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Re-delivered with FLIPPED success value — also dropped (would otherwise
+        // double-count and break AllShardsComplete()'s sum invariant).
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/false));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Different shard, failure — recorded normally.
+        UNIT_ASSERT(op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/false));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 1u);
+
+        // Re-delivery of the failed shard — also dropped, in either direction.
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/false));
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 1u);
+
+        // AllShardsComplete invariant holds despite re-delivery attempts.
+        UNIT_ASSERT(op.AllShardsComplete());
+        UNIT_ASSERT_VALUES_EQUAL(
+            op.CompletedShards.size() + op.FailedShards.size(),
+            op.ExpectedShards.size());
+    }
+
 } // TBackupCollectionTests

@@ -3705,6 +3705,26 @@ struct TIncrementalRestoreState {
         bool HasFailures() const {
             return !FailedShards.empty();
         }
+
+        // Idempotent against re-delivery. Returns true on the first terminal
+        // report for this shard, false if the shard was already recorded as
+        // success or failure. The first report wins; later reports — common in
+        // practice (DataShard tablet restart replays from WAL, schemeshard
+        // reboot triggers re-send, interconnect retransmits) — are dropped.
+        // This guards the AllShardsComplete() sum invariant against double-
+        // counting that would happen if the same shardIdx ever landed in both
+        // sets.
+        bool RecordShardResult(TShardIdx shardIdx, bool success) {
+            if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
+                return false;
+            }
+            if (success) {
+                CompletedShards.insert(shardIdx);
+            } else {
+                FailedShards.insert(shardIdx);
+            }
+            return true;
+        }
     };
 
     // Pending sub-op queued by ProcessNextIncrementalBackup; dispatched in batches

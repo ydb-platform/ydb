@@ -2,7 +2,6 @@
 #include "table_writer.h"
 
 #include <ydb/core/protos/datashard_backup.pb.h>
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/aclib/user_context.h>
 #include <library/cpp/testing/unittest/registar.h>
 

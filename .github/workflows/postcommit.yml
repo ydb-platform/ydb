@@ -21,8 +21,12 @@ jobs:
       matrix:
         build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).postmerge }}
     name: Build and test ${{ matrix.build_preset }}
-    uses: ./.github/workflows/ya_ci_core_build_test.yml
-    secrets: inherit
-    with:
-      build_preset: ${{ matrix.build_preset }}
-      runner_extra_label: postcommit
+    runs-on:
+      - self-hosted
+      - auto-provisioned
+      - "${{ format('build-preset-{0}', matrix.build_preset) }}"
+      - postcommit
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        with:
+          build_preset: ${{ matrix.build_preset }}

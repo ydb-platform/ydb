@@ -225,11 +225,12 @@ jobs:
       matrix:
         build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).pr_check }}
     name: Build and test ${{ matrix.build_preset }}
-    uses: ./.github/workflows/ya_ci_core_build_test.yml
-    secrets: inherit
-    with:
-      build_preset: ${{ matrix.build_preset }}
-      checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
     needs: build_and_test

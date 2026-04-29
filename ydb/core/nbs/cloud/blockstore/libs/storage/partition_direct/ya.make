@@ -19,7 +19,8 @@ SRCS(
     partition_direct_actor.cpp
     partition_direct.cpp
     range_translate.cpp
-    read_request.cpp
+    read_request_single_location.cpp
+    read_request_multiple_location.cpp
     region.cpp
     restore_request.cpp
     vchunk_config.cpp

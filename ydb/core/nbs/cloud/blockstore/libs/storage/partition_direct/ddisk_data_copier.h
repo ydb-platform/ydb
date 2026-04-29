@@ -1,7 +1,7 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "read_request.h"
+#include "read_request_multiple_location.h"
 #include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
@@ -53,7 +53,7 @@ private:
     void StartCopyRange();
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
-        const TReadRequestExecutor::TResponse& response);
+        const TReadMultipleLocationRequestExecutor::TResponse& response);
     void OnRangeWritten(
         TCopyRangeRequestStatePtr copyRangeState,
         const TDBGWriteBlocksResponse& response);

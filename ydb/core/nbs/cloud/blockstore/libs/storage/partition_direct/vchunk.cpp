@@ -2,7 +2,7 @@
 
 #include "flush_request.h"
 #include "range_translate.h"
-#include "read_request.h"
+#include "read_request_multiple_location.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -312,14 +312,15 @@ void TVChunk::DoReadBlocksLocal(
         "SourceCount",
         static_cast<i64>(readHint.RangeHints.size()));
 
-    auto requestExecutor = std::make_shared<TReadRequestExecutor>(
-        ActorSystem,
-        VChunkConfig,
-        DirectBlockGroup,
-        std::move(readHint),
-        std::move(callContext),
-        std::move(request),
-        span->GetTraceId());
+    auto requestExecutor =
+        std::make_shared<TReadMultipleLocationRequestExecutor>(
+            ActorSystem,
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(request),
+            span->GetTraceId());
 
     auto future = requestExecutor->GetFuture();
     future.Subscribe(
@@ -327,7 +328,8 @@ void TVChunk::DoReadBlocksLocal(
          promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
-        (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
+        (const TFuture<TReadMultipleLocationRequestExecutor::TResponse>&
+             f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 

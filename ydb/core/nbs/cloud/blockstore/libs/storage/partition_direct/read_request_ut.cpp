@@ -1,6 +1,5 @@
-#include "read_request.h"
-
 #include "base_test_fixture.h"
+#include "read_request_multiple_location.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -28,14 +27,15 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        auto readRequest = std::make_shared<TReadRequestExecutor>(
-            Runtime->GetActorSystem(0),
-            VChunkConfig,
-            DirectBlockGroup,
-            std::move(readHint),
-            std::move(callContext),
-            std::move(originalRequest),
-            NWilson::TTraceId());
+        auto readRequest =
+            std::make_shared<TReadMultipleLocationRequestExecutor>(
+                Runtime->GetActorSystem(0),
+                VChunkConfig,
+                DirectBlockGroup,
+                std::move(readHint),
+                std::move(callContext),
+                std::move(originalRequest),
+                NWilson::TTraceId());
         auto future = readRequest->GetFuture();
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -80,14 +80,15 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         sglist.push_back(TBlockDataRef{readBuffer.data(), readBuffer.size()});
         originalRequest->Sglist = TGuardedSgList(std::move(sglist));
 
-        auto readRequest = std::make_shared<TReadRequestExecutor>(
-            Runtime->GetActorSystem(0),
-            VChunkConfig,
-            DirectBlockGroup,
-            std::move(readHint),
-            std::move(callContext),
-            std::move(originalRequest),
-            NWilson::TTraceId());
+        auto readRequest =
+            std::make_shared<TReadMultipleLocationRequestExecutor>(
+                Runtime->GetActorSystem(0),
+                VChunkConfig,
+                DirectBlockGroup,
+                std::move(readHint),
+                std::move(callContext),
+                std::move(originalRequest),
+                NWilson::TTraceId());
         auto future = readRequest->GetFuture();
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());

@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/read_request_single_location.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 
@@ -12,21 +13,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// работает с 1 readHint, выполняя запрос в 1 источник
-class TReadSingleLocationRequestExecutor;
-
-// Работает с N readHints, инкапсулируя логику разбиения исходного запроса на N
-// подзапросов, их отправкой в разные источники и сбором ответов.
-class TReadRequestExecutor
-    : public std::enable_shared_from_this<TReadRequestExecutor>
+// Class works with a multiple readHints.
+// It incapsulates logic of splitting original request into N subrequests,
+// sending them to different sources and collecting responses.
+class TReadMultipleLocationRequestExecutor
+    : public std::enable_shared_from_this<TReadMultipleLocationRequestExecutor>
 {
 public:
-    struct TResponse
-    {
-        NProto::TError Error;
-    };
+    using TResponse = TReadSingleLocationRequestExecutor::TResponse;
 
-    TReadRequestExecutor(
+    TReadMultipleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
@@ -35,7 +31,7 @@ public:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
-    ~TReadRequestExecutor();
+    ~TReadMultipleLocationRequestExecutor();
 
     void Run();
 
@@ -45,8 +41,8 @@ private:
     struct TSubRequest
     {
         std::shared_ptr<TReadSingleLocationRequestExecutor> Executor;
-        size_t SglistOffset;   // Смещение в байтах относительно начала
-                               // запрошенного диапазона
+        size_t
+            SglistOffset;   // Byte's offset relatively to requested range start
     };
 
     void OnSubRequestComplete(const TResponse& response, size_t index);

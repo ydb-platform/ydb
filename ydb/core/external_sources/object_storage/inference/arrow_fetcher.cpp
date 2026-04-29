@@ -31,6 +31,7 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
+    struct TRequest;
 public:
     TArrowFileFetcher(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}

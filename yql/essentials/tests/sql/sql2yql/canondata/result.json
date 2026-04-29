@@ -8665,6 +8665,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_produce-yql-10297_/sql.yql"
         }
     ],
+    "test_sql2yql.test[runtime_features-runtime_feature_basic]": [
+        {
+            "checksum": "d32f51ee72a9196fcef4524c74bf7776",
+            "size": 1244,
+            "uri": "https://{canondata_backend}/1784117/e7bcd74e97ae81a1c9f3fba21fd5ebc9ec5aa0aa/resource.tar.gz#test_sql2yql.test_runtime_features-runtime_feature_basic_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select-autogen_columns_conflict]": [
         {
             "checksum": "0d6f67152448820805e411702e04b092",
@@ -16462,6 +16469,11 @@
     "test_sql_format.test[produce-yql-10297]": [
         {
             "uri": "file://test_sql_format.test_produce-yql-10297_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[runtime_features-runtime_feature_basic]": [
+        {
+            "uri": "file://test_sql_format.test_runtime_features-runtime_feature_basic_/formatted.sql"
         }
     ],
     "test_sql_format.test[select-autogen_columns_conflict]": [

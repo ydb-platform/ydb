@@ -5017,6 +5017,27 @@ TRuntimeNode TProgramBuilder::Now(const TArrayRef<const TRuntimeNode>& dependent
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::HostRuntimeSetting(TRuntimeNode featureName) {
+    if constexpr (RuntimeVersion < 77U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(NewDataType(NUdf::TDataType<char*>::Id)));
+    callableBuilder.Add(featureName);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::UdfRuntimeSetting(TRuntimeNode module, TRuntimeNode featureName) {
+    if constexpr (RuntimeVersion < 77U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(NewDataType(NUdf::TDataType<char*>::Id)));
+    callableBuilder.Add(module);
+    callableBuilder.Add(featureName);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::CurrentUtcDate(const TArrayRef<const TRuntimeNode>& dependentNodes) {
     return Cast(CurrentUtcTimestamp(dependentNodes), NewDataType(NUdf::TDataType<NUdf::TDate>::Id));
 }

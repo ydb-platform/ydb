@@ -37,14 +37,6 @@ enum class EInitialEviction {
 
 namespace {
 
-Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    NKikimr::InitAwsAPI();
-}
-
-Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    NKikimr::ShutdownAwsAPI();
-}
-
 static const std::vector<NArrow::NTest::TTestColumn> testYdbSchema = TTestSchema::YdbSchema();
 static const std::vector<NArrow::NTest::TTestColumn> testYdbPk = TTestSchema::YdbPkSchema();
 

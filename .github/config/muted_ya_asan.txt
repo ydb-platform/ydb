@@ -63,6 +63,7 @@ ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsEmptyFields
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
@@ -75,6 +76,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestNoAuthoriza
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestWrongStream2
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.BillingRecordsForJsonApi
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.BillingRecordsForJsonApi_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility_TableImplementation
@@ -87,6 +89,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueAttributes_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListDeadLetterSourceQueues
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListQueueTags
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestMoveMessagesToDLQ
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue_TableImplementation
@@ -5522,12 +5525,14 @@ ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1_UNIQUE_SYNC-pk
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Datetime_1_UNIQUE_SYNC-pk_types5-all_types5-index5-Datetime-UNIQUE-SYNC]
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-sync-False-2-2-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-async-False-1-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_validation.py.TestS3.test_nested_type[v2-client0]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestBackupCollectionServiceObjectsRotation.test_service_schema_objects_cleanup_on_rotate
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_dynamic_node_start_with_seed_nodes
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealOverrides.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealPileupReplicas.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage

@@ -78,6 +78,7 @@ constexpr std::pair<arrow::Type::type, Ydb::Type::PrimitiveTypeId> kPrimitiveTyp
     {arrow::Type::LARGE_BINARY,      Ydb::Type::STRING},
     {arrow::Type::DATE32,            Ydb::Type::DATE},
     {arrow::Type::DATE64,            Ydb::Type::DATETIME64},
+    {arrow::Type::DECIMAL128,        Ydb::Type::DOUBLE},
 };
 
 std::optional<Ydb::Type::PrimitiveTypeId> MapPrimitiveType(const arrow::DataType& type, const FormatConfig& config) {

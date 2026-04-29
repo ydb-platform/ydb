@@ -130,6 +130,7 @@ Pear,15,33,2024-05-06'''
         # a parquet round-trip, then verify schema inference maps each column
         # to the expected YDB type. Column names are numerically prefixed so
         # they come back in a deterministic alphabetical order.
+        import decimal
         import io
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -153,17 +154,18 @@ Pear,15,33,2024-05-06'''
         # types are excluded because they don't survive a parquet round-trip
         # cleanly (parquet's default reader widens unsigned ints to signed int64).
         columns = [
-            ("c01_bool",      pa.array([True],                          type=pa.bool_()),         ydb.Type.BOOL,      True),
-            ("c02_int8",      pa.array([1],                             type=pa.int8()),          ydb.Type.INT8,      True),
-            ("c03_int16",     pa.array([1],                             type=pa.int16()),         ydb.Type.INT16,     True),
-            ("c04_int32",     pa.array([1],                             type=pa.int32()),         ydb.Type.INT32,     True),
-            ("c05_int64",     pa.array([1],                             type=pa.int64()),         ydb.Type.INT64,     True),
-            ("c06_float",     pa.array([1.0],                           type=pa.float32()),       ydb.Type.FLOAT,     True),
-            ("c07_double",    pa.array([1.0],                           type=pa.float64()),       ydb.Type.DOUBLE,    True),
-            ("c08_string",    pa.array(["s"],                           type=pa.string()),        ydb.Type.UTF8,      False),
-            ("c09_binary",    pa.array([b"b"],                          type=pa.binary()),        ydb.Type.STRING,    False),
-            ("c10_date32",    pa.array([date(2024, 1, 2)],              type=pa.date32()),        ydb.Type.DATE,      True),
-            ("c11_timestamp", pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')), ydb.Type.TIMESTAMP, True),
+            ("c01_bool",       pa.array([True],                          type=pa.bool_()),                          ydb.Type.BOOL,      True),
+            ("c02_int8",       pa.array([1],                             type=pa.int8()),                           ydb.Type.INT8,      True),
+            ("c03_int16",      pa.array([1],                             type=pa.int16()),                          ydb.Type.INT16,     True),
+            ("c04_int32",      pa.array([1],                             type=pa.int32()),                          ydb.Type.INT32,     True),
+            ("c05_int64",      pa.array([1],                             type=pa.int64()),                          ydb.Type.INT64,     True),
+            ("c06_float",      pa.array([1.0],                           type=pa.float32()),                        ydb.Type.FLOAT,     True),
+            ("c07_double",     pa.array([1.0],                           type=pa.float64()),                        ydb.Type.DOUBLE,    True),
+            ("c08_string",     pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      False),
+            ("c09_binary",     pa.array([b"b"],                          type=pa.binary()),                         ydb.Type.STRING,    False),
+            ("c10_date32",     pa.array([date(2024, 1, 2)],              type=pa.date32()),                         ydb.Type.DATE,      True),
+            ("c11_timestamp",  pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, True),
+            ("c12_decimal",    pa.array([decimal.Decimal("1.5")],        type=pa.decimal128(precision=5, scale=2)), ydb.Type.DOUBLE,    True),
         ]
 
         table = pa.table([col[1] for col in columns], names=[col[0] for col in columns])

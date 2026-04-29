@@ -1,5 +1,7 @@
 #include "shard_reader.h"
 
+#include <ydb/library/yql/dq/actors/dq.h>
+
 namespace NKikimr::NTxUT {
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent() const {

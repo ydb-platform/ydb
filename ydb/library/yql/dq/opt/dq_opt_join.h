@@ -37,13 +37,14 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleMapJoin = true,
     bool useGraceCoreForMap = false,
     bool useBlockHashJoin = false,
+    bool useScalarHashJoin = false,
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
+NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool useScalarHashJoin = false, bool blockHashJoinBuildSideLeft = false);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

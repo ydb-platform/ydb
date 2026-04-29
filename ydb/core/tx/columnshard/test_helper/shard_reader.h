@@ -7,7 +7,6 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <ydb/library/accessor/accessor.h>
 

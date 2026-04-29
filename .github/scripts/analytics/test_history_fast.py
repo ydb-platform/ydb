@@ -2,7 +2,13 @@
 
 import ydb
 import os
+import sys
 from ydb_wrapper import YDBWrapper
+
+TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
+if TESTS_DIR not in sys.path:
+    sys.path.insert(0, TESTS_DIR)
+from error_type_utils import classify_error_type  # noqa: E402
 
 
 def create_test_history_fast_table(ydb_wrapper, table_path):
@@ -69,18 +75,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         duration,
         status,
         status_description,
-        CAST(
-            CASE
-                WHEN String::AsciiToLower(COALESCE(status, '')) NOT IN ('failure', 'mute')
-                THEN ''
-                WHEN String::Contains(String::AsciiToLower(COALESCE(status_description, '')), 'sanitizer')
-                THEN 'SANITIZER'
-                WHEN String::Contains(String::AsciiToLower(COALESCE(error_type, '')), 'timeout')
-                THEN 'TIMEOUT'
-                ELSE ''
-            END
-            AS Utf8
-        ) AS error_type,
+        error_type,
         owners,
         log,
         logsdir,
@@ -104,6 +99,12 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
 
     print(f'missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
+    for row in results:
+        row["error_type"] = classify_error_type(
+            row.get("status"),
+            row.get("status_description"),
+            row.get("error_type"),
+        )
     return results
 
 

@@ -4,7 +4,6 @@ import dataclasses
 import json
 import math
 import os
-import re
 import sys
 import traceback
 from enum import Enum
@@ -12,6 +11,7 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
+from error_type_utils import is_sanitizer_issue, is_timeout_issue, is_not_launched_issue
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -30,39 +30,6 @@ def load_owner_area_mapping():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
         return {}
-
-
-def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
-    if not error_text:
-        return False
-    
-    # Sanitizer error patterns for comprehensive coverage
-    sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # UndefinedBehaviorSanitizer runtime errors
-        r'runtime error:',
-        r'==\d+==.*runtime error:',
-        
-        # Memory leak detection (specific LeakSanitizer output)
-        r'detected memory leaks',
-        r'==\d+==.*detected memory leaks',
-    ]
-    
-    for pattern in sanitizer_patterns:
-        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
-            return True
-    
-    return False
-
 
 class TestStatus(Enum):
     PASS = 0
@@ -208,9 +175,9 @@ class TestResult:
             status_description=status_description or '',
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            is_timeout_issue=is_timeout_issue(error_type),
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
-            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
+            is_not_launched=is_not_launched_issue(error_type, status.name)
         )
 
 

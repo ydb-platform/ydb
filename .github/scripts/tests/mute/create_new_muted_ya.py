@@ -740,35 +740,86 @@ def apply_and_add_mutes(
         # sooner when stable.
         manual_unmute_full_names = set(manual_unmute_full_names or [])
         if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
-            def is_manual_unmute_candidate(test):
+            def _manual_unmute_fast_delete_reason(test):
+                """Return why a manual-unmute–tracked test is a fast path, or None.
+
+                - ``zero_runs``: no monitor activity in the manual window → unmute with ``[fast-delete]``.
+                - ``stable``: enough clean runs → unmute with ``[fast-unmute]``.
+                """
                 if is_chunk_test(test):
-                    return False
+                    return None
                 fn = test.get('full_name')
                 if fn not in manual_unmute_full_names:
-                    return False
-                total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
-                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
-                result = total_runs >= manual_unmute_min_runs and total_fails == 0
+                    return None
+                p = test.get('pass_count', 0)
+                f = test.get('fail_count', 0)
+                m = test.get('mute_count', 0)
+                s = test.get('skip_count', 0)
+                # Same run count as before for the stable fast-unmute threshold (pass/fail/mute only).
+                total_runs_pf_m = p + f + m
+                # Full activity in the manual window — all zeros ⇒ fast-delete path.
+                total_activity = p + f + m + s
+                total_fails = f + m
+                win = manual_unmute_window_days if manual_unmute_window_days is not None else '?'
+                if total_activity == 0:
+                    logging.info(
+                        'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, activity(p+f+m+s):%s, fails:%s, '
+                        'min_runs:%s, window_days=%s, path:fast-delete, result:True',
+                        fn,
+                        total_runs_pf_m,
+                        total_activity,
+                        total_fails,
+                        manual_unmute_min_runs,
+                        win,
+                    )
+                    return 'zero_runs'
+                result = total_runs_pf_m >= manual_unmute_min_runs and total_fails == 0
                 logging.info(
-                    'FAST_UNMUTE_CHECK: %s - runs:%s, fails:%s, min_runs:%s, window_days=%s, result:%s',
+                    'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, fails:%s, min_runs:%s, window_days=%s, '
+                    'path:fast-unmute, result:%s',
                     fn,
-                    total_runs,
+                    total_runs_pf_m,
                     total_fails,
                     manual_unmute_min_runs,
-                    manual_unmute_window_days if manual_unmute_window_days is not None else '?',
+                    win,
                     result,
                 )
-                return result
+                return 'stable' if result else None
 
-            to_unmute_manual, to_unmute_manual_debug = create_file_set(
+            def is_manual_unmute_candidate_stable(test):
+                return _manual_unmute_fast_delete_reason(test) == 'stable'
+
+            def is_manual_unmute_candidate_zero_runs(test):
+                return _manual_unmute_fast_delete_reason(test) == 'zero_runs'
+
+            to_unmute_manual_stable, to_unmute_manual_stable_debug = create_file_set(
                 aggregated_for_manual_unmute,
-                is_manual_unmute_candidate,
+                is_manual_unmute_candidate_stable,
                 mute_check,
                 resolution='to_unmute',
                 debug_suffix=' [fast-unmute]',
             )
+            to_unmute_manual_zero_activity, to_unmute_manual_zero_activity_debug = create_file_set(
+                aggregated_for_manual_unmute,
+                is_manual_unmute_candidate_zero_runs,
+                mute_check,
+                resolution='to_unmute',
+                debug_suffix=' [fast-delete]',
+            )
+            to_unmute_manual = sorted(
+                set(to_unmute_manual_stable) | set(to_unmute_manual_zero_activity)
+            )
+            to_unmute_manual_debug = sorted(
+                set(to_unmute_manual_stable_debug) | set(to_unmute_manual_zero_activity_debug)
+            )
             if to_unmute_manual:
-                logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
+                logging.info(
+                    'Manual fast-unmute added %d test(s) to to_unmute '
+                    '(%d stable [fast-unmute], %d zero-runs [fast-delete])',
+                    len(to_unmute_manual),
+                    len(to_unmute_manual_stable),
+                    len(to_unmute_manual_zero_activity),
+                )
             to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
             to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
 

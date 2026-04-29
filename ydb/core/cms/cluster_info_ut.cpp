@@ -1,7 +1,9 @@
 #include "cluster_info.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -466,6 +468,80 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                             "request-1", "user-1", 1,
                             "request-4", "user-4", 4);
 
+    }
+
+    Y_UNIT_TEST(ApplyStateStorageInfoWithMissingNode) {
+        // simulates the situation where the node was removed from cluster config
+        // but still referenced by state storage config
+        TActorSystemStub stub;
+
+        TClusterInfoPtr cluster(new TClusterInfo);
+        cluster->AddNode({1, "::1", "host1", "host1", 1, TNodeLocation()}, nullptr);
+        cluster->AddNode({2, "::2", "host2", "host2", 1, TNodeLocation()}, nullptr);
+        cluster->AddNode({3, "::3", "host3", "host3", 1, TNodeLocation()}, nullptr);
+
+        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1"));
+        cluster->SetNodeState(2, NKikimrCms::UP, MakeSystemStateInfo("1"));
+        cluster->SetNodeState(3, NKikimrCms::UP, MakeSystemStateInfo("1"));
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups.emplace_back();
+        auto& group = info->RingGroups.back();
+        group.NToSelect = 3;
+        group.Rings.resize(3);
+        group.Rings[0].Replicas.push_back(TActorId(1, 0, 0, 0));
+        group.Rings[0].Replicas.push_back(TActorId(2, 0, 0, 0));
+
+        group.Rings[1].Replicas.push_back(TActorId(3, 0, 0, 0));
+        group.Rings[1].Replicas.push_back(TActorId(42, 0, 0, 0));
+        group.Rings[2].Replicas.push_back(TActorId(99, 0, 0, 0));
+
+        cluster->ApplyStateStorageInfo(info);
+
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings[0].size(), 3);
+
+        auto& ring0 = *cluster->StateStorageRings[0][0];
+        auto& ring1 = *cluster->StateStorageRings[0][1];
+        auto& ring2 = *cluster->StateStorageRings[0][2];
+
+        UNIT_ASSERT_VALUES_EQUAL(ring0.Replicas.size(), 2);
+        UNIT_ASSERT(!ring0.IsDisabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas[0]->NodeId, 3);
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas[1]->NodeId, 42);
+        UNIT_ASSERT(!ring1.IsDisabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(ring2.Replicas.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ring2.Replicas[0]->NodeId, 99);
+        UNIT_ASSERT(!ring2.IsDisabled);
+
+        const auto now = Now();
+        const auto retry = TDuration::Seconds(1);
+        const auto duration = TDuration::Minutes(1);
+        const TString requestId = "test-request";
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring0.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Ok));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring1.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Restart));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring2.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Restart));
+
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(2));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
+        UNIT_ASSERT(!cluster->IsStateStorageReplicaNode(42));
+        UNIT_ASSERT(!cluster->IsStateStorageReplicaNode(99));
+        UNIT_ASSERT(!cluster->HasNode(42));
+        UNIT_ASSERT(!cluster->HasNode(99));
+
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
     }
 }
 

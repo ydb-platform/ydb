@@ -171,7 +171,7 @@ jobs:
           cp mute_update/new_muted_ya.txt "$OUT"
 
           git add "$OUT"
-          git commit -m "Update mute list (${{ env.BUILD_TYPE }}) for ${{ env.BASE_BRANCH }}"
+          git commit -m "Update muted_ya for ${{ env.BUILD_TYPE }} ${{ env.BASE_BRANCH }}"
 
           echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes ($OUT)"
 

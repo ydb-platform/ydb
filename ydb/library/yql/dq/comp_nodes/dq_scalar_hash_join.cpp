@@ -386,7 +386,8 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     TDqScalarJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
-    MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
+    MKQL_ENSURE(joinType->IsFlow() || joinType->IsStream(),
+        "Expected WideFlow or WideStream as join output");
     const auto joinComponents = GetWideComponents(joinType);
     MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
     for (auto* type : joinComponents) {
@@ -394,20 +395,20 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     }
 
     const auto leftType = callable.GetInput(0).GetStaticType();
-    MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
-    const auto leftFlowType = AS_TYPE(TFlowType, leftType);
-    MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(), "Expected Multi as a left flow item type");
-    const auto leftFlowComponents = GetWideComponents(leftFlowType);
+    MKQL_ENSURE(leftType->IsFlow() || leftType->IsStream(),
+        "Expected WideFlow or WideStream as left input");
+    MKQL_ENSURE(GetWideComponentsCount(leftType) > 0, "Expected at least one left column");
+    const auto leftFlowComponents = GetWideComponents(leftType);
     MKQL_ENSURE(!leftFlowComponents.empty(), "Expected at least one column");
     for (auto* type : leftFlowComponents) {
         meta.InputTypes.Probe.push_back(type);
     }
 
     const auto rightType = callable.GetInput(1).GetStaticType();
-    MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
-    const auto rightFlowType = AS_TYPE(TFlowType, rightType);
-    MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(), "Expected Multi as a right flow item type");
-    const auto rightFlowComponents = GetWideComponents(rightFlowType);
+    MKQL_ENSURE(rightType->IsFlow() || rightType->IsStream(),
+        "Expected WideFlow or WideStream as right input");
+    MKQL_ENSURE(GetWideComponentsCount(rightType) > 0, "Expected at least one right column");
+    const auto rightFlowComponents = GetWideComponents(rightType);
     MKQL_ENSURE(!rightFlowComponents.empty(), "Expected at least one column");
     for (auto* type : rightFlowComponents) {
         meta.InputTypes.Build.push_back(type);

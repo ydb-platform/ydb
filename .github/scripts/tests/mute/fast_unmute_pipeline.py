@@ -19,7 +19,6 @@ from mute.constants import (
 from mute.fast_unmute_comments import (
     COMMENT_ABANDON_NOT_COMPLETED,
     COMMENT_ENTER,
-    COMMENT_PROGRESS,
     COMMENT_SUCCESS,
     COMMENT_TTL_INCOMPLETE,
     format_bullet_list,

@@ -74,12 +74,14 @@ public:
     TString AuthToken;
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
@@ -110,10 +112,12 @@ public:
     TKikimrSettings& SetAuthToken(const TString& value) { AuthToken = value; return *this; }
     TKikimrSettings& SetDomainRoot(const TString& value) { DomainRoot = value; return *this; }
     TKikimrSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
+    TKikimrSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
+    TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
@@ -205,6 +209,7 @@ public:
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
+    TString CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount = 1, TDuration timeout = TDuration::Seconds(30), bool acceptIfExists = false);
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 
@@ -246,8 +251,9 @@ private:
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
+    Tests::TServer::TPtr Server;
     THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
     TAdaptiveThreadPool ThreadPool;
     bool ThreadPoolStarted_ = false;
     TPortManager PortManager;

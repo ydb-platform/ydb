@@ -367,7 +367,13 @@ namespace NKikimr {
             };
             // parse entry point
             TString explanation;
-            auto repaired = TSyncLogRepaired::Construct(std::move(params), entryPoint.GetData(), entryPoint.GetSize(), entryPointLsn, explanation);
+            auto repaired = TSyncLogRepaired::Construct(
+                std::move(params),
+                entryPoint.GetData(),
+                entryPoint.GetSize(),
+                entryPointLsn,
+                explanation,
+                LocRecCtx->VCtx->VDiskLogPrefix);
             if (!repaired) {
                 explanation = "Error parsing SyncLog entry point; explanation# " + explanation;
                 SignalErrorAndDie(ctx, NKikimrProto::ERROR, explanation);
@@ -726,4 +732,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

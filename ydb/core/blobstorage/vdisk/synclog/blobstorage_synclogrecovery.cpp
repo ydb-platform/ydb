@@ -11,9 +11,10 @@ namespace NKikimr {
                 TSyncLogParams &&params,
                 const TString &data,
                 ui64 entryPointLsn,
-                TString &explanation)
+                TString &explanation,
+                const TString &vdiskLogPrefix)
         {
-            return Construct(std::move(params), data.data(), data.size(), entryPointLsn, explanation);
+            return Construct(std::move(params), data.data(), data.size(), entryPointLsn, explanation, vdiskLogPrefix);
         }
 
         std::unique_ptr<TSyncLogRepaired> TSyncLogRepaired::Construct(
@@ -21,9 +22,10 @@ namespace NKikimr {
                 const char* data,
                 size_t size,
                 ui64 entryPointLsn,
-                TString &explanation)
+                TString &explanation,
+                const TString &vdiskLogPrefix)
         {
-            TEntryPointParser parser(std::move(params));
+            TEntryPointParser parser(std::move(params), vdiskLogPrefix);
             bool needsInitialCommit = false;
             bool success = parser.ParseArray(data, size, needsInitialCommit, explanation);
             if (!success) {
@@ -36,6 +38,7 @@ namespace NKikimr {
             return std::unique_ptr<TSyncLogRepaired>(new TSyncLogRepaired(parser.GetSyncLogPtr(),
                 parser.GetChunksToDelete(),
                 std::move(commitHistory),
+                vdiskLogPrefix,
                 needsInitialCommit));
         }
 
@@ -43,10 +46,12 @@ namespace NKikimr {
                 TSyncLogPtr &&syncLog,
                 TVector<ui32> &&chunksToDelete,
                 TCommitHistory &&commitHistory,
+                TString vdiskLogPrefix,
                 bool needsInitialCommit)
             : SyncLogPtr(std::move(syncLog))
             , ChunksToDelete(std::move(chunksToDelete))
             , CommitHistory(std::move(commitHistory))
+            , VDiskLogPrefix(std::move(vdiskLogPrefix))
             , NeedsInitialCommit(needsInitialCommit)
         {}
 
@@ -152,11 +157,23 @@ namespace NKikimr {
         }
 
         void TSyncLogRecovery::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+            TSet<TChunkIdx> syncLogChunks;
+            Repaired->SyncLogPtr->GetOwnedChunks(syncLogChunks);
+
             for (TChunkIdx chunkIdx : Repaired->ChunksToDelete) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
+                Y_ABORT_UNLESS(inserted, "%sduplicate chunk while adding SyncLog delayed delete chunk; chunkIdx# %" PRIu32,
+                    Repaired->VDiskLogPrefix.data(), chunkIdx);
+                Y_ABORT_UNLESS(syncLogChunks.find(chunkIdx) == syncLogChunks.end(),
+                    "%sduplicate SyncLog chunk in delayed delete list and recovered SyncLog; chunkIdx# %" PRIu32,
+                    Repaired->VDiskLogPrefix.data(), chunkIdx);
             }
-            Repaired->SyncLogPtr->GetOwnedChunks(chunks);
+
+            for (TChunkIdx chunkIdx : syncLogChunks) {
+                const bool inserted = chunks.insert(chunkIdx).second;
+                Y_ABORT_UNLESS(inserted, "%sduplicate chunk while adding recovered SyncLog chunk; chunkIdx# %" PRIu32,
+                    Repaired->VDiskLogPrefix.data(), chunkIdx);
+            }
         }
 
         TString TSyncLogRecovery::ToString() const {

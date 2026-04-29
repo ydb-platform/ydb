@@ -465,6 +465,7 @@ namespace NKikimr {
         namespace {
             bool RemoveDelayedChunksFromDiskRecLogSerialized(
                     NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                    const TString &vdiskLogPrefix,
                     TString &explanation)
             {
                 if (pb.GetDiskRecLogSerialized().empty() || !pb.ChunksToDeleteDelayedSize()) {
@@ -522,7 +523,8 @@ namespace NKikimr {
 
                 if (NActors::TlsActivationContext) {
                     LOG_ERROR_S(*NActors::TlsActivationContext, BS_LOCALRECOVERY,
-                        "SyncLog entry point contains chunks both in DiskRecLogSerialized and "
+                        vdiskLogPrefix
+                        << "SyncLog entry point contains chunks both in DiskRecLogSerialized and "
                         "ChunksToDeleteDelayed; removing them from DiskRecLogSerialized in favor of "
                         "delayed delete"
                         << " RemovedChunks# " << FormatList(chunksRemovedFromDiskRecLog)
@@ -546,7 +548,7 @@ namespace NKikimr {
                 return false;
             }
 
-            success = RemoveDelayedChunksFromDiskRecLogSerialized(pb, explanation);
+            success = RemoveDelayedChunksFromDiskRecLogSerialized(pb, VDiskLogPrefix, explanation);
             if (!success) {
                 return false;
             }

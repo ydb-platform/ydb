@@ -116,7 +116,7 @@ public:
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
-    TKikimrSettings& SetStoragePoolTypes(const TVector<TString> storagePoolTypes) { StoragePoolTypes = std::move(storagePoolTypes); return *this; };
+    TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };

@@ -14,8 +14,8 @@ public:
         return false;
     }
 
-    TCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::CreateUser, std::move(cb))
+    TCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::CreateUser, std::move(cb), peername)
     {
     }
 
@@ -84,8 +84,8 @@ private:
     TActorId SchemaActor;
 };
 
-IActor* CreateCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TCreateUserActor(sourceSqsRequest, std::move(cb));
+IActor* CreateCreateUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TCreateUserActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

@@ -29,8 +29,8 @@ public:
         return true;
     }
 
-    TUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::UntagQueue, std::move(cb))
+    TUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::UntagQueue, std::move(cb), peername)
     {
         for (const auto& key : Request().tagkeys()) {
             TagKeys_.push_back(key);
@@ -172,8 +172,8 @@ private:
     TString SourceAddress_ = "";
 };
 
-IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TUntagQueueActor(sourceSqsRequest, std::move(cb));
+IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TUntagQueueActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

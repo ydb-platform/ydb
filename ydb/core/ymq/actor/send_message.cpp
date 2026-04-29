@@ -33,8 +33,8 @@ public:
         return true;
     }
 
-    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
+    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb), peername)
         , IsBatch_(isBatch)
     {
     }
@@ -471,12 +471,12 @@ private:
     std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
 };
 
-IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSendMessageActor(sourceSqsRequest, false, std::move(cb));
+IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TSendMessageActor(sourceSqsRequest, false, std::move(cb), peername);
 }
 
-IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSendMessageActor(sourceSqsRequest, true, std::move(cb));
+IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TSendMessageActor(sourceSqsRequest, true, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

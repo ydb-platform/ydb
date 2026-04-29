@@ -35,8 +35,8 @@ public:
         return false;
     }
 
-    TCommonBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, const EAction action, THolder<IReplyCallback> cb)
-        : TActionActor<TDerived>(sourceSqsRequest, action, std::move(cb))
+    TCommonBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, const EAction action, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor<TDerived>(sourceSqsRequest, action, std::move(cb), peername)
     {
     }
 

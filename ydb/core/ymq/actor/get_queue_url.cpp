@@ -18,8 +18,8 @@ class TGetQueueUrlActor
     : public TActionActor<TGetQueueUrlActor>
 {
 public:
-    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb))
+    TGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::GetQueueUrl, std::move(cb), peername)
     {
     }
 
@@ -85,8 +85,8 @@ private:
     }
 };
 
-IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TGetQueueUrlActor(sourceSqsRequest, std::move(cb));
+IActor* CreateGetQueueUrlActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TGetQueueUrlActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

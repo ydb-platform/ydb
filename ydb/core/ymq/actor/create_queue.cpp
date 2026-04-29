@@ -24,8 +24,8 @@ public:
         return true;
     }
 
-    TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::CreateQueue, std::move(cb))
+    TCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::CreateQueue, std::move(cb), peername)
     {
     }
 
@@ -242,8 +242,8 @@ private:
     TString TagsJson_;
 };
 
-IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TCreateQueueActor(sourceSqsRequest, std::move(cb));
+IActor* CreateCreateQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TCreateQueueActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

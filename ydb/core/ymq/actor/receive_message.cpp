@@ -30,8 +30,8 @@ public:
         return true;
     }
 
-    TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ReceiveMessage, std::move(cb))
+    TReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::ReceiveMessage, std::move(cb), peername)
     {
     }
 
@@ -373,8 +373,8 @@ private:
     std::vector<TString> LockedMessageGroups_;
 };
 
-IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TReceiveMessageActor(sourceSqsRequest, std::move(cb));
+IActor* CreateReceiveMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TReceiveMessageActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

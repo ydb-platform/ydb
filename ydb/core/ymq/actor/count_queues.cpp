@@ -23,8 +23,8 @@ public:
         return false;
     }
 
-    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb))
+    TCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::CountQueues, std::move(cb), peername)
     {
     }
 
@@ -67,8 +67,8 @@ private:
     }
 };
 
-IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TCountQueuesActor(sourceSqsRequest, std::move(cb));
+IActor* CreateCountQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TCountQueuesActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

@@ -13,8 +13,8 @@ class TUnimplementedRequestActor
     : public TActionActor<TUnimplementedRequestActor>
 {
 public:
-    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb)
-        : TActionActor(req, EAction::Unknown, std::move(cb))
+    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(req, EAction::Unknown, std::move(cb), peername)
     {
         Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
     }
@@ -33,13 +33,13 @@ private:
     }
 };
 
-IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) {
+IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, const TString& peername) {
     Y_ABORT_UNLESS(req.GetRequestId());
 
 #define REQUEST_CASE(action) \
     case NKikimrClient::TSqsRequest::Y_CAT(k, action): {                \
-        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb); \
-        return Y_CAT(Y_CAT(Create, action), Actor)(req, std::move(cb));  \
+        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername); \
+        return Y_CAT(Y_CAT(Create, action), Actor)(req, std::move(cb), peername);  \
     }
 
     switch (req.GetRequestCase()) {
@@ -74,7 +74,7 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
 #undef REQUEST_CASE
 
         case NKikimrClient::TSqsRequest::REQUEST_NOT_SET:
-            return new TUnimplementedRequestActor(req, std::move(cb));
+            return new TUnimplementedRequestActor(req, std::move(cb), peername);
     }
 
     Y_ABORT();

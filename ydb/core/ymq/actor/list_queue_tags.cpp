@@ -19,8 +19,8 @@ class TListQueueTagsActor
     : public TActionActor<TListQueueTagsActor>
 {
 public:
-    TListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, EAction::ListQueueTags, std::move(cb))
+    TListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, EAction::ListQueueTags, std::move(cb), peername)
     {
     }
 
@@ -60,8 +60,8 @@ private:
 
 };
 
-IActor* CreateListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TListQueueTagsActor(sourceSqsRequest, std::move(cb));
+IActor* CreateListQueueTagsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TListQueueTagsActor(sourceSqsRequest, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

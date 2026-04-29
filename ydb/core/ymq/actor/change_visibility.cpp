@@ -19,8 +19,8 @@ class TChangeMessageVisibilityActor
     : public TActionActor<TChangeMessageVisibilityActor>
 {
 public:
-    TChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
-        : TActionActor(sourceSqsRequest, isBatch ? EAction::ChangeMessageVisibilityBatch : EAction::ChangeMessageVisibility, std::move(cb))
+    TChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb, const TString& peername)
+        : TActionActor(sourceSqsRequest, isBatch ? EAction::ChangeMessageVisibilityBatch : EAction::ChangeMessageVisibility, std::move(cb), peername)
         , IsBatch_(isBatch)
     {
     }
@@ -265,12 +265,12 @@ private:
     TInstant NowTimestamp_;
 };
 
-IActor* CreateChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TChangeMessageVisibilityActor(sourceSqsRequest, false, std::move(cb));
+IActor* CreateChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TChangeMessageVisibilityActor(sourceSqsRequest, false, std::move(cb), peername);
 }
 
-IActor* CreateChangeMessageVisibilityBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TChangeMessageVisibilityActor(sourceSqsRequest, true, std::move(cb));
+IActor* CreateChangeMessageVisibilityBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb, const TString& peername) {
+    return new TChangeMessageVisibilityActor(sourceSqsRequest, true, std::move(cb), peername);
 }
 
 } // namespace NKikimr::NSQS

@@ -153,19 +153,22 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
         KAFKA_LOG_CRIT("Generation check KQP query failed."
             << " group# " << Message->GroupId.value()
             << " status# " << record.GetYdbStatus());
-        SendFailedForAllPartitions(UNKNOWN_SERVER_ERROR, ctx);
+        Error = UNKNOWN_SERVER_ERROR;
+        SendFailedForAllPartitions(Error, ctx);
         return;
     }
 
     auto& resp = record.GetResponse();
     if (resp.GetYdbResults().empty()) {
-        SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
+        Error = GROUP_ID_NOT_FOUND;
+        SendFailedForAllPartitions(Error, ctx);
         return;
     }
 
     NYdb::TResultSetParser parser(resp.GetYdbResults(0));
     if (!parser.TryNextRow()) {
-        SendFailedForAllPartitions(GROUP_ID_NOT_FOUND, ctx);
+        Error = GROUP_ID_NOT_FOUND;
+        SendFailedForAllPartitions(Error, ctx);
         return;
     }
 
@@ -174,7 +177,8 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
         KAFKA_LOG_I("Generation mismatch for group# " << Message->GroupId.value()
             << ". Expected# " << Message->GenerationId
             << ", got# " << tableGeneration);
-        SendFailedForAllPartitions(ILLEGAL_GENERATION, ctx);
+        Error = ILLEGAL_GENERATION;
+        SendFailedForAllPartitions(Error, ctx);
         return;
     }
 

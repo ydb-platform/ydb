@@ -1,0 +1,28 @@
+# Mainline / integration-branch checks when main, stable-*, or stream-nb-* advance (e.g. after merge).
+# Build presets: repo variable TEST_BUILD_TYPES JSON key postmerge (same schema as PR-check; runner label postcommit).
+name: Postmerge
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'stable-*'
+      - 'stream-nb-*'
+    paths-ignore:
+      - 'ydb/docs/**'
+
+env:
+  BUILD_TYPES_JSON: ${{ vars.TEST_BUILD_TYPES || '{"pr_check":["relwithdebinfo","release-asan"],"postmerge":["relwithdebinfo","release-asan"]}' }}
+
+jobs:
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).postmerge }}
+    name: Build and test ${{ matrix.build_preset }}
+    uses: ./.github/workflows/ya_ci_core_build_test.yml
+    secrets: inherit
+    with:
+      build_preset: ${{ matrix.build_preset }}
+      runner_extra_label: postcommit

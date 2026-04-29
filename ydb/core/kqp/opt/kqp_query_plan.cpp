@@ -973,6 +973,29 @@ private:
             return;
         }
 
+        if (auto maybeSettings = source.Settings().Maybe<TKqpReadTableVectorIndexSourceSettings>(); maybeSettings.IsValid()) {
+            auto vectorSettings = maybeSettings.Cast();
+            TTableRead readInfo;
+            readInfo.Type = EPlanTableReadType::Scan;
+            auto tablePath = vectorSettings.Table().Path().StringValue();
+            TOperator op;
+            op.Properties["Name"] = "VectorIndexSource";
+            op.Properties["Table"] = tablePath;
+            op.Properties["Index"] = vectorSettings.Index().StringValue();
+            for (const auto& col : vectorSettings.Columns()) {
+                readInfo.Columns.emplace_back(col.StringValue());
+            }
+            auto& readColumns = op.Properties["ReadColumns"];
+            readColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& c : readInfo.Columns) {
+                readColumns.AppendValue(c);
+            }
+            AddOptimizerEstimates(op, source);
+            SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
+            stagePlanNode.Operators.push_back(std::move(op));
+            return;
+        }
+
         // Federated providers
         TOperator op;
         TCoDataSource dataSource = source.DataSource().Cast<TCoDataSource>();

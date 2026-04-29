@@ -457,6 +457,30 @@ message TKqpReadRangesSource {
     TKqpPhyVectorTopK VectorTopK = 11;
 }
 
+message TKqpVectorIndexSource {
+    message TIndexTable {
+        TKqpPhyTableId Table = 1;
+        repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 2;
+        repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 3;
+    }
+
+    TKqpPhyTableId Table = 1;                             // main table
+    string Index = 2;                                      // index name
+    Ydb.Table.KMeansTreeSettings KMeansTreeSettings = 3;   // index settings
+
+    repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 4;  // main table PKs
+    repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 5;     // result columns
+
+    repeated TIndexTable IndexTables = 6;  // level table, posting table
+
+    TKqpPhyValue TargetVector = 7;         // the query vector (param or literal)
+    TKqpPhyValue TopK = 8;                 // K limit
+    uint32 LevelTopSize = 9;               // per-level top-K for tree traversal
+    bool WithOverlap = 10;                 // overlap_clusters > 1
+    string EmbeddingColumn = 11;           // vector column name in posting table
+    Ydb.Table.VectorIndexSettings VectorIndexSettings = 12; // similarity metric & vector type
+}
+
 message TKqpSysViewSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -495,6 +519,7 @@ message TKqpSource {
         TKqpExternalSource ExternalSource = 4;
         TKqpFullTextSource FullTextSource = 5;
         TKqpSysViewSource SysViewSource = 6;
+        TKqpVectorIndexSource VectorIndexSource = 7;
     }
 }
 

@@ -391,6 +391,69 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
     return TStatus::Ok;
 }
 
+TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
+    if (!EnsureArgsCount(*node, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    bool isPhysical = TKqpReadTableVectorIndex::Match(node.Get());
+
+    auto table = ResolveTable(node->Child(TKqlReadTableVectorIndex::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlReadTableVectorIndex::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqlReadTableVectorIndex::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    if (isPhysical) {
+        node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+    }
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateReadTableVectorIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
+    if (!EnsureArgsCount(*node, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpReadTableVectorIndexSourceSettings::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqpReadTableVectorIndexSourceSettings::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpReadTableVectorIndexSourceSettings::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2916,6 +2979,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateReadTableFullTextIndex(input, ctx, cluster, *tablesData);
             }
 
+            if (TKqpReadTableVectorIndex::Match(input.Get()) || TKqlReadTableVectorIndex::Match(input.Get())) {
+                return AnnotateReadTableVectorIndex(input, ctx, cluster, *tablesData);
+            }
+
             if (TKqlLookupTableBase::Match(input.Get())) {
                 return AnnotateLookupTable(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -3054,6 +3121,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpReadTableFullTextIndexSourceSettings::Match(input.Get())) {
                 return AnnotateReadTableFullTextIndexSourceSettings(input, ctx, cluster, *tablesData);
+            }
+
+            if (TKqpReadTableVectorIndexSourceSettings::Match(input.Get())) {
+                return AnnotateReadTableVectorIndexSourceSettings(input, ctx, cluster, *tablesData);
             }
 
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {

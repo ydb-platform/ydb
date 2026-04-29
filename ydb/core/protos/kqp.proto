@@ -951,6 +951,35 @@ message TKqpFullTextSourceSettings {
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
 };
 
+message TKqpVectorIndexSourceSettings {
+    message TIndexTable {
+        optional NKqpProto.TKqpPhyTableId Table = 1;
+        repeated TKqpColumnMetadataProto KeyColumns = 2;
+        repeated TKqpColumnMetadataProto Columns = 3;
+    }
+
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    optional string Index = 2;
+    optional Ydb.Table.KMeansTreeSettings KMeansTreeSettings = 3;
+
+    repeated TKqpColumnMetadataProto KeyColumns = 4;
+    repeated TKqpColumnMetadataProto Columns = 5;
+
+    repeated TIndexTable IndexTables = 6;
+
+    optional bytes TargetVector = 7;              // serialized vector value
+    optional string TargetVectorParamName = 8;    // or param name for runtime binding
+    optional uint64 TopK = 9;
+    optional string TopKParamName = 10;
+    optional uint32 LevelTopSize = 11;
+    optional bool WithOverlap = 12;
+    optional string EmbeddingColumn = 13;
+    optional Ydb.Table.VectorIndexSettings VectorIndexSettings = 14;
+
+    optional TKqpSnapshot Snapshot = 15;
+    optional string Database = 16;
+}
+
 message TKqpSysViewSourceSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
     repeated TKqpColumnMetadataProto Columns = 2;

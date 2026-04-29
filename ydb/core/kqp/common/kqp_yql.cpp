@@ -308,6 +308,46 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         .Done();
 }
 
+TKqpReadTableVectorIndexSettings TKqpReadTableVectorIndexSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
+    TKqpReadTableVectorIndexSettings settings;
+
+    for (const auto& tuple : node) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableVectorIndexSettings::LevelTopSizeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.LevelTopSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableVectorIndexSettings::EmbeddingColumnSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.EmbeddingColumn = TString(tuple.Value().Cast<TCoAtom>().Value());
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTableVectorIndex setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpReadTableVectorIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(LevelTopSizeSettingName)
+        .Value<TCoAtom>().Build(ToString(LevelTopSize))
+        .Done());
+
+    if (EmbeddingColumn) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(EmbeddingColumnSettingName)
+            .Value<TCoAtom>().Build(EmbeddingColumn)
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
 }

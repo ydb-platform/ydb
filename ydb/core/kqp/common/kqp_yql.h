@@ -46,6 +46,7 @@ struct TKqpPhyTxSettings {
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
+constexpr TStringBuf KqpVectorIndexSourceName = "KqpVectorIndexSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
@@ -157,6 +158,18 @@ public:
     void SetTokens(const TExprNode::TPtr& expr) { Tokens = expr; }
 
     static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+};
+
+struct TKqpReadTableVectorIndexSettings {
+public:
+    static constexpr TStringBuf LevelTopSizeSettingName = "LevelTopSize";
+    static constexpr TStringBuf EmbeddingColumnSettingName = "EmbeddingColumn";
+
+    ui32 LevelTopSize = 1;
+    TString EmbeddingColumn;
+
+    static TKqpReadTableVectorIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 

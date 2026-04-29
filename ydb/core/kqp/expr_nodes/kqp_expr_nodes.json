@@ -150,6 +150,45 @@
             ]
         },
         {
+            "Name": "TKqpReadTableVectorIndexSourceSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpReadTableVectorIndexSourceSettings"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqlReadTableVectorIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableVectorIndex"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqpReadTableVectorIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpReadTableVectorIndex"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKqlReadTableRanges",
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},

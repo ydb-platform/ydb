@@ -155,6 +155,8 @@ public:
                 }
             } else if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                 unknownAffectedShardCount = true;
+            } else if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kVectorIndexSource) {
+                unknownAffectedShardCount = true;
             } else if (isComputeTask) {
                 for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
                     const auto& input = stage.GetInputs(inputIndex);
@@ -761,6 +763,10 @@ private:
                 }
 
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    HasDatashardSourceScan = true;
+                }
+
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kVectorIndexSource) {
                     HasDatashardSourceScan = true;
                 }
             }

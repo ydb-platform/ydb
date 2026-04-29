@@ -526,6 +526,18 @@ void TKqpTasksGraph::FillStages() {
                         break;
                     }
 
+                    case NKqpProto::TKqpSource::kVectorIndexSource: {
+                        YQL_ENSURE(source.GetInputIndex() == 0);
+                        YQL_ENSURE(stage.SourcesSize() == 1);
+                        meta.TableId = MakeTableId(source.GetVectorIndexSource().GetTable());
+                        meta.TablePath = source.GetVectorIndexSource().GetTable().GetPath();
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
+                        YQL_ENSURE(tx.Body->GetTableConstInfoById()->Map.find(meta.TableId) != tx.Body->GetTableConstInfoById()->Map.end(), "Cannot find table const info for table: " << meta.TableId);
+                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                        stageSourcesCount++;
+                        break;
+                    }
+
                     case NKqpProto::TKqpSource::kSysViewSource: {
                         YQL_ENSURE(source.GetInputIndex() == 0);
                         YQL_ENSURE(stage.SourcesSize() == 1);
@@ -1366,6 +1378,14 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 }
 
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
+            } else if (input.Meta.VectorIndexSourceSettings) {
+
+                if (snapshot.IsValid()) {
+                    input.Meta.VectorIndexSourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
+                    input.Meta.VectorIndexSourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+                }
+
+                inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.VectorIndexSourceSettings);
             } else if (input.Meta.SysViewSourceSettings) {
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SysViewSourceSettings);
             } else {
@@ -1742,6 +1762,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                         } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse full text source settings");
+                            sourceSettings->ClearSnapshot();
+                        } else if (settings.Is<NKikimrKqp::TKqpVectorIndexSourceSettings>()) {
+                            auto sourceSettings = newInput.Meta.VectorIndexSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpVectorIndexSourceSettings>();
+                            YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse vector index source settings");
                             sourceSettings->ClearSnapshot();
                         } else if (settings.Is<NKikimrKqp::TKqpSysViewSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.SysViewSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpSysViewSourceSettings>();
@@ -2505,6 +2529,70 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 }
 
+void TKqpTasksGraph::BuildVectorIndexScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats) {
+    YQL_ENSURE(stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kVectorIndexSource);
+    Y_UNUSED(stats);
+
+    auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    const auto& source = stage.GetSources(0);
+    const auto& vectorSource = source.GetVectorIndexSource();
+
+    YQL_ENSURE(vectorSource.GetIndex());
+
+    auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SOURCE_READ);
+    task.Meta.Type = TTaskMeta::TTaskType::Scan;
+    task.Meta.NodeId = GetMeta().ExecuterId.NodeId();
+    const auto& stageSource = stage.GetSources(0);
+    auto& input = task.Inputs.at(stageSource.GetInputIndex());
+    input.SourceType = NYql::KqpVectorIndexSourceName;
+    input.ConnectionInfo = NYql::NDq::TSourceInput{};
+
+    input.Meta.VectorIndexSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpVectorIndexSourceSettings>();
+    NKikimrKqp::TKqpVectorIndexSourceSettings* settings = input.Meta.VectorIndexSourceSettings;
+
+    settings->SetIndex(vectorSource.GetIndex());
+    settings->SetDatabase(GetMeta().Database);
+    settings->MutableTable()->CopyFrom(vectorSource.GetTable());
+    settings->MutableKMeansTreeSettings()->CopyFrom(vectorSource.GetKMeansTreeSettings());
+    settings->MutableVectorIndexSettings()->CopyFrom(vectorSource.GetVectorIndexSettings());
+    settings->SetLevelTopSize(vectorSource.GetLevelTopSize());
+    settings->SetWithOverlap(vectorSource.GetWithOverlap());
+    settings->SetEmbeddingColumn(vectorSource.GetEmbeddingColumn());
+
+    auto guard = TxAlloc->TypeEnv.BindAllocator();
+
+    if (vectorSource.HasTargetVector()) {
+        auto value = ExtractPhyValue(
+            stageInfo, vectorSource.GetTargetVector(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        settings->SetTargetVector(TString(value.AsStringRef()));
+    }
+
+    if (vectorSource.HasTopK()) {
+        auto value = ExtractPhyValue(
+            stageInfo, vectorSource.GetTopK(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        if (value.HasValue()) {
+            settings->SetTopK(value.Get<ui64>());
+        }
+    }
+
+    for (const auto& indexTable : vectorSource.GetIndexTables()) {
+        auto* indexTableProto = settings->AddIndexTables();
+        indexTableProto->MutableTable()->CopyFrom(indexTable.GetTable());
+        indexTableProto->MutableKeyColumns()->CopyFrom(indexTable.GetKeyColumns());
+        indexTableProto->MutableColumns()->CopyFrom(indexTable.GetColumns());
+    }
+
+    settings->MutableKeyColumns()->CopyFrom(vectorSource.GetKeyColumns());
+    settings->MutableColumns()->CopyFrom(vectorSource.GetColumns());
+
+    if (GetMeta().Snapshot.IsValid()) {
+        settings->MutableSnapshot()->SetStep(GetMeta().Snapshot.Step);
+        settings->MutableSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
+    }
+}
+
 void TKqpTasksGraph::BuildSysViewTasksFromSource(TStageInfo& stageInfo) {
     YQL_ENSURE(stageInfo.Meta.GetStage(stageInfo.Id).GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kSysViewSource);
 
@@ -3104,6 +3192,10 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                     } break;
                     case NKqpProto::TKqpSource::kFullTextSource: {
                         BuildFullTextScanTasksFromSource(stageInfo, stats);
+                        GetMeta().UnknownAffectedShardCount = true;
+                    } break;
+                    case NKqpProto::TKqpSource::kVectorIndexSource: {
+                        BuildVectorIndexScanTasksFromSource(stageInfo, stats);
                         GetMeta().UnknownAffectedShardCount = true;
                     } break;
                     case NKqpProto::TKqpSource::kSysViewSource: {

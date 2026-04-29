@@ -25,6 +25,7 @@ SRCS(
     kqp_stream_lookup_worker.h
     kqp_transport.cpp
     kqp_vector_actor.cpp
+    kqp_vector_index_source.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp

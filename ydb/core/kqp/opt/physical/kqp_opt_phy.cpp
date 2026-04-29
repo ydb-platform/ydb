@@ -38,6 +38,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(BuildReadTableFullTextIndexStage));
+        AddHandler(0, &TKqlReadTableVectorIndex::Match, HNDL(BuildReadTableVectorIndexStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
@@ -148,6 +149,7 @@ public:
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableSysView));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableFullText));
+        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableVectorIndex));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
         AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
@@ -193,6 +195,12 @@ protected:
     TMaybeNode<TExprBase> BuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableFullTextIndexStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableFullTextIndexStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReadTableVectorIndexStage(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReadTableVectorIndexStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -258,6 +266,12 @@ protected:
     TMaybeNode<TExprBase> RewriteKqpReadTableFullText(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteReadTableFullText(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteKqpReadTableFullText", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteKqpReadTableVectorIndex(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReadTableVectorIndex(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteKqpReadTableVectorIndex", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

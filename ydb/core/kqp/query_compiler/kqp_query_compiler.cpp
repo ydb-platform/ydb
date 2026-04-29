@@ -1562,6 +1562,97 @@ private:
                 }
             }
 
+        } else if (auto settings = source.Settings().Maybe<TKqpReadTableVectorIndexSourceSettings>()) {
+            NKqpProto::TKqpVectorIndexSource& vectorProto = *protoSource->MutableVectorIndexSource();
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *vectorProto.MutableTable());
+
+            TString indexName = TString(settings.Index().Cast().StringValue());
+            vectorProto.SetIndex(indexName);
+
+            auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            auto [indexMeta, index] = tableMeta->GetIndex(indexName);
+            YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
+
+            const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index->SpecializedIndexDescription);
+            vectorProto.MutableKMeansTreeSettings()->CopyFrom(kmeansDesc.settings());
+            vectorProto.MutableVectorIndexSettings()->CopyFrom(kmeansDesc.settings().settings());
+            vectorProto.SetWithOverlap(kmeansDesc.settings().overlap_clusters() > 1);
+
+            auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
+                columnProto->SetName(columnMeta->Name);
+                columnProto->SetId(columnMeta->Id);
+                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+                if (NScheme::NTypeIds::IsParametrizedType(columnMeta->TypeInfo.GetTypeId())) {
+                    ProtoFromTypeInfo(columnMeta->TypeInfo, columnMeta->TypeMod, *columnProto->MutableTypeInfo());
+                }
+            };
+
+            for (auto& keyColumn : tableMeta->KeyColumnNames) {
+                auto* columnPtr = tableMeta->Columns.FindPtr(keyColumn);
+                YQL_ENSURE(columnPtr);
+                fillCol(columnPtr, vectorProto.AddKeyColumns());
+            }
+
+            for (auto item : type->GetItems()) {
+                auto* columnProto = vectorProto.AddColumns();
+                columnProto->SetName(TString(item->GetName()));
+                auto* columnPtr = tableMeta->Columns.FindPtr(item->GetName());
+                if (columnPtr) {
+                    fillCol(columnPtr, columnProto);
+                }
+            }
+
+            for (auto& implTable : index->GetImplTables()) {
+                auto indexProto = vectorProto.AddIndexTables();
+                TVector<TString> pathParts = {TString(settings.Table().Cast().Path()), indexName, TString(implTable)};
+                TString tablePath = NKikimr::JoinPath(pathParts);
+                FillTablesMap(tablePath, tablesMap);
+
+                auto implTableMeta = TablesData->ExistingTable(Cluster, tablePath).Metadata;
+                indexProto->MutableTable()->SetOwnerId(implTableMeta->PathId.OwnerId());
+                indexProto->MutableTable()->SetTableId(implTableMeta->PathId.TableId());
+                indexProto->MutableTable()->SetPath(tablePath);
+                indexProto->MutableTable()->SetSysView(implTableMeta->SysView);
+                indexProto->MutableTable()->SetVersion(implTableMeta->SchemaVersion);
+
+                for (auto& keyColumn : implTableMeta->KeyColumnNames) {
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(keyColumn);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddKeyColumns());
+                }
+
+                for (auto& column : implTableMeta->Columns) {
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(column.first);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddColumns());
+                }
+            }
+
+            TKqpReadTableVectorIndexSettings settingsObj = TKqpReadTableVectorIndexSettings::Parse(settings.Settings().Cast());
+            vectorProto.SetLevelTopSize(settingsObj.LevelTopSize);
+            vectorProto.SetEmbeddingColumn(settingsObj.EmbeddingColumn);
+
+            // TargetVector
+            auto targetVector = TExprBase(settings.TargetVector().Cast());
+            if (targetVector.Maybe<TCoParameter>()) {
+                vectorProto.MutableTargetVector()->MutableParamValue()->SetParamName(targetVector.Cast<TCoParameter>().Name().StringValue());
+            } else {
+                FillLiteralProto(targetVector.Cast<TCoDataCtor>(), *vectorProto.MutableTargetVector()->MutableLiteralValue());
+            }
+
+            // TopK
+            auto topK = TExprBase(settings.TopK().Cast());
+            if (topK.Maybe<TCoParameter>()) {
+                vectorProto.MutableTopK()->MutableParamValue()->SetParamName(topK.Cast<TCoParameter>().Name().StringValue());
+            } else if (topK.Maybe<TCoUint64>()) {
+                FillLiteralProto(topK.Cast<TCoDataCtor>(), *vectorProto.MutableTopK()->MutableLiteralValue());
+            }
+
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1571,7 +1662,7 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
+        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName, NYql::KqpVectorIndexSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
             FillDqInput(source.Ptr(), stageProto, protoSource, dataSourceCategory, ctx, true);

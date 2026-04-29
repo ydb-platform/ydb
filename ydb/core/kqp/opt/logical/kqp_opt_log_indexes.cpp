@@ -795,88 +795,32 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
-    const auto* levelTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Name);
-    const auto* postingTableDesc = &kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable.Next->Name);
     YQL_ENSURE(!implTable.Next->Next);
-    YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::LevelTable));
-    YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
 
     const auto pos = match.Pos();
 
-    const auto levelTable = BuildTableMeta(*levelTableDesc->Metadata, pos, ctx);
-    const auto postingTable = BuildTableMeta(*postingTableDesc->Metadata, pos, ctx);
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
-
-    const auto levelColumns = BuildKeyColumnsList(pos, ctx,
-            std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
     const auto& mainColumns = match.Columns();
 
     TNodeOnNodeOwnedMap replaces;
     TExprNode::TPtr targetVector;
-    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
-
-    auto listType = Build<TCoListType>(ctx, pos)
-        .ItemType<TCoStructType>()
-            .Add<TExprList>()
-                .Add<TCoAtom>()
-                    .Value(NTableIndex::NKMeans::ParentColumn)
-                .Build()
-                .Add<TCoDataType>()
-                .Type()
-                    .Value("Uint64")
-                .Build()
-            .Build()
-            .Build()
-        .Build()
-    .Done();
-
-    // Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
-    auto lookupKey = Build<TCoAsStruct>(ctx, pos)
-        .Add()
-            .Add<TCoAtom>()
-                .Value(NTableIndex::NKMeans::ParentColumn)
-            .Build()
-            .Add<TCoUint64>()
-                .Literal()
-                    .Value("0")
-                .Build()
-            .Build()
-        .Build()
-        .Done();
-
-    auto lookupKeys = Build<TCoList>(ctx, pos)
-        .ListType(listType)
-        .FreeArgs()
-            .Add(lookupKey)
-        .Build()
-    .Done();
+    LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
+    YQL_ENSURE(targetVector, "Failed to extract target vector from expression");
 
     const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
 
-    const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
-    const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+    TKqpReadTableVectorIndexSettings vectorSettings;
+    vectorSettings.LevelTopSize = levelTop;
+    vectorSettings.EmbeddingColumn = indexDesc.KeyColumns.back();
 
-    TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
-    settings.VectorTopIndex = indexDesc.Name;
-    settings.VectorTopTarget = targetVector;
-    settings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal().Build();
-    auto settingsNode = settings.BuildNode(ctx, pos);
-
-    auto read = Build<TKqlStreamLookupTable>(ctx, pos)
-        .Table(levelTable)
-        .LookupKeys(lookupKeys)
-        .Columns(levelColumns)
-        .Settings(settingsNode)
+    auto read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+        .Table(mainTable)
+        .Index().Build(indexDesc.Name)
+        .Columns(mainColumns)
+        .TargetVector(targetVector)
+        .TopK(top.Count())
+        .Settings(vectorSettings.BuildNode(ctx, pos))
         .Done().Ptr();
-
-    VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, settings.VectorTopLimit, settingsNode, read);
-
-    settings.VectorTopColumn = indexDesc.KeyColumns.back();
-    settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = withOverlap;
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())

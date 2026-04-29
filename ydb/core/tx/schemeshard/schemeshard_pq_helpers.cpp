@@ -33,6 +33,12 @@ bool BuildTopicCloudEventInfo(
     }
 
     info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
+    if (!workingDir.empty() && name == "streamImpl") {
+        TPath streamPath = TPath::Resolve(workingDir, context.SS);
+        if (streamPath.IsResolved() && streamPath.IsCdcStream()) {
+            info.TopicPath = workingDir;
+        }
+    }
 
     // Cloud / folder / database
     TPath dbPath = DatabasePathFromModifySchemeOperation(context.SS, operation);

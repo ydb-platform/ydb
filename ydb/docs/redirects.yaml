@@ -486,9 +486,6 @@ ru:
   - from: /maintenance/manual/cluster_expansion.md
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
-<<<<<<< HEAD
-    to: /concepts/datamodel/topic.md 
-=======
     to: /concepts/datamodel/topic.md
 
   - from: /concepts/query_execution.md
@@ -515,7 +512,6 @@ ru:
     to: /devops/backup-and-recovery/index.md
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
->>>>>>> aebbe3e3080 (Add system tablet backup docs (#38408))
 
 en:
   - from: /cluster/system-requirements.md

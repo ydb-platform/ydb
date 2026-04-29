@@ -33,6 +33,18 @@ All tests on this issue went green in CI before the deadline.
 """
 
 
+COMMENT_PROGRESS = """📊 **Fast-unmute progress**
+
+These tests are already unmuted in CI (removed from tracking):
+
+{unmuted_bullets}
+
+Other tests on this issue are still being monitored.
+
+🔗 [Workflow run]({workflow_run_url})
+"""
+
+
 COMMENT_ABANDON_NOT_COMPLETED = """🛑 **Fast-unmute stopped**
 
 Tracking was cancelled. **Status** → **Muted**.

@@ -33,7 +33,7 @@ bool TMinidumper::DumpCallback(const google_breakpad::MinidumpDescriptor& descri
             char* descriptorPath = succeeded ? (char *)descriptor.path() : (char *)"\0";  
             char* cmd[] = {Minidumper.Script.begin(), dumpSucceded, descriptorPath, NULL};  
             if (execve(cmd[0], &cmd[0], NULL)) {
-                fprintf(stderr, "Error while process BREAKPAD MINIDUMPS SCRIPT: execve(%s '%s' '%s' '%s'): %s\n", cmd[0], cmd[1], cmd[2], strerror(errno));
+                fprintf(stderr, "Error while process BREAKPAD MINIDUMPS SCRIPT: execve(%s '%s' '%s'): %s\n", cmd[0], cmd[1], cmd[2], strerror(errno));
             }
         }
     }

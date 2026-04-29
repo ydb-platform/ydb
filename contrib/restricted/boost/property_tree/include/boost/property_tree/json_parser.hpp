@@ -24,9 +24,9 @@ namespace boost { namespace property_tree { namespace json_parser
 {
 
     /**
-     * Read JSON from a the given stream and translate it to a property tree.
+     * Read JSON from the given stream and translate it to a property tree.
      * @note Clears existing contents of property tree.  In case of error the
-     *       property tree unmodified.
+     *       property tree is not modified.
      * @note Items of JSON arrays are translated into ptree keys with empty
      *       names. Members of objects are translated into named keys.
      * @note JSON data can be a string, a numeric value, or one of literals
@@ -47,9 +47,9 @@ namespace boost { namespace property_tree { namespace json_parser
     }
 
     /**
-     * Read JSON from a the given file and translate it to a property tree.
+     * Read JSON from the given file and translate it to a property tree.
      * @note Clears existing contents of property tree.  In case of error the
-     *       property tree unmodified.
+     *       property tree is not modified.
      * @note Items of JSON arrays are translated into ptree keys with empty
      *       names. Members of objects are translated into named keys.
      * @note JSON data can be a string, a numeric value, or one of literals
@@ -76,7 +76,7 @@ namespace boost { namespace property_tree { namespace json_parser
     }
 
     /**
-     * Translates the property tree to JSON and writes it the given output
+     * Translates the property tree to JSON and writes it to the given output
      * stream.
      * @note Any property tree key containing only unnamed subkeys will be
      *       rendered as JSON arrays.
@@ -85,7 +85,7 @@ namespace boost { namespace property_tree { namespace json_parser
      *                          to JSON or writing to the output stream.
      * @param stream The stream to which to write the JSON representation of the
      *               property tree.
-     * @param pt The property tree to tranlsate to JSON and output.
+     * @param pt The property tree to translate to JSON and output.
      * @param pretty Whether to pretty-print. Defaults to true for backward
      *               compatibility.
      */
@@ -100,7 +100,7 @@ namespace boost { namespace property_tree { namespace json_parser
     }
 
     /**
-     * Translates the property tree to JSON and writes it the given file.
+     * Translates the property tree to JSON and writes it to the given file.
      * @note Any property tree key containing only unnamed subkeys will be
      *       rendered as JSON arrays.
      * @pre @e pt cannot contain keys that have both subkeys and non-empty data.

@@ -458,7 +458,7 @@ namespace boost { namespace property_tree
         /** If the node identified by the path does not exist, create it,
          * including all its missing parents.
          * If the node already exists, add a sibling with the same key.
-         * Set the newly created node's value to the given paremeter,
+         * Set the newly created node's value to the given parameter,
          * translated with the supplied translator.
          * @param path Path to the child. The last fragment must not have an
          *             index.
@@ -475,7 +475,7 @@ namespace boost { namespace property_tree
         /** If the node identified by the path does not exist, create it,
          * including all its missing parents.
          * If the node already exists, add a sibling with the same key.
-         * Set the newly created node's value to the given paremeter,
+         * Set the newly created node's value to the given parameter,
          * translated with the supplied translator.
          * @param path Path to the child. The last fragment must not have an
          *             index.

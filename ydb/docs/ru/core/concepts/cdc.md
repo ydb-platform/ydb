@@ -289,6 +289,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
   * `retention_period`;
   * `retention_storage_mb`;
+  * `partition_write_burst_bytes`;
+  * `partition_write_speed_bytes_per_second`.
 
 * [управление читателями](../yql/reference/syntax/alter-topic.md#consumer).
 

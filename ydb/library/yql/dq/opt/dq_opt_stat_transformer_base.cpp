@@ -123,6 +123,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TDqBlockHashJoinCore::Match(input.Get())) {
         InferStatisticsForBlockHashJoin(input, TypeCtx, *Pctx, Hints);
     }
+    else if(TDqScalarHashJoinCore::Match(input.Get())) {
+        InferStatisticsForScalarHashJoin(input, TypeCtx, *Pctx, Hints);
+    }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
         InferStatisticsForDqJoinBase(input, TypeCtx, *Pctx, Hints);
     }

@@ -13,7 +13,7 @@ TRBOContext::TRBOContext(NOpt::TKqpOptimizeContext& kqpCtx, NYql::TExprContext& 
     , FuncRegistry(funcRegistry)
     , CBOCtx(kqpCtx, 
         kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()), 
-        kqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false))
+        kqpCtx.Config->GetUseBlockHashJoin() || kqpCtx.Config->GetUseScalarHashJoin())
     , ExecutionJson(std::nullopt)
     , ExplainJson(std::nullopt)
 {}

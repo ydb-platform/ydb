@@ -1384,6 +1384,7 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
+    bool useScalarHashJoin,
     bool blockHashJoinBuildSideLeft
 ) {
 
@@ -1751,11 +1752,41 @@ TExprBase DqBuildHashJoin(
         }
     }
 
+    static const std::set<std::string_view> blockHashJoinSupportedTypes = {"Inner"sv, "Left"sv, "LeftSemi"sv, "LeftOnly"sv};
+    const bool inBlockHashTypes = blockHashJoinSupportedTypes.contains(joinType);
+    const bool useScalarPath = useScalarHashJoin && inBlockHashTypes;
+    const bool useBlockPath = useBlockHashJoin && inBlockHashTypes && !useScalarPath;
+
     TExprNode::TPtr hashJoin;
     switch (mode) {
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
-            if (useBlockHashJoin) {
+            if (useScalarPath) {
+                TVector<TCoNameValueTuple> joinSettings;
+                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+                    joinSettings.push_back(
+                        Build<TCoNameValueTuple>(ctx, join.Pos())
+                            .Name().Build("BuildSide")
+                            .Value<TCoAtom>().Build("Left")
+                            .Done());
+                }
+
+                hashJoin = Build<TDqPhyScalarHashJoin>(ctx, join.Pos())
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
+                    .LeftLabel(join.LeftLabel())
+                    .RightLabel(join.RightLabel())
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
+                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                    .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Settings()
+                        .Add(joinSettings)
+                        .Build()
+                    .Done().Ptr();
+                break;
+            }
+            if (useBlockPath) {
                 TVector<TCoNameValueTuple> joinSettings;
                 if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
                     joinSettings.push_back(
@@ -2012,7 +2043,7 @@ TExprBase DqBuildHashJoin(
             ythrow yexception() << "Invalid hash join mode: " << mode;
     }
 
-    if (!useBlockHashJoin) {
+    if (!useBlockPath && !useScalarPath) {
         std::vector<TString> fullColNames;
         for (const auto& v: leftNames) {
             if (leftTableName.empty()) {

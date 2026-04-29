@@ -28,7 +28,7 @@ class TDqProgramBuilder : public TProgramBuilder {
                                   const TArrayRef<const ui32>& leftKeyColumns,
                                   const TArrayRef<const ui32>& rightKeyColumns,
                                   const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames,
-                                  TType* returnType);
+                                  TType* returnType, TBlockHashJoinSettings settings = {});
 
     TType* LastScalarIndexBlock();
 

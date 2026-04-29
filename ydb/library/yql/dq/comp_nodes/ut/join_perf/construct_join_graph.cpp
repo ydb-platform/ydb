@@ -317,7 +317,8 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(
                 ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind, descr.LeftSource.KeyColumnIndexes,
-                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType)));
+                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType),
+                joinSettings));
         }
         default:
             Y_ABORT("unreachable");

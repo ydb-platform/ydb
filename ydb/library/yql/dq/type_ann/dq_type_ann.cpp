@@ -668,6 +668,7 @@ public:
         : TVisitorTransformerBase(/* failOnUnknown */ true)
     {
         AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
+        AddHandler({TDqScalarHashJoinCore::CallableName()}, Hndl(&AnnotateDqScalarHashJoinCore)); // Handle ScalarHashJoinCore callable (from peephole)
         AddHandler({TDqStage::CallableName()}, Hndl(&AnnotateDqStage));
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&AnnotateDqPhyStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&AnnotateDqOutput));
@@ -697,6 +698,7 @@ public:
         AddHandler({
             TDqPhyGraceJoin::CallableName(),
             TDqPhyBlockHashJoin::CallableName(),
+            TDqPhyScalarHashJoin::CallableName(),
             TDqPhyMapJoin::CallableName(),
             TDqPhyJoinDict::CallableName(),
         }, Hndl(&AnnotateDqMapOrDictJoin));
@@ -1319,6 +1321,95 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     node->SetTypeAnn(MakeSequenceType(input->GetTypeAnn()->GetKind(), *ctx.MakeType<TStructExprType>(structItems), ctx));
     return TStatus::Ok;
+}
+
+TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 8, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    auto extractWideScalarMulti = [&](const TExprNode& inputNode, TTypeAnnotationNode::TListType& items) -> bool {
+        if (!EnsureWideFlowOrStreamType(inputNode, ctx)) {
+            return false;
+        }
+        const auto* ann = inputNode.GetTypeAnn();
+        const TMultiExprType* multi = nullptr;
+        if (ann->GetKind() == ETypeAnnotationKind::Flow) {
+            multi = ann->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+        } else {
+            multi = ann->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        }
+        if (!EnsureMultiType(inputNode.Pos(), *multi, ctx)) {
+            return false;
+        }
+        items = multi->GetItems();
+        for (const auto* itemType : items) {
+            if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                ctx.AddError(TIssue(ctx.GetPosition(inputNode.Pos()),
+                    "ScalarHashJoinCore expects scalar wide columns (non-block), got block column"));
+                return false;
+            }
+        }
+        return true;
+    };
+
+    TTypeAnnotationNode::TListType leftItemTypes;
+    if (!extractWideScalarMulti(leftInputNode, leftItemTypes)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    TTypeAnnotationNode::TListType rightItemTypes;
+    if (!extractWideScalarMulti(rightInputNode, rightItemTypes)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    for (auto itemType : leftItemTypes) {
+        resultItems.push_back(itemType);
+    }
+
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightItemTypes) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
+        }
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
 }
 
 TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {

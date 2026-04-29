@@ -77,6 +77,10 @@ struct TSchemaOperation {
     TString Error;
     ui64 BytesProcessed;
     ui64 RowsProcessed;
+    // Meaningful only when !Success; default true preserves the prior
+    // "all failures retriable" behavior. Propagated via TShardOpResult.Retriable
+    // so the SchemeShard orchestrator can short-circuit non-retriable failures.
+    bool Retriable = true;
 
     TScanState ScanState;
 

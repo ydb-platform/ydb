@@ -28,16 +28,36 @@ struct TEvIncrementalRestoreScan {
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
-        TEvFinished(ui64 txId, bool success = true, const TString& error = "")
+        TEvFinished(ui64 txId, bool success = true, const TString& error = "",
+                    bool retriable = true)
             : TxId(txId)
             , Success(success)
             , Error(error)
+            , Retriable(retriable)
         {}
         ui64 TxId = 0;
         bool Success = true;
         TString Error;
+        // Meaningful only when !Success. Default true preserves the prior
+        // "all failures retriable" behavior (also see TShardOpResult.Retriable
+        // for the on-wire equivalent).
+        bool Retriable = true;
     };
 };
+
+// Header-only classification helpers; usable from production code AND tests
+// without pulling additional schemeshard headers.
+inline bool IsScanSuccess(NTable::EStatus status) {
+    return status == NTable::EStatus::Done;
+}
+
+inline bool IsScanRetriable(NTable::EStatus status) {
+    // Operator/system actions (Term) and transient conditions (Aborted) are
+    // retriable. Lost/Exception/StorageError/anything else is treated as
+    // fatal — the next attempt would almost certainly hit the same condition.
+    return IsScanSuccess(status)
+        || status == NTable::EStatus::Term;
+}
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
         NActors::TActorId parent,

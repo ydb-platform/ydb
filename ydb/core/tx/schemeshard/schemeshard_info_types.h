@@ -184,13 +184,20 @@ struct TIncrementalRestoreSettings {
     // Sentinel -1 = unbounded (mirrors TSplitSettings::SplitMergePartCountLimit).
     TControlWrapper MaxIncrementalRestoreTablesInFlight;
 
+    // Per-incremental retry budget. Sentinel -1 = unlimited. Default 50 mirrors
+    // the Index Build orchestrator's default retry budget.
+    TControlWrapper MaxIncrementalRestoreRetriesPerIncremental;
+
     TIncrementalRestoreSettings()
         : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
+        , MaxIncrementalRestoreRetriesPerIncremental(50, -1, 1000)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
         TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
                                              icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreRetriesPerIncremental,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
     }
 };
 
@@ -3706,6 +3713,14 @@ struct TIncrementalRestoreState {
             return !FailedShards.empty();
         }
 
+        // Sticky per-table flag set when any shard reported a non-retriable
+        // failure for this operation. Cleared together with the rest of
+        // TableOperations on advance to the next incremental (via
+        // MoveToNextIncremental → TableOperations.clear()). Lives inside the
+        // per-table record (NOT a sibling set) so a non-retriable bit cannot
+        // race past CheckForCompletedOperations and be lost.
+        bool HasNonRetriableFailure = false;
+
         // Idempotent against re-delivery. Returns true on the first terminal
         // report for this shard, false if the shard was already recorded as
         // success or failure. The first report wins; later reports — common in
@@ -3714,7 +3729,7 @@ struct TIncrementalRestoreState {
         // This guards the AllShardsComplete() sum invariant against double-
         // counting that would happen if the same shardIdx ever landed in both
         // sets.
-        bool RecordShardResult(TShardIdx shardIdx, bool success) {
+        bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {
             if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
                 return false;
             }
@@ -3722,6 +3737,9 @@ struct TIncrementalRestoreState {
                 CompletedShards.insert(shardIdx);
             } else {
                 FailedShards.insert(shardIdx);
+                if (!retriable) {
+                    HasNonRetriableFailure = true;
+                }
             }
             return true;
         }
@@ -3761,7 +3779,27 @@ struct TIncrementalRestoreState {
     // not "wasted" attempts).
     ui32 CurrentIncrementalRetryCount = 0;
 
-    // Maximum retry attempts per incremental before giving up
+    // Two-phase backoff guard. Set when a TEvProgressIncrementalRestore is
+    // scheduled with a backoff delay. Cleared when that scheduled event arrives
+    // and runs the retry body, OR on advance/Failed transition. Concurrent
+    // completion notifications that arrive while a retry is already scheduled
+    // bail out without incrementing the counter — this keeps
+    // CurrentIncrementalRetryCount accurate when many shards fail at once.
+    // Transient (in-memory only); reboot resets it.
+    bool RetryScheduled = false;
+
+    // Diagnostic timestamp of the next scheduled retry attempt. Not used as a
+    // gate (RetryScheduled is the gate). Transient (reboot resets it).
+    TInstant NextRetryAttemptAt;
+
+    // Sticky-within-incremental flag set by CheckForCompletedOperations when
+    // any per-table operation reports a non-retriable failure. Cleared on
+    // advance to next incremental. Transient (in-memory only).
+    bool NonRetriableFailure = false;
+
+    // Maximum retry attempts per incremental before giving up. ADVISORY mirror —
+    // the runtime value comes from
+    // SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental (ICB).
     static constexpr ui32 MaxRetriesPerIncremental = 5;
 
     // Operation completion tracking for current incremental backup
@@ -3827,12 +3865,15 @@ struct TIncrementalRestoreState {
             // Reset operation tracking for next incremental
             InProgressOperations.clear();
             CompletedOperations.clear();
-            TableOperations.clear();
+            TableOperations.clear();      // also clears HasNonRetriableFailure on each table
             PendingTables.clear();
             // Note: We don't clear InvolvedShards as it accumulates across all incrementals
 
-            // Reset retry budget for the new incremental
+            // Reset retry budget and backoff/failure state for the new incremental
             CurrentIncrementalRetryCount = 0;
+            RetryScheduled = false;
+            NextRetryAttemptAt = TInstant::Zero();
+            NonRetriableFailure = false;
         }
     }
 

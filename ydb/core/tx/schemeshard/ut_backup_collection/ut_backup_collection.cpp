@@ -2,6 +2,9 @@
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/datashard/incr_restore_scan.h>  // IsScanSuccess / IsScanRetriable
+#include <ydb/core/tx/datashard/scan_common.h>  // GetRetryWakeupTimeoutBackoff
+#include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/printf.h>
@@ -3509,12 +3512,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         using TState = TIncrementalRestoreState;
         using TPending = TState::TPendingRestoreOp;
 
-        // Local mirror of the DispatchPendingTables drain loop. The real helper
-        // also calls into schemeshard maps; here we just count how many entries
-        // the cap permits to drain before stopping.
-        // nextOpIdSeq is captured by reference so each drain() call generates
-        // unique TOperationIds across invocations (a per-call counter would
-        // produce collisions that THashSet deduplicates).
+        // Local mirror of DispatchPendingTables; nextOpIdSeq is by-ref so unique
+        // TOperationIds are generated across drain() invocations.
         ui64 nextOpIdSeq = 9000;
         auto drain = [&nextOpIdSeq](TState& s, i64 cap) -> ui32 {
             ui32 dispatched = 0;
@@ -3617,6 +3616,47 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(
             op.CompletedShards.size() + op.FailedShards.size(),
             op.ExpectedShards.size());
+    }
+
+    // Unit test: documents the expected exponential backoff sequence for the
+    // shared NDataShard::GetRetryWakeupTimeoutBackoff helper. Acts as a guard
+    // rail for upstream changes to the helper.
+    Y_UNIT_TEST(IncrementalRestoreBackoffSchedule) {
+        // Per scan_common.h: TDuration::Seconds(1u << Min(attempt, 3))
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(0), TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(1), TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(2), TDuration::Seconds(4));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(3), TDuration::Seconds(8));
+        // Plateau at 8s for any attempt >= 3.
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(4), TDuration::Seconds(8));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(5), TDuration::Seconds(8));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(6), TDuration::Seconds(8));
+    }
+
+    // Unit test: documents the IsScanSuccess / IsScanRetriable mapping over the
+    // public NTable::EStatus values. If new values are added upstream, this
+    // test forces a conscious decision about their classification.
+    Y_UNIT_TEST(IncrementalRestoreScanStatusToRetriable) {
+        using NKikimr::NTable::EStatus;
+        using NKikimr::NDataShard::IsScanSuccess;
+        using NKikimr::NDataShard::IsScanRetriable;
+
+        // Done is the only success.
+        UNIT_ASSERT(IsScanSuccess(EStatus::Done));
+        UNIT_ASSERT(IsScanRetriable(EStatus::Done));  // success implies retriable
+
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
+        UNIT_ASSERT(!IsScanRetriable(EStatus::Lost));
+
+        // Operator-issued termination is retriable (the operator may re-issue).
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Term));
+        UNIT_ASSERT(IsScanRetriable(EStatus::Term));
+
+        UNIT_ASSERT(!IsScanSuccess(EStatus::StorageError));
+        UNIT_ASSERT(!IsScanRetriable(EStatus::StorageError));
+
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Exception));
+        UNIT_ASSERT(!IsScanRetriable(EStatus::Exception));
     }
 
 } // TBackupCollectionTests

@@ -194,19 +194,23 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         LOG_D("Finish " << status);
 
-        const bool success = (status == EStatus::Done);
+        const bool success = IsScanSuccess(status);
+        const bool retriable = IsScanRetriable(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
             // Failure status is propagated via TEvFinished -> schemeOp->Success -> OpResult
-            // -> SchemeShard detects and retries the current incremental
-            LOG_E("IncrementalRestoreScan finished with error status: " << status);
+            // -> SchemeShard detects and retries the current incremental.
+            // The Retriable flag lets non-retriable failures short-circuit the
+            // retry loop instead of consuming the budget.
+            LOG_E("IncrementalRestoreScan finished with error status: " << status
+                  << " retriable=" << retriable);
         }
 
         TString errorMsg;
         if (!success) {
             errorMsg = TStringBuilder() << "Scan finished with status: " << status;
         }
-        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg));
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg, retriable));
 
         PassAway();
         return nullptr;

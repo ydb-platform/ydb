@@ -1601,6 +1601,11 @@ message TImmediateControlsConfig {
             MinValue: -1,
             MaxValue: 1000000,
             DefaultValue: 32 }];
+        optional int64 MaxIncrementalRestoreRetriesPerIncremental = 17 [(ControlOptions) = {
+            Description: "Max retry attempts per incremental in incremental restore. -1 disables the cap.",
+            MinValue: -1,
+            MaxValue: 1000,
+            DefaultValue: 50 }];
     }
 
     message TTCMallocControls {

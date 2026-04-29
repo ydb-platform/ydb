@@ -1671,6 +1671,7 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             result->SetExplain(op->Error);
             result->SetBytesProcessed(op->BytesProcessed);
             result->SetRowsProcessed(op->RowsProcessed);
+            result->SetRetriable(op->Retriable);
             break;
         }
         default:

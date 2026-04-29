@@ -34,6 +34,7 @@ public:
             case TIncrementalRestoreState::EState::Failed:
                 restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
                 restore.SetProgressPercent(100);
+                restore.SetStatus(Ydb::StatusIds::GENERIC_ERROR);  // overrides SUCCESS default
                 break;
             case TIncrementalRestoreState::EState::Finalizing:
                 restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);

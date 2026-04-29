@@ -2,6 +2,7 @@
 #include "schemeshard__backup_collection_common.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/datashard/scan_common.h>  // GetRetryWakeupTimeoutBackoff
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -78,11 +79,22 @@ public:
               
         if (state.AreAllCurrentOperationsComplete()) {
             if (state.RetryNeeded) {
-                if (state.CurrentIncrementalRetryCount >= TIncrementalRestoreState::MaxRetriesPerIncremental) {
+                const i64 cap = Self->IncrementalRestoreSettings.MaxIncrementalRestoreRetriesPerIncremental;
+                // Skip budget check while a retry is in flight — count is
+                // incremented at scheduling time, so re-entries between schedule
+                // and run would otherwise fail prematurely.
+                const bool budgetExceeded = (cap != -1)
+                    && !state.RetryScheduled
+                    && (i64)state.CurrentIncrementalRetryCount >= cap;
+                if (state.NonRetriableFailure || budgetExceeded) {
                     LOG_E("Incremental #" << state.CurrentIncrementalIdx
-                          << " exceeded retry budget (" << TIncrementalRestoreState::MaxRetriesPerIncremental
-                          << "), marking restore as Failed");
+                          << " short-circuiting to Failed: nonRetriable="
+                          << state.NonRetriableFailure
+                          << " retryCount=" << state.CurrentIncrementalRetryCount
+                          << " cap=" << cap);
                     state.State = TIncrementalRestoreState::EState::Failed;
+                    state.RetryScheduled = false;
+                    state.NextRetryAttemptAt = TInstant::Zero();
                     db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                         NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
                     );
@@ -91,26 +103,55 @@ public:
                     return true;
                 }
 
+                // Two-phase backoff: Phase 1 (!RetryScheduled) increments counter +
+                // schedules timer; Phase 2 (timer fired) re-dispatches; concurrent
+                // completion events arriving mid-window bail out without double-counting.
+                if (state.RetryScheduled) {
+                    if (ctx.Now() < state.NextRetryAttemptAt) {
+                        LOG_I("Backoff window in flight for incremental #"
+                              << state.CurrentIncrementalIdx
+                              << " (retry " << state.CurrentIncrementalRetryCount
+                              << ", until " << state.NextRetryAttemptAt
+                              << "), skipping concurrent retry trigger");
+                        return true;
+                    }
+
+                    // Phase 2: timer event has arrived. Drain into the retry body.
+                    LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
+                          << ", proceeding with retry attempt " << state.CurrentIncrementalRetryCount);
+                    state.RetryScheduled = false;
+                    state.NextRetryAttemptAt = TInstant::Zero();
+                    state.RetryNeeded = false;
+
+                    // Reset operation tracking for retry (don't advance index)
+                    state.InProgressOperations.clear();
+                    state.CompletedOperations.clear();
+                    state.PendingTables.clear();
+                    state.CurrentIncrementalStarted = false;
+
+                    // Persist cleared state
+                    TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
+                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
+                    );
+
+                    // Retry: process same incremental again
+                    ProcessNextIncrementalBackup(state, ctx);
+                    return true;
+                }
+
+                // Phase 1: schedule the backoff.
                 state.CurrentIncrementalRetryCount++;
+                auto delay = NDataShard::GetRetryWakeupTimeoutBackoff(state.CurrentIncrementalRetryCount);
+                state.NextRetryAttemptAt = ctx.Now() + delay;
+                state.RetryScheduled = true;
                 LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
                       << ", retry attempt " << state.CurrentIncrementalRetryCount
-                      << "/" << TIncrementalRestoreState::MaxRetriesPerIncremental);
-
-                // Reset operation tracking for retry (don't advance index)
-                state.InProgressOperations.clear();
-                state.CompletedOperations.clear();
-                state.PendingTables.clear();
-                state.CurrentIncrementalStarted = false;
-                state.RetryNeeded = false;
-
-                // Persist cleared state
-                TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
-                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
-                );
-
-                // Retry: process same incremental again
-                ProcessNextIncrementalBackup(state, ctx);
+                      << "/" << (cap == -1 ? "unlimited" : ToString(cap))
+                      << " scheduled in " << delay);
+                Self->Schedule(delay,
+                    new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
+                return true;
             } else {
                 LOG_I("All operations for current incremental backup completed, moving to next");
                 state.MarkCurrentIncrementalComplete();
@@ -239,6 +280,19 @@ private:
 
         state.InProgressOperations = std::move(stillInProgress);
         state.RetryNeeded |= hasFailedOperations;
+
+        // Roll up the non-retriable bit from per-table state. Sticky within
+        // the current incremental — once any table reports a non-retriable
+        // failure, the orchestrator must short-circuit to Failed instead of
+        // burning the retry budget.
+        if (!state.NonRetriableFailure) {
+            for (const auto& [_, tableOp] : state.TableOperations) {
+                if (tableOp.HasNonRetriableFailure) {
+                    state.NonRetriableFailure = true;
+                    break;
+                }
+            }
+        }
 
         // If operations were completed, update the persisted state
         if (operationsCompleted) {

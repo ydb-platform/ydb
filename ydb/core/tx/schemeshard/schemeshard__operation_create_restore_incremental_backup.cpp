@@ -21,10 +21,19 @@ void TrackIncrementalRestoreShardReply(
 {
     const auto& record = ev->Get()->Record;
     bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
+    // Backward-compat default for the Retriable bit: when the field is absent
+    // (old DataShard talking to new SchemeShard during a rolling upgrade),
+    // treat the failure as retriable. Otherwise an old DS's failure would
+    // silently turn into a non-retriable short-circuit.
+    bool retriable = !failed
+        || !record.HasOpResult()
+        || !record.GetOpResult().HasRetriable()
+        || record.GetOpResult().GetRetriable();
     if (failed) {
         context.SS->FailedIncrementalRestoreOperations.insert(operationId);
         LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            debugHint << " Shard reported failure: " << record.GetOpResult().GetExplain());
+            debugHint << " Shard reported failure: " << record.GetOpResult().GetExplain()
+                      << " retriable=" << retriable);
     }
 
     auto tabletId = TTabletId(record.GetOrigin());
@@ -44,7 +53,7 @@ void TrackIncrementalRestoreShardReply(
     if (opIt == restoreIt->second.TableOperations.end()) {
         return;
     }
-    opIt->second.RecordShardResult(*shardIdx, !failed);
+    opIt->second.RecordShardResult(*shardIdx, !failed, retriable);
 }
 
 } // anonymous namespace

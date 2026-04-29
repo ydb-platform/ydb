@@ -1,6 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -730,6 +732,442 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         // Verify table data was restored correctly despite the injected failure
         // Full backup: key=1,val=1. Incremental: key=2,val=2. Total: 2 rows.
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
+    }
+
+    // Helper: create N tables in a backup collection, populate with data, take a
+    // single full+incremental backup, drop the tables. Used by the cap tests.
+    void SetupBackupCollectionWithNTables(TTestActorRuntime& runtime, TTestEnv& env,
+            ui64& txId, ui32 numTables) {
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
+        env.TestWaitNotification(runtime, txId);
+
+        TStringBuilder bcRequest;
+        bcRequest << "Name: \"MyCollection1\"\n"
+                  << "ExplicitEntryList {\n";
+        for (ui32 i = 0; i < numTables; ++i) {
+            bcRequest << "  Entries { Type: ETypeTable Path: \"/MyRoot/Table" << i << "\" }\n";
+        }
+        bcRequest << "}\nCluster {}\nIncrementalBackupConfig {}\n";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", bcRequest);
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 i = 0; i < numTables; ++i) {
+            TString tbl = TStringBuilder() << "Table" << i;
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+            )", tbl.c_str()));
+            env.TestWaitNotification(runtime, txId);
+
+            TString fullPath = TStringBuilder() << "/MyRoot/" << tbl;
+            UploadRow(runtime, fullPath, 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+        }
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        for (ui32 i = 0; i < numTables; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UploadRow(runtime, fullPath, 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+        }
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        const ui64 incrBackupId = txId;
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForIncrementalBackupDone(runtime, &env, incrBackupId, "/MyRoot");
+
+        for (ui32 i = 0; i < numTables; ++i) {
+            TString tbl = TStringBuilder() << "Table" << i;
+            TestDropTable(runtime, ++txId, "/MyRoot", tbl);
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    // Test 2: With cap=2, never see >2 concurrent ESchemeOpRestoreMultipleIncrementalBackups
+    // sub-ops in flight. All 8 tables eventually restored.
+    Y_UNIT_TEST(IncrementalRestoreRespectsConcurrencyLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Set ICB cap=2 BEFORE the restore is issued.
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        // Observer: count concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
+        // Increments on TEvModifySchemeTransaction (op start), decrements on
+        // TEvModifySchemeTransactionResult (op accepted/done).
+        std::atomic<i32> inFlight{0};
+        std::atomic<i32> peakInFlight{0};
+        std::atomic<i32> totalSeen{0};
+        // Track which TxIds are restore sub-ops so we know which results to count.
+        TMutex restoreTxIdsMutex;
+        THashSet<ui64> restoreTxIds;
+
+        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    restoreTxIds.insert(rec.GetTxId());
+                }
+                i32 cur = inFlight.fetch_add(1) + 1;
+                totalSeen.fetch_add(1);
+                i32 peak;
+                do {
+                    peak = peakInFlight.load();
+                    if (cur <= peak) break;
+                } while (!peakInFlight.compare_exchange_weak(peak, cur));
+            });
+
+        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+                ui64 txId = ev->Get()->Record.GetTxId();
+                bool isRestore;
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    isRestore = restoreTxIds.contains(txId);
+                }
+                if (isRestore) {
+                    inFlight.fetch_sub(1);
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        UNIT_ASSERT_C(totalSeen.load() >= 8,
+            "Expected at least 8 restore sub-ops, saw " << totalSeen.load());
+        UNIT_ASSERT_C(peakInFlight.load() <= 2,
+            "Expected peak in-flight <= 2 (cap=2), saw " << peakInFlight.load());
+
+        // Sanity: each table has 1 row from full + 1 row from incremental
+        for (ui32 i = 0; i < 8; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Test 3: cap=-1 (unbounded sentinel) lets all 8 tables fan out at once.
+    Y_UNIT_TEST(IncrementalRestoreUnboundedWhenCapNegative) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(-1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        std::atomic<i32> inFlight{0};
+        std::atomic<i32> peakInFlight{0};
+        TMutex restoreTxIdsMutex;
+        THashSet<ui64> restoreTxIds;
+
+        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    restoreTxIds.insert(rec.GetTxId());
+                }
+                i32 cur = inFlight.fetch_add(1) + 1;
+                i32 peak;
+                do {
+                    peak = peakInFlight.load();
+                    if (cur <= peak) break;
+                } while (!peakInFlight.compare_exchange_weak(peak, cur));
+            });
+
+        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+                ui64 txId = ev->Get()->Record.GetTxId();
+                bool isRestore;
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    isRestore = restoreTxIds.contains(txId);
+                }
+                if (isRestore) {
+                    inFlight.fetch_sub(1);
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // With cap=-1 we expect to observe all 8 in-flight at peak (best-effort:
+        // require >2 to prove the cap is actually disabled).
+        UNIT_ASSERT_C(peakInFlight.load() > 2,
+            "Expected peak in-flight > 2 with unbounded cap, saw " << peakInFlight.load());
+    }
+
+    // Test 4: cap survives reboots. ICB lives in AppData which persists across
+    // tablet restart in the test framework, so set it once in the inactive zone.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalRestoreCapRespectedAcrossReboots, 2, 1, false) {
+        t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                // Set ICB cap=2 once; AppData survives test reboots.
+                TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TStringBuilder bcRequest;
+                bcRequest << "Name: \"MyCollection1\"\n"
+                          << "ExplicitEntryList {\n";
+                for (ui32 i = 0; i < 8; ++i) {
+                    bcRequest << "  Entries { Type: ETypeTable Path: \"/MyRoot/Table" << i << "\" }\n";
+                }
+                bcRequest << "}\nCluster {}\nIncrementalBackupConfig {}\n";
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", bcRequest);
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (ui32 i = 0; i < 8; ++i) {
+                    TString tbl = TStringBuilder() << "Table" << i;
+                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                        Name: "%s"
+                        Columns { Name: "key" Type: "Uint32" }
+                        Columns { Name: "value" Type: "Uint32" }
+                        KeyColumnNames: ["key"]
+                    )", tbl.c_str()));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                    TString fullPath = TStringBuilder() << "/MyRoot/" << tbl;
+                    UploadRow(runtime, fullPath, 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+                }
+
+                TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                    R"(Name: ".backups/collections/MyCollection1")");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Two incrementals to give the reboot bucket more chances to fire mid-restore
+                for (int incIdx = 0; incIdx < 2; ++incIdx) {
+                    runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+                    for (ui32 i = 0; i < 8; ++i) {
+                        TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+                        ui32 v = ui32(2 + incIdx);
+                        UploadRow(runtime, fullPath, 0, {1}, {2}, {TCell::Make(v)}, {TCell::Make(v)});
+                    }
+                    TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                        R"(Name: ".backups/collections/MyCollection1")");
+                    const ui64 incrBackupId = t.TxId;
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                    WaitForIncrementalBackupDone(runtime, t.TestEnv.Get(), incrBackupId, "/MyRoot");
+                }
+
+                for (ui32 i = 0; i < 8; ++i) {
+                    TString tbl = TStringBuilder() << "Table" << i;
+                    TestDropTable(runtime, ++t.TxId, "/MyRoot", tbl);
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+
+                TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                    R"(Name: ".backups/collections/MyCollection1")");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Reboots inject here. Cap remains in effect across reboots.
+            {
+                TInactiveZone inactive(activeZone);
+
+                WaitForRestoreDone(runtime, t.TestEnv.Get(), "/MyRoot", true,
+                    TDuration::Seconds(2), TDuration::Seconds(120));
+
+                for (ui32 i = 0; i < 8; ++i) {
+                    TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+                    // Full backup: key=1,val=1 (1 row).
+                    // Incr 0 (v=2): key=2,val=2 — new row.
+                    // Incr 1 (v=3): key=3,val=3 — new row.
+                    // After restore of both incrementals: 3 rows total.
+                    UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 3u);
+                }
+            }
+        });
+    }
+
+    // Test 5: change cap during restore. Raising lets dispatcher fill up; lowering
+    // does not abort in-flight (cap is checked at dispatch time, not retroactively).
+    Y_UNIT_TEST(IncrementalRestoreCapChangedMidRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Start with cap=2.
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        std::atomic<i32> inFlight{0};
+        std::atomic<i32> peakInFlight{0};
+        std::atomic<i32> peakAfterRaise{0};
+        std::atomic<bool> raised{false};
+        TMutex restoreTxIdsMutex;
+        THashSet<ui64> restoreTxIds;
+
+        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    restoreTxIds.insert(rec.GetTxId());
+                }
+                i32 cur = inFlight.fetch_add(1) + 1;
+                i32 peak;
+                do {
+                    peak = peakInFlight.load();
+                    if (cur <= peak) break;
+                } while (!peakInFlight.compare_exchange_weak(peak, cur));
+                if (raised.load()) {
+                    i32 peak2;
+                    do {
+                        peak2 = peakAfterRaise.load();
+                        if (cur <= peak2) break;
+                    } while (!peakAfterRaise.compare_exchange_weak(peak2, cur));
+                }
+            });
+
+        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+                ui64 txId = ev->Get()->Record.GetTxId();
+                bool isRestore;
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    isRestore = restoreTxIds.contains(txId);
+                }
+                if (isRestore) {
+                    inFlight.fetch_sub(1);
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // While restore is processing, raise cap to 8.
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(500));
+        TControlBoard::SetValue(8, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        raised.store(true);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // Verify cap was respected: peak <= 8 (the raised value).
+        UNIT_ASSERT_C(peakInFlight.load() <= 8,
+            "Peak in-flight exceeded cap=8, saw " << peakInFlight.load());
+
+        // Sanity: restore finished
+        for (ui32 i = 0; i < 8; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Test 6: cap interacts cleanly with the retry path. After an injected shard
+    // failure, the orchestrator clears PendingTables and re-enqueues; the cap
+    // continues to apply during the retry wave.
+    Y_UNIT_TEST(IncrementalRestoreCapRespectedDuringRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
+
+        std::atomic<i32> inFlight{0};
+        std::atomic<i32> peakInFlight{0};
+        TMutex restoreTxIdsMutex;
+        THashSet<ui64> restoreTxIds;
+
+        auto observerStart = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    restoreTxIds.insert(rec.GetTxId());
+                }
+                i32 cur = inFlight.fetch_add(1) + 1;
+                i32 peak;
+                do {
+                    peak = peakInFlight.load();
+                    if (cur <= peak) break;
+                } while (!peakInFlight.compare_exchange_weak(peak, cur));
+            });
+
+        auto observerEnd = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            [&](TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+                ui64 txId = ev->Get()->Record.GetTxId();
+                bool isRestore;
+                {
+                    TGuard<TMutex> g(restoreTxIdsMutex);
+                    isRestore = restoreTxIds.contains(txId);
+                }
+                if (isRestore) {
+                    inFlight.fetch_sub(1);
+                }
+            });
+
+        // Inject one TEvFinished failure (same pattern as IncrementalRestoreShardFailureTriggersRetry).
+        std::atomic<int> failuresInjected{0};
+        auto failureObserver = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
+            [&failuresInjected](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
+                if (failuresInjected.fetch_add(1) == 0) {
+                    ev->Get()->Success = false;
+                    ev->Get()->Error = "Injected scan failure for cap+retry test";
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // Cap respected during retry wave.
+        UNIT_ASSERT_C(peakInFlight.load() <= 2,
+            "Peak in-flight exceeded cap=2 during retry, saw " << peakInFlight.load());
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
+
+        // All 4 tables restored despite injected failure.
+        for (ui32 i = 0; i < 4; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests)

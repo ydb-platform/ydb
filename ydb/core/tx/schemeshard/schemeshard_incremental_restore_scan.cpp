@@ -99,6 +99,7 @@ public:
                 // Reset operation tracking for retry (don't advance index)
                 state.InProgressOperations.clear();
                 state.CompletedOperations.clear();
+                state.PendingTables.clear();
                 state.CurrentIncrementalStarted = false;
                 state.RetryNeeded = false;
 
@@ -137,7 +138,10 @@ public:
                 ProcessNextIncrementalBackup(state, ctx);
             }
         } else if (!state.InProgressOperations.empty()) {
-            // Still have operations in progress, schedule another check
+            // Fallback heartbeat. The hot path is the immediate ctx.Send in
+            // NotifyIncrementalRestoreOperationCompleted (fires per completion);
+            // this 1s heartbeat covers the case where a completion notification
+            // was missed or the operation pipeline is otherwise quiet.
             auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
             Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
         } else {
@@ -240,6 +244,13 @@ private:
         if (operationsCompleted) {
             SetCompletedOperationsChanged(true);
         }
+
+        // Top-up the in-flight set: any sub-ops that finished free up capacity
+        // for queued PendingTables entries. Skip if we're about to retry
+        // (retry path will clear and re-populate the queue).
+        if (!state.RetryNeeded) {
+            Self->DispatchPendingTables(state, OperationId, ctx);
+        }
     }
     
     void ProcessNextIncrementalBackup(TIncrementalRestoreState& state, const TActorContext& ctx) {
@@ -248,20 +259,26 @@ private:
             LOG_I("No more incremental backups to process");
             return;
         }
-        
-        LOG_I("Processing incremental backup #" << state.CurrentIncrementalIdx + 1 
+
+        LOG_I("Processing incremental backup #" << state.CurrentIncrementalIdx + 1
             << " path: " << currentIncremental->BackupPath
             << " timestamp: " << currentIncremental->Timestamp);
-        
-        Self->CreateIncrementalRestoreOperation(
+
+        // Populate the dispatch queue with one TPendingRestoreOp per table (and per
+        // index impl-table). Both kinds share the cap so indexes don't fan out
+        // unbounded. The actual sub-op creation happens in DispatchPendingTables,
+        // throttled by ICB SchemeShardControls.MaxIncrementalRestoreTablesInFlight.
+        Self->EnqueueIncrementalRestoreOperations(
             state.BackupCollectionPathId,
             OperationId,
             currentIncremental->BackupPath,
             ctx
         );
-        
+
         state.CurrentIncrementalStarted = true;
-        
+
+        Self->DispatchPendingTables(state, OperationId, ctx);
+
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
     }
@@ -432,27 +449,39 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, c
     Execute(new TTxProgressIncrementalRestore(this, operationId), ctx);
 }
 
-// Create a MultiIncrementalRestore operation for a single incremental backup
-void TSchemeShard::CreateIncrementalRestoreOperation(
+// Enumerate the per-table and per-index sub-ops for a single incremental backup
+// and push them onto the orchestrator's PendingTables queue. Actual dispatch is
+// throttled in DispatchPendingTables.
+//
+// Cap unit is per sub-op (one per table or per index impl-table), not per raw shard.
+// This mirrors the Index Build orchestrator pattern at the unit incremental restore
+// actually controls.
+void TSchemeShard::EnqueueIncrementalRestoreOperations(
     const TPathId& backupCollectionPathId,
-    ui64 operationId, 
+    ui64 operationId,
     const TString& backupName,
     const TActorContext& ctx) {
-    
-    LOG_I("CreateIncrementalRestoreOperation for backup: " << backupName 
+
+    LOG_I("EnqueueIncrementalRestoreOperations for backup: " << backupName
           << " operationId: " << operationId
           << " backupCollectionPathId: " << backupCollectionPathId);
-    
-    // Find the backup collection to get restore settings
+
     auto itBc = BackupCollections.find(backupCollectionPathId);
     if (itBc == BackupCollections.end()) {
         LOG_E("Backup collection not found for pathId: " << backupCollectionPathId);
         return;
     }
-    
+
+    auto stateIt = IncrementalRestoreStates.find(operationId);
+    if (stateIt == IncrementalRestoreStates.end()) {
+        LOG_E("Incremental restore state not found for operation: " << operationId);
+        return;
+    }
+
     const auto& backupCollectionInfo = itBc->second;
     const auto& bcPath = TPath::Init(backupCollectionPathId, this);
-    
+
+    // Enqueue table sub-ops
     for (const auto& item : backupCollectionInfo->Description.GetExplicitEntryList().GetEntries()) {
         std::pair<TString, TString> paths;
         TString err;
@@ -460,67 +489,26 @@ void TSchemeShard::CreateIncrementalRestoreOperation(
             LOG_E("Failed to split path: " << err);
             continue;
         }
-        
+
         auto& relativeItemPath = paths.second;
-        
         TString incrBackupPathStr = JoinPath({bcPath.PathString(), backupName + "_incremental", relativeItemPath});
         const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, this);
-        
-        if (incrBackupPath.IsResolved()) {
-            LOG_I("Creating separate restore operation for table: " << incrBackupPathStr << " -> " << item.GetPath());
-            
-            auto tableRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
-            auto& tableRecord = tableRequest->Record;
-            
-            TTxId tableTxId = GetCachedTxId(ctx);
-            tableRecord.SetTxId(ui64(tableTxId));
-            
-            auto& tableTx = *tableRecord.AddTransaction();
-            tableTx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
-            tableTx.SetInternal(true);
-            tableTx.SetWorkingDir(bcPath.PathString());
 
-            auto& tableRestore = *tableTx.MutableRestoreMultipleIncrementalBackups();
-            
-            tableRestore.AddSrcTablePaths(incrBackupPathStr);
-            
-            tableRestore.SetDstTablePath(item.GetPath());
-            
-            TOperationId tableRestoreOpId(tableTxId, 0);
-            IncrementalRestoreOperationToState[tableRestoreOpId] = operationId;
-            TxIdToIncrementalRestore[tableTxId] = operationId;
-            
-            auto stateIt = IncrementalRestoreStates.find(operationId);
-            if (stateIt != IncrementalRestoreStates.end()) {
-                stateIt->second.InProgressOperations.insert(tableRestoreOpId);
-                
-                auto& tableOpState = stateIt->second.TableOperations[tableRestoreOpId];
-                tableOpState.OperationId = tableRestoreOpId;
-                
-                TPath itemPath = TPath::Resolve(item.GetPath(), this);
-                if (itemPath.IsResolved() && itemPath.Base()->IsTable()) {
-                    auto tableInfo = Tables.FindPtr(itemPath.Base()->PathId);
-                    if (tableInfo) {
-                        for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
-                            tableOpState.ExpectedShards.insert(shardIdx);
-                            stateIt->second.InvolvedShards.insert(shardIdx);
-                        }
-                        LOG_I("Table operation " << tableRestoreOpId << " expects " << tableOpState.ExpectedShards.size() << " shards");
-                    }
-                }
-                
-                LOG_I("Tracking operation " << tableRestoreOpId << " for incremental restore " << operationId);
-            }
-            
-            LOG_I("Sending MultiIncrementalRestore operation for table: " << item.GetPath());
-            Send(SelfId(), tableRequest.Release());
-        } else {
+        if (!incrBackupPath.IsResolved()) {
             LOG_W("Incremental backup path not found: " << incrBackupPathStr);
+            continue;
         }
+
+        TIncrementalRestoreState::TPendingRestoreOp pending;
+        pending.Kind = TIncrementalRestoreState::TPendingRestoreOp::EKind::Table;
+        pending.BackupName = backupName;
+        pending.TablePath = item.GetPath();
+        stateIt->second.PendingTables.push_back(std::move(pending));
+        LOG_I("Enqueued table sub-op for: " << item.GetPath());
     }
 
-    // Discover and create index restore operations in parallel
-    DiscoverAndCreateIndexRestoreOperations(
+    // Enqueue index sub-ops (discovers indexes from the backup metadata tree)
+    EnqueueAndDiscoverIndexRestoreOperations(
         backupCollectionPathId,
         operationId,
         backupName,
@@ -529,7 +517,129 @@ void TSchemeShard::CreateIncrementalRestoreOperation(
         ctx
     );
 
-    LOG_I("Created separate restore operations for incremental backup: " << backupName);
+    LOG_I("Enqueued " << stateIt->second.PendingTables.size()
+          << " sub-ops for incremental backup: " << backupName);
+}
+
+// Pull PendingTables into in-flight up to the ICB cap. Moving-window dispatch:
+// invoked at initial fan-out (ProcessNextIncrementalBackup) AND after every single
+// completion (CheckForCompletedOperations, reached via the immediate
+// NotifyIncrementalRestoreOperationCompleted -> TEvProgressIncrementalRestore
+// path). Each call refills the window — there is no wave/batch boundary.
+// The in-flight set stays at the cap until the queue drains.
+void TSchemeShard::DispatchPendingTables(
+    TIncrementalRestoreState& state,
+    ui64 operationId,
+    const TActorContext& ctx) {
+
+    const i64 cap = IncrementalRestoreSettings.MaxIncrementalRestoreTablesInFlight;
+    auto bcPath = TPath::Init(state.BackupCollectionPathId, this);
+
+    while (!state.PendingTables.empty()
+           && (cap == -1 || (i64)state.InProgressOperations.size() < cap)) {
+        auto op = std::move(state.PendingTables.front());
+        state.PendingTables.pop_front();
+
+        switch (op.Kind) {
+            case TIncrementalRestoreState::TPendingRestoreOp::EKind::Table:
+                CreateSingleTableRestoreOperation(
+                    state.BackupCollectionPathId,
+                    operationId,
+                    op.BackupName,
+                    op.TablePath,
+                    ctx);
+                break;
+            case TIncrementalRestoreState::TPendingRestoreOp::EKind::Index:
+                CreateSingleIndexRestoreOperation(
+                    operationId,
+                    op.BackupName,
+                    bcPath,
+                    op.TablePath,
+                    op.IndexName,
+                    op.TargetTablePath,
+                    ctx,
+                    op.SpecificImplTableName);
+                break;
+        }
+    }
+
+    LOG_I("DispatchPendingTables: in-flight=" << state.InProgressOperations.size()
+          << " pending=" << state.PendingTables.size()
+          << " cap=" << cap);
+}
+
+// Send the schemeshard MultiIncrementalRestore sub-op for one table entry.
+// Extracted from the old CreateIncrementalRestoreOperation per-entry loop body.
+void TSchemeShard::CreateSingleTableRestoreOperation(
+    const TPathId& backupCollectionPathId,
+    ui64 operationId,
+    const TString& backupName,
+    const TString& targetTablePath,
+    const TActorContext& ctx) {
+
+    auto bcPath = TPath::Init(backupCollectionPathId, this);
+
+    std::pair<TString, TString> paths;
+    TString err;
+    if (!TrySplitPathByDb(targetTablePath, bcPath.GetDomainPathString(), paths, err)) {
+        LOG_E("Failed to split path: " << err);
+        return;
+    }
+    auto& relativeItemPath = paths.second;
+
+    TString incrBackupPathStr = JoinPath({bcPath.PathString(), backupName + "_incremental", relativeItemPath});
+    const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, this);
+
+    if (!incrBackupPath.IsResolved()) {
+        LOG_W("Incremental backup path not found at dispatch time: " << incrBackupPathStr);
+        return;
+    }
+
+    LOG_I("Creating separate restore operation for table: " << incrBackupPathStr << " -> " << targetTablePath);
+
+    auto tableRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+    auto& tableRecord = tableRequest->Record;
+
+    TTxId tableTxId = GetCachedTxId(ctx);
+    tableRecord.SetTxId(ui64(tableTxId));
+
+    auto& tableTx = *tableRecord.AddTransaction();
+    tableTx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
+    tableTx.SetInternal(true);
+    tableTx.SetWorkingDir(bcPath.PathString());
+
+    auto& tableRestore = *tableTx.MutableRestoreMultipleIncrementalBackups();
+    tableRestore.AddSrcTablePaths(incrBackupPathStr);
+    tableRestore.SetDstTablePath(targetTablePath);
+
+    TOperationId tableRestoreOpId(tableTxId, 0);
+    IncrementalRestoreOperationToState[tableRestoreOpId] = operationId;
+    TxIdToIncrementalRestore[tableTxId] = operationId;
+
+    auto stateIt = IncrementalRestoreStates.find(operationId);
+    if (stateIt != IncrementalRestoreStates.end()) {
+        stateIt->second.InProgressOperations.insert(tableRestoreOpId);
+
+        auto& tableOpState = stateIt->second.TableOperations[tableRestoreOpId];
+        tableOpState.OperationId = tableRestoreOpId;
+
+        TPath itemPath = TPath::Resolve(targetTablePath, this);
+        if (itemPath.IsResolved() && itemPath.Base()->IsTable()) {
+            auto tableInfo = Tables.FindPtr(itemPath.Base()->PathId);
+            if (tableInfo) {
+                for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
+                    tableOpState.ExpectedShards.insert(shardIdx);
+                    stateIt->second.InvolvedShards.insert(shardIdx);
+                }
+                LOG_I("Table operation " << tableRestoreOpId << " expects " << tableOpState.ExpectedShards.size() << " shards");
+            }
+        }
+
+        LOG_I("Tracking operation " << tableRestoreOpId << " for incremental restore " << operationId);
+    }
+
+    LOG_I("Sending MultiIncrementalRestore operation for table: " << targetTablePath);
+    Send(SelfId(), tableRequest.Release());
 }
 
 TString TSchemeShard::FindTargetTablePath(
@@ -556,14 +666,18 @@ TString TSchemeShard::FindTargetTablePath(
     return {};
 }
 
-void TSchemeShard::DiscoverIndexesRecursive(
+void TSchemeShard::EnqueueIndexesRecursive(
     ui64 operationId,
     const TString& backupName,
-    const TPath& bcPath,
     const TBackupCollectionInfo::TPtr& backupCollectionInfo,
     const TPath& currentPath,
     const TString& accumulatedRelativePath,
     const TActorContext& ctx) {
+
+    auto stateIt = IncrementalRestoreStates.find(operationId);
+    if (stateIt == IncrementalRestoreStates.end()) {
+        return;
+    }
 
     // Try to find target table for current accumulated path
     TString targetTablePath = FindTargetTablePath(backupCollectionInfo, accumulatedRelativePath);
@@ -575,16 +689,15 @@ void TSchemeShard::DiscoverIndexesRecursive(
         for (const auto& [indexName, indexDirPathId] : currentPath.Base()->GetChildren()) {
             auto indexPathInBackup = TPath::Init(indexDirPathId, this);
             for (const auto& [implName, implPathId] : indexPathInBackup.Base()->GetChildren()) {
-                CreateSingleIndexRestoreOperation(
-                    operationId,
-                    backupName,
-                    bcPath,
-                    accumulatedRelativePath,
-                    indexName,
-                    targetTablePath,
-                    ctx,
-                    implName
-                );
+                TIncrementalRestoreState::TPendingRestoreOp pending;
+                pending.Kind = TIncrementalRestoreState::TPendingRestoreOp::EKind::Index;
+                pending.BackupName = backupName;
+                pending.TablePath = accumulatedRelativePath;
+                pending.IndexName = indexName;
+                pending.TargetTablePath = targetTablePath;
+                pending.SpecificImplTableName = implName;
+                stateIt->second.PendingTables.push_back(std::move(pending));
+                LOG_I("Enqueued index sub-op: " << indexName << "/" << implName << " on " << targetTablePath);
             }
         }
     } else {
@@ -595,10 +708,9 @@ void TSchemeShard::DiscoverIndexesRecursive(
                 ? childName
                 : accumulatedRelativePath + "/" + childName;
 
-            DiscoverIndexesRecursive(
+            EnqueueIndexesRecursive(
                 operationId,
                 backupName,
-                bcPath,
                 backupCollectionInfo,
                 childPath,
                 newRelativePath,
@@ -608,7 +720,7 @@ void TSchemeShard::DiscoverIndexesRecursive(
     }
 }
 
-void TSchemeShard::DiscoverAndCreateIndexRestoreOperations(
+void TSchemeShard::EnqueueAndDiscoverIndexRestoreOperations(
     const TPathId& /*backupCollectionPathId*/,
     ui64 operationId,
     const TString& backupName,
@@ -640,10 +752,9 @@ void TSchemeShard::DiscoverAndCreateIndexRestoreOperations(
     LOG_I("Discovering indexes for restore at: " << indexMetaBasePath);
 
     // Start recursive discovery from the indexes root with empty accumulated path
-    DiscoverIndexesRecursive(
+    EnqueueIndexesRecursive(
         operationId,
         backupName,
-        bcPath,
         backupCollectionInfo,
         indexMetaPath,
         "", // Start with empty accumulated path
@@ -796,9 +907,10 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 //     → TTxProgressIncrementalRestore::Execute() advances state + persists to DB
 //
 // Required maps: IncrementalRestoreOperationToState, TxIdToIncrementalRestore
-// These maps are populated by ProcessNextIncrementalBackup()/CreateIncrementalRestoreOperation().
+// These maps are populated by CreateSingleTableRestoreOperation() and
+// CreateSingleIndexRestoreOperation() (both invoked by DispatchPendingTables).
 // After reboot, maps are empty — TTxProgressIncrementalRestore handles this by
-// re-calling ProcessNextIncrementalBackup() which repopulates maps.
+// re-calling ProcessNextIncrementalBackup() which repopulates the queue and maps.
 // The actor model guarantees serialized execution, so no race conditions.
 void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx) {
     auto it = IncrementalRestoreOperationToState.find(operationId);

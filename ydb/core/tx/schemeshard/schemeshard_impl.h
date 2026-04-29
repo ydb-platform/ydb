@@ -243,6 +243,8 @@ public:
 
     TBackupSettings BackupSettings;
 
+    TIncrementalRestoreSettings IncrementalRestoreSettings;
+
     struct TTenantInitState {
         enum EInitState {
             InvalidState = 0,
@@ -1268,9 +1270,25 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
-    void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
 
-    void DiscoverAndCreateIndexRestoreOperations(
+    // Enqueue per-table and per-index sub-ops onto the orchestrator's PendingTables
+    // queue. Actual dispatch is deferred to DispatchPendingTables, which honors the
+    // ICB cap.
+    void EnqueueIncrementalRestoreOperations(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TActorContext& ctx);
+
+    // Drain PendingTables in waves bounded by ICB
+    // SchemeShardControls.MaxIncrementalRestoreTablesInFlight (sentinel -1 = no cap).
+    // Top-up happens in CheckForCompletedOperations after each completion.
+    void DispatchPendingTables(
+        TIncrementalRestoreState& state,
+        ui64 operationId,
+        const TActorContext& ctx);
+
+    void EnqueueAndDiscoverIndexRestoreOperations(
         const TPathId& backupCollectionPathId,
         ui64 operationId,
         const TString& backupName,
@@ -1278,13 +1296,21 @@ public:
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TActorContext& ctx);
 
-    void DiscoverIndexesRecursive(
+    void EnqueueIndexesRecursive(
         ui64 operationId,
         const TString& backupName,
-        const TPath& bcPath,
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TPath& currentPath,
         const TString& accumulatedRelativePath,
+        const TActorContext& ctx);
+
+    // Per-table dispatch helper invoked by DispatchPendingTables for a TPendingRestoreOp
+    // of kind=Table. Sends the schemeshard MultiIncrementalRestore sub-op for one entry.
+    void CreateSingleTableRestoreOperation(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TString& targetTablePath,
         const TActorContext& ctx);
 
     void CreateSingleIndexRestoreOperation(

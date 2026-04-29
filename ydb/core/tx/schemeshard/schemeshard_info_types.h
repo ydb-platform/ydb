@@ -177,6 +177,23 @@ struct TBackupSettings {
     }
 };
 
+// Per-incremental restore orchestrator rate-limit settings.
+// Cap unit is per-table sub-operation, not raw shard — see Index Build pattern
+// (it owns the dispatcher; we only own the orchestrator level).
+struct TIncrementalRestoreSettings {
+    // Sentinel -1 = unbounded (mirrors TSplitSettings::SplitMergePartCountLimit).
+    TControlWrapper MaxIncrementalRestoreTablesInFlight;
+
+    TIncrementalRestoreSettings()
+        : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+    }
+};
+
 
 struct TBindingsRoomsChange {
     TChannelsBindings ChannelsBindings;
@@ -3690,6 +3707,27 @@ struct TIncrementalRestoreState {
         }
     };
 
+    // Pending sub-op queued by ProcessNextIncrementalBackup; dispatched in batches
+    // bounded by ICB SchemeShardControls.MaxIncrementalRestoreTablesInFlight.
+    // Both Table and Index restore sub-operations flow through this queue so the cap
+    // counts them uniformly (otherwise indexes would fan out unbounded).
+    struct TPendingRestoreOp {
+        enum class EKind { Table, Index };
+        EKind Kind = EKind::Table;
+
+        // Common fields (both kinds use these)
+        TString BackupName;
+
+        // Table-only: the backup-collection entry path (e.g. /MyRoot/Table1).
+        // Index-only: relative table path under the index meta tree.
+        TString TablePath;
+
+        // Index-only fields
+        TString IndexName;
+        TString TargetTablePath;
+        TString SpecificImplTableName;
+    };
+
     TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
@@ -3714,6 +3752,11 @@ struct TIncrementalRestoreState {
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
     THashSet<TShardIdx> InvolvedShards;
+
+    // Per-incremental dispatch queue. Populated by ProcessNextIncrementalBackup,
+    // drained by DispatchPendingTables in batches bounded by ICB cap.
+    // In-memory only; rebuilt after reboot from backup-collection contents.
+    TDeque<TPendingRestoreOp> PendingTables;
 
     // Returns progress within the current incremental as a fraction [0.0, 1.0]
     // based on per-shard completion across all table operations
@@ -3765,6 +3808,7 @@ struct TIncrementalRestoreState {
             InProgressOperations.clear();
             CompletedOperations.clear();
             TableOperations.clear();
+            PendingTables.clear();
             // Note: We don't clear InvolvedShards as it accumulates across all incrementals
 
             // Reset retry budget for the new incremental

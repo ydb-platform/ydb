@@ -1596,6 +1596,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 411000000000,
             DefaultValue: 3600 }];
+        optional int64 MaxIncrementalRestoreTablesInFlight = 16 [(ControlOptions) = {
+            Description: "Max concurrent per-table restore sub-operations within a single incremental backup. -1 disables the cap.",
+            MinValue: -1,
+            MaxValue: 1000000,
+            DefaultValue: 32 }];
     }
 
     message TTCMallocControls {

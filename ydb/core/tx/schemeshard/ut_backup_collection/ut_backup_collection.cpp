@@ -3500,4 +3500,75 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
     }
 
+    // Pure unit test for the dispatch helper logic. Validates the cap arithmetic
+    // (in-flight count vs cap, sentinel -1 = unbounded). No schemeshard tablet
+    // involved — exercises only TIncrementalRestoreState fields and a local
+    // simulation of the DispatchPendingTables loop body.
+    Y_UNIT_TEST(IncrementalRestoreDispatchRespectsCap) {
+        using namespace NKikimr::NSchemeShard;
+        using TState = TIncrementalRestoreState;
+        using TPending = TState::TPendingRestoreOp;
+
+        // Local mirror of the DispatchPendingTables drain loop. The real helper
+        // also calls into schemeshard maps; here we just count how many entries
+        // the cap permits to drain before stopping.
+        // nextOpIdSeq is captured by reference so each drain() call generates
+        // unique TOperationIds across invocations (a per-call counter would
+        // produce collisions that THashSet deduplicates).
+        ui64 nextOpIdSeq = 9000;
+        auto drain = [&nextOpIdSeq](TState& s, i64 cap) -> ui32 {
+            ui32 dispatched = 0;
+            while (!s.PendingTables.empty()
+                   && (cap == -1 || (i64)s.InProgressOperations.size() < cap)) {
+                s.PendingTables.pop_front();
+                TOperationId opId(TTxId(nextOpIdSeq++), 0);
+                s.InProgressOperations.insert(opId);
+                ++dispatched;
+            }
+            return dispatched;
+        };
+
+        TState state;
+        // Seed 8 pending entries
+        for (ui32 i = 0; i < 8; ++i) {
+            TPending p;
+            p.Kind = TPending::EKind::Table;
+            p.BackupName = "incr1";
+            p.TablePath = TStringBuilder() << "/MyRoot/Table" << i;
+            state.PendingTables.push_back(std::move(p));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 0u);
+
+        // cap=2, in-flight=0 -> drain marks 2; queue has 6 left.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // cap=2, in-flight=2 -> drain marks 0; queue still 6.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // Move 1 from in-flight to completed (simulating completion notification).
+        auto firstIt = state.InProgressOperations.begin();
+        TOperationId completedId = *firstIt;
+        state.InProgressOperations.erase(firstIt);
+        state.CompletedOperations.insert(completedId);
+
+        // cap=2, in-flight=1 -> drain marks 1; queue 5.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // cap=-1 (unbounded) drains everything remaining.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, -1), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 7u);
+
+        // Empty queue: returns 0 immediately, no errors.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, -1), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 0), 0u);
+    }
+
 } // TBackupCollectionTests

@@ -82,12 +82,15 @@ TReadRequestExecutor::TReadRequestExecutor(
 {
     SubRequests.reserve(readHint.RangeHints.size());
 
+    Y_ASSERT(Request->Headers.VolumeConfig);
+    Y_ASSERT(Request->Headers.VolumeConfig->BlockSize != 0);
+    size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
+
     for (auto& hint: readHint.RangeHints) {
         // Вычислить смещение для Sglist
         const size_t offsetBlocks = hint.RequestRelativeRange.Start;
-        const size_t offsetBytes = offsetBlocks * DefaultBlockSize;
-        const size_t sizeBytes =
-            hint.RequestRelativeRange.Size() * DefaultBlockSize;
+        const size_t offsetBytes = offsetBlocks * blockSize;
+        const size_t sizeBytes = hint.RequestRelativeRange.Size() * blockSize;
 
         auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
             Request->Headers.Clone(hint.VChunkRange));
@@ -107,8 +110,9 @@ TReadRequestExecutor::TReadRequestExecutor(
                 LOG_ERROR(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "TReadRequestExecutor: SubRequest %zu failed: %s",
-                    index,
+                    "TReadRequestExecutor: SubRequest %s %s failed: %s",
+                    Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+                    Request->Headers.Range.Print().c_str(),
                     FormatError(error).c_str());
 
                 Promise.TrySetValue(TResponse{.Error = std::move(error)});
@@ -168,16 +172,19 @@ void TReadRequestExecutor::OnSubRequestComplete(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor: SubRequest %zu failed: %s",
+            "TReadRequestExecutor: SubRequest %zu %s %s failed: %s",
             index,
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str(),
             FormatError(response.Error).c_str());
 
+        ++CompletedCount;
         Promise.TrySetValue(response);
         return;
     }
 
     if (++CompletedCount == SubRequests.size()) {
-        Promise.SetValue(TResponse{.Error = MakeError(S_OK)});
+        Promise.TrySetValue(TResponse{.Error = MakeError(S_OK)});
     }
 }
 
@@ -235,8 +242,10 @@ void TReadSingleLocationRequestExecutor::Run()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadSingleLocationRequestExecutor %s %s",
-            hint.VChunkRange.Print().c_str(),
+            "TReadSingleLocationRequestExecutor failed to find location %s %s "
+            "%s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str(),
             error.c_str());
 
         Reply(MakeError(E_REJECTED, error));
@@ -246,7 +255,9 @@ void TReadSingleLocationRequestExecutor::Run()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadSingleLocationRequestExecutor. Reading from location %s",
+        "TReadSingleLocationRequestExecutor %s %s. Reading from location %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str(),
         ToString(*location).c_str());
 
     auto onReadResponse = [self = shared_from_this()]   //
@@ -286,9 +297,10 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "TReadSingleLocationRequestExecutor: read failed for range %s",
-                ReadHint.DebugPrint().c_str(),
-                "Error: %s",
+                "TReadSingleLocationRequestExecutor: read failed %s %s with "
+                "error '%s'",
+                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+                Request->Headers.Range.Print().c_str(),
                 FormatError(response.Error).c_str());
         }
 
@@ -299,11 +311,11 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadSingleLocationRequestExecutor: OnReadResponse failed %d trying "
-        "for range %s. "
-        "Error: %s",
+        "TReadSingleLocationRequestExecutor: OnReadResponse %s %s failed %d "
+        "trying with error '%s'",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str(),
         TryNumber,
-        ReadHint.DebugPrint().c_str(),
         FormatError(response.Error).c_str());
 
     ++TryNumber;

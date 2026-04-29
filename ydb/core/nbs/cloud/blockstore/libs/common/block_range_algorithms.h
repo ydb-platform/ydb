@@ -4,22 +4,27 @@
 
 #include <util/system/types.h>
 
-#include <functional>
+#include <span>
 
 namespace NYdb::NBS::NBlockStore {
 
-using Cb = std::function<bool(ui64 key, TBlockRange64 range)>;
+struct TWeightedRange
+{
+    ui64 Key{};
+    TBlockRange64 Range;
+
+    bool operator<(const TWeightedRange& other) const
+    {
+        return Key < other.Key;
+    }
+};
+
 // The function splits overlapping ranges into non-overlapping ranges
 //   and calls cb for each of them on the same loop's iteration.
-// Result is continious range's sequence, where original 'holes' are
+// Result is continuous range's sequence, where original 'holes' are
 //   fullfilled with key == 0.
-template <typename TContainerRanges>
-void SplitExecOnNonOverlappingRanges(
-    ui64 start,
-    ui64 end,
-    const TContainerRanges& overlappigRanges,
-    Cb cb);
+TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
+    TBlockRange64 fullRange,
+    const std::span<TWeightedRange> overlappingRanges);
 
 }   // namespace NYdb::NBS::NBlockStore
-
-#include "block_range_algorithms.tcc"

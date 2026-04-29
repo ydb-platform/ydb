@@ -54,13 +54,12 @@ private:
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TReadHint ReadHint;
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
 
     TVector<TSubRequest> SubRequests;
-    std::atomic<size_t> CompletedCount{0};
+    size_t CompletedCount{0};
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();
 };

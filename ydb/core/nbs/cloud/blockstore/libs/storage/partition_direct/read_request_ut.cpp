@@ -22,8 +22,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto readHint = DirtyMap.MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
-        auto originalRequest = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1, .Range = range});
+        auto originalRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
 
         auto readRequest = std::make_shared<TReadRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -67,8 +70,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
-        auto originalRequest = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1, .Range = range});
+        auto originalRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
         TSgList sglist;
         TString readBuffer(RangeData.size(), '\0');
         sglist.push_back(TBlockDataRef{readBuffer.data(), readBuffer.size()});

@@ -23,7 +23,6 @@ RECURSE_FOR_TESTS(
     service
     runtime
     sysview
-    tli
     topics
     tx
     view

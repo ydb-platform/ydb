@@ -1518,6 +1518,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
               std::back_inserter(response->BodyKeys));
     if (!ev->GetSkipSrcIdInfo()) {
         response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+        response->SrcIdInfo.erase("");
     }
 
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();

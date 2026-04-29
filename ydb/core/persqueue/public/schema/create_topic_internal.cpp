@@ -40,7 +40,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Settings.Database << "][" << Path << "] ";
+        return TStringBuilder() << "[" << Path << "] ";
     }
 
 private:

@@ -530,7 +530,7 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     
     is_muted = test.get('is_muted', False)
     mute_state = "muted" if is_muted else "not muted"
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state: {state}"
     return debug_string
 
 def is_mute_candidate(test):
@@ -609,6 +609,24 @@ def is_delete_candidate(test):
 
     return result
 
+
+def file_set_from_rows(rows, debug_suffix=''):
+    """Sorted mute + debug lines from pre-filtered rows (same shape as ``create_file_set``)."""
+    result_set = set()
+    debug_list = []
+    for test in rows:
+        result_set.add(create_test_string(test, use_wildcards=False))
+        debug_string = create_debug_string(
+            test,
+            period_days=test.get('period_days'),
+            date_window=test.get('date_window'),
+        )
+        if debug_suffix:
+            debug_string += debug_suffix
+        debug_list.append(debug_string)
+    return sorted(list(result_set)), sorted(debug_list)
+
+
 def create_file_set(
     aggregated_for_mute,
     filter_func,
@@ -625,14 +643,13 @@ def create_file_set(
     for idx, test in enumerate(aggregated_for_mute, 1):
         testsuite = test.get('suite_folder')
         testcase = test.get('test_name')
-        
+
         if not testsuite or not testcase:
             continue
-        
+
         # Apply mute_check when provided.
         if mute_check and not mute_check(testsuite, testcase):
             continue
-        # Progress bar.
         percent = int(idx / total * 100)
         if percent != last_percent and (percent % 5 == 0 or percent == 100):
             print(f"\r[create_file_set] Progress: {percent}% ({idx}/{total})", end="")
@@ -641,7 +658,7 @@ def create_file_set(
         if filter_func(test):
             test_string = create_test_string(test, use_wildcards)
             result_set.add(test_string)
-            
+
             if resolution:
                 debug_string = create_debug_string(
                     test,
@@ -651,11 +668,10 @@ def create_file_set(
                 if debug_suffix:
                     debug_string += debug_suffix
                 debug_list.append(debug_string)
-    
-    # Force 100% output if it was not printed yet.
+
     if last_percent != 100:
         print(f"\r[create_file_set] Progress: 100% ({total}/{total})", end="")
-    print()  # Newline after progress output.
+    print()
     return sorted(list(result_set)), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=False):
@@ -740,22 +756,6 @@ def apply_and_add_mutes(
         # sooner when stable.
         manual_unmute_full_names = set(manual_unmute_full_names or [])
         if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
-            def _manual_rows_to_unmute_output(rows, debug_suffix):
-                """Build sorted mute lines + debug lines (same shape as ``create_file_set`` output)."""
-                result_set = set()
-                debug_list = []
-                for test in rows:
-                    test_string = create_test_string(test, use_wildcards=False)
-                    result_set.add(test_string)
-                    debug_string = create_debug_string(
-                        test,
-                        period_days=test.get('period_days'),
-                        date_window=test.get('date_window'),
-                    )
-                    debug_list.append(debug_string + debug_suffix)
-                return sorted(list(result_set)), sorted(debug_list)
-
-            # Single pass: partition manual-unmute rows and log once per tracked test.
             manual_stable_rows = []
             manual_zero_rows = []
             _mu_total = len(aggregated_for_manual_unmute)
@@ -820,13 +820,11 @@ def apply_and_add_mutes(
                 )
             print()
 
-            to_unmute_manual_stable, to_unmute_manual_stable_debug = _manual_rows_to_unmute_output(
-                manual_stable_rows,
-                ' [fast-unmute]',
+            to_unmute_manual_stable, to_unmute_manual_stable_debug = file_set_from_rows(
+                manual_stable_rows, ' [fast-unmute]'
             )
-            to_unmute_manual_zero_activity, to_unmute_manual_zero_activity_debug = _manual_rows_to_unmute_output(
-                manual_zero_rows,
-                ' [fast-delete]',
+            to_unmute_manual_zero_activity, to_unmute_manual_zero_activity_debug = file_set_from_rows(
+                manual_zero_rows, ' [fast-delete]'
             )
             to_unmute_manual = sorted(
                 set(to_unmute_manual_stable) | set(to_unmute_manual_zero_activity)

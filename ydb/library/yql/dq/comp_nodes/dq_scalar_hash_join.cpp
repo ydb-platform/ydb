@@ -19,6 +19,34 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
+/// Wide-flow for join: direct wide-flow node, or inner flow of MKQL `FromFlow` (wide stream as Stream(Multi)).
+IComputationWideFlowNode* LocateWideFlowJoinInput(
+    const TComputationNodeFactoryContext& ctx,
+    TCallable& callable,
+    ui32 inputIndex)
+{
+    TNode* rootNode = callable.GetInput(inputIndex).GetNode();
+    MKQL_ENSURE(rootNode, "Scalar hash join input graph node is null");
+
+    IComputationNode* located = LocateNode(ctx.NodeLocator, callable, inputIndex);
+    if (auto* wide = dynamic_cast<IComputationWideFlowNode*>(located)) {
+        return wide;
+    }
+
+    if (rootNode->GetType()->IsCallable()) {
+        const auto* callableType = AS_TYPE(TCallableType, rootNode->GetType());
+        if (callableType->GetName() == TStringBuf("FromFlow")) {
+            auto* fromFlow = AS_TYPE(TCallable, rootNode);
+            MKQL_ENSURE(fromFlow->GetInputsCount() == 1, "FromFlow expects one argument");
+            TNode& inner = *fromFlow->GetInput(0).GetNode();
+            MKQL_ENSURE(inner.GetType()->IsFlow(), "FromFlow argument must be Flow");
+            auto* innerLocated = LocateNode(ctx.NodeLocator, inner, false);
+            return dynamic_cast<IComputationWideFlowNode*>(innerLocated);
+        }
+    }
+    return nullptr;
+}
+
 struct TDqScalarJoinContext {
     TSides<TVector<TType*>> InputTypes;
     TSides<TVector<int>> KeyColumns;
@@ -438,10 +466,12 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     TDqUserRenames userRenames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
 
-    const auto leftFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
-    const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));
-    MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
-    MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
+    const auto leftFlow = LocateWideFlowJoinInput(ctx, callable, 0);
+    const auto rightFlow = LocateWideFlowJoinInput(ctx, callable, 1);
+    MKQL_ENSURE(leftFlow,
+        "Expected WideFlow, or Stream from FromFlow(WideFlow), as left input of scalar hash join");
+    MKQL_ENSURE(rightFlow,
+        "Expected WideFlow, or Stream from FromFlow(WideFlow), as right input of scalar hash join");
 
     ValidateRenames(userRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
 

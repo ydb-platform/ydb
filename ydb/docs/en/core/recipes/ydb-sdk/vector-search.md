@@ -1358,21 +1358,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return items
     ```
 
-- JavaScript (alternative)
-
-  ```javascript
-  const limit;
-  const embedding = new Float32Array([1.5, 2.5, 3.5])
-
-  await sql`SELECT
-        id,
-        document,
-        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
-    FROM `table_name`
-    ORDER BY score DESC
-    LIMIT ${unsafe(limit)};
-  ```
-
 - C++ (alternative)
 
     ```cpp
@@ -1432,6 +1417,21 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return result;
     }
     ```
+
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 {% endlist %}
 

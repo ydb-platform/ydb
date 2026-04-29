@@ -52,16 +52,16 @@ You can click any of the methods below to go to the source code of an example in
   | OAuth 2.0 token exchange | [tech.ydb.auth.OAuth2TokenExchangeProvider.fromFile(cfgFile);](https://github.com/ydb-platform/ydb-java-sdk/blob/master/auth-providers/oauth2-provider/src/main/java/tech/ydb/auth/OAuth2TokenExchangeProvider.java) |
   | Determined by environment variables | [tech.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();](https://github.com/ydb-platform/ydb-java-examples/tree/master/auth/environ) |
 
-- Node.js
+- JavaScript
 
   | Mode | Method |
   | ----- | ----- |
-  | Anonymous | [AnonymousAuthService()](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/anonymous-credentials) |
-  | Access Token | [TokenAuthService(accessToken, database)](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/access-token-credentials) |
-  | Metadata | [MetadataAuthService(database)](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/metadata-credentials) |
-  | Service Account Key | [getSACredentialsFromJson(saKeyFile)](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials) |
-  | Static Credentials | [StaticCredentialsAuthService(user, password, endpoint)](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/static-credentials) |
-  | Determined by environment variables | [getCredentialsFromEnv(entryPoint, database, logger)](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ) |
+  | Anonymous | [AnonymousCredentialsProvider()](https://github.com/ydb-platform/ydb-js-sdk/blob/main/packages/auth/src/anonymous.ts) |
+  | Access Token | [AccessTokenCredentialsProvider({ token })](https://github.com/ydb-platform/ydb-js-sdk/blob/main/packages/auth/src/access-token.ts) |
+  | Metadata | [MetadataCredentialsProvider()](https://github.com/ydb-platform/ydb-js-sdk/blob/main/packages/auth/src/metadata.ts) |
+  | Service Account Key | [ServiceAccountCredentialsProvider.fromFile(saKeyFile)](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/auth-yandex-cloud) |
+  | Static Credentials | [StaticCredentialsProvider({ username, password }, endpoint)](https://github.com/ydb-platform/ydb-js-sdk/blob/main/packages/auth/src/static.ts) |
+  | Determined by environment variables | [EnvironCredentialsProvider(connectionString)](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/environ) |
 
 - Rust
 

@@ -37,6 +37,7 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     ActualDemand = 0;
 
     // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+<<<<<<< HEAD
     const auto burstUsage = BurstUsage.load();
     const auto burstUsageResume = BurstUsageResume.load();
     const auto burstUsageExtra = BurstUsageExtra.load();
@@ -49,6 +50,14 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     PrevBurstUsageResume = burstUsageResume;
     PrevBurstUsageExtra = burstUsageExtra;
     PrevBurstThrottle = burstThrottle;
+=======
+    const auto burstUsage = CpuBurstUsage.load() + CpuBurstUsageResume.load() + ReadBurstUsage.load();
+    const auto burstThrottle = CpuBurstThrottle.load();
+    newQuery->CpuBurstUsage += burstUsage - PrevCpuBurstUsage;
+    newQuery->CpuBurstThrottle = burstThrottle - PrevCpuBurstThrottle;
+    PrevCpuBurstUsage = burstUsage;
+    PrevCpuBurstThrottle = burstThrottle;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
 
     newQuery->Usage = Usage.load();
     return newQuery;
@@ -120,6 +129,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
+    Counters->Read         = group->GetCounter("Read",         true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
     Counters->FairShare    = group->GetCounter("FairShare",    true);  // snapshot
 
@@ -136,6 +146,7 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
 
     if (Counters) {
+<<<<<<< HEAD
         Counters->Limit->Set(GetLimit() * 1'000'000);
         Counters->Guarantee->Set(GetGuarantee() * 1'000'000);
         Counters->InFlight->Set(Usage * 1'000'000);
@@ -146,6 +157,16 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
 
         Counters->InFlightExtra->Set(UsageExtra * 1'000'000);
         Counters->UsageExtra->Set(BurstUsageExtra);
+=======
+        Counters->Limit->Set(GetCpuLimit() * 1'000'000);
+        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
+        Counters->InFlight->Set(CpuUsage * 1'000'000);
+        Counters->Waiting->Set(CpuThrottle * 1'000'000);
+        Counters->Usage->Set(CpuBurstUsage);
+        Counters->UsageResume->Set(CpuBurstUsageResume);
+        Counters->Read->Set(ReadBurstUsage);
+        Counters->Throttle->Set(CpuBurstThrottle);
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
     }
 
     if (IsLeaf()) {

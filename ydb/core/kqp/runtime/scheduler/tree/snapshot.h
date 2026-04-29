@@ -10,10 +10,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 TotalLimit = Infinity();
         ui64 FairShare = 0;
 
+<<<<<<< HEAD
         ui64 Demand = 0;
         ui64 Usage = 0;
         ui64 BurstUsage = 0;
         ui64 BurstThrottle = 0;
+=======
+        std::atomic<ui64> CpuDemand = 0;
+        ui64 CpuUsage = 0;
+        ui64 CpuBurstUsage = 0;
+        ui64 CpuBurstThrottle = 0;
+        ui64 ReadBurstUsage = 0;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         std::optional<float> Satisfaction;
 
         const TMonotonic Timestamp = TMonotonic::Now();

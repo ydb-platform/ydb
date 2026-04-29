@@ -23,6 +23,7 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     Limit = Min<ui64>(GetLimit(), TotalLimit);
 
     if (IsPool()) {
+<<<<<<< HEAD
         Demand = 0;
         Usage = 0;
         BurstUsage = 0;
@@ -33,6 +34,20 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
             Usage += child->Usage;
             BurstUsage += child->BurstUsage;
             BurstThrottle += child->BurstThrottle;
+=======
+        CpuDemand = 0;
+        CpuUsage = 0;
+        CpuBurstUsage = 0;
+        CpuBurstThrottle = 0;
+        ReadBurstUsage = 0;
+        ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
+            child->UpdateBottomUp(totalLimit);
+            CpuDemand += child->CpuDemand;
+            CpuUsage += child->CpuUsage;
+            CpuBurstUsage += child->CpuBurstUsage;
+            CpuBurstThrottle += child->CpuBurstThrottle;
+            ReadBurstUsage += child->ReadBurstUsage;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         });
     }
 

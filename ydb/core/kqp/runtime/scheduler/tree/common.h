@@ -5,6 +5,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/hash.h>
+#include <util/string/builder.h>
 
 #include <optional>
 #include <set>
@@ -34,8 +35,17 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         std::optional<ui64> Guarantee;
         std::optional<double> Weight;
 
+<<<<<<< HEAD
         inline auto GetLimit() const {
             return Limit.value_or(Infinity());
+=======
+        std::optional<ui64> CpuLimit;
+        std::optional<ui64> CpuGuarantee;
+        std::optional<TDuration> ReadLimit; // per second
+
+        auto GetCpuLimit() const {
+            return CpuLimit.value_or(Infinity());
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         }
 
         inline auto GetGuarantee() const {
@@ -46,6 +56,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             return Weight.value_or(1);
         }
 
+<<<<<<< HEAD
         inline void Update(const TStaticAttributes& other) {
             if (other.Limit) {
                 Limit = other.Limit;
@@ -56,6 +67,33 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.Weight) {
                 Weight = other.Weight;
             }
+=======
+        auto GetReadLimit() const {
+            return ReadLimit.value_or(TDuration::Seconds(1));
+        }
+
+        void Update(const TStaticAttributes& other) {
+            if (other.Weight) {
+                Weight = other.Weight;
+            }
+            if (other.CpuLimit) {
+                CpuLimit = other.CpuLimit;
+            }
+            if (other.CpuGuarantee) {
+                CpuGuarantee = other.CpuGuarantee;
+            }
+            if (other.ReadLimit) {
+                ReadLimit = other.ReadLimit;
+            }
+        }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << "Weight: " << GetWeight()
+                << ", CpuLimit: " << GetCpuLimit()
+                << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", ReadLimit: " << GetReadLimit();
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         }
     };
 
@@ -172,6 +210,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
+        NMonitoring::TDynamicCounters::TCounterPtr Read;
         NMonitoring::TDynamicCounters::TCounterPtr Throttle;
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;

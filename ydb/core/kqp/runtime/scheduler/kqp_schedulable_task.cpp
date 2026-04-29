@@ -68,13 +68,27 @@ void TSchedulableTask::IncreaseUsage() {
     }
 }
 
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
+void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usageType) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
+<<<<<<< HEAD
         --parent->Usage;
         if (forcedResume) {
             parent->BurstUsageResume += burstUsage.MicroSeconds();
         } else {
             parent->BurstUsage += burstUsage.MicroSeconds();
+=======
+        --parent->CpuUsage;
+        switch(usageType) {
+            case CPU_DEFAULT:
+                parent->CpuBurstUsage += burstUsage.MicroSeconds();
+                break;
+            case CPU_RESUMED:
+                parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
+                break;
+            case READ_DEFAULT:
+                parent->ReadBurstUsage += burstUsage.MicroSeconds();
+                break;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         }
     }
 }

@@ -1,5 +1,10 @@
 #include "kqp_compute_scheduler_service.h"
 
+<<<<<<< HEAD
+=======
+#include "kqp_schedulable_read.h"
+#include "log.h"
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
 #include "tree/dynamic.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -70,6 +75,8 @@ public:
 
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
+            hFunc(TEvGetReadFactory, Handle);
+
             default:
                 LOG_E("Unexpected event: " << ev->GetTypeRewrite());
         }
@@ -98,7 +105,11 @@ public:
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->Id, attrs);
 
+<<<<<<< HEAD
         LOG_D("Add database: " << ev->Get()->Id);
+=======
+        LOG_D("Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -113,13 +124,24 @@ public:
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
+<<<<<<< HEAD
         if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
             attrs.Limit = ev->Get()->Params.TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100;
+=======
+        if (const auto& cpuLimitPercent = ev->Get()->Params.TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
+            if (cpuLimitPercent == 0) {
+                attrs.CpuLimit = 0;
+                attrs.ReadLimit = TDuration::Zero();
+            } else {
+                attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
+                attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
+            }
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         }
 
         Y_ASSERT(!poolId.empty());
 
-        LOG_D("Add pool: " << databaseId << "/" << poolId);
+        LOG_D("Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {false, resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
@@ -151,11 +173,27 @@ public:
             UpdatePoolsGuarantee();
 
             // Update limit
+<<<<<<< HEAD
             if (ev->Get()->Config->TotalCpuLimitPercentPerNode >= 0) {
                 Scheduler->AddOrUpdatePool(databaseId, poolId, {
                     .Limit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
                 });
             }
+=======
+            if (const auto& cpuLimitPercent = ev->Get()->Config->TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
+                if (cpuLimitPercent == 0) {
+                    attrs.CpuLimit = 0;
+                    attrs.ReadLimit = TDuration::Zero();
+                } else {
+                    attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
+                    attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
+                }
+            }
+
+            Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
+
+            LOG_D("Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
@@ -204,6 +242,12 @@ public:
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
+    void Handle(TEvGetReadFactory::TPtr& ev) {
+        auto response = MakeHolder<TEvReadFactoryResponse>();
+        response->Factory = std::make_unique<TSchedulableReadFactory>(Scheduler);
+        Send(ev->Sender, response.Release(), 0, 0);
+    }
+
 private:
     ui64 CalculateTotalCpuLimit() {
         auto poolId = SelfId().PoolID();
@@ -229,7 +273,11 @@ private:
 private:
     bool Enabled = true;
     TComputeSchedulerPtr Scheduler;
+<<<<<<< HEAD
     const TDuration UpdateFairSharePeriod;
+=======
+    const NScheduler::TOptions Options;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
 
     struct TPoolParams {
         bool IsFirstRemoval = false;
@@ -287,7 +335,18 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
     } else {
-        database->AddPool(std::make_shared<TPool>(poolId, KqpCounters, attrs));
+        pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
+        database->AddPool(pool);
+
+        bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
+            && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+
+        // Since they are not visible by query id - use the same id for each pool
+        auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, allowMinFairShare, NHdrf::TStaticAttributes());
+        pool->AddQuery(query);
+
+        // Add read query
+        ReadQueries.emplace(std::make_pair(databaseId, poolId), query);
     }
 }
 
@@ -314,6 +373,17 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     }
 
     return query;
+}
+
+NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
+    TReadGuard lock(Mutex);
+
+    auto databaseAndPoolId = std::make_pair(databaseId, poolId);
+    if (auto queryIt = ReadQueries.find(databaseAndPoolId); queryIt != ReadQueries.end()) {
+        return queryIt->second;
+    }
+
+    return {}; // TODO: no such pool?
 }
 
 bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {

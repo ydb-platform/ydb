@@ -36,12 +36,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> Demand = 0;
         std::atomic<ui64> Throttle = 0;
 
+<<<<<<< HEAD
         std::atomic<ui64> BurstUsage = 0;
         std::atomic<ui64> BurstUsageResume = 0;
         std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
+=======
+        std::atomic<ui64> CpuBurstUsage = 0;
+        std::atomic<ui64> CpuBurstUsageResume = 0;
+        std::atomic<ui64> CpuBurstThrottle = 0;
+        std::atomic<ui64> ReadBurstUsage = 0;
+>>>>>>> b09907e25ce (Add support for KQP Compute Scheduler into datashard reading (#38179))
 
         std::atomic<ui64> ActualDemand = 0;
+
+        // TODO: implement Read resource - for now it's only per datashard.
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 

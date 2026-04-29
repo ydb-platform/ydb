@@ -299,9 +299,9 @@ public:
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
 
-        YQL_ENSURE(SourceParams.OffsetPredicateSize() <= 1, "Multiple OffsetPredicate is not implemented");
+        YQL_ENSURE(SourceParams.GetOffsetPredicate().ItemSize() <= 1, "Multiple OffsetPredicate is not implemented");
         
-        for (const auto& predicateOffset: SourceParams.GetOffsetPredicate()) {
+        for (const auto& predicateOffset: SourceParams.GetOffsetPredicate().GetItem()) {
             YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
 
             if (predicateOffset.HasBegin()) {
@@ -313,7 +313,8 @@ public:
             SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset);
         }
 
-        for (const auto& predicateWriteTime: SourceParams.GetWriteTimePredicate()) {
+        YQL_ENSURE(SourceParams.GetWriteTimePredicate().ItemSize() <= 1, "Multiple WriteTimePredicate is not implemented");
+        for (const auto& predicateWriteTime: SourceParams.GetWriteTimePredicate().GetItem()) {
             YQL_ENSURE(!predicateWriteTime.HasPartitionId(), "Not empty PartitionId is not implemented");
             YQL_ENSURE(SourceParams.GetDisposition().GetDispositionCase() == NPq::NProto::StreamingDisposition::kOldest, "WriteTimePredicate is supported in table mode");
 

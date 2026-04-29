@@ -336,16 +336,34 @@ public:
                 topicPartitionsCount = FromString(kv.Value().Ref().Content());
             }
         }
-        
-        if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
-            Cerr << "PushFilterToPqTopicSource TCoVoid"  << Endl;
 
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "OffsetPredicate is already not empty";
+            return node;
+        }
+
+        if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
             if(compareArgsEvaluate) {
 
                auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
                if (!maybeOptionalIf.IsValid()) { // Nothing to push
-                    return node;
+                    return node;    // TODO
                }
             
                 TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
@@ -381,58 +399,20 @@ public:
                     .Done();
             }
         } else if (dqPqTopicSource.CompareArgsEvaluate().Raw()->IsList()) {
-            
             auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
             for (ui32 j = 0; j < list->ChildrenSize(); ++j) {
                 if (list->Child(j)->IsCallable("EvaluateExpr")) {
                     return node;    // wait EvaluateExpr is calculated
                 }
             }
-            auto maybeLambda = dqPqTopicSource.Predicate().Maybe<TCoLambda>();
-            if (!maybeLambda) {
-                return node;
-            }
-
-
-            ReplaceCompareNodes(maybeLambda.Cast(), ctx, list);
-
-            auto settings = TPushdownSettings();
-            settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
-
-            NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(maybeLambda.Cast(), ctx, node.Pos(), settings);
-            if (!sharedReadingPredicate.IsEmpty()) {
-                TStringBuilder err;
-                NYql::NConnector::NApi::TPredicate predicateProto;
-                if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), maybeLambda.Cast().Args().Arg(0), &predicateProto, err)) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                    return node;
-                }
-                TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
-                Cerr << "PushFilterToPqTopicSource filterPredicateSql " << filterPredicateSql << Endl;
-            }
         }
 
-        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+        auto maybeLambda = dqPqTopicSource.Predicate().Maybe<TCoLambda>();
+        if (!maybeLambda) {
             return node;
         }
-
-        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
-
-        if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
-
-        if (!dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
-
-        Cerr << "topicPartitionsCount " << topicPartitionsCount << Endl;
+        auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
+        ReplaceCompareNodes(maybeLambda.Cast(), ctx, list);
 
         TString sharedReadingPridicateSerializedProto;
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
@@ -512,34 +492,8 @@ public:
             }
         }
 
-        TString offsetPredicateSerializedProto;
-        {   //
-            auto settings = TPushdownSettings();
-            settings.EnableMember("_yql_sys_offset");
-            NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
-            if (!predicate.IsEmpty()) {
-                NYql::NConnector::NApi::TPredicate proto;
-                TStringBuilder err;
-                if (NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
-                    YQL_ENSURE(proto.SerializeToString(&offsetPredicateSerializedProto));
-                }
-            }
-        }
-
-        TString writeTimePredicateSerializedProto;
-        {
-            auto settings = TPushdownSettings();
-            settings.EnableMember("_yql_sys_write_time");
-            settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
-            NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
-            if (!predicate.IsEmpty()) {
-                NYql::NConnector::NApi::TPredicate proto;
-                TStringBuilder err;
-                if (NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &proto, err)) {
-                    YQL_ENSURE(proto.SerializeToString(&writeTimePredicateSerializedProto));
-                }
-            }
-        }
+        TString offsetPredicateSerializedProto = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
+        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx);
 
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         
@@ -550,10 +504,6 @@ public:
             && writeTimePredicateSerializedProto.empty()) {
             return node;
         }
-
-        // Deep copy the filter lambda to store as Predicate in TDqPqTopicSource
-        auto predicateLambdaCopy = ctx.DeepCopyLambda(flatmap.Lambda().Ref());
-        auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
 
         if (maybeExtractMembers) {
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
@@ -568,8 +518,6 @@ public:
                             .Partitions(partitionList)
                             .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                             .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
-                            .Predicate(predicateLambdaCopy)
-                            .CompareArgsEvaluate(compareArgsEvaluate)
                             .Build()
                         .Build()
                     .Build()
@@ -585,8 +533,6 @@ public:
                     .Partitions(partitionList)
                     .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                     .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
-                    .Predicate(predicateLambdaCopy)
-                    .CompareArgsEvaluate(compareArgsEvaluate)
                     .Build()
                 .Build()
             .Done();
@@ -690,6 +636,33 @@ private:
         });
     }
 
+    TString SerializePredicate(
+        const TString& memberName,
+        const NNodes::TCoLambda& lambda,
+         TExprContext& ctx) const {
+        auto settings = TPushdownSettings();
+        settings.EnableMember(memberName);
+        NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
+        if (predicate.IsEmpty()) {
+            return {};
+        }
+        TStringBuilder err;
+        TDisjointIntervalTree<ui64> tree;
+        if (!NYql::CalculateFilterPredicate(ctx, predicate.ExprNode.Cast(), lambda.Args().Arg(0), tree, err)) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
+            return {};
+        }
+        if (tree.Empty()) {
+            return {};
+        }
+        NPq::NProto::TOffsetPredicate proto;    
+        auto* item = proto.AddItem();
+        item->SetBegin(tree.Min()); // Copy only one interval.
+        item->SetEnd(tree.Max());
+        TString result; 
+        YQL_ENSURE(proto.SerializeToString(&result));
+        return result;
+    }
 
     TPqState::TPtr State_;
 };

@@ -65,16 +65,23 @@ message TTaskSensorLabel {
     string Value = 2;
 }
 
-message TOffsetPredicate {           // (partition = PartitionId AND offset >= Begin AND offset < End)
+message TOffsetPredicateItem {       // (partition = PartitionId AND offset >= Begin AND offset < End)
     optional uint64 PartitionId = 1; // all partitions if not set
     optional uint64 Begin = 2;       // inclusive   
     optional uint64 End = 3;         // exclusive
 }
+message TOffsetPredicate {
+    repeated TOffsetPredicateItem Item = 1;
+}
 
-message TWriteTimePredicate {           // (partition = PartitionId AND write_time >= Begin AND write_time < End)
+message TWriteTimePredicateItem {    // (partition = PartitionId AND write_time >= Begin AND write_time < End)
     optional uint64 PartitionId = 1; // all partitions if not set
     optional uint64 Begin = 2;       // inclusive  
     optional uint64 End = 3;         // exclusive
+}
+
+message TWriteTimePredicate {  
+    repeated TWriteTimePredicateItem Item = 1;
 }
 
 message TDqPqTopicSource {
@@ -110,8 +117,8 @@ message TDqPqTopicSource {
     google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
     repeated string UserSchemaColumns = 31;
     bool StopAtCurrentEndOffsets = 32;
-    repeated TOffsetPredicate OffsetPredicate = 33;
-    repeated TWriteTimePredicate WriteTimePredicate = 34;
+    TOffsetPredicate OffsetPredicate = 33;
+    TWriteTimePredicate WriteTimePredicate = 34;
 }
 
 message TDqPqTopicSink {

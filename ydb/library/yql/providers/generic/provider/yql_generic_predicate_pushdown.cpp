@@ -1,9 +1,11 @@
 #include "yql_generic_predicate_pushdown.h"
 
+#include <limits>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 namespace NYql {
 
@@ -1187,5 +1189,213 @@ namespace NYql {
     ) {
         TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err, .Ctx = ctx};
         return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
+    }
+
+
+    // bool CalculateCompare(const TCoCompare& compare, TDisjointIntervalTree<ui64>& /*tree*/, TSerializationContext& ctx, ui64 depth) {
+    //    // bool opMatched = false;
+
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEqual, EQ);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpNotEqual, NE);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLess, L);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLessOrEqual, LE);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreater, G);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStartsWith, STARTS_WITH);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpEndsWith, ENDS_WITH);
+    //     // EXPR_NODE_TO_COMPARE_TYPE(TCoCmpStringContains, CONTAINS);
+
+    //     // if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
+    //     //     ctx.Err << "unknown compare operation: " << compare.Raw()->Content();
+    //     //     return false;
+    //     // }
+    //     // return SerializeExpression(compare.Left(), proto->mutable_left_value(), ctx, depth + 1) && SerializeExpression(compare.Right(), proto->mutable_right_value(), ctx, depth + 1);
+    // }
+
+    // bool CalculateAnd(const TCoAnd& andExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    //     auto* dstProto = proto->mutable_conjunction();
+    //     for (const auto& child : andExpr.Ptr()->Children()) {
+    //         if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), ctx, depth + 1)) {
+    //             return false;
+    //         }
+    //     }
+    //     return true;
+    // }
+
+#define MATCH_ATOM(AtomType)                                             \
+    if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {          \
+        return FromString<ui64>(atom.Cast().Literal().Value());          \
+    }
+
+    std::optional<ui64> CalculateExpression(
+        const TExprBase& expression,
+        TSerializationContext& ctx
+    ) {
+        if (auto just = expression.Maybe<TCoJust>()) {
+            return CalculateExpression(TExprBase(just.Cast().Input()), ctx);
+        }
+        if (auto atom = expression.Maybe<TCoIntegralCtor>()) {
+            bool hasSign;
+            bool isSigned;
+            ui64 valueAbs;
+            ExtractIntegralValue(atom.Ref(), false, hasSign, isSigned, valueAbs);
+            if (hasSign) {
+                return 0;   // TODO
+            }
+            return valueAbs;
+        }
+        MATCH_ATOM(Timestamp);
+        ctx.Err << "Unsupported expression: " << expression.Raw()->Content();
+        return std::nullopt;
+    }
+
+    void IntersectIntervals(
+        TDisjointIntervalTree<ui64>& tree,
+        const TDisjointIntervalTree<ui64>& other)
+    {
+        // A ∩ B = A \ complement(B)
+        // Erase from tree every gap that is not covered by other.
+
+        if (other.Empty()) {
+            tree.Clear();
+            return;
+        }
+
+        ui64 prev = std::numeric_limits<ui64>::min();
+        for (auto it = other.begin(); it != other.end(); ++it) {
+            ui64 gapBegin = prev;
+            ui64 gapEnd = it->first;
+            if (gapBegin < gapEnd) {
+                tree.EraseInterval(gapBegin, gapEnd);
+            }
+            prev = it->second;
+        }
+
+        // Trailing gap: [last interval end, MAX)
+        if (prev < std::numeric_limits<ui64>::max()) {
+            tree.EraseInterval(prev, std::numeric_limits<ui64>::max());
+        }
+    }
+
+    void MergeIntervals(
+        TDisjointIntervalTree<ui64>& tree,
+        const TDisjointIntervalTree<ui64>& other)
+    {
+        for (const auto [begin, end] : other) {
+            // Erase the range first to remove any overlapping intervals,
+            // then insert the interval from other.
+            tree.EraseInterval(begin, end);
+            tree.InsertInterval(begin, end);
+        }
+    }
+    
+    bool CalculateFilterPredicate(
+        const TExprBase& predicate,
+        TDisjointIntervalTree<ui64>& tree,
+        TSerializationContext& ctx
+    ) {
+        if (auto compare = predicate.Maybe<TCoCompare>()) {
+
+            bool leftIsMember = compare.Cast().Left().Maybe<TCoMember>().IsValid();
+            bool rightIsMember = compare.Cast().Right().Maybe<TCoMember>().IsValid();
+            if (!(leftIsMember && !rightIsMember || !leftIsMember && rightIsMember)) {
+                return false;
+            }
+            
+            auto valueExpr = compare.Cast().Right();
+            bool inverted = rightIsMember;
+            if (inverted) {
+                valueExpr = compare.Cast().Left();
+            }
+            
+            auto optValue = CalculateExpression(valueExpr, ctx);
+            if (!optValue) {
+                return false;
+            }
+            ui64 value = *optValue;
+            tree.Clear();
+
+            if (compare.Cast().Maybe<TCoCmpEqual>()) {
+                tree.Insert(value);
+                return true;
+            } else if (compare.Cast().Maybe<TCoCmpNotEqual>()) {
+                tree.InsertInterval(std::numeric_limits<ui64>::min(), value);
+                tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());
+                return true;
+            } else if (compare.Cast().Maybe<TCoCmpLess>()) {
+                if (!inverted) {
+                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value);             // a < 100
+                } else {
+                    tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());         // 100 < a
+                }
+                return true;
+            } else if (compare.Cast().Maybe<TCoCmpLessOrEqual>()) {
+                if (!inverted) {
+                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value + 1);         // a <= 100
+                } else {
+                    tree.InsertInterval(value, std::numeric_limits<ui64>::max());             // 100 <= a
+                }
+                return true;
+            } else if (compare.Cast().Maybe<TCoCmpGreater>()) {
+                if (!inverted) {
+                    tree.InsertInterval(value + 1, std::numeric_limits<ui64>::max());         // a > 100
+                } else {
+                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value);             // 100 > a
+                }
+                return true;
+            } else if (compare.Cast().Maybe<TCoCmpGreaterOrEqual>()) {
+                if (!inverted) {
+                    tree.InsertInterval(value, std::numeric_limits<ui64>::max());             // a >= 100
+                } else {
+                    tree.InsertInterval(std::numeric_limits<ui64>::min(), value + 1);         // 100 >= a
+                }
+                return true;
+            }
+            ctx.Err << "unknown compare operation: " << compare.Cast().Raw()->Content();
+            return false;
+        } else if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
+            auto value = coalesce.Cast().Value().Maybe<TCoBool>();
+            if (value && TStringBuf(value.Cast().Literal()) == "false"sv) {
+                return CalculateFilterPredicate(TExprBase(coalesce.Cast().Predicate()), tree, ctx);
+            }
+            return false;
+        } else if (auto andExpr = predicate.Maybe<TCoAnd>()) {
+            tree.Clear();
+            tree.InsertInterval(std::numeric_limits<ui64>::min(), std::numeric_limits<ui64>::max());
+            for (const auto& child : andExpr.Cast().Ptr()->Children()) {
+                TDisjointIntervalTree<ui64> itemTree;
+                if (!CalculateFilterPredicate(TExprBase(child), itemTree, ctx)) {
+                    return false;
+                }
+                IntersectIntervals(tree, itemTree);
+            }
+            return true;
+        } else if(auto orExpr = predicate.Maybe<TCoOr>()) {
+            tree.Clear();
+            for (const auto& child : orExpr.Cast().Ptr()->Children()) {
+                TDisjointIntervalTree<ui64> itemTree;
+                if (!CalculateFilterPredicate(TExprBase(child), itemTree, ctx)) {
+                    return false;
+                }
+                MergeIntervals(tree, itemTree);
+            }
+            return true;
+        }
+        ctx.Err << "unknown predicate: " << predicate.Raw()->Content();
+        return false;
+    }
+
+    bool CalculateFilterPredicate(
+        TExprContext& ctx,
+        const TExprBase& predicateBody,
+        const TCoArgument& predicateArgument,
+        TDisjointIntervalTree<ui64>& tree,
+        TStringBuilder& err
+    ) {
+        TSerializationContext serializationContext = {.Arg = predicateArgument, .Err = err, .Ctx = ctx};
+        return CalculateFilterPredicate(predicateBody, tree, serializationContext);
+
     }
 } // namespace NYql

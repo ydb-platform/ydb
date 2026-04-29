@@ -439,32 +439,21 @@ public:
                 TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
                 Cerr << "Filter predicate: " << filterPredicateSql << Endl;
 
-                NYql::NConnector::NApi::TPredicate offsetPredicateProto;
-                auto offsetSerializedProto = topicSource.OffsetPredicate().Ref().Content();
-                YQL_ENSURE(offsetPredicateProto.ParseFromString(offsetSerializedProto));
-                TString offsetPredicateSql = NYql::FormatPredicate(offsetPredicateProto);
-                Cerr << "Offset predicate: " << offsetPredicateSql << Endl;
+                NPq::NProto::TOffsetPredicate offsetPredicates;
+                auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
+                YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
 
-                NYql::NConnector::NApi::TPredicate writeTimePredicateProto;
-                auto writeTimeSerializedProto = topicSource.WriteTimePredicate().Ref().Content();
-                YQL_ENSURE(writeTimePredicateProto.ParseFromString(writeTimeSerializedProto));
-                TString writeTimeTPredicateSql = NYql::FormatPredicate(writeTimePredicateProto);
-                Cerr << "writeTimeTPredicateSql predicate: " << writeTimeTPredicateSql << Endl;
+                NPq::NProto::TWriteTimePredicate writeTimePredicate;
+                auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
+                YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
 
                 if (!streamingTopicRead) {
-                    std::vector<NPq::NProto::TOffsetPredicate> offsetPredicates;
-                    FillPredicate<NPq::NProto::TOffsetPredicate>(offsetPredicateProto, offsetPredicates);
-                    if (!offsetPredicates.empty()) {
-                        srcDesc.MutableOffsetPredicate()->Assign(offsetPredicates.begin(), offsetPredicates.end());
-                    }
+                   
+                    *srcDesc.MutableOffsetPredicate() = offsetPredicates;
+                    Cerr << "Fill Offset predicate: " << offsetPredicates.DebugString() << Endl;
 
-                    std::vector<NPq::NProto::TWriteTimePredicate> timePredicates;
-                    FillPredicate<NPq::NProto::TWriteTimePredicate>(writeTimePredicateProto, timePredicates);
-                    if (!timePredicates.empty()) {
-                        srcDesc.MutableWriteTimePredicate()->Assign(timePredicates.begin(), timePredicates.end());
-                    }
-
-                    // TODO : check disposition
+                    *srcDesc.MutableWriteTimePredicate() = writeTimePredicate;
+                    Cerr << "Fill writeTimePredicate predicate: " << writeTimePredicate.DebugString() << Endl;
                 }
                 if (sharedReading) {
                     srcDesc.SetPredicate(filterPredicateSql);
@@ -958,137 +947,6 @@ public:
             useSharedReading = false;
         }
         return useSharedReading;
-    }
-
-    bool ConvertTypedValueToInt64(const Ydb::TypedValue& typedValue, ui64& offset) {
-        auto v = typedValue.value();
-        switch(v.value_case()) {
-            case Ydb::Value::kInt32Value:
-                offset = v.int32_value() >= 0 ? v.int32_value() : 0;
-                break; 
-            case Ydb::Value::kUint32Value:
-                offset = v.uint32_value();
-                break;
-            case Ydb::Value::kInt64Value:
-                offset = v.int64_value() >= 0 ? v.int64_value() : 0; 
-                break;
-            case Ydb::Value::kUint64Value:
-                offset = v.uint64_value();
-                break;
-            default:
-                return false; // not supported
-        }
-        return true;
-    }
-
-    template<typename TProto>
-    void FillComparation(NConnector::NApi::TPredicate_TComparison comparison, TProto& proto) {
-        bool leftIsColumn = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kColumn;
-        bool leftIsValue = comparison.left_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
-        bool rightIsColumn = comparison.right_value().payload_case() == NConnector::NApi::TExpression::kColumn;
-        bool rightIsValue = comparison.right_value().payload_case() == NConnector::NApi::TExpression::kTypedValue;
-
-        if (!(leftIsColumn && rightIsValue || leftIsValue && rightIsColumn)) {
-            return;   // not supported
-        }
-        bool inverted = rightIsColumn;
-        auto typedValue = comparison.right_value();
-        auto operation = comparison.operation();
-        if (inverted) {
-            typedValue = comparison.left_value();
-            switch (operation) {
-            case NConnector::NApi::TPredicate_TComparison::L:
-                operation = NConnector::NApi::TPredicate_TComparison::G;
-                break;
-            case NConnector::NApi::TPredicate_TComparison::LE:
-                operation = NConnector::NApi::TPredicate_TComparison::GE;
-                break;
-            case NConnector::NApi::TPredicate_TComparison::EQ:
-            case NConnector::NApi::TPredicate_TComparison::NE:
-                break;
-            case NConnector::NApi::TPredicate_TComparison::GE:
-                operation = NConnector::NApi::TPredicate_TComparison::LE;
-                break;
-            case NConnector::NApi::TPredicate_TComparison::G:
-                operation = NConnector::NApi::TPredicate_TComparison::L;
-                break;
-            default:
-                break;
-            }
-        }
-        ui64 offset = 0;
-        if (!ConvertTypedValueToInt64( typedValue.typed_value(), offset)) {
-            return;
-        }
-
-        switch (operation) {
-        case NConnector::NApi::TPredicate_TComparison::L:
-            proto.SetEnd(offset);
-            break;
-        case NConnector::NApi::TPredicate_TComparison::LE:
-            proto.SetEnd(offset + 1);
-            break;
-        case NConnector::NApi::TPredicate_TComparison::EQ:
-            proto.SetBegin(offset);
-            proto.SetEnd(offset + 1);
-            break;
-        case NConnector::NApi::TPredicate_TComparison::GE:
-            proto.SetBegin(offset);
-            break;
-        case NConnector::NApi::TPredicate_TComparison::G:
-            proto.SetBegin(offset + 1);
-            break;
-        case NConnector::NApi::TPredicate_TComparison::NE:
-            break;  // not supported
-        default:
-            break;
-        }
-    }
-
-    template<typename TProto>
-    bool FillPredicate(const NConnector::NApi::TPredicate& predicate, std::vector<TProto>& predicates) {
-         if (predicate.payload_case() == NConnector::NApi::TPredicate::kConjunction) {
-            TProto proto;
-            for (const auto& predicate :  predicate.conjunction().operands()) {
-                if (predicate.payload_case() != NConnector::NApi::TPredicate::kComparison) {
-                    continue;
-                }
-                FillComparation(predicate.comparison(), proto);
-            }
-            if (proto.HasBegin() || proto.HasEnd()) {
-                predicates.push_back(proto);
-            }
-        }
-        if (predicate.payload_case() == NConnector::NApi::TPredicate::kComparison) {
-            TProto proto; 
-            FillComparation(predicate.comparison(), proto);
-            if (proto.HasBegin() || proto.HasEnd()) {
-                predicates.push_back(proto);
-            }
-        }
-        if (predicate.payload_case() == NConnector::NApi::TPredicate::kIn) {
-            if (predicate.in().value().payload_case() != NConnector::NApi::TExpression::kColumn) {
-                return false;
-            }
-            std::set<ui64> offsets;
-            for (const auto& expr : predicate.in().set()) {
-                if (expr.payload_case() != NConnector::NApi::TExpression::kTypedValue) {
-                    return false;
-                }
-                ui64 offset = 0;
-                if (!ConvertTypedValueToInt64(expr.typed_value(), offset)) {
-                    return false;
-                }
-                offsets.insert(offset);
-            }
-            if (!offsets.empty()) {
-                TProto proto; 
-                proto.SetBegin(*offsets.begin());
-                proto.SetEnd(*offsets.rbegin() + 1);
-                predicates.push_back(proto);
-            }
-        }
-        return true;
     }
 
 private:

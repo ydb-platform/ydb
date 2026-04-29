@@ -1,5 +1,6 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_restore_incremental_progress.h"
 
 #include <ydb/core/backup/impl/logging.h>
 
@@ -23,44 +24,7 @@ public:
     }
 
     void Fill(NKikimrBackup::TBackupCollectionRestore& restore, const TIncrementalRestoreState& restoreInfo) {
-        restore.SetId(restoreInfo.OriginalOperationId);
-        restore.SetStatus(Ydb::StatusIds::SUCCESS);
-
-        switch (restoreInfo.State) {
-            case TIncrementalRestoreState::EState::Completed:
-                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
-                restore.SetProgressPercent(100);
-                break;
-            case TIncrementalRestoreState::EState::Failed:
-                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
-                restore.SetProgressPercent(100);
-                restore.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
-                break;
-            case TIncrementalRestoreState::EState::Finalizing:
-                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
-                restore.SetProgressPercent(99);
-                break;
-            case TIncrementalRestoreState::EState::Running: {
-                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
-                const ui32 total = restoreInfo.IncrementalBackups.size();
-                if (total > 0) {
-                    // 1-98% range split across incrementals, with per-shard granularity within each
-                    float incrProgress = restoreInfo.CurrentIncrementalIdx + restoreInfo.CalcCurrentIncrementalProgress();
-                    restore.SetProgressPercent(1 + static_cast<ui32>(incrProgress * 97 / total));
-                } else {
-                    restore.SetProgressPercent(1);
-                }
-                break;
-            }
-            default:
-                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_PREPARING);
-                restore.SetProgressPercent(0);
-                break;
-        }
-
-        // Set user information if available
-        // Note: TIncrementalRestoreState doesn't have direct user info,
-        // so we'll leave this empty for now
+        FillRestoreProgress(restore, restoreInfo);
     }
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())

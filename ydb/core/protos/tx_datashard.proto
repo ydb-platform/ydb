@@ -64,10 +64,7 @@ message TShardOpResult {
     optional string Explain = 2;
     optional uint64 BytesProcessed = 3;
     optional uint64 RowsProcessed = 4;
-    // Meaningful only when Success=false. Default true preserves the existing
-    // "all failures retriable" behavior under rolling upgrades (old DataShard,
-    // new SchemeShard).
-    optional bool Retriable = 5;
+    optional bool Retriable = 5;  // meaningful only when Success=false
 }
 
 message TEvSchemaChanged {

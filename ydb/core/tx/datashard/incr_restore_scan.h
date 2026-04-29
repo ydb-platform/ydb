@@ -38,10 +38,7 @@ struct TEvIncrementalRestoreScan {
         ui64 TxId = 0;
         bool Success = true;
         TString Error;
-        // Meaningful only when !Success. Default true preserves the prior
-        // "all failures retriable" behavior (also see TShardOpResult.Retriable
-        // for the on-wire equivalent).
-        bool Retriable = true;
+        bool Retriable = true;  // meaningful only when !Success
     };
 };
 

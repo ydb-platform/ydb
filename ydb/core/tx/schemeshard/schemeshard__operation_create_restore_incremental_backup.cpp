@@ -21,10 +21,6 @@ void TrackIncrementalRestoreShardReply(
 {
     const auto& record = ev->Get()->Record;
     bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
-    // Backward-compat default for the Retriable bit: when the field is absent
-    // (old DataShard talking to new SchemeShard during a rolling upgrade),
-    // treat the failure as retriable. Otherwise an old DS's failure would
-    // silently turn into a non-retriable short-circuit.
     bool retriable = !failed
         || !record.HasOpResult()
         || !record.GetOpResult().HasRetriable()

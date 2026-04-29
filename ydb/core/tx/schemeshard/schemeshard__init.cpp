@@ -5525,17 +5525,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TOperationId opId(txId, 0);
                 Self->LongIncrementalRestoreOps[opId] = op;
 
-                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
-                    auto& state = Self->IncrementalRestoreStates[ui64(txId)];
-                    for (const auto& shardIdValue : op.GetInvolvedShards()) {
-                        TShardIdx shardIdx = TShardIdx(Self->TabletID(), TLocalShardIdx(shardIdValue));
-                        state.InvolvedShards.insert(shardIdx);
-                    }
-                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                 "TTxInit loaded " << op.GetInvolvedShards().size()
-                                 << " involved shards for incremental restore operation " << txId);
-                }
-
                 if (op.HasBackupCollectionPathId()) {
                     RestoreIncrementalRestoreOpPathStates(op);
                 }

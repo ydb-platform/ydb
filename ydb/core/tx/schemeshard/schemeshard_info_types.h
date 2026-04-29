@@ -3763,8 +3763,6 @@ struct TIncrementalRestoreState {
 
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    THashSet<TShardIdx> InvolvedShards;
-
     // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingTables.
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
@@ -3820,7 +3818,6 @@ struct TIncrementalRestoreState {
             // TableOperations.clear() also clears HasNonRetriableFailure on each table.
             TableOperations.clear();
             PendingTables.clear();
-            // InvolvedShards intentionally accumulates across incrementals.
 
             CurrentIncrementalRetryCount = 0;
             RetryScheduled = false;

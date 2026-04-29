@@ -590,7 +590,6 @@ void TSchemeShard::TrackSubOpAndExpectedShards(
     if (tableInfoPtr) {
         for (const auto& [shardIdx, partitionIdx] : (*tableInfoPtr)->GetShard2PartitionIdx()) {
             tableOpState.ExpectedShards.insert(shardIdx);
-            state.InvolvedShards.insert(shardIdx);
         }
     }
 }

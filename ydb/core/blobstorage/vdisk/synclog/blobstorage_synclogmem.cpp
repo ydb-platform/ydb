@@ -277,7 +277,8 @@ namespace NKikimr {
 
         TMemRecLogSnapshotPtr TMemRecLog::BuildSwapSnapshot(ui64 diskLastLsn,
                                                             ui64 freeUpToLsn, // excluding
-                                                            ui32 freeNPages) {
+                                                            ui32 freeNPages,
+                                                            ui32 maxPages) {
             TSyncLogPages pages;
 
             // compare function
@@ -303,7 +304,7 @@ namespace NKikimr {
 
             // now it points to the first page we are going to swap
             ui32 recsNum = 0;
-            while (it != Pages.end()) {
+            while (it != Pages.end() && pages.size() < maxPages) {
                 Y_ABORT_UNLESS((*it)->GetLastLsn() > diskLastLsn);
                 if (freeNPages > 0 || (*it)->GetFirstLsn() < freeUpToLsn) { // '<', because 'excluding'
                     pages.push_back(*it);

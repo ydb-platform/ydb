@@ -34,6 +34,7 @@ namespace NKikimr {
                 KeepState.Init(
                     std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
                     std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
+                FixateFirstLsnToKeep(ctx, KeepState.CalculateFirstLsnToKeep());
                 PerformActions(ctx);
                 Become(&TThis::StateFunc);
             }

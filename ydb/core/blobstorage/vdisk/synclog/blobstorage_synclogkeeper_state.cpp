@@ -40,7 +40,11 @@ namespace NKikimr {
             , MaxDiskChunks(CalcMaxDiskChunks(syncLogMaxDiskAmount, SyncLogPtr->GetChunkSize()))
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
-        {}
+        {
+            if (!ChunksToDelete.empty()) {
+                DelayedActions.SetDeleteChunk();
+            }
+        }
 
         // Calculate first lsn in recovery log we must to keep
         ui64 TSyncLogKeeperState::CalculateFirstLsnToKeep() const {
@@ -126,24 +130,33 @@ namespace NKikimr {
 
             FreeUpToLsn = freeUpToLsn;
             CutLogRetries = 0;
+            LastCutLogRetryFirstLsnToKeep = CalculateFirstLsnToKeep();
             DelayedActions.SetCutLog();
         }
 
         void TSyncLogKeeperState::RetryCutLogEvent() {
-            ++CutLogRetries;
-            if (CutLogRetries > 2) {
-                // error condition, retry doens't help
+            const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
+            if (firstLsnToKeep > LastCutLogRetryFirstLsnToKeep) {
+                CutLogRetries = 0;
+                LastCutLogRetryFirstLsnToKeep = firstLsnToKeep;
+            } else if (++CutLogRetries > 2) {
+                // error condition, retry doesn't help if several commits did not advance the boundary
                 LOG_ERROR(*LoggerCtx, BS_LOGCUTTER,
                         VDISKP(VCtx->VDiskLogPrefix,
-                            "KEEPER: RetryCutLogEvent: limit exceeded; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
-            } else {
-                LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
-                        VDISKP(VCtx->VDiskLogPrefix,
-                            "KEEPER: RetryCutLogEvent: retried; FreeUpToLsn# %" PRIu64, FreeUpToLsn));
-
-                // retry event with old value of FreeUpToLsn
-                DelayedActions.SetCutLog();
+                            "KEEPER: RetryCutLogEvent: no progress limit exceeded; FreeUpToLsn# %" PRIu64
+                            " firstLsnToKeep# %" PRIu64 " lastFirstLsnToKeep# %" PRIu64,
+                            FreeUpToLsn, firstLsnToKeep, LastCutLogRetryFirstLsnToKeep));
+                return;
             }
+
+            LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
+                    VDISKP(VCtx->VDiskLogPrefix,
+                        "KEEPER: RetryCutLogEvent: retried; FreeUpToLsn# %" PRIu64
+                        " firstLsnToKeep# %" PRIu64 " retriesWithoutProgress# %" PRIu32,
+                        FreeUpToLsn, firstLsnToKeep, CutLogRetries));
+
+            // retry event with old value of FreeUpToLsn
+            DelayedActions.SetCutLog();
         }
 
         void TSyncLogKeeperState::FreeChunkEvent(ui32 chunkIdx) {
@@ -338,15 +351,21 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(!wantToCutRecoveryLog || (FreeUpToLsn > 0));
                 const ui64 freeUpToLsn = wantToCutRecoveryLog ? FreeUpToLsn : 0;
 
+                const ui32 pagesInChunk = SyncLogPtr->GetChunkSize() / SyncLogPtr->GetAppendBlockSize();
+                const ui32 maxCutLogSwapPages = Max<ui32>(1, Min(MaxMemPages, pagesInChunk));
+                const ui32 maxSwapPages = wantToCutRecoveryLog ? maxCutLogSwapPages : Max<ui32>();
+
                 // build swap snap
-                swapSnap = SyncLogPtr->BuildMemSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages);
+                swapSnap = SyncLogPtr->BuildMemSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages, maxSwapPages);
                 LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
                         VDISKP(VCtx->VDiskLogPrefix,
                             "KEEPER: BuildSwapSnap: wantToCutRecoveryLog# %" PRIu32
                             " stillMemOverflow# %" PRIu32 " diskLastLsn# %" PRIu64
-                            " freeUpToLsn# %" PRIu64 " freeNPages# %" PRIu32 " swapSnap# %s",
+                            " freeUpToLsn# %" PRIu64 " freeNPages# %" PRIu32
+                            " maxSwapPages# %" PRIu32 " swapSnap# %s",
                             ui32(wantToCutRecoveryLog), ui32(stillMemOverflow),
                             diskLastLsn, freeUpToLsn, freeNPages,
+                            maxSwapPages,
                             (swapSnap ? swapSnap->BoundariesToString().data() : "{Mem: empty}")));
             }
 

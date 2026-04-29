@@ -179,6 +179,8 @@ namespace NKikimr {
             std::shared_ptr<ILoggerCtx> LoggerCtx;
             // number of retries me made to cut the log
             ui32 CutLogRetries = 0;
+            // last observed keep lsn while retrying the current cut-log request
+            ui64 LastCutLogRetryFirstLsnToKeep = 0;
             // settings:
             const ui32 MaxMemPages;
             const ui32 MaxDiskChunks;

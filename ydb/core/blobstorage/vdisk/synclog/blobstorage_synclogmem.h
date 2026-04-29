@@ -559,7 +559,8 @@ namespace NKikimr {
             TMemRecLogSnapshotPtr BuildSwapSnapshot(
                 ui64 diskLastLsn,
                 ui64 freeUpToLsn, // excluding
-                ui32 freeNPages);
+                ui32 freeNPages,
+                ui32 maxPages = Max<ui32>());
             TString BoundariesToString() const;
             void Output(IOutputStream &s) const;
             TString ToString() const;

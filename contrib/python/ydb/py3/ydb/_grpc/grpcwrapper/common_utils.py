@@ -56,8 +56,7 @@ class IFromProto(abc.ABC, Generic[ProtoT, ResultT]):
 
     @staticmethod
     @abc.abstractmethod
-    def from_proto(msg: ProtoT) -> ResultT:
-        ...
+    def from_proto(msg: ProtoT) -> ResultT: ...
 
 
 class IFromProtoWithProtoType(IFromProto[ProtoT, ResultT]):
@@ -65,27 +64,23 @@ class IFromProtoWithProtoType(IFromProto[ProtoT, ResultT]):
 
     @staticmethod
     @abc.abstractmethod
-    def empty_proto_message() -> ProtoT:
-        ...
+    def empty_proto_message() -> ProtoT: ...
 
 
 class IToProto(abc.ABC):
     @abc.abstractmethod
-    def to_proto(self) -> Message:
-        ...
+    def to_proto(self) -> Message: ...
 
 
 class IFromPublic(abc.ABC):
     @staticmethod
     @abc.abstractmethod
-    def from_public(o: typing.Any) -> typing.Any:
-        ...
+    def from_public(o: typing.Any) -> typing.Any: ...
 
 
 class IToPublic(abc.ABC):
     @abc.abstractmethod
-    def to_public(self) -> typing.Any:
-        ...
+    def to_public(self) -> typing.Any: ...
 
 
 class UnknownGrpcMessageError(issues.Error):
@@ -150,16 +145,13 @@ class SyncToAsyncIterator:
 
 class IGrpcWrapperAsyncIO(abc.ABC):
     @abc.abstractmethod
-    async def receive(self, timeout: Optional[int] = None) -> Any:
-        ...
+    async def receive(self, timeout: Optional[int] = None) -> Any: ...
 
     @abc.abstractmethod
-    def write(self, wrap_message: IToProto):
-        ...
+    def write(self, wrap_message: IToProto): ...
 
     @abc.abstractmethod
-    def close(self):
-        ...
+    def close(self): ...
 
 
 # SupportedDriverType imported from ydb._typing
@@ -297,7 +289,7 @@ class ServerStatus(
         msg: Union[
             ydb_topic_pb2.StreamReadMessage.FromServer,
             ydb_topic_pb2.StreamWriteMessage.FromServer,
-        ]
+        ],
     ) -> "ServerStatus":
         return ServerStatus(msg.status, msg.issues)
 

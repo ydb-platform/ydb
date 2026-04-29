@@ -115,6 +115,7 @@ private:
                 C(BytesRead)
                 C(MessagesRead)
                 C(BytesReadCompressed)
+                C(ReadSizeBudget)
                 C(BytesInflightUncompressed)
                 C(BytesInflightCompressed)
                 C(BytesInflightTotal)

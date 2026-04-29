@@ -19,8 +19,7 @@ logger = logging.getLogger(__name__)
 class BaseSqlInteractiveTest(BaseInteractiveTest):
     @classmethod
     def run_interactive_session(cls, queries: List[str], tmp_path: Path, extra_args: List[str] = None, endpoint: Optional[str] = None) -> BaseInteractiveTest.ExecutionResult:
-        if extra_args is None:
-            extra_args = []
+        extra_args = cls._with_profile_isolation(extra_args)
 
         stdin_content = "\n".join(queries) + "\n"
         stdin_path = str(tmp_path / f"interactive_stdin_{uuid.uuid4().hex}.txt")
@@ -154,7 +153,9 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
             self._wait_for_prompt(child)
             child.sendcontrol("c")
             self._wait_for_prompt(child)
-            time.sleep(2)
+            # Sleep past the double-Ctrl+C window (3s in line_reader.cpp) so the next
+            # Ctrl+C is treated as a cancel rather than an exit signal.
+            time.sleep(4)
             child.sendcontrol("c")
             self._wait_for_prompt(child)
             self._send_query(child, "exit")
@@ -163,8 +164,8 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
         finally:
             child.close()
 
-    def test_double_ctrl_c_within_1s_exits(self):
-        """Two Ctrl+Cs sent within one second terminate the session."""
+    def test_double_ctrl_c_exits(self):
+        """Two Ctrl+Cs sent within the double-Ctrl+C window terminate the session."""
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
@@ -177,16 +178,16 @@ class TestInteractiveExitCommands(BaseSqlInteractiveTest):
         finally:
             child.close()
 
-    def test_consequence_ctrl_c_without_prompt(self):
-        """Consecutive Ctrl+Cs sent at the same time."""
+    def test_consecutive_ctrl_c_without_prompt(self):
+        """A burst of Ctrl+Cs sent without waiting for prompt redraw must terminate the session cleanly."""
         child = self.spawn_interactive()
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_prompt(child)
-            child.sendcontrol("c")
-            child.sendcontrol("c")
-            child.sendcontrol("c")
-            child.sendcontrol("c")
+            # Send all four Ctrl+Cs in a single write so they land in the child's stdin
+            # buffer atomically. This avoids pexpect's per-call delaybeforesend inflating
+            # the gap between consecutive cancels beyond the double-Ctrl+C window.
+            child.send("\x03\x03\x03\x03")
             child.expect("Bye!", timeout=10)
             child.expect(pexpect.EOF, timeout=5)
         finally:

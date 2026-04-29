@@ -75,13 +75,19 @@ void TSchedulableTask::IncreaseUsage() {
     }
 }
 
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
+void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usageType) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->CpuUsage;
-        if (forcedResume) {
-            parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
-        } else {
-            parent->CpuBurstUsage += burstUsage.MicroSeconds();
+        switch(usageType) {
+            case CPU_DEFAULT:
+                parent->CpuBurstUsage += burstUsage.MicroSeconds();
+                break;
+            case CPU_RESUMED:
+                parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
+                break;
+            case READ_DEFAULT:
+                parent->ReadBurstUsage += burstUsage.MicroSeconds();
+                break;
         }
     }
 }

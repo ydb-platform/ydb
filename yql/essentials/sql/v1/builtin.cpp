@@ -5,6 +5,7 @@
 #include "list_builtin.h"
 #include "match_recognize.h"
 #include "select_yql_aggregation.h"
+#include "select_yql_window.h"
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -2420,16 +2421,16 @@ TString THoppingWindow::GetOpName() const {
     return "HoppingWindow";
 }
 
-TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
-    auto literal = node->GetLiteral("String");
+TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& val) const {
+    auto literal = val->GetLiteral("String");
     if (!literal) {
-        return Y("EvaluateExpr", node);
+        return Y("EvaluateExpr", val);
     }
     if (*literal == "max") {
-        return node;
+        return val;
     }
 
-    return new TYqlData(node->GetPos(), "Interval", {node});
+    return new TYqlData(val->GetPos(), "Interval", {val});
 }
 
 TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {
@@ -4146,15 +4147,6 @@ TNodeResult BuildBuiltinFunc(
                 return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"))));
             }
 
-#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-            if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-#endif
-
             switch (ctx.GetColumnReferenceState()) {
                 case EColumnRefState::MatchRecognizeMeasures:
                     [[fallthrough]];
@@ -4164,7 +4156,12 @@ TNodeResult BuildBuiltinFunc(
                     if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
                         return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
-                    return (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect);
+                    return WrapWithLangVerProxy(
+                        pos,
+                        (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect),
+                        TString(aggrCallback->second.CanonicalSqlName),
+                        aggrCallback->second.MinLangVer,
+                        aggrCallback->second.MaxLangVer);
             }
         }
 
@@ -4183,15 +4180,6 @@ TNodeResult BuildBuiltinFunc(
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
-#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-            if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-#endif
-
             TNodeResult result = (*aggrCallback).second.Callback(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
             if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
                 return UnsupportedYqlSelect(
@@ -4213,7 +4201,12 @@ TNodeResult BuildBuiltinFunc(
                     if ("first" == normalizedName || "last" == normalizedName) {
                         return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
-                    return result;
+                    return WrapWithLangVerProxy(
+                        pos,
+                        std::move(result),
+                        TString(aggrCallback->second.CanonicalSqlName),
+                        aggrCallback->second.MinLangVer,
+                        aggrCallback->second.MaxLangVer);
             }
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
@@ -4223,21 +4216,25 @@ TNodeResult BuildBuiltinFunc(
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
             const auto& funcInfo = builtinCallback->second;
-#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, funcInfo.CanonicalSqlName, funcInfo.MinLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-            if (!ctx.EnsureFeatureNotExpired(pos, funcInfo.CanonicalSqlName, funcInfo.MaxLangVer)) {
-                return std::unexpected(ESQLError::Basic);
-            }
-#endif
-
             if (isYqlSelect && funcInfo.Kind == "Window") {
-                return UnsupportedYqlSelect(
-                    ctx, TStringBuilder() << "Window function " << funcInfo.CanonicalSqlName);
+                TYqlWindowArgs wargs = {
+                    .Name = std::move(normalizedName),
+                    .Args = std::move(args),
+                };
+
+                return Wrap(BuildYqlWindow(pos, std::move(wargs)));
             }
 
-            return Wrap(funcInfo.Callback(pos, args));
+            if (isYqlSelect && normalizedName == "grouping") {
+                return Wrap(BuildYqlGrouping(pos, args));
+            }
+
+            return WrapWithLangVerProxy(
+                pos,
+                Wrap(funcInfo.Callback(pos, args)),
+                TString(funcInfo.CanonicalSqlName),
+                funcInfo.MinLangVer,
+                funcInfo.MaxLangVer);
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;

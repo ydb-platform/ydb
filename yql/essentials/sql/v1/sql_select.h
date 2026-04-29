@@ -54,7 +54,7 @@ private:
     };
 
     TSourcePtr SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
-                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
+                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrderBy, bool& selectOpAssumeOrderBy);
 
     struct TSelectKindResult {
         TSourcePtr Source;

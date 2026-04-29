@@ -1,12 +1,13 @@
 #pragma once
 
-#include "direct_block_group.h"
-#include "vchunk.h"
+#include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -24,7 +25,8 @@ public:
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
-        TDuration writeHandoffDelay,
+        TDuration writeHedgingDelay,
+        TDuration writeRequestTimeout,
         TDuration traceSamplePeriod,
         NMonitoring::TDynamicCounterPtr counters);
 

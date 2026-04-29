@@ -23,4 +23,20 @@ TMaybe<std::string> GetName(SQLv1::Bind_parameterContext* ctx) {
     }
 }
 
+TPosition GetPosition(SQLv1::Bind_parameterContext* ctx) {
+    if (ctx == nullptr) {
+        return {};
+    }
+
+    antlr4::Token* token = ctx->getStart();
+    if (!token) {
+        return {};
+    }
+
+    return {
+        .Line = static_cast<ui32>(token->getLine()),
+        .Column = static_cast<ui32>(token->getCharPositionInLine()),
+    };
+}
+
 } // namespace NSQLComplete

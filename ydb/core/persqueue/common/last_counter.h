@@ -45,6 +45,12 @@ public:
         return Values.back().Value;
     }
 
+    void Merge(const TLastCounter<T>& other) {
+        for (const auto& value : other.Values) {
+            Use(value.Value, value.LastUseTime);
+        }
+    }
+
 private:
     struct Data {
         TInstant LastUseTime;

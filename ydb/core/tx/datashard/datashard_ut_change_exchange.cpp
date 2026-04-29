@@ -2121,27 +2121,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         }
 
-        // try to update retention storage
-        {
-            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
-                .SetRetentionStorageMb(1)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
-        }
-
-        // try to update speed
-        {
-            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
-                .SetPartitionWriteSpeedBytesPerSecond(1_MB)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
-        }
-
-        // try to update write burst
-        {
-            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
-                .SetPartitionWriteBurstBytes(1_MB)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
-        }
-
         // try to update attributes
         {
             auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()

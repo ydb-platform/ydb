@@ -4,8 +4,6 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 #include <ydb/public/sdk/cpp/src/library/decimal/yql_decimal.h>
 
-#include <ydb/library/persqueue/constants.h>
-
 #include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/threading/future/subscription/wait_any.h>
 
@@ -17,9 +15,11 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+constexpr std::string_view WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX = "track_producer_id_in_tx";
+
 TWriteSessionSettings& TWriteSessionSettings::SetTrackProducerIdInTx(bool value)
 {
-    const auto& key = NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
+    const auto& key = WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
     return AppendSessionMeta({key.data(), key.size()},
                              value ? "true" : "false");
 }

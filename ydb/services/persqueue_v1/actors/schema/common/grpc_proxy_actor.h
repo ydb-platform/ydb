@@ -32,6 +32,8 @@ public:
     {
     }
 
+    ~TGrpcProxyActor() = default;
+
     void Bootstrap(const TActorContext& ctx) {
         NGRpcService::TRpcOperationRequestActor<TDerived, TRequest>::Bootstrap(ctx);
 

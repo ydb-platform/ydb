@@ -8,3 +8,6 @@ items:
 - { name: Secrets,                                   href: secrets.md }
 - { name: External tables,                           href: external_table.md }
 - { name: External data source,                      href: external_data_source.md }
+- name: Service objects
+  items:
+  - { name: Backup collections,                      href: backup-collection.md }

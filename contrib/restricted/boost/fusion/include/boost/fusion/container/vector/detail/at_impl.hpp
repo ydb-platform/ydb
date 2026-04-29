@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_AT_IMPL_05042005_0741)
+#ifndef FUSION_AT_IMPL_05042005_0741
 #define FUSION_AT_IMPL_05042005_0741
 
 #include <boost/fusion/support/config.hpp>

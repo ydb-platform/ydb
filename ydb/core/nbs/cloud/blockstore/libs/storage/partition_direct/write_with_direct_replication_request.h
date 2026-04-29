@@ -19,7 +19,8 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         NWilson::TTraceId traceId,
-        TDuration hedgingDelay);
+        TDuration hedgingDelay,
+        TDuration timeout);
 
     ~TWriteWithDirectReplicationRequestExecutor() override = default;
 
@@ -27,6 +28,8 @@ public:
 
 private:
     void SendWriteRequestsToHandoffPBuffers();
+
+    void ScheduleHedging() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

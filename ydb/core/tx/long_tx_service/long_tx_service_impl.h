@@ -49,16 +49,34 @@ namespace NLongTxService {
             TActorId CommitActor;
         };
 
+        struct TLockIsland;
         struct TWaitEdge;
 
         struct TTagAwaiter {};
         struct TTagBlocker {};
+        struct TTagIsland {};
 
-        struct TWaitNode {
+        struct TWaitNode : public TIntrusiveListItem<TWaitNode, TTagIsland> {
+            // Current island of connected locks (lock subgraph).
+            TLockIsland* Island = nullptr;
             // Incoming edges waiting for this lock (this == Blocker)
             TIntrusiveList<TWaitEdge, TTagAwaiter> Awaiters;
             // Outgoing edges blocking this lock (this == Awaiter)
             TIntrusiveList<TWaitEdge, TTagBlocker> Blockers;
+
+            // True if the lock has been marked by deadlock detection. After such lock
+            // has been removed, we need to run deadlock detection again to break any
+            // remaining cycles.
+            bool DeadlockDetectionVictim = false;
+
+            // Bookkeeping for the SCC finding algorithm
+            bool DfsVisited = false;
+            size_t SccId = -1;
+
+            void ClearBookkeeping() {
+                DfsVisited = false;
+                SccId = -1;
+            }
         };
 
         enum class ERequestType {
@@ -107,6 +125,7 @@ namespace NLongTxService {
             THashMap<TActorId, ui64> NewSubscribers;
             THashMap<TActorId, ui64> RepliedSubscribers;
             TInstant Timestamp = TInstant::Zero();
+            bool TimestampReady = false;
             // Intrusive heap support
             size_t HeapIndex = -1;
             TMonotonic ExpiresAt;
@@ -229,6 +248,20 @@ namespace NLongTxService {
                 }, Impl);
             }
 
+            TInstant Timestamp() const {
+                return std::visit([](auto ptr) {
+                    return ptr->Timestamp;
+                }, Impl);
+            }
+
+            bool TimestampReady() const {
+                struct TVisitor {
+                    bool operator()(TLockState*) { return true; }
+                    bool operator()(TProxyLockState* ls) { return ls->TimestampReady; }
+                };
+                return std::visit(TVisitor{}, Impl);
+            }
+
             TLockState* LocalState() const {
                 if (auto ptr = std::get_if<TLockState*>(&Impl)) {
                     return *ptr;
@@ -244,6 +277,15 @@ namespace NLongTxService {
             }
         };
 
+        struct TLockIsland : public TIntrusiveListItem<TLockIsland> {
+            ui64 Id;
+            TIntrusiveList<TWaitNode, TTagIsland> Locks;
+            // Current number of locks in this island (we merge smaller island into the bigger island)
+            size_t LocksCount = 0;
+            bool DeadlockDetectionScheduled = false;
+
+            explicit TLockIsland(ui64 id) : Id(id) {}
+        };
 
         struct TWaitEdge
                 : public TIntrusiveListItem<TWaitEdge, TTagAwaiter>
@@ -251,6 +293,7 @@ namespace NLongTxService {
             TWaitEdgeId Id;
             TLockStateHandle Awaiter;
             TLockStateHandle Blocker;
+            bool Broken = false; // True if the deadlock detection algo sent a request to break it.
 
             TWaitEdge(const TWaitEdgeId& id, TLockStateHandle awaiter, TLockStateHandle blocker)
                 : Id(id)
@@ -275,6 +318,7 @@ namespace NLongTxService {
                 EvAcquireSnapshotFinished,
                 EvReconnect,
                 EvSnapshotMaintenance,
+                EvRunDeadlockDetection,
             };
 
             struct TEvCommitFinished : public TEventLocal<TEvCommitFinished, EvCommitFinished> {
@@ -328,6 +372,15 @@ namespace NLongTxService {
 
             struct TEvSnapshotMaintenance : public TEventLocal<TEvSnapshotMaintenance, EvSnapshotMaintenance> {
             };
+
+            struct TEvRunDeadlockDetection : public TEventLocal<
+                    TEvRunDeadlockDetection, EvRunDeadlockDetection> {
+                const ui64 IslandId;
+
+                explicit TEvRunDeadlockDetection(ui64 islandId)
+                    : IslandId(islandId)
+                {}
+            };
         };
 
     private:
@@ -371,9 +424,7 @@ namespace NLongTxService {
     public:
         TLongTxServiceActor(const TLongTxServiceSettings& settings)
             : Settings(settings)
-        {
-            Y_UNUSED(Settings); // TODO
-        }
+        {}
 
         ~TLongTxServiceActor() {
             if (SessionSubscribeActor) {
@@ -416,6 +467,7 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
                 hFunc(TEvLongTxService::TEvUpdateLockWaitEdges, Handle);
                 hFunc(TEvLongTxService::TEvGetLockWaitGraph, Handle);
+                hFunc(TEvPrivate::TEvRunDeadlockDetection, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -446,6 +498,7 @@ namespace NLongTxService {
         void Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr& ev);
         void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
         void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
+        void Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -483,6 +536,7 @@ namespace NLongTxService {
         void UpdateLocalSnapshots();
         void UpdateImmutableSnapshotsRegistry();
 
+    private:
         TLockStateHandle GetAwaiterHandle(const TLockInfo& awaiterInfo);
 
         void UpdateLockWaitEdges(
@@ -495,7 +549,10 @@ namespace NLongTxService {
             const TProtoList& newEdges,
             TFilter edgeFilter);
 
-        void RemoveWaitNodeEdges(TWaitNode& waitNode);
+        void UnlinkWaitEdge(TWaitEdge&);
+        void UnlinkWaitNode(TWaitNode&);
+
+        void ScheduleDeadlockDetection(TLockIsland&, TDuration delay);
 
     private:
         const TLongTxServiceSettings Settings;
@@ -514,6 +571,8 @@ namespace NLongTxService {
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
 
+        ui64 NextLockIslandId = 1;
+        THashMap<ui64, TLockIsland> LockIslands;
         THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
     };
 

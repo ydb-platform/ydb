@@ -28,6 +28,56 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(0, errorCount);
     }
 
+    Y_UNIT_TEST(InflightTracking)
+    {
+        THostStat stat;
+        TInstant now = TInstant::Now();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.InflightCount(EOperation::WriteToManyPBuffers));
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.InflightCount(EOperation::WriteToPBuffer));
+
+        stat.OnRequest(EOperation::WriteToManyPBuffers);
+        stat.OnRequest(EOperation::WriteToManyPBuffers);
+        stat.OnRequest(EOperation::WriteToPBuffer);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            stat.InflightCount(EOperation::WriteToManyPBuffers));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.InflightCount(EOperation::WriteToPBuffer));
+
+        stat.OnSuccess(
+            now,
+            TDuration::MilliSeconds(10),
+            EOperation::WriteToManyPBuffers);
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.InflightCount(EOperation::WriteToManyPBuffers));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            stat.InflightCount(EOperation::WriteToPBuffer));
+
+        stat.OnError(now, EOperation::WriteToManyPBuffers);
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.InflightCount(EOperation::WriteToManyPBuffers));
+
+        // Decrement is clamped at 0 - extra OnSuccess/OnError calls are
+        // safe and do not cause underflow.
+        stat.OnSuccess(
+            now,
+            TDuration::MilliSeconds(10),
+            EOperation::WriteToManyPBuffers);
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            stat.InflightCount(EOperation::WriteToManyPBuffers));
+    }
+
     Y_UNIT_TEST(HasErrors)
     {
         THostStat stat;

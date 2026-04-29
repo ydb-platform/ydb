@@ -2522,7 +2522,7 @@ TExprNode::TPtr TryExpandFlatMapOverTableSource(const TExprNode::TPtr& node, TEx
 }
 
 template <bool Ordered>
-TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (auto res = TryExpandFlatMapOverTableSource(node, ctx)) {
         return res;
     }
@@ -2618,7 +2618,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TT
             .Build();
     }
 
-    if (node->Head().IsCallable("NarrowMap") && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
+    if (node->Head().IsCallable("NarrowMap") && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
         return FuseNarrowMap<true>(*node, ctx);
     }
 
@@ -2631,14 +2631,14 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TT
 }
 
 template<bool Ordered>
-TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         return FuseNarrowMap<false>(*node, ctx);
     } else if (input.IsCallable({"MultiMap", "OrderedMultiMap", "NarrowMultiMap"})) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -3483,7 +3483,7 @@ TExprNode::TPtr ExpandMinMax(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 template <bool Ordered>
-TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& arg = node->Tail().Head().Head();
     if (!arg.IsUsedInDependsOn() && ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
         YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
@@ -3517,7 +3517,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx, TTyp
     }
 
     if (node->Head().IsCallable("NarrowMap")) {
-        if (!arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
+        if (!arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
             const auto width = node->Head().Tail().Head().ChildrenSize();
             auto lambda = ctx.Builder(node->Pos())
@@ -3536,7 +3536,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx, TTyp
     }
 
     if (node->Head().IsCallable({"Map", "OrderedMap"})) {
-        if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1), types)) {
+        if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())
                     .Lambda()
@@ -4038,9 +4038,9 @@ bool IsSimpleExpand(const TExprNode& out, const TExprNode& arg) {
     return &out == &arg;
 }
 
-TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable({"Map", "OrderedMap"})) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -4117,7 +4117,7 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
     }
 
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -7195,9 +7195,9 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
         .Build();
 }
 
-TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -7206,7 +7206,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx,
             node->Content().starts_with("Narrow") ? TString("Ordered") += node->Content().substr(6U, 16U) : input.Content(),
             {input.HeadPtr(), std::move(lambda)});
     } else if (input.IsCallable("WideMap") && !node->IsCallable("NarrowFlatMap")) {
-        if (!CanFuseLambdas(*node->Child(1), *input.Child(1), types)) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
             return node;
         }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
@@ -7417,7 +7417,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx,
     return node;
 }
 
-TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto& lambda = node->Tail();
     const auto& body = lambda.Tail();
 
@@ -7483,15 +7483,15 @@ TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext&
         }
     }
 
-    return OptimizeWideMaps(node, ctx, types);
+    return OptimizeWideMaps(node, ctx);
 }
 
-TExprNode::TPtr OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
-        if (!CanFuseLambdas(*node->Child(1), input.Tail(), types)) {
+        if (!CanFuseLambdas(*node->Child(1), input.Tail())) {
             return node;
         }
-        if (!CanFuseLambdas(*node->Child(2), input.Tail(), types)) {
+        if (!CanFuseLambdas(*node->Child(2), input.Tail())) {
             return node;
         }
 
@@ -9415,14 +9415,14 @@ struct TPeepHoleRules {
         {"OptionalIf", &ExpandContainerIf<false, false>},
         {"FlatListIf", &ExpandContainerIf<true, true>},
         {"FlatOptionalIf", &ExpandContainerIf<true, false>},
-        {"IfPresent", &OptimizeIfPresent<false>}
+        {"IfPresent", &OptimizeIfPresent<false>},
+        {"FlatMap", &ExpandFlatMap<false>},
+        {"OrderedFlatMap", &ExpandFlatMap<true>},
+        {"Map", &OptimizeMap<false>},
+        {"OrderedMap", &OptimizeMap<true>},
     };
 
     const TExtPeepHoleOptimizerMap SimplifyStageExtRules = {
-        {"Map", &OptimizeMap<false>},
-        {"OrderedMap", &OptimizeMap<true>},
-        {"FlatMap", &ExpandFlatMap<false>},
-        {"OrderedFlatMap", &ExpandFlatMap<true>},
     };
 
     const TPeepHoleOptimizerMap FinalStageRules = {
@@ -9477,6 +9477,14 @@ struct TPeepHoleRules {
         {"ToFlow", &OptimizeToFlow},
         {"FromFlow", &OptimizeFromFlow},
         {"Coalesce", &OptimizeCoalesce},
+        {"MultiMap", &OptimizeMultiMap<false>},
+        {"OrderedMultiMap", &OptimizeMultiMap<true>},
+        {"ExpandMap", &OptimizeExpandMap},
+        {"NarrowMultiMap", &OptimizeWideMaps},
+        {"WideMap", &OptimizeWideMaps},
+        {"NarrowMap", &OptimizeWideMaps},
+        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
+        {"SqueezeToDict", &OptimizeSqueezeToDict},
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
@@ -9484,14 +9492,6 @@ struct TPeepHoleRules {
         {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"Exists", &OptimizeExists},
-        {"ExpandMap", &OptimizeExpandMap},
-        {"NarrowFlatMap", &OptimizeNarrowFlatMap},
-        {"NarrowMultiMap", &OptimizeWideMaps},
-        {"WideMap", &OptimizeWideMaps},
-        {"NarrowMap", &OptimizeWideMaps},
-        {"MultiMap", &OptimizeMultiMap<false>},
-        {"OrderedMultiMap", &OptimizeMultiMap<true>},
-        {"SqueezeToDict", &OptimizeSqueezeToDict},
     };
 
     const TMaybeNonDetPeepHoleOptimizerMap FinalStageNonDetRules = {

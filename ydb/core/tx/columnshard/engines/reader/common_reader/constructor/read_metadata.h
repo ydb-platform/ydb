@@ -195,7 +195,7 @@ public:
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
-    TConclusionStatus Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const bool isPlain);
+    TConclusionStatus Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass);
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;

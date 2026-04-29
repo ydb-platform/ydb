@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -75,9 +76,14 @@ private:
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys, ui32 outputIndex = 0)
+    TShuffleConnection(const TVector<TInfoUnit>& keys,
+                       ui32 outputIndex,
+                       NDq::EHashShuffleFuncType hashFuncType,
+                       bool useSpilling = false)
         : TConnection("Shuffle", outputIndex)
-        , Keys(keys) {
+        , Keys(keys)
+        , HashFuncType(hashFuncType)
+        , UseSpilling(useSpilling) {
     }
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
@@ -86,6 +92,8 @@ struct TShuffleConnection: public TConnection {
     }
 
     TVector<TInfoUnit> Keys;
+    NDq::EHashShuffleFuncType HashFuncType;
+    bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
@@ -190,6 +198,8 @@ struct TStageGraph {
     }
 
     TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }
+
+    TIntrusivePtr<TConnection> GetInputConnection(ui32 stageId, ui32 inputIndex) const;
 
     /**
      * Generate an expression for stage inputs

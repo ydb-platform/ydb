@@ -11,6 +11,115 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+struct TShuffleEliminationContext {
+    TSimpleSharedPtr<TOrderingsStateMachine> FSM;
+    TTableAliasMap TableAliasMap;
+};
+
+TShuffleEliminationContext BuildShuffleEliminationContext(
+    TIntrusivePtr<TOpCBOTree>& cboTree,
+    TVector<std::shared_ptr<TRelOptimizerNode>>& rels)
+{
+    TFDStorage fdStorage;
+    TTableAliasMap tableAliasMap;
+    auto& rootLineage = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
+
+    // -- Build table alias map --------------------------------------
+    THashSet<TString> addedAliases;
+    for (const auto& [iu, entry] : rootLineage.Mapping) {
+        auto alias = entry.GetCannonicalAlias();
+        if (addedAliases.insert(alias).second) {
+            tableAliasMap.AddMapping(entry.TableName, alias);
+        }
+    }
+
+    auto resolveColumn = [&](const TInfoUnit& column) -> TInfoUnit {
+        auto& mapping = rootLineage.Mapping;
+        if (mapping.contains(column)) {
+            return mapping.at(column).GetInfoUnit();
+        }
+        return column;
+    };
+
+    // -- Collect interesting orderings & FDs from join conditions ---
+    for (auto node : cboTree->TreeNodes) {
+        auto join = CastOperator<TOpJoin>(node);
+        TVector<TJoinColumn> leftKeys, rightKeys;
+        for (auto [leftKey, rightKey] : join->JoinKeys) {
+            auto mappedLeft = resolveColumn(leftKey);
+            auto mappedRight = resolveColumn(rightKey);
+
+            leftKeys.emplace_back(mappedLeft.GetAlias(), mappedLeft.GetColumnName());
+            rightKeys.emplace_back(mappedRight.GetAlias(), mappedRight.GetColumnName());
+        }
+
+        fdStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle, &tableAliasMap);
+        fdStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle, &tableAliasMap);
+        for (size_t i = 0; i < leftKeys.size(); ++i) {
+            fdStorage.AddFD(leftKeys[i], rightKeys[i],
+                            TFunctionalDependency::EEquivalence, false, &tableAliasMap);
+        }
+    }
+
+    // -- Collect base-table shufflings & sortings -------------------
+    // Resolve once, cache for reuse during rel initialization below.
+    TVector<TVector<TJoinColumn>> resolvedChildShufflings(cboTree->Children.size());
+
+    for (size_t i = 0; i < cboTree->Children.size(); ++i) {
+        const auto& child = cboTree->Children[i];
+        if (!child->Props.Metadata.has_value()) {
+            continue;
+        }
+        const auto& metadata = *child->Props.Metadata;
+
+        if (!metadata.ShuffledByColumns.empty()) {
+            auto& shuffledBy = resolvedChildShufflings[i];
+            shuffledBy.reserve(metadata.ShuffledByColumns.size());
+            for (const auto& col : metadata.ShuffledByColumns) {
+                auto mapped = resolveColumn(col);
+                shuffledBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
+            }
+            fdStorage.AddShuffling(TShuffling(shuffledBy), &tableAliasMap);
+        }
+
+        if (!metadata.KeyColumns.empty()) {
+            TVector<TJoinColumn> sortedBy;
+            sortedBy.reserve(metadata.KeyColumns.size());
+            for (const auto& col : metadata.KeyColumns) {
+                auto mapped = resolveColumn(col);
+                sortedBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
+            }
+            TVector<TOrdering::TItem::EDirection> dirs(
+                sortedBy.size(), TOrdering::TItem::EDirection::EAscending);
+            fdStorage.AddSorting(TSorting(sortedBy, dirs), &tableAliasMap);
+        }
+    }
+
+    // -- Build the FSM ----------------------------------------------
+    auto fsm = MakeSimpleShared<TOrderingsStateMachine>(
+        std::move(fdStorage), TOrdering::EType::EShuffle);
+
+    // -- Seed each rel's LogicalOrderings from cached shufflings ----
+    for (size_t i = 0; i < resolvedChildShufflings.size(); ++i) {
+        if (resolvedChildShufflings[i].empty()) {
+            continue;
+        }
+        auto orderingIdx = fsm->FDStorage.FindShuffling(
+            TShuffling(resolvedChildShufflings[i]), &tableAliasMap);
+        if (orderingIdx != std::numeric_limits<std::size_t>::max()) {
+            rels[i]->Stats.LogicalOrderings = fsm->CreateState(orderingIdx);
+        }
+    }
+
+    // -- Log orderings FSM that we created --------------------------
+    if (NYql::NLog::YqlLogger().NeedToLog(
+            NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "\nShufflings FSM: " << fsm->ToString();
+    }
+
+    return {std::move(fsm), std::move(tableAliasMap)};
+}
+
 // To use DP CBO, we need to use the column lineage map and map all variables in join condition to
 // original aliases and column names in order to correctly use column statistics and shuffle elimination
 //
@@ -131,6 +240,8 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         if (join->JoinAlgo != NKikimr::NKqp::EJoinAlgoType::Undefined) {
             res->Props.JoinAlgo = join->JoinAlgo;
         }
+        res->Props.LeftShuffleEliminated = join->ShuffleLeftSideBy.empty();
+        res->Props.RightShuffleEliminated = join->ShuffleRightSideBy.empty();
 
         return res;
     }
@@ -195,11 +306,20 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
     };
 
-    // Shuffle elimination is currently disabled
-    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+    bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+
+    std::optional<TShuffleEliminationContext> shuffleCtx;
+    if (enableShuffleElimination) {
+        shuffleCtx.emplace(BuildShuffleEliminationContext(cboTree, rels));
+    }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
-    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
+    auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
+        providerCtx, settings, ctx.ExprCtx,
+        enableShuffleElimination,
+        shuffleCtx ? shuffleCtx->FSM : nullptr,
+        shuffleCtx ? &shuffleCtx->TableAliasMap : nullptr)
+    );
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

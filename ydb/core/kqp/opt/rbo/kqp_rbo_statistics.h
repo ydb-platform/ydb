@@ -90,6 +90,10 @@ public:
     TColumnLineage ColumnLineage;
     TVector<TInfoUnit> KeyColumns;
     ui32 ColumnsCount = 0;
+    // This is a descriptive fact: "this node's rows are physically partitioned by these columns".
+    // The per-side *requirement* ("shuffle this input by these keys for the parent join") is
+    // NOT stored here — it lives on TJoinOptimizerNode. It is propagated through renames, projections,
+    // joins and such. When it reaches leafs of a CBO Tree it's used to set the initial orderings.
     TVector<TInfoUnit> ShuffledByColumns;
     TVector<std::pair<TInfoUnit,bool>> SortColumns;
 

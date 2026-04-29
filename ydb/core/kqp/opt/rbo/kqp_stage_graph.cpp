@@ -63,6 +63,8 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .KeyColumns()
             .Add(keyColumns)
         .Build()
+        .UseSpilling().Build(UseSpilling)
+        .HashFunc().Build(ToString(HashFuncType))
     .Done().Ptr();
     // clang-format on
 }
@@ -102,6 +104,23 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
     const auto arg = Build<TCoArgument>(ctx, pos).Name(inputName).Done().Ptr();
     return std::make_pair(arg, arg);
+}
+
+TIntrusivePtr<TConnection> TStageGraph::GetInputConnection(ui32 stageId, ui32 inputIndex) const {
+    const auto& stageInputs = StageInputs.at(stageId);
+    Y_ENSURE(inputIndex < stageInputs.size(), "Stage input index is out of range.");
+
+    const auto inputStageId = stageInputs[inputIndex];
+    const auto& connections = Connections.at(std::make_pair(inputStageId, stageId));
+    ui32 connectionIndex = 0;
+    for (ui32 i = 0; i < inputIndex; ++i) {
+        if (stageInputs[i] == inputStageId) {
+            ++connectionIndex;
+        }
+    }
+
+    Y_ENSURE(connectionIndex < connections.size(), "Stage input connection is missing.");
+    return connections[connectionIndex];
 }
 
 void TStageGraph::TopologicalSort() {

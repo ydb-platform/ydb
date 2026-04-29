@@ -19,28 +19,40 @@ NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags
     return res;
 }
 
+struct TExplainJsonContext {
+    const TStageGraph& StageGraph;
+    ui64& NodeCounter;
+    ui32 ExplainFlags;
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, ui32 explainFlags) {
+    ui64 NextNodeId() {
+        return NodeCounter++;
+    }
+};
+
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplainJsonContext& ctx) {
     NJson::TJsonValue result;
-    result["PlanNodeId"] = nodeCounter++;
+    result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, explainFlags));
+    operatorList.AppendValue(MakeJson(op, ctx.ExplainFlags));
     result["Operators"] = operatorList;
 
-    auto getChildJson = [&](const auto& child) {
-        auto childJson = GetExplainJsonRec(child, nodeCounter, explainFlags);
+    auto getChildJson = [&](const auto& child, ui32 childIndex) {
+        auto childJson = GetExplainJsonRec(child, ctx);
 
-        // Insert shuffle connections if needed
-        // (currently always needed for GraceJoin)
+        // Insert shuffle connections if the stage graph has them between this child and the join.
         NJson::TJsonValue connectionJson = childJson;
         if (op->Kind == EOperator::Join) {
-            auto join = CastOperator<TOpJoin>(op);
-            if (join->Props.JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin) {
+            auto connection = ctx.StageGraph.GetInputConnection(
+                static_cast<ui32>(*op->Props.StageId),
+                childIndex
+            );
+
+            if (IsConnection<TShuffleConnection>(connection)) {
                 connectionJson = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
                 connectionJson["PlanNodeType"] = "Connection";
-                connectionJson["Node Type"] = "HashShuffle";
-                connectionJson["PlanNodeId"] = nodeCounter++;
+                connectionJson["Node Type"] = connection->GetExplainName();
+                connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
                 NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
                 plans.AppendValue(childJson);
@@ -53,8 +65,8 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
 
     if (op->Children.size()){
         NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& child : op->Children) {
-            plans.AppendValue(getChildJson(child));
+        for (ui32 i = 0; i < op->Children.size(); ++ i) {
+            plans.AppendValue(getChildJson(op->Children[i], i));
         }
         result["Plans"] = plans;
     }
@@ -187,15 +199,14 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 
 // For explain JSON we recurse over the operators of the plan
 NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) {
-    Y_UNUSED(explainFlags);
-
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, explainFlags));
+    TExplainJsonContext ctx{PlanProps.StageGraph, nodeCounter, explainFlags};
+    plans.AppendValue(GetExplainJsonRec(GetInput(), ctx));
     result["Plans"] = plans;
 
     return result;

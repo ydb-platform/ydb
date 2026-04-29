@@ -5,6 +5,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <util/generic/strbuf.h>
+
 namespace NKikimr {
 
 struct TPathId;
@@ -13,6 +15,9 @@ namespace NSchemeShard {
 
 struct TOperationContext;
 struct TTxState;
+
+/** Leaf name of the internal PersQueue group under a CDC or continuous-backup changefeed path. */
+inline constexpr TStringBuf CdcStreamPersQueueGroupName = TStringBuf("streamImpl");
 
 } // namespace NSchemeShard
 

@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
+#include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
 #include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 
 namespace NKikimr::NSchemeShard {
@@ -33,7 +34,7 @@ bool BuildTopicCloudEventInfo(
     }
 
     info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
-    if (!workingDir.empty() && name == "streamImpl") {
+    if (!workingDir.empty() && name == CdcStreamPersQueueGroupName) {
         TPath streamPath = TPath::Resolve(workingDir, context.SS);
         if (streamPath.IsResolved() && streamPath.IsCdcStream()) {
             info.TopicPath = workingDir;

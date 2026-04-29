@@ -685,13 +685,13 @@ void DoCreatePqPart(
     outTx.SetFailOnExist(!acceptExisted);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
-    desc.SetName("streamImpl");
+    desc.SetName(TString{CdcStreamPersQueueGroupName});
     desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
     desc.SetPartitionPerTablet(2);
 
     auto& pqConfig = *desc.MutablePQTabletConfig();
     pqConfig.SetTopicName(streamName);
-    pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
+    pqConfig.SetTopicPath(streamPath.Child(TString{CdcStreamPersQueueGroupName}).PathString());
     pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
 
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();

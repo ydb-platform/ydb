@@ -1,5 +1,6 @@
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_alter_cdc_stream.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_rotate_cdc_stream.h"
@@ -122,7 +123,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     const auto [_, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
     TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-    const auto topicPath = streamPath.Child("streamImpl");
+    const auto topicPath = streamPath.Child(TString{CdcStreamPersQueueGroupName});
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
 
     const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath(), TPath::TSplitChildTag{});

@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 
@@ -166,7 +167,7 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
 
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
             Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
-                        || implName == "streamImpl"
+                        || implName == CdcStreamPersQueueGroupName
                 , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);

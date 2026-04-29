@@ -1,5 +1,6 @@
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_helpers.h"
+#include "schemeshard_cdc_stream_common.h"
 
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
@@ -449,9 +450,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     modifyScheme.SetWorkingDir(changefeedPath);
     modifyScheme.SetInternal(true);
 
-    pqGroup.SetName("streamImpl");
+    pqGroup.SetName(TString{CdcStreamPersQueueGroupName});
 
-    auto describeSchemeResult = GetDescription(ss, changefeedPath + "/streamImpl");
+    auto describeSchemeResult = GetDescription(ss, TString::Join(changefeedPath, "/", CdcStreamPersQueueGroupName));
 
     const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
     item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};

@@ -152,11 +152,60 @@ namespace NKikimr {
         }
 
         void TSyncLogRecovery::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+            TSet<TChunkIdx> delayedChunks;
             for (TChunkIdx chunkIdx : Repaired->ChunksToDelete) {
-                const bool inserted = chunks.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
+                const bool inserted = delayedChunks.insert(chunkIdx).second;
+                Y_ABORT_UNLESS(inserted,
+                        "duplicate chunk in SyncLog ChunksToDeleteDelayed; chunkIdx# %" PRIu32
+                        " ChunksToDeleteDelayed# %s SyncLog# %s",
+                        chunkIdx,
+                        FormatList(Repaired->ChunksToDelete).data(),
+                        Repaired->SyncLogPtr->BoundariesToString().data());
             }
-            Repaired->SyncLogPtr->GetOwnedChunks(chunks);
+
+            TSet<TChunkIdx> syncLogChunks;
+            Repaired->SyncLogPtr->GetOwnedChunks(syncLogChunks);
+
+            TVector<TChunkIdx> duplicateChunks;
+            for (TChunkIdx chunkIdx : delayedChunks) {
+                if (syncLogChunks.find(chunkIdx) != syncLogChunks.end()) {
+                    duplicateChunks.push_back(chunkIdx);
+                }
+            }
+
+            if (duplicateChunks && NActors::TlsActivationContext) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::BS_LOCALRECOVERY,
+                    "SyncLog owned chunk appears both in DiskRecLog and ChunksToDeleteDelayed; "
+                    "resolving in favor of ChunksToDeleteDelayed; "
+                    << "DuplicateChunks# " << FormatList(duplicateChunks)
+                    << " DiskRecLogChunks# " << FormatList(syncLogChunks)
+                    << " ChunksToDeleteDelayed# " << FormatList(Repaired->ChunksToDelete)
+                    << " SyncLog# " << Repaired->SyncLogPtr->BoundariesToString());
+            }
+
+            for (TChunkIdx chunkIdx : delayedChunks) {
+                const bool inserted = chunks.insert(chunkIdx).second;
+                Y_ABORT_UNLESS(inserted,
+                        "duplicate chunk between SyncLog ChunksToDeleteDelayed and another owner; "
+                        "chunkIdx# %" PRIu32 " ChunksToDeleteDelayed# %s SyncLog# %s",
+                        chunkIdx,
+                        FormatList(Repaired->ChunksToDelete).data(),
+                        Repaired->SyncLogPtr->BoundariesToString().data());
+            }
+
+            for (TChunkIdx chunkIdx : syncLogChunks) {
+                if (delayedChunks.find(chunkIdx) != delayedChunks.end()) {
+                    continue;
+                }
+
+                const bool inserted = chunks.insert(chunkIdx).second;
+                Y_ABORT_UNLESS(inserted,
+                        "duplicate chunk between SyncLog DiskRecLog and another owner; "
+                        "chunkIdx# %" PRIu32 " DiskRecLogChunks# %s SyncLog# %s",
+                        chunkIdx,
+                        FormatList(syncLogChunks).data(),
+                        Repaired->SyncLogPtr->BoundariesToString().data());
+            }
         }
 
         TString TSyncLogRecovery::ToString() const {

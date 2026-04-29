@@ -337,8 +337,7 @@ public:
 
     THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
     THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
-    // Track incremental restore operations that completed with shard failures
-    // Transient (not persisted) — on reboot, operations restart fresh
+    // Transient (not persisted): cleared on reboot so operations restart fresh.
     THashSet<TOperationId> FailedIncrementalRestoreOperations;
 
     ui64 NextLocalShardIdx = 0;
@@ -1271,18 +1270,12 @@ public:
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
 
-    // Enqueue per-table and per-index sub-ops onto the orchestrator's PendingTables
-    // queue. Actual dispatch is deferred to DispatchPendingTables, which honors the
-    // ICB cap.
     void EnqueueIncrementalRestoreOperations(
         const TPathId& backupCollectionPathId,
         ui64 operationId,
         const TString& backupName,
         const TActorContext& ctx);
 
-    // Drain PendingTables in waves bounded by ICB
-    // SchemeShardControls.MaxIncrementalRestoreTablesInFlight (sentinel -1 = no cap).
-    // Top-up happens in CheckForCompletedOperations after each completion.
     void DispatchPendingTables(
         TIncrementalRestoreState& state,
         ui64 operationId,
@@ -1304,17 +1297,13 @@ public:
         const TString& accumulatedRelativePath,
         const TActorContext& ctx);
 
-    // Register subOpId in the orchestrator maps and populate ExpectedShards/InvolvedShards
-    // from the target table's Shard2PartitionIdx. Called by both CreateSingleTableRestoreOperation
-    // and CreateSingleIndexRestoreOperation after building the sub-op request.
+    // Registers the sub-op in orchestrator maps and seeds ExpectedShards from the table's shards.
     void TrackSubOpAndExpectedShards(
         TOperationId subOpId,
         TPathId tablePathId,
         ui64 incrementalRestoreId,
         TIncrementalRestoreState& state);
 
-    // Per-table dispatch helper invoked by DispatchPendingTables for a TPendingRestoreOp
-    // of kind=Table. Sends the schemeshard MultiIncrementalRestore sub-op for one entry.
     void CreateSingleTableRestoreOperation(
         const TPathId& backupCollectionPathId,
         ui64 operationId,

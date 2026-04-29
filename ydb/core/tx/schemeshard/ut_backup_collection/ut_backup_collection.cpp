@@ -3383,10 +3383,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         DescribePath(runtime, "/MyRoot/Table1");
     }
     Y_UNIT_TEST(RestoreProgressCalculation) {
-        // Unit test for CalcCurrentIncrementalProgress and the progress percent formula.
-        // Verifies per-shard granularity within each incremental and per-incremental
-        // granularity across the chain.
-
+        // Verifies CalcCurrentIncrementalProgress and the 1-98% progress formula.
         using namespace NKikimr::NSchemeShard;
         using TState = TIncrementalRestoreState;
         using TTableOp = TState::TTableOperationState;
@@ -3503,17 +3500,13 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
     }
 
-    // Pure unit test for the dispatch helper logic. Validates the cap arithmetic
-    // (in-flight count vs cap, sentinel -1 = unbounded). No schemeshard tablet
-    // involved — exercises only TIncrementalRestoreState fields and a local
-    // simulation of the DispatchPendingTables loop body.
+    // Validates cap arithmetic (in-flight vs cap, sentinel -1 = unbounded) via a local
+    // simulation of the DispatchPendingTables loop without a real schemeshard tablet.
     Y_UNIT_TEST(IncrementalRestoreDispatchRespectsCap) {
         using namespace NKikimr::NSchemeShard;
         using TState = TIncrementalRestoreState;
         using TPending = TState::TPendingRestoreOp;
 
-        // Local mirror of DispatchPendingTables; nextOpIdSeq is by-ref so unique
-        // TOperationIds are generated across drain() invocations.
         ui64 nextOpIdSeq = 9000;
         auto drain = [&nextOpIdSeq](TState& s, i64 cap) -> ui32 {
             ui32 dispatched = 0;
@@ -3570,12 +3563,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(drain(state, 0), 0u);
     }
 
-    // Contract test for TTableOperationState::RecordShardResult. Documents the
-    // invariant: per-shard reports are recorded exactly once. Re-deliveries —
-    // common in practice (DataShard tablet restart, schemeshard reboot,
-    // interconnect retransmits) — are dropped, even if they carry a different
-    // success value. This guards AllShardsComplete()'s sum invariant against
-    // double-counting that would otherwise hang the orchestrator.
+    // RecordShardResult is idempotent: re-deliveries (reboot, retransmit) are dropped
+    // even with a flipped success value, guarding AllShardsComplete()'s sum invariant.
     Y_UNIT_TEST(IncrementalRestoreShardResultIdempotent) {
         using namespace NKikimr::NSchemeShard;
         using TTableOp = TIncrementalRestoreState::TTableOperationState;
@@ -3618,11 +3607,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             op.ExpectedShards.size());
     }
 
-    // Unit test: documents the expected exponential backoff sequence for the
-    // shared NDataShard::GetRetryWakeupTimeoutBackoff helper. Acts as a guard
-    // rail for upstream changes to the helper.
+    // Guards GetRetryWakeupTimeoutBackoff against upstream changes: 1s/2s/4s/8s plateau.
     Y_UNIT_TEST(IncrementalRestoreBackoffSchedule) {
-        // Per scan_common.h: TDuration::Seconds(1u << Min(attempt, 3))
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(0), TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(1), TDuration::Seconds(2));
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(2), TDuration::Seconds(4));
@@ -3633,17 +3619,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(6), TDuration::Seconds(8));
     }
 
-    // Unit test: documents the IsScanSuccess / IsScanRetriable mapping over the
-    // public NTable::EStatus values. If new values are added upstream, this
-    // test forces a conscious decision about their classification.
+    // Guards IsScanSuccess/IsScanRetriable classification against new EStatus values.
     Y_UNIT_TEST(IncrementalRestoreScanStatusToRetriable) {
         using NKikimr::NTable::EStatus;
         using NKikimr::NDataShard::IsScanSuccess;
         using NKikimr::NDataShard::IsScanRetriable;
 
-        // Done is the only success.
         UNIT_ASSERT(IsScanSuccess(EStatus::Done));
-        UNIT_ASSERT(IsScanRetriable(EStatus::Done));  // success implies retriable
+        UNIT_ASSERT(IsScanRetriable(EStatus::Done));
 
         UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
         UNIT_ASSERT(!IsScanRetriable(EStatus::Lost));

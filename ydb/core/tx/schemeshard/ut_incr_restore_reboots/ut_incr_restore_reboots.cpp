@@ -59,10 +59,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     }
 
-    // Inject TEvFinished failures into the scan completion path. Returns the
-    // observer holder; when 'counter' is captured externally, the caller can
-    // inspect how many failures were actually injected. Skips internal
-    // TEvFinished() events (TxId=0) emitted by change_sender_incr_restore.
+    // Injects scan failures into TEvFinished; skips TxId=0 events from change_sender.
     TTestActorRuntime::TEventObserverHolder InjectScanFailures(
         TTestActorRuntime& runtime,
         std::atomic<int>& counter,
@@ -84,10 +81,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             });
     }
 
-    // Counts in-flight ESchemeOpRestoreMultipleIncrementalBackups sub-ops by
-    // observing TEvModifySchemeTransaction (start) and TEvModifySchemeTransactionResult
-    // (end). Used by the rate-limiter cap tests to assert the in-flight count never
-    // exceeds the configured cap.
+    // Tracks peak concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
     struct TInFlightTracker {
         std::atomic<i32> InFlight{0};
         std::atomic<i32> PeakInFlight{0};
@@ -601,13 +595,9 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            // Active zone: reboots are injected here while the restore is processing.
-            // The bug manifests here: after reboot, IncrementalRestoreState is not
-            // loaded from DB, so the restore actor loses its state and cannot complete.
             {
                 TInactiveZone inactive(activeZone);
 
-                // After reboots, the restore must still complete successfully.
                 WaitForRestoreDone(runtime, t.TestEnv.Get(), "/MyRoot", true);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
@@ -623,10 +613,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // Tests that TTxInit correctly resumes an incremental restore operation that is in the
-    // Finalizing state after a SchemeShard reboot. With enough incrementals, the bucket
-    // reboot mechanism is very likely to inject a reboot while the finalize sub-operation
-    // is in flight (state == Finalizing), exercising the TTxInit Finalizing resume path.
+    // Verifies TTxInit resumes correctly when a reboot lands during the Finalizing state.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(TestIncrementalRestoreFinalizingStateRecoveryAfterReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -681,17 +668,11 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 TestDropTable(runtime, ++t.TxId, "/MyRoot", "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                // Start restore — processing begins here; reboots will be injected during
-                // the active zone below, including potentially during Finalizing state
                 TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot",
                     R"(Name: ".backups/collections/MyCollection1")");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            // Active zone: bucket reboots injected here. With 5 incrementals the restore
-            // goes through: Running(incr0) -> Running(incr1) -> ... -> Running(incr4) ->
-            // Finalizing -> Completed. Reboots at any of these transitions exercise the
-            // TTxInit resume path for both Running and Finalizing states.
             {
                 TInactiveZone inactive(activeZone);
 
@@ -752,9 +733,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
-        // Inject a single TEvFinished failure to exercise the retry path.
-        // We rewrite the FIRST TEvFinished from the IncrementalRestoreScan to carry success=false
-        // and let subsequent retries succeed.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
             /*retriable=*/true, "Injected scan failure for retry test");
@@ -763,23 +741,15 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
-        // Wait for restore to complete via the retry path
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(60));
-        // Status must be SUCCESS — retry path recovered from the injected failure
         UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
             "Restore status is not SUCCESS after retry");
-
-        // Ensure exactly 1 failure was injected (the retry must have succeeded on attempt 2)
         UNIT_ASSERT_GE(failuresInjected.load(), 1);
-
-        // Verify table data was restored correctly despite the injected failure
-        // Full backup: key=1,val=1. Incremental: key=2,val=2. Total: 2 rows.
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
     }
 
-    // Helper: create N tables in a backup collection, populate with data, take a
-    // single full+incremental backup, drop the tables. Used by the cap tests.
+    // Creates N tables, takes a full+incremental backup, drops the tables. Used by cap tests.
     void SetupBackupCollectionWithNTables(TTestActorRuntime& runtime, TTestEnv& env,
             ui64& txId, ui32 numTables) {
         TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
@@ -834,8 +804,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         }
     }
 
-    // Test 2: With cap=2, never see >2 concurrent ESchemeOpRestoreMultipleIncrementalBackups
-    // sub-ops in flight. All 8 tables eventually restored.
     Y_UNIT_TEST(IncrementalRestoreRespectsConcurrencyLimit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -883,7 +851,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         }
     }
 
-    // Test 3: cap=-1 (unbounded sentinel) lets all 8 tables fan out at once.
     Y_UNIT_TEST(IncrementalRestoreUnboundedWhenCapNegative) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -908,8 +875,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             "Expected peak in-flight > 2 with unbounded cap, saw " << tracker.PeakInFlight.load());
     }
 
-    // Test 4: cap survives reboots. ICB lives in AppData which persists across
-    // tablet restart in the test framework, so set it once in the inactive zone.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalRestoreCapRespectedAcrossReboots, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -993,8 +958,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // Test 5: change cap during restore. Raising lets dispatcher fill up; lowering
-    // does not abort in-flight (cap is checked at dispatch time, not retroactively).
+    // Lowering the cap mid-restore does not abort in-flight ops (cap is checked at dispatch time).
     Y_UNIT_TEST(IncrementalRestoreCapChangedMidRestore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1055,9 +1019,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         }
     }
 
-    // Test 6: cap interacts cleanly with the retry path. After an injected shard
-    // failure, the orchestrator clears PendingTables and re-enqueues; the cap
-    // continues to apply during the retry wave.
+    // Cap remains in effect during the retry wave after a shard failure.
     Y_UNIT_TEST(IncrementalRestoreCapRespectedDuringRetry) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1093,23 +1055,16 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         }
     }
 
-    // Test 3 (integration): exponential backoff between retries.
-    //
-    // Inject 2 retriable scan failures, then let the third attempt succeed.
-    // Observe the wall-clock time of each TEvFinished arrival; the gaps must
-    // honor GetRetryWakeupTimeoutBackoff(attempt): >= 1s for retry 1, >= 2s
-    // for retry 2.
+    // Backoff gaps between retries honor GetRetryWakeupTimeoutBackoff: >=1s then >=2s.
     Y_UNIT_TEST(IncrementalRestoreRetryBackoffEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Force a generous budget so the backoff (not the cap) is what we observe.
         TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
-        // Capture per-attempt timestamps and inject 2 retriable failures.
         TMutex finishMutex;
         TVector<TInstant> finishTimes;
         std::atomic<int> failuresInjected{0};
@@ -1136,7 +1091,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(2), TDuration::Seconds(120));
 
-        // Need at least 3 attempts (2 failed + 1 success).
         TVector<TInstant> snap;
         {
             TGuard<TMutex> g(finishMutex);
@@ -1146,7 +1100,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             "Expected at least 3 TEvFinished, got " << snap.size());
         UNIT_ASSERT_GE(failuresInjected.load(), 2);
 
-        // Backoff: retry 1 (after first failure) ≥ 1s; retry 2 ≥ 2s.
         TDuration gap1 = snap[1] - snap[0];
         TDuration gap2 = snap[2] - snap[1];
         UNIT_ASSERT_C(gap1 >= TDuration::Seconds(1),
@@ -1154,13 +1107,10 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         UNIT_ASSERT_C(gap2 >= TDuration::Seconds(2),
             "Backoff gap2 too short: " << gap2);
 
-        // Restore eventually succeeded.
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Test 4 (integration): retry budget enforced via ICB cap.
-    //
-    // ICB cap = 2; inject 3 retriable failures. Restore must reach Failed.
+    // Budget cap=2 exhausted by injected failures → restore must reach GENERIC_ERROR.
     Y_UNIT_TEST(IncrementalRestoreRetryBudgetEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1181,20 +1131,12 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(120));
 
-        // Budget exhausted → GENERIC_ERROR (NOT SUCCESS).
         UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
             "Restore status was SUCCESS under exhausted retry budget");
-
-        // We expect at least 3 failure events: initial attempt + 2 retries.
         UNIT_ASSERT_GE(failuresInjected.load(), 3);
     }
 
-    // Test 5 (integration): -1 sentinel disables the retry cap.
-    //
-    // The plan asks for "100 failures, then succeed", but the simulated runtime
-    // makes 100 backoff cycles slow (sum of capped 8s plateau). Exercise the
-    // sentinel with 20 failures, which already exceeds any reasonable default
-    // (50) once we hit the plateau, so passing 20 in proves -1 is honored.
+    // cap=-1 disables the budget; restore must succeed after 20 injected failures.
     Y_UNIT_TEST(IncrementalRestoreRetryBudgetUnlimited) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

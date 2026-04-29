@@ -318,7 +318,8 @@ private:
 };
 
 class TProposedWaitParts : public NTableState::TProposedWaitParts {
-    TOperationId MyOperationId;  // Own copy — parent's OperationId is private
+    // Own copy — parent's OperationId is private.
+    TOperationId MyOperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -333,11 +334,7 @@ public:
     {}
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        // Check for shard failure BEFORE delegating to parent
         TrackIncrementalRestoreShardReply(MyOperationId, ev, context, DebugHint());
-
-        // Delegate to parent — handles CollectSchemaChanged, ReadyForNotifications,
-        // logging, and all edge cases
         return NTableState::TProposedWaitParts::HandleReply(ev, context);
     }
 };

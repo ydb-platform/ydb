@@ -5464,8 +5464,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Load incremental restore state (must be before IncrementalRestoreOperations
-        // so IncrementalRestoreStates is populated when the contains() check below runs)
+        // Must load before IncrementalRestoreOperations so IncrementalRestoreStates is
+        // populated when the contains() check in that block runs.
         {
             auto rowset = db.Table<Schema::IncrementalRestoreState>().Select();
             if (!rowset.IsReady()) {
@@ -5482,11 +5482,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
 
-                // Do NOT load CompletedOperations for Running states.
-                // After reboot, we retry the current incremental from scratch rather than
-                // risk advancing past a partially-completed incremental where some operations
-                // failed and their failure status was lost (transient FailedIncrementalRestoreOperations).
-                // This is safe because incremental restore operations are idempotent.
+                // Do NOT restore CompletedOperations for Running states — after reboot we retry
+                // the current incremental from scratch (ops are idempotent; transient failure
+                // tracking is lost on reboot so resuming mid-incremental would be unsafe).
                 if (state.State != TIncrementalRestoreState::EState::Running && !serializedData.empty()) {
                     NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
                     if (protoList.ParseFromString(serializedData)) {
@@ -5527,7 +5525,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TOperationId opId(txId, 0);
                 Self->LongIncrementalRestoreOps[opId] = op;
 
-                // Load involved shards into IncrementalRestoreState if it exists
                 if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
                     auto& state = Self->IncrementalRestoreStates[ui64(txId)];
                     for (const auto& shardIdValue : op.GetInvolvedShards()) {
@@ -5539,7 +5536,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                  << " involved shards for incremental restore operation " << txId);
                 }
 
-                // Restore table path states based on the operation
                 if (op.HasBackupCollectionPathId()) {
                     RestoreIncrementalRestoreOpPathStates(op);
                 }
@@ -5559,8 +5555,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
                 TTxId txId = opId.GetTxId();
 
-                // Skip orphan recovery if state already loaded from IncrementalRestoreState table
-                // (the IncrementalRestoreStates block above already handles resumption for these)
+                // Skip orphan recovery for ops whose state was already loaded above.
                 if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
                     continue;
                 }
@@ -5569,13 +5564,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Reconstruct IncrementalBackups from LongIncrementalRestoreOps for loaded states
         for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
             ui64 operationId = opId.GetTxId().GetValue();
             if (Self->IncrementalRestoreStates.contains(operationId)) {
                 auto& state = Self->IncrementalRestoreStates[operationId];
 
-                // Populate IncrementalBackups using trimmed names
                 for (const auto& backupName : op.GetIncrementalBackupTrimmedNames()) {
                     TPathId dummyPathId;
                     state.AddIncrementalBackup(dummyPathId, backupName, 0);
@@ -5593,7 +5586,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Schedule progress for non-completed restores
         for (const auto& [operationId, state] : Self->IncrementalRestoreStates) {
             if (state.State == TIncrementalRestoreState::EState::Running ||
                 state.State == TIncrementalRestoreState::EState::Finalizing) {
@@ -5794,7 +5786,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             op.GetBackupCollectionPathId().GetLocalId()
         );
 
-        // Set target tables to EPathStateIncomingIncrementalRestore
         for (const auto& tablePath : op.GetTablePathList()) {
             TPath resolvedPath = TPath::Resolve(tablePath, Self);
             if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
@@ -5803,22 +5794,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
         if (Self->PathsById.contains(backupCollectionPathId)) {
             auto sourcePath = Self->PathsById.at(backupCollectionPathId);
             sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
 
-            // Get the backup collection path to construct backup table paths
             TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
             if (backupCollectionPath.IsResolved()) {
                 TString backupCollectionPathStr = backupCollectionPath.PathString();
 
-                // Set full backup table states using trimmed names
                 if (op.HasFullBackupTrimmedName()) {
                     TString fullBackupName = NBackup::FullBackupDirName(op.GetFullBackupTrimmedName());
                     TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
 
-                    // Set state for each table in the full backup
                     for (const auto& tablePath : op.GetTablePathList()) {
                         TPath originalTablePath = TPath::Resolve(tablePath, Self);
                         if (originalTablePath.IsResolved()) {
@@ -5834,12 +5821,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                // Set incremental backup table states using trimmed names
                 for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
                     TString incrBackupName = NBackup::IncrementalBackupDirName(trimmedIncrName);
                     TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
 
-                    // Set state for each table in the incremental backup
                     for (const auto& tablePath : op.GetTablePathList()) {
                         TPath originalTablePath = TPath::Resolve(tablePath, Self);
                         if (originalTablePath.IsResolved()) {

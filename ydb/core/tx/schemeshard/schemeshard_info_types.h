@@ -177,15 +177,9 @@ struct TBackupSettings {
     }
 };
 
-// Per-incremental restore orchestrator rate-limit settings.
-// Cap unit is per-table sub-operation, not raw shard — see Index Build pattern
-// (it owns the dispatcher; we only own the orchestrator level).
+// Per-incremental restore orchestrator rate-limit settings. Sentinel -1 means unbounded.
 struct TIncrementalRestoreSettings {
-    // Sentinel -1 = unbounded (mirrors TSplitSettings::SplitMergePartCountLimit).
     TControlWrapper MaxIncrementalRestoreTablesInFlight;
-
-    // Per-incremental retry budget. Sentinel -1 = unlimited. Default 50 mirrors
-    // the Index Build orchestrator's default retry budget.
     TControlWrapper MaxIncrementalRestoreRetriesPerIncremental;
 
     TIncrementalRestoreSettings()
@@ -3713,22 +3707,9 @@ struct TIncrementalRestoreState {
             return !FailedShards.empty();
         }
 
-        // Sticky per-table flag set when any shard reported a non-retriable
-        // failure for this operation. Cleared together with the rest of
-        // TableOperations on advance to the next incremental (via
-        // MoveToNextIncremental → TableOperations.clear()). Lives inside the
-        // per-table record (NOT a sibling set) so a non-retriable bit cannot
-        // race past CheckForCompletedOperations and be lost.
         bool HasNonRetriableFailure = false;
 
-        // Idempotent against re-delivery. Returns true on the first terminal
-        // report for this shard, false if the shard was already recorded as
-        // success or failure. The first report wins; later reports — common in
-        // practice (DataShard tablet restart replays from WAL, schemeshard
-        // reboot triggers re-send, interconnect retransmits) — are dropped.
-        // This guards the AllShardsComplete() sum invariant against double-
-        // counting that would happen if the same shardIdx ever landed in both
-        // sets.
+        // Idempotent against re-delivery: the first terminal report wins.
         bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {
             if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
                 return false;
@@ -3745,74 +3726,46 @@ struct TIncrementalRestoreState {
         }
     };
 
-    // Pending sub-op queued by ProcessNextIncrementalBackup; dispatched in batches
-    // bounded by ICB SchemeShardControls.MaxIncrementalRestoreTablesInFlight.
-    // Both Table and Index restore sub-operations flow through this queue so the cap
-    // counts them uniformly (otherwise indexes would fan out unbounded).
+    // Pending sub-op dispatched in batches bounded by MaxIncrementalRestoreTablesInFlight.
+    // Both Table and Index sub-ops share the queue so indexes don't fan out unbounded.
     struct TPendingRestoreOp {
         enum class EKind { Table, Index };
         EKind Kind = EKind::Table;
 
-        // Common fields (both kinds use these)
         TString BackupName;
-
-        // Table-only: the backup-collection entry path (e.g. /MyRoot/Table1).
-        // Index-only: relative table path under the index meta tree.
         TString TablePath;
 
-        // Index-only fields
         TString IndexName;
         TString TargetTablePath;
         TString SpecificImplTableName;
     };
 
-    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    // Sorted by timestamp.
+    TVector<TIncrementalBackup> IncrementalBackups;
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
 
-    // Transient flag — set by CheckForCompletedOperations when any operation failed
-    // Not persisted to DB. After reboot, operations restart fresh.
     bool RetryNeeded = false;
-
-    // Transient retry counter for current incremental — reset on advance to next incremental.
-    // Not persisted to DB. After reboot, retry budget restarts (this is intentional — reboots are
-    // not "wasted" attempts).
     ui32 CurrentIncrementalRetryCount = 0;
 
-    // Two-phase backoff guard. Set when a TEvProgressIncrementalRestore is
-    // scheduled with a backoff delay. Cleared when that scheduled event arrives
-    // and runs the retry body, OR on advance/Failed transition. Concurrent
-    // completion notifications that arrive while a retry is already scheduled
-    // bail out without incrementing the counter — this keeps
-    // CurrentIncrementalRetryCount accurate when many shards fail at once.
-    // Transient (in-memory only); reboot resets it.
+    // Two-phase backoff guard: set when a retry is scheduled, cleared when it fires.
+    // Prevents concurrent completion events from double-counting retries.
     bool RetryScheduled = false;
-
-    // Diagnostic timestamp of the next scheduled retry attempt. Not used as a
-    // gate (RetryScheduled is the gate). Transient (reboot resets it).
     TInstant NextRetryAttemptAt;
 
-    // Sticky-within-incremental flag set by CheckForCompletedOperations when
-    // any per-table operation reports a non-retriable failure. Cleared on
-    // advance to next incremental. Transient (in-memory only).
     bool NonRetriableFailure = false;
 
-    // Maximum retry attempts per incremental before giving up. ADVISORY mirror —
-    // the runtime value comes from
-    // SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental (ICB).
+    // Advisory mirror of SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental.
     static constexpr ui32 MaxRetriesPerIncremental = 5;
 
-    // Operation completion tracking for current incremental backup
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 
-    // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
     THashSet<TShardIdx> InvolvedShards;
 
-    // Per-incremental dispatch queue. Populated by ProcessNextIncrementalBackup,
-    // drained by DispatchPendingTables in batches bounded by ICB cap.
+    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingTables.
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
 
@@ -3862,14 +3815,13 @@ struct TIncrementalRestoreState {
             CurrentIncrementalIdx++;
             CurrentIncrementalStarted = false;
 
-            // Reset operation tracking for next incremental
             InProgressOperations.clear();
             CompletedOperations.clear();
-            TableOperations.clear();      // also clears HasNonRetriableFailure on each table
+            // TableOperations.clear() also clears HasNonRetriableFailure on each table.
+            TableOperations.clear();
             PendingTables.clear();
-            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
+            // InvolvedShards intentionally accumulates across incrementals.
 
-            // Reset retry budget and backoff/failure state for the new incremental
             CurrentIncrementalRetryCount = 0;
             RetryScheduled = false;
             NextRetryAttemptAt = TInstant::Zero();

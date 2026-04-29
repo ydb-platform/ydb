@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/intervals_converter.h>
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -358,12 +359,8 @@ public:
         }
 
         if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
-            Cerr << "PushFilterToPqTopicSource TCoVoid  " << Endl;
             auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
             if(compareArgsEvaluate) {
-                Cerr << "PushFilterToPqTopicSource compareArgsEvaluate  " << Endl;
-
-
                auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
                if (!maybeOptionalIf.IsValid()) { // Nothing to push
                     return node;    // TODO
@@ -410,14 +407,11 @@ public:
             }
         }
 
-        Cerr << "PushFilterToPqTopicSource maybeLambda  " << Endl;
-
         auto maybeLambda = dqPqTopicSource.Predicate().Maybe<TCoLambda>();
         if (!maybeLambda) {
             maybeLambda = flatmap.Lambda();
         }
 
-        Cerr << "PushFilterToPqTopicSource eplaceCompareNodes  " << Endl;
         auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
         ReplaceCompareNodes(maybeLambda.Cast(), ctx, list);
 
@@ -525,6 +519,8 @@ public:
                             .Partitions(partitionList)
                             .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                             .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                            .Predicate<TCoVoid>().Build()
+                            .CompareArgsEvaluate<TCoVoid>().Build()
                             .Build()
                         .Build()
                     .Build()
@@ -540,6 +536,8 @@ public:
                     .Partitions(partitionList)
                     .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                     .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                    .Predicate<TCoVoid>().Build()
+                    .CompareArgsEvaluate<TCoVoid>().Build()
                     .Build()
                 .Build()
             .Done();
@@ -656,9 +654,8 @@ private:
         }
         TStringBuilder err;
         TDisjointIntervalTree<ui64> tree;
-        if (!NYql::CalculateFilterPredicate(ctx, predicate.ExprNode.Cast(), lambda.Args().Arg(0), tree, err)) {
+        if (!NYql::NPushdown::ConvertPredicateToIntervals(ctx, predicate.ExprNode.Cast(), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
-            Cerr << "Failed to calculate filter predicate  " << err << Endl;
             return {};
         }
         if (tree.Empty()) {

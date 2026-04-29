@@ -34,11 +34,4 @@ namespace NYql {
     TString FormatExpression(const NConnector::NApi::TExpression& expression);
     TString FormatPredicate(const NConnector::NApi::TPredicate& predicate);
 
-    bool CalculateFilterPredicate(
-        TExprContext& ctx,
-        const NNodes::TExprBase& predicateBody,
-        const NNodes::TCoArgument& predicateArgument,
-        TDisjointIntervalTree<ui64>& tree,
-        TStringBuilder& err);
-
 } // namespace NYql

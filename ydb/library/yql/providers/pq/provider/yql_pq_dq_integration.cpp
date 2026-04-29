@@ -437,7 +437,6 @@ public:
                 auto filterSerializedProto = topicSource.FilterPredicate().Ref().Content();
                 YQL_ENSURE(filterPredicateProto.ParseFromString(filterSerializedProto));
                 TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
-                Cerr << "Filter predicate: " << filterPredicateSql << Endl;
 
                 NPq::NProto::TOffsetPredicate offsetPredicates;
                 auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
@@ -448,12 +447,8 @@ public:
                 YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
 
                 if (!streamingTopicRead) {
-                   
                     *srcDesc.MutableOffsetPredicate() = offsetPredicates;
-                    Cerr << "Fill Offset predicate: " << offsetPredicates.DebugString() << Endl;
-
                     *srcDesc.MutableWriteTimePredicate() = writeTimePredicate;
-                    Cerr << "Fill writeTimePredicate predicate: " << writeTimePredicate.DebugString() << Endl;
                 }
                 if (sharedReading) {
                     srcDesc.SetPredicate(filterPredicateSql);

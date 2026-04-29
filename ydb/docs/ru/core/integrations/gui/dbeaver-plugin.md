@@ -124,7 +124,11 @@
 
 {% note warning %}
 
-При установке из ZIP-архива автоматические обновления не поддерживаются: DBeaver не запоминает локальный файл как источник обновлений. Для обновления до новой версии скачайте новый архив со страницы [GitHub Releases](https://github.com/ydb-platform/ydb-dbeaver-plugin/releases), удалите старую версию через **Help → About DBeaver → Installation Details**, затем установите заново.
+При установке из ZIP-архива автоматические обновления не поддерживаются: DBeaver не знает, где искать новые версии. Для обновления:
+
+1. Скачайте новый архив со страницы [GitHub Releases](https://github.com/ydb-platform/ydb-dbeaver-plugin/releases).
+1. Откройте **Help → Installation Information**, выберите плагин и нажмите **Uninstall**.
+1. Установите новую версию, следуя [инструкции по установке из ZIP-архива](#installation-zip).
 
 {% endnote %}
 
@@ -293,5 +297,5 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 1. Автоматически при следующем запуске DBeaver (если включена проверка обновлений в **Window → Preferences → Install/Update → Automatic Updates**).
 1. Вручную через **Help → Check for Updates**: выберите доступное обновление и пройдите те же шаги, что и при первой установке (лицензия → предупреждение о неподписанном содержимом → перезапуск).
 
-При [установке из ZIP-архива](#installation-zip) обновление выполняется вручную: скачайте новый архив со страницы [GitHub Releases](https://github.com/ydb-platform/ydb-dbeaver-plugin/releases), удалите старую версию через **Help → Installation Information** и установите заново.
+При [установке из ZIP-архива](#installation-zip) обновление выполняется вручную: скачайте новый архив со страницы [GitHub Releases](https://github.com/ydb-platform/ydb-dbeaver-plugin/releases), откройте **Help → Installation Information**, выберите плагин, нажмите **Uninstall**, затем установите новую версию заново.
 

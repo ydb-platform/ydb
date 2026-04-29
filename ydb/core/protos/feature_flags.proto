@@ -278,4 +278,14 @@ message TFeatureFlags {
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
+<<<<<<< HEAD
+=======
+    optional bool EnableInterpileTrafficOptimization = 253 [default = false];
+    optional bool EnableSnapshotsLocking = 254 [default = true];
+    optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
+    optional bool UseRealUserIpForBlackbox = 256 [default = false];
+    optional bool EnableNodeShutdownHints = 257 [default = false];
+    optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
+    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+>>>>>>> ad4d3f9a256 (Monitoring incorrect discovery service requests with inner database paths (#38712))
 }

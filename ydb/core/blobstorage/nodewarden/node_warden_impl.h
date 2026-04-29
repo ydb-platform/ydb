@@ -319,7 +319,6 @@ namespace NKikimr::NStorage {
         void StopInvalidGroupProxy();
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
-        void StartStaticProxies();
         void StartRequestReportingThrottler();
 
         /**
@@ -568,6 +567,9 @@ namespace NKikimr::NStorage {
         // this function returns group info if possible, or otherwise starts requesting group info and/or proposing key
         // if needed
         TIntrusivePtr<TBlobStorageGroupInfo> NeedGroupInfo(ui32 groupId);
+
+        // check if a proxy exists for a given group
+        bool HasGroupProxy(ui32 groupId) const;
 
         // propose group key
         void ProposeKey(ui32 groupId, const TEncryptionKey& mainKey, const NKikimrBlobStorage::TGroupInfo& encryptionParams);

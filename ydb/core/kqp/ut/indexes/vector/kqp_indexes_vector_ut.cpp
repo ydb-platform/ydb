@@ -565,13 +565,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        auto create = [&]() {
+        auto create = [&](bool expected_result) {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
                 ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess() == expected_result, result.GetIssues().ToString());
         };
 
         auto insert = [&]() {
@@ -588,9 +588,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         if (OnBuild) {
             insert();
-            create();
+            create(false);
         } else {
-            create();
+            create(true);
             insert();
         }
     }

@@ -1243,14 +1243,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             const TString query1(Q_(R"(
                 UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
                 "( 1, \"user_a\", \"\", \"10\"),"
-                "( 2, \"user_a\", \"1\", \"11\"),"
-                "( 3, \"user_a\", \"40\", \"12\"),"
-                "( 4, \"user_a\", \"abcd\", \"13\"),"
 
                 "(11, \"user_b\", \"\", \"20\"),"
-                "(12, \"user_b\", \"1\", \"21\"),"
-                "(13, \"user_b\", \"40\", \"22\"),"
-                "(14, \"user_b\", \"abcd\", \"23\"),"
                 "(15, \"user_b\", \"\x03\x30\x02\", \"24\"),"
                 "(16, \"user_b\", \"\x13\x31\x02\", \"25\"),"
                 "(17, \"user_b\", \"\x23\x32\x02\", \"26\"),"
@@ -1313,7 +1307,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[5u;5u;[5];1u;[5]]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[4u;4u;[4];1u;[4]]]");
         }
     }
 }

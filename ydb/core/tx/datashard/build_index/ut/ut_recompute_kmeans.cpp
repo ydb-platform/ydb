@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x80\xFF\2 size = 1\n");
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -316,14 +316,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         options.Shards(1);
         CreateMainTable(server, sender, options);
 
-        // 2 valid rows, 3 invalid rows (no format byte \x02)
+        // 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
             "(1, \"\x30\x30\2\", \"one\"),"
             "(2, \"\x31\x31\2\", \"two\"),"
-            "(3, \"invalid\", \"three\"),"
-            "(4, \"\", \"four\"),"
-            "(5, \"bad\", \"five\");");
+            "(3, \"\x30\x30\x30\2\", \"three\");");
 
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
@@ -357,13 +355,48 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(handle);
 
-        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE);
+        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
 
-        // Warning about 3 invalid rows should be present
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
         TString issuesStr = issues.ToOneLineString();
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
+    }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // 2 valid rows, 2 rows with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, data) VALUES )"
+            "(3, \"null_one\"),"
+            "(4, \"null_two\");");
+
+        std::vector<TString> level = { "\x30\x30\2", "\x31\x31\2" };
+        auto recomputed = DoRecomputeKMeans(server, sender, 0, level,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
+
+        // Clusters should still be recomputed from the 2 valid rows
+        UNIT_ASSERT_STRING_CONTAINS(recomputed, "cluster = ");
     }
 
     Y_UNIT_TEST(EmptyCluster) {

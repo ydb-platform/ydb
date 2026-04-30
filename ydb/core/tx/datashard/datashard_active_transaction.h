@@ -77,7 +77,7 @@ struct TSchemaOperation {
     TString Error;
     ui64 BytesProcessed;
     ui64 RowsProcessed;
-    bool Retriable = true;  // meaningful only when !Success
+    bool Retriable = true;
 
     TScanState ScanState;
 

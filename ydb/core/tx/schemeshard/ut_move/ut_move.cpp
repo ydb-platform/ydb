@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -1640,5 +1641,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
         UNIT_ASSERT_VALUES_EQUAL(value, 2);
+    }
+
+    Y_UNIT_TEST(MoveColumnTableWithLocalBloomIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTable"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Both local indexes are visible as scheme-object children before the move.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+            {NLs::PathExist, NLs::ChildrenCount(2)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_bloom"),
+            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_ngram"),
+            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // Source is gone; destination has both index children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMoved"),
+            {NLs::PathExist, NLs::ChildrenCount(2)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMoved/idx_bloom"),
+            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMoved/idx_ngram"),
+            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
     }
 }

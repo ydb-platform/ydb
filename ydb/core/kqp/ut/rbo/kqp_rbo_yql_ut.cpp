@@ -2815,9 +2815,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
         UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
 
-        std::vector<std::string> queries = {
+        const std::vector<std::string> queries = {
             R"(
-                select sum(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+                select sum(t1.a), max(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select sum(t1.a), min(t1.b), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select count(t1.a), t1.b from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                select sum(t1.a), max(t1.a) from `/Root/t1` as t1;
+            )",
+            R"(
+                select sum(t1.a), min(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                select count(t1.a) from `/Root/t1` as t1;
             )",
         };
 

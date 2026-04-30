@@ -4,13 +4,24 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-const THashSet<TString> AllowedAggFunction{"sum", "min", "max"};
+const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count"};
 
-bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input) {
+bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
+    return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
+}
+
+bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input, TPlanProps& props) {
     const auto aggregateStageId = *aggregate->Props.StageId;
     const auto inputStageId = *input->Props.StageId;
-    // FIXME: Currently we cannot push to source stage.
-    return aggregateStageId != inputStageId && input->IsSingleConsumer() && input->GetKind() != EOperator::Source;
+    if (aggregateStageId == inputStageId || !input->IsSingleConsumer()) {
+        return false;
+    }
+    const auto connection = props.StageGraph.GetConnections(inputStageId, aggregateStageId);
+    if (connection.size() > 1 || !IsValidConnectionToPushAggregation(connection.front())) {
+        return false;
+    }
+
+    return (input->GetKind() != EOperator::Source || CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage);
 }
 
 bool AggregationTraitsAreValidForPropagation(const TVector<TOpAggregationTraits>& aggregationTraitsList) {
@@ -31,8 +42,17 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
     const auto& aggTraits = aggregate->GetAggregationTraits();
     const auto distinctAll = aggregate->IsDistinctAll();
 
-    return aggregate->GetAggregationPhase() != EOpPhase::Final && AggregationTraitsAreValidForPropagation(aggTraits) && !distinctAll &&
-           !aggregate->GetKeyColumns().empty();
+    return aggregate->GetAggregationPhase() != EOpPhase::Final && AggregationTraitsAreValidForPropagation(aggTraits) && !distinctAll;
+}
+
+std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum") {
+        return std::make_pair(aggFunc, aggFunc);
+    }
+    if (aggFunc == "count") {
+        return std::make_pair("count", "sum");
+    }
+    Y_ENSURE(false, "Aggregation function is not supported for splitting.");
 }
 
 TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusivePtr<TOpAggregate>& aggregate) {
@@ -49,9 +69,10 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
         const auto& originalColName = originalTraits.OriginalColName;
         const auto& aggFunc = originalTraits.AggFunction;
         const auto& resultColName = originalTraits.ResultColName;
-        const auto newIntermediateName = TInfoUnit("__inter" + resultColName.GetFullName());
-        intermediateTraits.emplace_back(originalColName, aggFunc, newIntermediateName);
-        finalTraits.emplace_back(newIntermediateName, aggFunc, resultColName);
+        const auto newIntermediateName = TInfoUnit("__intermediate_" + resultColName.GetFullName());
+        const auto [interAggFunc, finalAggFunc] = GetAggFunctions(aggFunc);
+        intermediateTraits.emplace_back(originalColName, interAggFunc, newIntermediateName);
+        finalTraits.emplace_back(newIntermediateName, finalAggFunc, resultColName);
     }
 
     const auto intermediate = MakeIntrusive<TOpAggregate>(aggregate->GetInput(), intermediateTraits, aggKeys, EOpPhase::Intermediate, distinctAll, props, pos);
@@ -62,7 +83,6 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
 
 TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
-    Y_UNUSED(props);
 
     if (!IsSuitableToPropagateAggregateThroughStage(input)) {
         return input;
@@ -74,11 +94,19 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
     }
 
     const auto aggInput = aggregate->GetInput();
-    if (CanPushAggregateToStage(aggregate, aggInput)) {
-        auto props = aggregate->Props;
-        props.StageId = aggInput->Props.StageId;
+    if (CanPushAggregateToStage(aggregate, aggInput, props)) {
+        const auto aggStageId = *aggregate->Props.StageId;
+        const auto inputStageId = *aggInput->Props.StageId;
+        auto opProps = aggregate->Props;
+        opProps.StageId = inputStageId;
+        TIntrusivePtr<TConnection> connection = MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns());
+        if (aggregate->GetKeyColumns().empty()) {
+            connection = MakeIntrusive<TUnionAllConnection>();
+        }
+
+        props.StageGraph.UpdateConnection(inputStageId, aggStageId, connection);
         return MakeIntrusive<TOpAggregate>(aggInput, aggregate->GetAggregationTraits(), aggregate->GetKeyColumns(), EOpPhase::Intermediate,
-                                           aggregate->IsDistinctAll(), props, aggregate->Pos);
+                                           aggregate->IsDistinctAll(), opProps, aggregate->Pos);
     }
 
     return input;

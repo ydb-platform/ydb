@@ -35,12 +35,12 @@ struct TCloudPermissionsSettings {
 
 template<typename TCtx>
 bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
+    IRequestProxyCtx* requestProxyCtx = ctx;
     TString validationError;
-    if (!ctx->Validate(validationError)) {
+    if (!requestProxyCtx->Validate(validationError)) {
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
-        ctx->RaiseIssue(issue);
-        ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        ctx->FinishSpan();
+        requestProxyCtx->RaiseIssue(issue);
+        requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         return false;
     } else {
         return true;
@@ -212,14 +212,15 @@ public:
         , GrpcRequestBaseCtx_(Request_->Get())
         , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
-        , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
         , CloudPermissionsSettings(cloudPermissionsSettings)
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            if (TlsActivationContext) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            }
             const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
             if (!clientCertificates.empty()) {
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
@@ -229,6 +230,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        Span_ = NWilson::TSpan(
+            TWilsonGrpc::RequestCheckActor,
+            GrpcRequestBaseCtx_->GetWilsonTraceId(),
+            "RequestCheckActor",
+            NWilson::EFlags::NONE,
+            ctx.ActorSystem());
+
         TBase::UnsafeBecome(&TSelf::DbAccessStateFunc);
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
@@ -587,34 +595,29 @@ private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown resource database");
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
-        GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
 
@@ -631,7 +634,6 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
-        GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
         PassAway();
     }
@@ -663,7 +665,6 @@ private:
         // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
-        GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         PassAway();
     }

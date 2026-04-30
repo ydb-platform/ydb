@@ -11,6 +11,7 @@
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
+#include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -51,7 +52,7 @@ struct TCheckStateResult;
 struct TState {
     TString AntiForgeryToken;
     TString CookieSuffix;
-    TMaybe<i64> ExpirationTime;
+    TMaybe<TInstant> ExpirationTime;
 
     bool operator==(const TState& other) const {
         return AntiForgeryToken == other.AntiForgeryToken
@@ -72,13 +73,15 @@ struct TDecodeStateResult {
 };
 
 struct TCheckStateResult {
-    bool Success = true;
+    bool Ok = true;
     TString ErrorMessage;
     TString CookieSuffix;
 
-    TCheckStateResult(bool success = true, const TString& cookieSuffix = "", const TString& errorMessage = "");
+    static TCheckStateResult Error(const TString& errorMessage, const TString& cookieSuffix = "");
+    static TCheckStateResult Success(const TString& cookieSuffix = "");
 
-    bool IsSuccess() const;
+private:
+    TCheckStateResult(bool ok, const TString& cookieSuffix, const TString& errorMessage);
 };
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);

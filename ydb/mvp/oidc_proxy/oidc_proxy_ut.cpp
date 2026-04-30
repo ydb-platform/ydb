@@ -13,6 +13,7 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
@@ -578,7 +579,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(urlParameters["scope"], "openid");
         UNIT_ASSERT_STRINGS_EQUAL(urlParameters["client_id"], settings.ClientId);
         UNIT_ASSERT_STRINGS_EQUAL(urlParameters["redirect_uri"], "https://" + hostProxy + "/auth/callback");
-        const TString state = urlParameters["state"];
+        const TString state = TString(urlParameters.Get("state"));
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(headers.Has("X-Request-Id"));
@@ -718,19 +719,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(OpenIdConnectExpiredBackgroundStateKeepsCookieSuffix) {
         TPortManager tp;
         auto settings = BuildBaseSettings(tp);
-        const TString stateContainer = TStringBuilder()
-            << "{\"state\":\"state\",\"expiration_time\":\"0\",\"cookie_suffix\":\""
-            << TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX
-            << "\"}";
-        const TString digest = HmacSHA1(settings.ClientSecret, stateContainer);
-        const TString signedState = TStringBuilder()
-            << "{\"container\":\"" << Base64Encode(stateContainer)
-            << "\",\"digest\":\"" << Base64Encode(digest) << "\"}";
+        TState sourcePayload;
+        sourcePayload.AntiForgeryToken = "state";
+        sourcePayload.ExpirationTime = TInstant::Seconds(0);
+        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
-        TCheckStateResult result = CheckState(Base64EncodeNoPadding(signedState), settings.ClientSecret);
+        TCheckStateResult result = CheckState(EncodeState(sourcePayload, settings.ClientSecret), settings.ClientSecret);
         const TString expectedCookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
-        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT(!result.Ok);
         UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, expectedCookieSuffix);
         UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State life time expired");
     }
@@ -1438,17 +1435,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
 
         static TString GetViewerResponse200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_USER_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_USER_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_USER_ACCOUNT_ID;
+            json["OriginalUserToken"] = TProfileServiceMock::VALID_USER_TOKEN;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponseService200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_SERVICE_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_SERVICE_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_SERVICE_ACCOUNT_ID;
+            json["OriginalUserToken"] = TProfileServiceMock::VALID_SERVICE_TOKEN;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponse403() {
@@ -1640,14 +1637,14 @@ Y_UNIT_TEST_SUITE(Utils) {
 
         TState sourcePayload;
         sourcePayload.AntiForgeryToken = "state";
-        sourcePayload.ExpirationTime = TInstant::Now().TimeT() + 600;
+        sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
         sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
         const TString state = EncodeState(sourcePayload, settings.ClientSecret);
         const TCheckStateResult result = CheckState(state, settings.ClientSecret);
         const TDecodeStateResult decodedResult = DecodeState(state);
 
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT(result.Ok);
         UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, sourcePayload.CookieSuffix);
         UNIT_ASSERT(result.ErrorMessage.empty());
         UNIT_ASSERT(decodedResult.HasSignedStateJson);

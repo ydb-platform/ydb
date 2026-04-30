@@ -144,6 +144,12 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
         Executor()->UpdateConfig(ev);
 }
 
+void TTabletExecutedFlat::Handle(TEvTablet::TEvCompactTables::TPtr & ev) {
+    if (Executor()) {
+        Executor()->ForceCompaction(ev);
+    }
+}
+
 void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     // Default implementation just confirms it's ok to be stopped
@@ -351,6 +357,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
+        hFunc(TEvTablet::TEvCompactTables, Handle);
         IgnoreFunc(TEvTablet::TEvReady);
     default:
         return false;

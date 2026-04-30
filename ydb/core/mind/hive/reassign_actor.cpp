@@ -30,7 +30,7 @@ public:
     std::vector<TReassignOperation>::const_iterator NextReassign;
     ui32 ReassignInFlight = 0;
     const ui32 MaxInFlight;
-    NJson::TJsonValue Response;
+    std::unique_ptr<IReassignCallback> Callback;
     const TString Description;
     ui64 TabletsDone = 0;
     THive* Hive;
@@ -39,11 +39,12 @@ public:
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
     }
 
-    TReassignTabletsActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, THive* hive)
+    TReassignTabletsActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback, THive* hive)
         : Source(source)
         , Operations(std::move(operations))
         , NextReassign(Operations.begin())
         , MaxInFlight(maxInFlight)
+        , Callback(std::move(callback))
         , Description(std::move(description))
         , Hive(hive)
     {}
@@ -80,8 +81,7 @@ public:
     void CheckCompletion() {
         if (ReassignInFlight == 0 && NextReassign == Operations.end()) {
             if (Source) {
-                Response["total"] = TabletsDone;
-                Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
+                Send(Source, Callback->MakeEvent(TabletsDone));
             }
             Hive->LastReassignStatus = TStringBuilder() << "Last actor reassign: " << Description << " at " << TActivationContext::Now();
             Hive->Execute(new TTxUpdateLastReassign(Hive));
@@ -145,8 +145,8 @@ public:
     }
 };
 
-void THive::StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description) {
-    auto* actor = new TReassignTabletsActor(std::move(operations), source, maxInFlight, std::move(description), this);
+void THive::StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback) {
+    auto* actor = new TReassignTabletsActor(std::move(operations), source, maxInFlight, std::move(description), std::move(callback), this);
     SubActors.emplace_back(actor);
     RegisterWithSameMailbox(actor);
 }

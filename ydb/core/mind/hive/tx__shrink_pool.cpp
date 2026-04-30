@@ -68,7 +68,7 @@ public:
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
             auto groupId = storagePool->InactiveGroups.back();
-            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
+            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << " as active");
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
             db.Table<Schema::Group>().Key(groupId).Delete();
@@ -87,7 +87,7 @@ public:
                 | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
             storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
-                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
+                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << " as inactive");
                 group->Status = EGroupState::Inactive;
                 db.Table<Schema::Group>().Key(group->Id).Update(
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),
@@ -102,6 +102,7 @@ public:
         reply->Record.SetStoragePool(StoragePool);
         reply->Record.SetVersion(Version);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
+        Self->StartShrinkPool(*storagePool);
         return true;
     }
 
@@ -155,6 +156,7 @@ public:
             }
         }
         storagePool.InactiveGroups.assign(inactiveGroups.begin(), inactiveGroups.end());
+        Self->StartShrinkPool(storagePool);
         return true;
     }
 

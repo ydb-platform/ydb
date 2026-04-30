@@ -327,6 +327,7 @@ public:
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     void DisableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }
     ui64 MissingReferencesSize() const override { Y_TABLET_ERROR("Not supported"); }
+    void ForceCompaction(TEvTablet::TEvCompactTables::TPtr&) override {};
 
 private:
     void ScheduleProcessPending() {

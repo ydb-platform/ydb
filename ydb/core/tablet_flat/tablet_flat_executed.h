@@ -82,6 +82,7 @@ protected:
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
     void Handle(TEvTablet::TEvFollowerDetached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
+    void Handle(TEvTablet::TEvCompactTables::TPtr&);
 
     /**
      * Common handler for TEvPoison, detaches from executor and calls Detach,

@@ -961,6 +961,15 @@ public:
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
         }
+
+        for (auto& [poolName, poolInfo] : Self->StoragePools) {
+            if (!poolInfo.InactiveGroups.empty()) {
+                if (Self->AreWeRootHive()) {
+                    poolInfo.NeedShrinkFromTenant = true;
+                }
+                Self->StartShrinkPool(poolInfo);
+            }
+        }
     }
 };
 

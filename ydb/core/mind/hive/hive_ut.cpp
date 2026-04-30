@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -9323,6 +9324,55 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         makeRequest(10, NKikimrProto::ERROR);
         makeRequest(0, NKikimrProto::ERROR);
         makeRequest(5, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(TestShrinkStoragePool) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryAllowList("Dummy");
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console), &NConsole::CreateConsole);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        ui32 group;
+        {
+            auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+            request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+            request->Record.MutableSubDomain()->SetPathId(1);
+            request->Record.SetStoragePool("def1");
+            request->Record.SetNewSize(1);
+            request->Record.SetVersion(1);
+            runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
+            group = response->Record.GetGroupsToRemove(0);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::EvCompactTables);
+            runtime.DispatchEvents(options);
+        }
+        for (ui32 channel = 0; channel < 3; ++channel) {
+            auto ev = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+            ev->Record.SetTabletID(tabletId);
+            ev->Record.SetChannel(channel);
+            ev->Record.SetGroupID(0);
+            ev->Record.SetFromGeneration(0);
+            ev->Record.SetGroup(group);
+            runtime.SendToPipe(hiveTablet, senderA, ev.release(), 0, GetPipeConfigWithRetries());
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvHive::EvShrinkStoragePoolDone);
+            runtime.DispatchEvents(options);
+        }
     }
 }
 

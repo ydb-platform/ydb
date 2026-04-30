@@ -669,6 +669,8 @@ private:
                 return "cross";
             case EYqlJoinKind::Inner:
                 return "inner";
+            case EYqlJoinKind::Full:
+                return "full";
             case EYqlJoinKind::Left:
                 return "left";
             case EYqlJoinKind::Right:

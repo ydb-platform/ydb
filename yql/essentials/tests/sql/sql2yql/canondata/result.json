@@ -9337,6 +9337,13 @@
             "uri": "https://{canondata_backend}/1817427/10b6e9a0eb3b82faa509d060d61732a6a473e449/resource.tar.gz#test_sql2yql.test_select_yql-join_left_outer_on_2_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-join_matrix]": [
+        {
+            "checksum": "23535b8191a726d7d951a1badaeff759",
+            "size": 11923,
+            "uri": "https://{canondata_backend}/1917492/e3bb6468eeaf5d5c2c8e14dc714c85290b533a1e/resource.tar.gz#test_sql2yql.test_select_yql-join_matrix_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-join_on_2]": [
         {
             "checksum": "32aac7c64cc45f670ca6e038a4b98d5c",
@@ -16948,6 +16955,11 @@
     "test_sql_format.test[select_yql-join_left_outer_on_2]": [
         {
             "uri": "file://test_sql_format.test_select_yql-join_left_outer_on_2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-join_matrix]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-join_matrix_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-join_on_2]": [

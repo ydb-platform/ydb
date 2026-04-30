@@ -675,61 +675,64 @@ private:
             return Unsupported("NATURAL");
         }
 
-        const auto& block = alt.GetBlock2();
-        switch (block.GetAltCase()) {
+        const auto& block2 = alt.GetBlock2();
+        switch (block2.GetAltCase()) {
             case TRule_join_op_TAlt2_TBlock2::kAlt1:
                 break;
             case TRule_join_op_TAlt2_TBlock2::kAlt2:
-                YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), INNER));
+                YQL_ENSURE(IS_TOKEN(block2.GetAlt2().GetToken1().GetId(), INNER));
                 return EYqlJoinKind::Inner;
             case TRule_join_op_TAlt2_TBlock2::kAlt3:
-                YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), CROSS));
+                YQL_ENSURE(IS_TOKEN(block2.GetAlt3().GetToken1().GetId(), CROSS));
                 return EYqlJoinKind::Cross;
             case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
 
-        const auto& alt1 = block.GetAlt1();
-        if (alt1.HasBlock1()) {
-            const auto& block = alt1.GetBlock1();
-            switch (block.GetAltCase()) {
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt1: {
-                    const auto& alt = block.GetAlt1();
+        const auto& alt1 = block2.GetAlt1();
+        if (!alt1.HasBlock1()) {
+            return EYqlJoinKind::Inner;
+        }
 
-                    if (alt.HasBlock2()) {
-                        return Unsupported("(ONLY | SEMI)");
-                    }
+        const auto& block1 = alt1.GetBlock1();
+        switch (block1.GetAltCase()) {
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt1: {
+                const auto& alt = block1.GetAlt1();
 
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt1().GetToken1().GetId(), LEFT));
-                    return EYqlJoinKind::Left;
+                if (alt.HasBlock2()) {
+                    return Unsupported("(ONLY | SEMI)");
                 }
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
-                    const auto& alt = block.GetAlt2();
 
-                    if (alt.HasBlock2()) {
-                        return Unsupported("(ONLY | SEMI)");
-                    }
-
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), RIGHT));
-                    return EYqlJoinKind::Right;
-                }
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), EXCLUSION));
-                    return Unsupported("EXCLUSION");
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
-                    YQL_ENSURE(IS_TOKEN(block.GetAlt4().GetToken1().GetId(), FULL));
-                    return Unsupported("FULL");
-                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt1().GetToken1().GetId(), LEFT));
+                return EYqlJoinKind::Left;
             }
-        }
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
+                const auto& alt = block1.GetAlt2();
 
-        if (alt1.HasBlock2()) {
-            YQL_ENSURE(IS_TOKEN(alt1.GetBlock2().GetToken1().GetId(), OUTER));
-            return Unsupported("OUTER");
-        }
+                if (alt.HasBlock2()) {
+                    return Unsupported("(ONLY | SEMI)");
+                }
 
-        return EYqlJoinKind::Inner;
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt2().GetToken1().GetId(), RIGHT));
+                return EYqlJoinKind::Right;
+            }
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
+                if (alt1.HasBlock2()) {
+                    Token(alt1.GetBlock2().GetToken1());
+                    Error() << "Invalid join type: EXCLUSION OUTER JOIN. "
+                            << "OUTER keyword is optional and can only "
+                            << "be used after LEFT, RIGHT or FULL";
+                    return std::unexpected(ESQLError::Basic);
+                }
+
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt3().GetToken1().GetId(), EXCLUSION));
+                return Unsupported("EXCLUSION");
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
+                YQL_ENSURE(IS_TOKEN(block1.GetAlt4().GetToken1().GetId(), FULL));
+                return EYqlJoinKind::Full;
+            case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
     }
 
     TSQLResult<TYqlJoinConstraint> Build(const TRule_join_constraint& rule, EYqlJoinKind kind) {

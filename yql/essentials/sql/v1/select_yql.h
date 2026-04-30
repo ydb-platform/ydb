@@ -17,6 +17,7 @@ struct TYqlSource {
 enum class EYqlJoinKind {
     Cross,
     Inner,
+    Full,
     Left,
     Right,
 };

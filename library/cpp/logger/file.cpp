@@ -4,25 +4,6 @@
 #include <util/system/file.h>
 #include <util/system/rwlock.h>
 
-
-#include <filesystem>
-#include <fstream>
-#include <mutex>
-
-namespace {
-std::mutex OutFileMutex;
-
-void WriteMyLog(const std::string& message)
-{
-    std::lock_guard lock(OutFileMutex);
-
-    const std::string filename{"/home/kseleznyov/dump.log"};
-    std::ofstream OutFile;
-    OutFile.open(filename, std::filesystem::exists(filename) ? std::ios_base::app : std::ios_base::out );
-    OutFile << message << std::endl;
-}
-}
-
 /*
  * file log
  */
@@ -36,8 +17,6 @@ public:
     inline void WriteData(const TLogRecord& rec) {
         //many writes are thread-safe
         TReadGuard guard(Lock_);
-
-        WriteMyLog(TString("TO_FILE: ") + TString(rec.Data, rec.Len));
         File_.Write(rec.Data, rec.Len);
     }
 

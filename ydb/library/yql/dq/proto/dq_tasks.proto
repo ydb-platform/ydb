@@ -166,6 +166,11 @@ message TTaskOutputSink {
     google.protobuf.Any Settings = 2;
 }
 
+message TTaskOutputScatter {
+    // Index of the first channel to activate; scatter starts here and expands lazily
+    uint32 primary_channel_idx = 1;
+}
+
 message TTaskOutput {
     repeated TChannel Channels = 1;
     oneof Type {
@@ -175,6 +180,7 @@ message TTaskOutput {
         TTaskOutputBroadcast Broadcast = 13;
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
+        TTaskOutputScatter Scatter = 16;
     }
     TDqTransform Transform = 30;
 }

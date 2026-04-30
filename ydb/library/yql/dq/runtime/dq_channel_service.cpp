@@ -97,6 +97,11 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
     Aggregator->AddCount(FillLevel);
 }
 
+void TLocalBuffer::SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) {
+    std::lock_guard lock(Mutex);
+    LevelChangeCallback = std::move(callback);
+}
+
 void TLocalBuffer::Push(TDataChunk&& data) {
     if (!FinishPushed && !Finished.load()) {
         if (data.Finished) {
@@ -148,6 +153,9 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         }
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
@@ -242,6 +250,9 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
+        }
         FillLevel = fillLevel;
         NotifyOutput(Queue.empty() || Finished.load());
     } else if (Queue.empty() || Finished.load())  {
@@ -277,6 +288,9 @@ void TLocalBuffer::StorageWakeupHandler() {
     if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
         FillLevel = EDqFillLevel::SoftLimit;
         NotifyOutput(false);
@@ -413,6 +427,9 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
+        }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
     }
@@ -478,6 +495,9 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         } else {
             if (Aggregator) {
                 Aggregator->UpdateCount(FillLevel, fillLevel);
+            }
+            if (LevelChangeCallback) {
+                LevelChangeCallback(FillLevel, fillLevel);
             }
             FillLevel = fillLevel;
         }
@@ -569,6 +589,9 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
+        }
         FillLevel = EDqFillLevel::SoftLimit;
         if (NeedToNotifyOutput.exchange(false)) {
             ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
@@ -607,6 +630,11 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
     std::lock_guard lock(Descriptor->FlowControlMutex);
     Descriptor->Aggregator = aggregator;
     Descriptor->Aggregator->AddCount(Descriptor->FillLevel);
+}
+
+void TOutputBuffer::SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) {
+    std::lock_guard lock(Descriptor->FlowControlMutex);
+    Descriptor->LevelChangeCallback = std::move(callback);
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
@@ -2018,7 +2046,20 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         buffer->SetFillAggregator(Aggregator);
     }
     Serializer->Buffer = buffer;
+    // Transfer the level-change callback (if any) to the real buffer.
+    // The callback was a no-op on TChannelStub; now we register it so that
+    // future fill-level transitions are visible to scatter routers.
+    // We also fire it once to advance the router's stale HardLimit view to
+    // the buffer's actual initial level (typically NoLimit).
+    if (LevelChangeCallback_) {
+        buffer->SetLevelChangeCallback(LevelChangeCallback_);
+        LevelChangeCallback_(EDqFillLevel::HardLimit, buffer->GetFillLevel());
+    }
+    Bound_ = true;
     Service.reset();
+    if (FinishPending_) {
+        Serializer->Flush(true);
+    }
 }
 
 void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {

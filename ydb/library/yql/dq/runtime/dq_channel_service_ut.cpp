@@ -6,6 +6,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/dq/runtime/dq_channel_service_impl.h>
+#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
+
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/threading/mux_event/mux_event.h>
@@ -905,4 +909,85 @@ Y_UNIT_TEST_SUITE(Channels20) {
         CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
     }
 */
+
+    Y_UNIT_TEST(ScatterWithFastChannelFillLevel) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+        NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Mem");
+        NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
+        auto* rowType = NKikimr::NMiniKQL::TDataType::Create(
+            NKikimr::NUdf::TDataType<i32>::Id, typeEnv);
+
+        TKikimrSettings ksettings;
+        ksettings.AppConfig.MutableTableServiceConfig()->SetLocalChannelInflightBytes(512);
+        TKikimrRunner kikimr(ksettings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto receiver = runtime.AllocateEdgeActor();
+
+        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId()), sender, new TEvPrivate::TEvServiceLookup());
+        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
+        auto service = serviceReply->Service;
+
+        constexpr ui32 channelCount = 2;
+
+        TVector<IDqOutputChannel::TPtr> channels;
+        TVector<IDqOutput::TPtr> outputs;
+
+        for (ui32 i = 0; i < channelCount; ++i) {
+            TDqChannelSettings chSettings;
+            chSettings.RowType = rowType;
+            chSettings.HolderFactory = &holderFactory;
+            chSettings.ChannelId = i;
+            chSettings.SrcStageId = 1;
+            chSettings.DstStageId = 2;
+            chSettings.Level = TCollectStatsLevel::None;
+            auto ch = service->GetOutputChannel(chSettings);
+            channels.push_back(ch);
+            outputs.push_back(ch);
+        }
+
+        auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+        TVector<std::shared_ptr<IChannelBuffer>> senderBuffers;
+        TVector<std::shared_ptr<IChannelBuffer>> receiverBuffers;
+        for (ui32 i = 0; i < channelCount; ++i) {
+            TChannelFullInfo info(i, sender, receiver, 1, 2, TCollectStatsLevel::None);
+            runtime.RunCall([&channels, i, &sender, &receiver] {
+                channels[i]->Bind(sender, receiver);
+                return true;
+            });
+            senderBuffers.push_back(service->GetLocalBuffer(info, false, nullptr));
+            receiverBuffers.push_back(service->GetLocalBuffer(info, true, nullptr));
+        }
+
+        // Both channels empty after Bind() → consumer is NoLimit.
+        UNIT_ASSERT_VALUES_EQUAL(EDqFillLevel::NoLimit, consumer->GetFillLevel());
+
+        // Fill channel 0: push past the 512-byte inflight limit.
+        // The callback on TLocalBuffer fires → consumer still NoLimit (ch1 available).
+        runtime.RunCall([&senderBuffers] {
+            senderBuffers[0]->Push(TDataChunk(NYql::TChunkedBuffer(TString(600, 'x')), 1, true, false));
+            return true;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(EDqFillLevel::HardLimit, senderBuffers[0]->GetFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(EDqFillLevel::NoLimit, consumer->GetFillLevel());
+
+        // Fill channel 1 too → all active channels full → consumer is HardLimit.
+        runtime.RunCall([&senderBuffers] {
+            senderBuffers[1]->Push(TDataChunk(NYql::TChunkedBuffer(TString(600, 'x')), 1, true, false));
+            return true;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(EDqFillLevel::HardLimit, consumer->GetFillLevel());
+
+        // Drain channel 0 → callback fires with NoLimit → consumer drops back to NoLimit.
+        TDataChunk data;
+        runtime.RunCall([&receiverBuffers, &data] {
+            receiverBuffers[0]->Pop(data);
+            return true;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(EDqFillLevel::NoLimit, consumer->GetFillLevel());
+    }
+
 }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -157,6 +158,9 @@ void TKqpComputeActor::DoBootstrap() {
 }
 
 STFUNC(TKqpComputeActor::StateFunc) {
+    NYql::NDq::TYqlLogScope yqlLogScope(TlsActivationContext->ActorSystem(),
+        NKikimrServices::KQP_TASKS_RUNNER,
+        TStringBuilder() << GetTxId() << ":" << GetTask().GetId());
     CA_LOG_D("CA StateFunc " << ev->GetTypeRewrite());
     try {
         switch (ev->GetTypeRewrite()) {

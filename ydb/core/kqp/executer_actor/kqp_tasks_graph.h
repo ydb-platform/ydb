@@ -212,6 +212,7 @@ struct TGraphMeta {
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
     ui32 DqChannelVersion = 1u;
+    bool EnableScatterConnection = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -410,6 +411,9 @@ public:
 private:
     void FillStages();
 
+    using TDownstreamConnTypes = THashMap<NYql::NDq::TStageId, THashSet<NKqpProto::TKqpPhyConnection::TypeCase>>;
+    static bool HasStreamLookupDownstream(const TDownstreamConnTypes& map, const NYql::NDq::TStageId& stageId);
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
@@ -420,7 +424,8 @@ private:
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
 
-    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
+    void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination,
+        const TDownstreamConnTypes& downstreamMap);
     bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
 
     void BuildTransformChannels(const NYql::NDq::TTransform& transform, const TTaskInputMeta& meta, const TString& name,
@@ -433,6 +438,8 @@ private:
         ui64 targetTaskId, ui32 inputIndex, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildParallelUnionAllChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc, ui64& nextOriginTaskId);
+    void BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex,
         const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);

@@ -51,4 +51,8 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(
+    TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
+    ui32 primaryChannelIdx = 0);
+
 } // namespace NYql::NDq

@@ -7,6 +7,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
+
 #include "dq_async_stats.h"
 
 namespace NYql {
@@ -71,6 +73,7 @@ struct TDqFillAggregator {
         }
     }
 
+    // MAX semantics: block if ANY channel is full (used by Map, Broadcast, HashPartition).
     EDqFillLevel GetFillLevel() const {
         if (Counts[static_cast<ui32>(HardLimit)].load()) {
             return HardLimit;
@@ -108,9 +111,18 @@ public:
     virtual const TDqOutputStats& GetPushStats() const = 0;
 
     // <| producer methods
+    using TLevelChangeCallback = std::function<void(EDqFillLevel from, EDqFillLevel to)>;
+
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
+    // Should be overridden to return true if the implementation supports level change callback.
+    virtual bool SupportsLevelChangeCallback() const { return false; }
+    // Called on every fill level transition. Required by Scatter consumer.
+    // Implementations that override this must also override SupportsLevelChangeCallback()
+    // to return true.
+    // LevelCallback should be fast because it takes buffer internal mutex
+    virtual void SetLevelChangeCallback(TLevelChangeCallback /*callback*/) {}
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;

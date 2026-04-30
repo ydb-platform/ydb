@@ -197,6 +197,7 @@ public:
 
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
+    void SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
     bool IsEarlyFinished() override;
@@ -225,6 +226,7 @@ public:
     mutable std::mutex Mutex;
     mutable std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    IDqOutput::TLevelChangeCallback LevelChangeCallback;
     EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
 
     std::queue<ui32> SpilledChunkBytes;
@@ -304,6 +306,7 @@ public:
 
     mutable std::mutex FlowControlMutex;
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    IDqOutput::TLevelChangeCallback LevelChangeCallback;
     mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
 
     std::atomic<ui64> PushBytes = 0;
@@ -359,6 +362,7 @@ public:
     ~TOutputBuffer() override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
+    void SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
     bool IsEarlyFinished() override;
@@ -754,6 +758,13 @@ public:
         Serializer->Buffer->SetFillAggregator(aggregator);
     }
 
+    bool SupportsLevelChangeCallback() const override { return true; }
+
+    void SetLevelChangeCallback(TLevelChangeCallback callback) override {
+        LevelChangeCallback_ = callback;
+        Serializer->Buffer->SetLevelChangeCallback(std::move(callback));
+    }
+
     void Push(NUdf::TUnboxedValue&& value) override {
         if (!Serializer->Buffer->IsFinished()) {
             Serializer->Push(std::move(value));
@@ -775,10 +786,17 @@ public:
     }
 
     void Finish() override {
+        if (!Bound_) {
+            FinishPending_ = true;
+            return;
+        }
         Serializer->Flush(true);
     }
 
     void Flush() override {
+        if (!Bound_) {
+            return;
+        }
         Serializer->Flush(false);
     }
 
@@ -854,7 +872,10 @@ public:
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
+    IDqOutput::TLevelChangeCallback LevelChangeCallback_;
     bool IsLocalChannel = false;
+    bool Bound_ = false;
+    bool FinishPending_ = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

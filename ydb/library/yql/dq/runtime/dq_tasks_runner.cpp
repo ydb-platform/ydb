@@ -221,6 +221,12 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             return CreateOutputBroadcastConsumer(std::move(outputs), outputWidth);
         }
 
+        case NDqProto::TTaskOutput::kScatter: {
+            const auto& scatter = outputDesc.GetScatter();
+            const ui32 primaryIdx = scatter.primary_channel_idx();
+            return CreateOutputScatterConsumer(std::move(outputs), outputWidth, primaryIdx);
+        }
+
         case NDqProto::TTaskOutput::kRangePartition: {
             YQL_ENSURE(false, "Unsupported partition type: `NYql::NDqProto::TTaskOutput::kRangePartition`");
         }

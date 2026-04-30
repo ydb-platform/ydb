@@ -1,6 +1,7 @@
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
+#include <ydb/library/yql/dq/runtime/dq_output.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
@@ -9,6 +10,9 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <algorithm>
+#include <util/generic/set.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -1089,3 +1093,593 @@ Y_UNIT_TEST(BackPressureWithSpillingLoad) {
 }
 
 }
+
+namespace {
+
+class TMockOutput : public IDqOutput {
+public:
+    TMockOutput(ui64 hardLimitBytes, ui64 bytesPerPush)
+        : HardLimitBytes(hardLimitBytes)
+        , BytesPerPush(bytesPerPush)
+    {}
+
+    const TDqOutputStats& GetPushStats() const override { return Stats; }
+    EDqFillLevel GetFillLevel() const override { return Level; }
+    EDqFillLevel UpdateFillLevel() override { return Level; }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg) override {
+        Aggregator = std::move(agg);
+        Aggregator->AddCount(Level);
+    }
+
+    bool SupportsLevelChangeCallback() const override { return true; }
+    void SetLevelChangeCallback(TLevelChangeCallback cb) override { Callback = std::move(cb); }
+
+    void Push(NUdf::TUnboxedValue&&) override {
+        if (Finished_) return;
+        DoPush();
+    }
+    void WidePush(NUdf::TUnboxedValue*, ui32) override {
+        if (Finished_) return;
+        DoPush();
+    }
+    void Push(NDqProto::TWatermark&&) override { ++WatermarkCount; }
+    void Push(NDqProto::TCheckpoint&&) override { ++CheckpointCount; }
+    void Finish() override { Finished_ = true; }
+    void Flush() override {}
+    bool HasData() const override { return InflightBytes > 0; }
+    bool IsFinished() const override { return Finished_; }
+    bool IsEarlyFinished() const override { return false; }
+    NKikimr::NMiniKQL::TType* GetOutputType() const override { return nullptr; }
+
+    // Simulates external consumer Pop: updates fill level, aggregator, and fires LevelChangeCallback.
+    void Drain() {
+        InflightBytes = 0;
+        ApplyLevel(EDqFillLevel::NoLimit, /*fireCallback=*/true);
+    }
+
+    // Simulates a downstream EarlyFinish on this channel: pin the fill level at
+    // HardLimit so the scatter router avoids it (matches production behaviour —
+    // see TLocalBuffer::EarlyFinish, which keeps FillLevel frozen to prevent
+    // silent data drops).
+    void PinHardLimit() {
+        ApplyLevel(EDqFillLevel::HardLimit, /*fireCallback=*/true);
+        Pinned = true;
+    }
+
+    ui64 PushCount = 0;
+    ui64 CheckpointCount = 0;
+    ui64 WatermarkCount = 0;
+
+private:
+    void DoPush() {
+        ++PushCount;
+        InflightBytes += BytesPerPush;
+        if (Pinned) return;
+        auto newLevel = InflightBytes >= HardLimitBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
+        ApplyLevel(newLevel, /*fireCallback=*/true);
+    }
+
+    void ApplyLevel(EDqFillLevel newLevel, bool fireCallback) {
+        if (newLevel == Level) return;
+        if (Aggregator) {
+            Aggregator->UpdateCount(Level, newLevel);
+        }
+        if (fireCallback && Callback) {
+            Callback(Level, newLevel);
+        }
+        Level = newLevel;
+    }
+
+    const ui64 HardLimitBytes;
+    const ui64 BytesPerPush;
+    ui64 InflightBytes = 0;
+    EDqFillLevel Level = EDqFillLevel::NoLimit;
+    bool Pinned = false;
+    bool Finished_ = false;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    TLevelChangeCallback Callback;
+    mutable TDqOutputStats Stats;
+};
+
+struct TScatterSetup {
+    TVector<TMockOutput*> Mocks;
+    IDqOutputConsumer::TPtr Consumer;
+};
+
+TScatterSetup MakeScatter(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush, ui32 primaryChannelIdx = 0) {
+    TVector<IDqOutput::TPtr> outputs;
+    TScatterSetup s;
+    for (ui32 i = 0; i < channelCount; ++i) {
+        auto* mock = new TMockOutput(hardLimitBytes, bytesPerPush);
+        s.Mocks.push_back(mock);
+        outputs.emplace_back(mock);
+    }
+    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing(), primaryChannelIdx);
+    return s;
+}
+
+void ConsumeOne(IDqOutputConsumer::TPtr& consumer) {
+    consumer->Consume(NUdf::TUnboxedValuePod((i32)0));
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(ScatterConsumer) {
+
+
+Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
+    TScopedAlloc alloc(__LOCATION__);
+    // ch0: one push fills it (200 bytes >= 100-byte limit)
+    // ch1: stays NoLimit (1 byte per push, 1000-byte limit)
+    TVector<IDqOutput::TPtr> outputs;
+    TVector<TMockOutput*> mocks;
+
+    auto* ch0 = new TMockOutput(/*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+    mocks.push_back(ch0);
+    outputs.emplace_back(ch0);
+
+    auto* ch1 = new TMockOutput(/*hardLimitBytes=*/1000, /*bytesPerPush=*/1);
+    mocks.push_back(ch1);
+    outputs.emplace_back(ch1);
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+    // First consume: round-robin → ch0. Push fills it; callback fires synchronously
+    // inside Push, moving ch0 to HardLimit bucket before UpdateFillLevel() is called.
+    ConsumeOne(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, mocks[0]->GetFillLevel());
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    // Next two consumes must go to ch1 because ch0 is in the HardLimit bucket.
+    ConsumeOne(consumer);
+    ConsumeOne(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, mocks[0]->PushCount);  // ch0 not touched again
+    UNIT_ASSERT_VALUES_EQUAL(2u, mocks[1]->PushCount);
+}
+
+// Verify that draining a channel (via callback) updates the per-channel atomic,
+// so GetFillLevel() on the consumer correctly returns NoLimit.
+Y_UNIT_TEST(DrainUpdatesFillLevel) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/2, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+
+    // Fill both channels via scatter (ch0 fills first, ch1 gets activated, then fills).
+    ConsumeOne(s.Consumer);
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel());
+
+    // Drain ch0: callback fires, updating ChannelLevels_[0] to NoLimit.
+    s.Mocks[0]->Drain();
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+}
+
+// Lazy activation: only primaryChannelIdx starts active.
+// — With high pressure (bytesPerPush > limit) each push fills the active channel
+//   and triggers activation of the next one in cyclic order after primaryIdx.
+// — With low pressure (bytesPerPush << limit) channels never fill, so only the
+//   primary channel is ever used.
+Y_UNIT_TEST(LazyActivation) {
+    // High-pressure sub-case: verify cyclic activation order for two primary values.
+    auto runHighPressure = [](ui32 primary, const TVector<ui32>& expectedOrder) {
+        TScopedAlloc alloc(__LOCATION__);
+        const ui32 channelCount = 3;
+        auto s = MakeScatter(channelCount, /*hardLimitBytes=*/100, /*bytesPerPush=*/200, primary);
+
+        TVector<ui32> order;
+        for (ui32 i = 0; i < channelCount; ++i) {
+            ConsumeOne(s.Consumer);
+            for (ui32 j = 0; j < channelCount; ++j) {
+                if (s.Mocks[j]->PushCount == 1 && std::find(order.begin(), order.end(), j) == order.end()) {
+                    order.push_back(j);
+                    break;
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(order.size(), expectedOrder.size(), "primary=" << primary);
+        for (ui32 i = 0; i < order.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(order[i], expectedOrder[i],
+                "primary=" << primary << " step=" << i);
+        }
+        for (ui32 j = 0; j < channelCount; ++j) {
+            UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[j]->PushCount);
+        }
+    };
+    runHighPressure(0, {0, 1, 2});
+    runHighPressure(1, {1, 2, 0});
+
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1, /*primaryChannelIdx=*/0);
+        for (int i = 0; i < 10; ++i) {
+            ConsumeOne(s.Consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(10u, s.Mocks[0]->PushCount);
+        UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[1]->PushCount);
+        UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+    }
+}
+
+
+Y_UNIT_TEST(ControlMessagesBroadcast) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1);
+
+    // Only ch0 gets a data row.
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
+
+    s.Consumer->Consume(NDqProto::TCheckpoint{});
+    s.Consumer->Consume(NDqProto::TWatermark{});
+
+    for (ui32 i = 0; i < 3; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(1u, s.Mocks[i]->CheckpointCount, "ch=" << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(1u, s.Mocks[i]->WatermarkCount, "ch=" << i);
+    }
+}
+
+
+Y_UNIT_TEST(EarlyFinishedChannelAvoided) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+
+    ConsumeOne(s.Consumer); // ch0 fills -> HardLimit
+    ConsumeOne(s.Consumer); // activates ch1, fills -> HardLimit
+    ConsumeOne(s.Consumer); // activates ch2, fills -> HardLimit
+    for (auto* m : s.Mocks) { m->Drain(); }
+
+    s.Mocks[0]->PinHardLimit();
+    const ui64 ch0Before = s.Mocks[0]->PushCount;
+
+    constexpr ui32 kRows = 30;
+    for (ui32 i = 0; i < kRows; ++i) {
+        ConsumeOne(s.Consumer);
+        s.Mocks[1]->Drain();
+        s.Mocks[2]->Drain();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(ch0Before, s.Mocks[0]->PushCount,
+        "ch0 was pinned at HardLimit but received " << (s.Mocks[0]->PushCount - ch0Before) << " extra rows");
+    UNIT_ASSERT_VALUES_EQUAL(kRows + 3u,
+        s.Mocks[0]->PushCount + s.Mocks[1]->PushCount + s.Mocks[2]->PushCount);
+    UNIT_ASSERT_C(s.Mocks[1]->PushCount > 0 && s.Mocks[2]->PushCount > 0,
+        "Healthy channels ch1/ch2 must share the load, got ch1="
+        << s.Mocks[1]->PushCount << " ch2=" << s.Mocks[2]->PushCount);
+}
+
+Y_UNIT_TEST(HeterogeneousDrainSpeed) {
+    TScopedAlloc alloc(__LOCATION__);
+    constexpr ui32 channelCount = 3;
+    // bytesPerPush > hardLimitBytes → a single push fills the channel.
+    auto s = MakeScatter(channelCount, /*hardLimitBytes=*/10, /*bytesPerPush=*/20);
+
+    // Activate all three channels up-front so the test doesn't race against
+    // lazy activation.
+    for (ui32 i = 0; i < 3; ++i) {
+        ConsumeOne(s.Consumer);
+    }
+    for (auto* m : s.Mocks) { m->Drain(); }
+    const ui64 baseline0 = s.Mocks[0]->PushCount;
+    const ui64 baseline1 = s.Mocks[1]->PushCount;
+    const ui64 baseline2 = s.Mocks[2]->PushCount;
+
+    constexpr ui32 kIterations = 1000;
+    for (ui32 i = 0; i < kIterations; ++i) {
+        ConsumeOne(s.Consumer);
+        s.Mocks[0]->Drain();                   // fast consumer: always NoLimit
+        if (i % 10 == 9) {                     // slow consumers: drained rarely
+            s.Mocks[1]->Drain();
+            s.Mocks[2]->Drain();
+        }
+    }
+
+    const ui64 ch0 = s.Mocks[0]->PushCount - baseline0;
+    const ui64 ch1 = s.Mocks[1]->PushCount - baseline1;
+    const ui64 ch2 = s.Mocks[2]->PushCount - baseline2;
+
+    UNIT_ASSERT_VALUES_EQUAL(kIterations, ch0 + ch1 + ch2);
+    UNIT_ASSERT_C(ch0 >= 5 * std::max(ch1, ch2),
+        "Fast channel should dominate routing. Got ch0=" << ch0
+        << " ch1=" << ch1 << " ch2=" << ch2);
+}
+
+Y_UNIT_TEST(BlocksOnlyWhenAllChannelsFull) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+
+    ConsumeOne(s.Consumer);  // ch0 fills → HardLimit
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());  // ch1 not yet active but available
+    ConsumeOne(s.Consumer);  // ch1 activated and fills
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());  // ch2 still available
+    ConsumeOne(s.Consumer);  // ch2 activated and fills
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel()); // all active channels full
+
+    // Drain ch0 → GetFillLevel drops to NoLimit.
+    s.Mocks[0]->Drain();
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+}
+
+}
+
+// Scatter consumer with real TDqOutputChannel not the mock one.
+// Verifies push→serialize→pop→deserialize roundtrip and backpressure routing.
+Y_UNIT_TEST_SUITE(ScatterConsumerRealChannel) {
+
+Y_UNIT_TEST(RealChannelBackpressure) {
+    TTestContext ctx;
+
+    constexpr ui32 channelCount = 3;
+    constexpr ui32 rowCount = 100;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    TVector<IDqOutput::TPtr> outputs;
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        TDqChannelSettings settings = {
+            .RowType = ctx.GetOutputType(),
+            .HolderFactory = &ctx.HolderFactory,
+            .ChannelId = i,
+            .DstStageId = 1000,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = ctx.TransportVersion,
+            .MaxStoredBytes = 60,
+            .MaxChunkBytes = 30,
+        };
+        auto ch = CreateDqOutputChannel(settings, Log);
+        channels.push_back(ch);
+        outputs.push_back(ch);
+    }
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+    ui64 totalPushed = 0;
+    ui64 totalPopped = 0;
+
+    for (ui32 i = 0; i < rowCount; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        ++totalPushed;
+
+        // Simulate task-runner: poll UpdateFillLevel on all channels after each push.
+        for (auto& ch : channels) {
+            ch->UpdateFillLevel();
+        }
+
+        // If consumer is blocked, drain channels.
+        if (consumer->GetFillLevel() == HardLimit) {
+            for (auto& ch : channels) {
+                TDqSerializedBatch data;
+                while (ch->Pop(data)) {
+                    totalPopped += data.RowCount();
+                }
+                ch->UpdateFillLevel();
+            }
+            UNIT_ASSERT_VALUES_UNEQUAL(HardLimit, consumer->GetFillLevel());
+        }
+    }
+
+    // Drain remaining data.
+    for (auto& ch : channels) {
+        TDqSerializedBatch data;
+        while (ch->Pop(data)) {
+            totalPopped += data.RowCount();
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPopped);
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPushed);
+
+    // With small buffers and 3 channels, scatter must have activated multiple channels.
+    ui32 activeChannels = 0;
+    for (auto& ch : channels) {
+        if (ch->GetPushStats().Rows > 0) {
+            ++activeChannels;
+        }
+    }
+    UNIT_ASSERT_C(activeChannels >= 2,
+        "Expected scatter to activate at least 2 channels, got " << activeChannels);
+}
+
+// One channel stops draining entirely, others works normally
+Y_UNIT_TEST(StuckChannelAvoided) {
+    TTestContext ctx;
+
+    constexpr ui32 channelCount = 3;
+    constexpr ui32 rowCount = 200;
+    constexpr ui32 stuckIdx = 0;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    TVector<IDqOutput::TPtr> outputs;
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        TDqChannelSettings settings = {
+            .RowType = ctx.GetOutputType(),
+            .HolderFactory = &ctx.HolderFactory,
+            .ChannelId = i,
+            .DstStageId = 1000,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = ctx.TransportVersion,
+            .MaxStoredBytes = 60,
+            .MaxChunkBytes = 30,
+        };
+        auto ch = CreateDqOutputChannel(settings, Log);
+        channels.push_back(ch);
+        outputs.push_back(ch);
+    }
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+    // Warmup a few rows so lazy activation brings all 3 channels up.
+    for (ui32 i = 0; i < 3; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        for (auto& ch : channels) { ch->UpdateFillLevel(); }
+    }
+    for (ui32 i = 0; i < channelCount; ++i) {
+        if (i == stuckIdx) continue;
+        TDqSerializedBatch data;
+        while (channels[i]->Pop(data)) {}
+        channels[i]->UpdateFillLevel();
+    }
+
+    ui64 totalPopped = 0;
+    for (ui32 i = 3; i < rowCount; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        for (auto& ch : channels) { ch->UpdateFillLevel(); }
+
+        if (consumer->GetFillLevel() == HardLimit) {
+            // Only drain the healthy channels.
+            for (ui32 j = 0; j < channelCount; ++j) {
+                if (j == stuckIdx) continue;
+                TDqSerializedBatch data;
+                while (channels[j]->Pop(data)) {
+                    totalPopped += data.RowCount();
+                }
+                channels[j]->UpdateFillLevel();
+            }
+            UNIT_ASSERT_VALUES_UNEQUAL_C(HardLimit, consumer->GetFillLevel(),
+                "Scatter must not be blocked when a non-stuck channel has room");
+        }
+    }
+
+    for (ui32 j = 0; j < channelCount; ++j) {
+        if (j == stuckIdx) continue;
+        TDqSerializedBatch data;
+        while (channels[j]->Pop(data)) {
+            totalPopped += data.RowCount();
+        }
+    }
+
+    const ui64 stuckRows = channels[stuckIdx]->GetPushStats().Rows;
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPopped + stuckRows);
+    UNIT_ASSERT_C(stuckRows < rowCount / 2,
+        "Stuck channel should have received only a small fraction of rows, got " << stuckRows);
+}
+
+Y_UNIT_TEST(VerifiesDataIntegrity) {
+    TTestContext ctx;
+
+    constexpr ui32 channelCount = 2;
+    constexpr ui32 rowCount = 20;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    TVector<IDqOutput::TPtr> outputs;
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        TDqChannelSettings settings = {
+            .RowType = ctx.GetOutputType(),
+            .HolderFactory = &ctx.HolderFactory,
+            .ChannelId = i,
+            .DstStageId = 1000,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = ctx.TransportVersion,
+            .MaxStoredBytes = 40,
+            .MaxChunkBytes = 20,
+        };
+        auto ch = CreateDqOutputChannel(settings, Log);
+        channels.push_back(ch);
+        outputs.push_back(ch);
+    }
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+    for (ui32 i = 0; i < rowCount; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        for (auto& ch : channels) { ch->UpdateFillLevel(); }
+
+        if (consumer->GetFillLevel() == HardLimit) {
+            for (auto& ch : channels) {
+                TDqSerializedBatch data;
+                while (ch->Pop(data)) {}
+                ch->UpdateFillLevel();
+            }
+        }
+    }
+
+    TSet<i32> seenValues;
+    for (auto& ch : channels) {
+        TDqSerializedBatch data;
+        while (ch->Pop(data)) {
+            TUnboxedValueBatch buffer(ctx.GetOutputType());
+            ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
+            buffer.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                seenValues.insert(value.GetElement(0).Get<i32>());
+            });
+        }
+    }
+
+    UNIT_ASSERT_C(!seenValues.empty(), "Expected at least some data in channels after pushes");
+    for (auto v : seenValues) {
+        UNIT_ASSERT_C(v >= 0 && v < (i32)rowCount,
+            "Unexpected value " << v << " outside [0, " << rowCount << ")");
+    }
+}
+
+Y_UNIT_TEST(WideChannelDistributes) {
+    TTestContext ctx(WIDE_CHANNEL);
+
+    constexpr ui32 channelCount = 3;
+    constexpr ui32 rowCount = 60;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    TVector<IDqOutput::TPtr> outputs;
+
+    for (ui32 i = 0; i < channelCount; ++i) {
+        TDqChannelSettings settings = {
+            .RowType = ctx.GetOutputType(),
+            .HolderFactory = &ctx.HolderFactory,
+            .ChannelId = i,
+            .DstStageId = 1000,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = ctx.TransportVersion,
+            .MaxStoredBytes = 60,
+            .MaxChunkBytes = 30,
+        };
+        auto ch = CreateDqOutputChannel(settings, Log);
+        channels.push_back(ch);
+        outputs.push_back(ch);
+    }
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), TMaybe<ui32>(ctx.Width()));
+
+    ui64 totalPopped = 0;
+    for (ui32 i = 0; i < rowCount; ++i) {
+        auto row = ctx.CreateRow(i);
+        auto* values = row.Head();
+        consumer->WideConsume(values, *row.Width());
+
+        for (auto& ch : channels) { ch->UpdateFillLevel(); }
+        if (consumer->GetFillLevel() == HardLimit) {
+            for (auto& ch : channels) {
+                TDqSerializedBatch data;
+                while (ch->Pop(data)) { totalPopped += data.RowCount(); }
+                ch->UpdateFillLevel();
+            }
+        }
+    }
+
+    for (auto& ch : channels) {
+        TDqSerializedBatch data;
+        while (ch->Pop(data)) { totalPopped += data.RowCount(); }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowCount, totalPopped);
+
+    ui32 activeChannels = 0;
+    for (auto& ch : channels) {
+        if (ch->GetPushStats().Rows > 0) ++activeChannels;
+    }
+    UNIT_ASSERT_C(activeChannels >= 2,
+        "Expected scatter to activate at least 2 wide channels, got " << activeChannels);
+}
+
+}
+
+

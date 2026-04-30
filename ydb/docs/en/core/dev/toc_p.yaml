@@ -27,7 +27,7 @@ items:
 - name: Local indexes
   href: bloom-skip-indexes.md
 - name: Query plans optimization
-  href: query-plans-optimization.md
+  href: query-execution-optimization/query-plans-optimization.md
 - name: Query execution optimization
   href: query-execution-optimization/index.md
   include:

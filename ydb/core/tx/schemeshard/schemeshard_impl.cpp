@@ -902,13 +902,13 @@ bool TSchemeShard::GetBindingsRooms(
 
 bool TSchemeShard::GetBindingsRoomsChanges(
         const TPathId domainId,
-        const TVector<TTableShardInfo>& partitions,
+        const TVector<TTableShardInfo*>& partitions,
         const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
         TBindingsRoomsChanges& changes,
         TString& errStr)
 {
-    for (const auto& shard : partitions) {
-        const auto& shardInfo = ShardInfos.at(shard.ShardIdx);
+    for (const auto* shard : partitions) {
+        const auto& shardInfo = ShardInfos.at(shard->ShardIdx);
         if (!shardInfo.BindedChannels) {
             // Shard has no existing channel bindings, better leave untouched!
             continue;
@@ -2779,15 +2779,15 @@ void TSchemeShard::PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx s
     }
 }
 
-void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
-    for (ui64 pi = 0; pi < tableInfo->GetPartitions().size(); ++pi) {
-        const auto& partition = tableInfo->GetPartitions()[pi];
-        if (IsLocalId(pathId) && IsLocalId(partition.ShardIdx)) {
+void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
+    for (ui64 pi = startIdx; pi < tableInfo->GetPartitions().size(); ++pi) {
+        const auto* partition = tableInfo->GetPartitions()[pi];
+        if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
             db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Update(
-                NIceDb::TUpdate<Schema::TablePartitions::RangeEnd>(partition.EndOfRange),
-                NIceDb::TUpdate<Schema::TablePartitions::DatashardIdx>(partition.ShardIdx.GetLocalId()),
-                NIceDb::TUpdate<Schema::TablePartitions::LastCondErase>(partition.LastCondErase.GetValue()),
-                NIceDb::TUpdate<Schema::TablePartitions::NextCondErase>(partition.NextCondErase.GetValue()));
+                NIceDb::TUpdate<Schema::TablePartitions::RangeEnd>(partition->EndOfRange),
+                NIceDb::TUpdate<Schema::TablePartitions::DatashardIdx>(partition->ShardIdx.GetLocalId()),
+                NIceDb::TUpdate<Schema::TablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
+                NIceDb::TUpdate<Schema::TablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
         } else {
             if (IsLocalId(pathId)) {
                 // Incompatible change 1:
@@ -2797,11 +2797,11 @@ void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId p
                 BumpIncompatibleChanges(db, 1);
             }
             db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Update(
-                NIceDb::TUpdate<Schema::MigratedTablePartitions::RangeEnd>(partition.EndOfRange),
-                NIceDb::TUpdate<Schema::MigratedTablePartitions::OwnerShardIdx>(partition.ShardIdx.GetOwnerId()),
-                NIceDb::TUpdate<Schema::MigratedTablePartitions::LocalShardIdx>(partition.ShardIdx.GetLocalId()),
-                NIceDb::TUpdate<Schema::MigratedTablePartitions::LastCondErase>(partition.LastCondErase.GetValue()),
-                NIceDb::TUpdate<Schema::MigratedTablePartitions::NextCondErase>(partition.NextCondErase.GetValue()));
+                NIceDb::TUpdate<Schema::MigratedTablePartitions::RangeEnd>(partition->EndOfRange),
+                NIceDb::TUpdate<Schema::MigratedTablePartitions::OwnerShardIdx>(partition->ShardIdx.GetOwnerId()),
+                NIceDb::TUpdate<Schema::MigratedTablePartitions::LocalShardIdx>(partition->ShardIdx.GetLocalId()),
+                NIceDb::TUpdate<Schema::MigratedTablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
+                NIceDb::TUpdate<Schema::MigratedTablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
         }
     }
     if (IsLocalId(pathId)) {
@@ -2813,9 +2813,9 @@ void TSchemeShard::PersistTablePartitioning(NIceDb::TNiceDb& db, const TPathId p
     }
 }
 
-void TSchemeShard::PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
+void TSchemeShard::PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
     const auto& partitions = tableInfo->GetPartitions();
-    for (ui64 pi = 0; pi < partitions.size(); ++pi) {
+    for (ui64 pi = startIdx; pi < partitions.size(); ++pi) {
         if (IsLocalId(pathId)) {
             db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, pi).Delete();
         }
@@ -2824,21 +2824,20 @@ void TSchemeShard::PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const T
     }
 }
 
-void TSchemeShard::PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, ui64 id, const TTableInfo::TPtr tableInfo) {
-    const auto& partition = tableInfo->GetPartitions()[id];
-
-    if (IsLocalId(pathId) && IsLocalId(partition.ShardIdx)) {
+void TSchemeShard::PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, [[maybe_unused]] const TTableInfo::TPtr tableInfo) {
+    const ui64 id = partition->Position;
+    if (IsLocalId(pathId) && IsLocalId(partition->ShardIdx)) {
         db.Table<Schema::TablePartitions>().Key(pathId.LocalPathId, id).Update(
-            NIceDb::TUpdate<Schema::TablePartitions::LastCondErase>(partition.LastCondErase.GetValue()),
-            NIceDb::TUpdate<Schema::TablePartitions::NextCondErase>(partition.NextCondErase.GetValue()));
+            NIceDb::TUpdate<Schema::TablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
+            NIceDb::TUpdate<Schema::TablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
     } else {
         if (IsLocalId(pathId)) {
             // Incompatible change 1 (see above)
             BumpIncompatibleChanges(db, 1);
         }
         db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, id).Update(
-            NIceDb::TUpdate<Schema::MigratedTablePartitions::LastCondErase>(partition.LastCondErase.GetValue()),
-            NIceDb::TUpdate<Schema::MigratedTablePartitions::NextCondErase>(partition.NextCondErase.GetValue()));
+            NIceDb::TUpdate<Schema::MigratedTablePartitions::LastCondErase>(partition->LastCondErase.GetValue()),
+            NIceDb::TUpdate<Schema::MigratedTablePartitions::NextCondErase>(partition->NextCondErase.GetValue()));
     }
 }
 
@@ -2912,34 +2911,35 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         return;
     }
 
-    const auto& shardToPartition = tableInfo->GetShard2PartitionIdx();
-    if (!shardToPartition.contains(shardIdx)) {
+    const TTableShardInfo* p = tableInfo->GetPartitionStore().FindPtr(shardIdx);
+    if (!p) {
         return;
     }
 
     const auto& tableStats = tableInfo->GetStats();
-    if (!tableStats.PartitionStats.contains(shardIdx)) {
+    const auto* statsPtr = tableStats.PartitionStats.FindPtr(shardIdx);
+    if (!statsPtr) {
         return;
     }
 
-    const ui64 partitionId = shardToPartition.at(shardIdx);
-    const auto& stats = tableStats.PartitionStats.at(shardIdx);
-    PersistTablePartitionStats(db, tableId, partitionId, stats);
+    PersistTablePartitionStats(db, tableId, p->Position, *statsPtr);
 }
 
-void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo) {
+void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx) {
     if (!AppData()->FeatureFlags.GetEnablePersistentPartitionStats()) {
         return;
     }
 
     const auto& tableStats = tableInfo->GetStats();
+    const auto& partitions = tableInfo->GetPartitions();
 
-    for (const auto& [shardIdx, pi] : tableInfo->GetShard2PartitionIdx()) {
+    for (ui64 pi = startIdx; pi < partitions.size(); ++pi) {
+        const TShardIdx shardIdx = partitions[pi]->ShardIdx;
         if (!tableStats.PartitionStats.contains(shardIdx)) {
             continue;
         }
-
-        PersistTablePartitionStats(db, tableId, pi, tableStats.PartitionStats.at(shardIdx));
+        const auto& stats = tableStats.PartitionStats.at(shardIdx);
+        PersistTablePartitionStats(db, tableId, pi, stats);
     }
 }
 
@@ -4517,8 +4517,8 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
 
-        const auto& shardInfo = tableInfo->GetPartitions().at(pNo);
-        if (auto& lag = shardInfo.LastCondEraseLag) {
+        const auto* shardInfo = tableInfo->GetPartitions().at(pNo);
+        if (auto& lag = shardInfo->LastCondEraseLag) {
             TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
             lag.Clear();
         }
@@ -4560,8 +4560,8 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     // sanity check: by this time compaction queue and metrics must be updated already
-    for (const auto& p: tableInfo->GetPartitions()) {
-        OnShardRemoved(p.ShardIdx);
+    for (const auto& [shardIdx, p] : tableInfo->GetPartitionStore()) {
+        OnShardRemoved(shardIdx);
     }
 
     Tables.erase(pathId);
@@ -7763,14 +7763,14 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
     const TTableInfo::TPtr tinfo = Tables.at(tableId);
 
     TString rangeBegin = (partitionIdx != 0)
-        ? tinfo->GetPartitions()[partitionIdx-1].EndOfRange
+        ? tinfo->GetPartitions()[partitionIdx-1]->EndOfRange
         : TString();
-    TString rangeEnd = tinfo->GetPartitions()[partitionIdx].EndOfRange;
+    TString rangeEnd = tinfo->GetPartitions()[partitionIdx]->EndOfRange;
 
     // For uniform partitioning we include range start and exclude range end
     FillTableDescriptionForShardIdx(
         tableId,
-        tinfo->GetPartitions()[partitionIdx].ShardIdx,
+        tinfo->GetPartitions()[partitionIdx]->ShardIdx,
         tableDescr,
         std::move(rangeBegin),
         std::move(rangeEnd),
@@ -7854,7 +7854,8 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     shardIndices.reserve(newPartitioning.size());
     for (auto& info : newPartitioning) {
         shardIndices.push_back(
-            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId())));
+            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId()))
+        );
     }
 
     auto path = TPath::Init(pathId, this);
@@ -7863,36 +7864,93 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     Send(SysPartitionStatsCollector, ev.Release());
 
     if (!tableInfo->IsBackup) {
-        // partitions updated:
-        // 1. We need to remove some parts from compaction queues.
-        // 2. We need to add new ones to the queues. Since we can safely enqueue already
-        // enqueued parts, we simple enqueue each part in newPartitioning
-        THashSet<TShardIdx> newPartitioningSet;
-        newPartitioningSet.reserve(newPartitioning.size());
-        const auto& oldPartitioning = tableInfo->GetPartitions();
-
+        const auto& partitionStats = tableInfo->GetStats().PartitionStats;
         TInstant now = AppData()->TimeProvider->Now();
-        for (const auto& p: newPartitioning) {
-            if (!oldPartitioning.empty())
-                newPartitioningSet.insert(p.ShardIdx);
-
-            const auto& partitionStats = tableInfo->GetStats().PartitionStats;
+        for (const auto& p : newPartitioning) {
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
+    }
 
-        for (const auto& p: oldPartitioning) {
-            if (!newPartitioningSet.contains(p.ShardIdx)) {
-                // note that queues might not contain the shard
-                OnShardRemoved(p.ShardIdx);
+    tableInfo->SetPartitioning(std::move(newPartitioning));
+}
+
+void TSchemeShard::UpdatePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(newPartitioning.size());
+    for (auto& info : newPartitioning) {
+        shardIndices.push_back(
+            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId()))
+        );
+    }
+
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
+
+    if (!tableInfo->IsBackup) {
+        THashSet<TShardIdx> newSet;
+        newSet.reserve(newPartitioning.size());
+        const auto& partitionStats = tableInfo->GetStats().PartitionStats;
+        TInstant now = AppData()->TimeProvider->Now();
+        for (const auto& p : newPartitioning) {
+            newSet.insert(p.ShardIdx);
+            auto it = partitionStats.find(p.ShardIdx);
+            if (it != partitionStats.end()) {
+                EnqueueBackgroundCompaction(p.ShardIdx, it->second);
+                UpdateShardMetrics(p.ShardIdx, it->second, now);
+            }
+        }
+        for (const auto& [shardIdx, p] : tableInfo->GetPartitionStore()) {
+            if (!newSet.contains(shardIdx)) {
+                OnShardRemoved(shardIdx); // note that queues might not contain the shard
             }
         }
     }
 
-    tableInfo->SetPartitioning(std::move(newPartitioning));
+    tableInfo->UpdatePartitioning(std::move(newPartitioning));
+}
+
+void TSchemeShard::ApplySplitMerge(
+    TPathId pathId,
+    TTableInfo::TPtr tableInfo,
+    TVector<TTableShardInfo>&& dstPartitions,
+    const THashSet<TShardIdx>& removedShards,
+    ui64 splitStartIdx
+) {
+    if (!tableInfo->IsBackup) {
+        for (const TShardIdx& shardIdx : removedShards) {
+            OnShardRemoved(shardIdx);
+        }
+        // New dst shards have no stats yet; they are enqueued on their first EvPeriodicTableStats.
+        const auto& partitionStats = tableInfo->GetStats().PartitionStats;
+        const TInstant now = AppData()->TimeProvider->Now();
+        for (const auto& dst : dstPartitions) {
+            auto it = partitionStats.find(dst.ShardIdx);
+            if (it != partitionStats.end()) {
+                EnqueueBackgroundCompaction(dst.ShardIdx, it->second);
+                UpdateShardMetrics(dst.ShardIdx, it->second, now);
+            }
+        }
+    }
+
+    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx);
+
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(tableInfo->GetPartitions().size());
+    for (const auto* info : tableInfo->GetPartitions()) {
+        shardIndices.push_back(
+            std::make_pair(ui64(info->ShardIdx.GetOwnerId()), ui64(info->ShardIdx.GetLocalId()))
+        );
+    }
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::OnShardRemoved(const TShardIdx& shardIdx) {

@@ -882,9 +882,9 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
         boundaries.reserve(partitions.size() - 1);
 
         for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& partition = partitions.at(i);
+            const auto* partition = partitions.at(i);
             if (i != partitions.size() - 1) {
-                boundaries.push_back(partition.EndOfRange);
+                boundaries.push_back(partition->EndOfRange);
             }
         }
     }

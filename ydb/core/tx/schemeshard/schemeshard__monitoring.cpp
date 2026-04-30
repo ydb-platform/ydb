@@ -1356,7 +1356,7 @@ private:
                                     str << "path is dropped or is not a table";
                                 } else {
                                     const TTableInfo::TPtr table = Self->Tables.at(pathId);
-                                    str << (table->GetShard2PartitionIdx().contains(shardIdx) ? "Active" : "Inactive");
+                                    str << (table->GetPartitionStore().contains(shardIdx) ? "Active" : "Inactive");
                                 }
                             }
                         }

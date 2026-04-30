@@ -614,7 +614,7 @@ void TSchemeShard::CreateIncrementalRestoreOperation(
                 if (itemPath.IsResolved() && itemPath.Base()->IsTable()) {
                     auto tableInfo = Tables.FindPtr(itemPath.Base()->PathId);
                     if (tableInfo) {
-                        for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
+                        for (const auto& [shardIdx, _] : (*tableInfo)->GetPartitionStore()) {
                             tableOpState.ExpectedShards.insert(shardIdx);
                             stateIt->second.InvolvedShards.insert(shardIdx);
                         }
@@ -884,7 +884,7 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
         if (Tables.contains(indexImplTablePathId)) {
             auto indexImplTable = Tables.at(indexImplTablePathId);
-            for (const auto& [shardIdx, partitionIdx] : indexImplTable->GetShard2PartitionIdx()) {
+            for (const auto& [shardIdx, _] : indexImplTable->GetPartitionStore()) {
                 indexOpState.ExpectedShards.insert(shardIdx);
                 stateIt->second.InvolvedShards.insert(shardIdx);
             }

@@ -29,7 +29,7 @@ env:
 
 jobs:
   resolve-build-types:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
@@ -41,6 +41,7 @@ jobs:
           sparse-checkout: |
             .github/config/mute_issue_and_digest_config.json
             .github/scripts/tests/mute/mute_helper.py
+            .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
 
       - name: Resolve build types matrix
@@ -69,7 +70,7 @@ jobs:
 
   create-issues-for-muted-tests:
     needs: resolve-build-types
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
       ((github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||

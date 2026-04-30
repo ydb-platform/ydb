@@ -993,6 +993,20 @@ Y_UNIT_TEST(FunctionName) {
     }
 }
 
+Y_UNIT_TEST(NamespacedFunctionName) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString query = R"sql(
+        SELECT DateTime::# FROM example.`/people`
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(100, engine, query), expected);
+}
+
 Y_UNIT_TEST(SelectTableHintName) {
     auto engine = MakeSqlCompletionEngineUT();
     {

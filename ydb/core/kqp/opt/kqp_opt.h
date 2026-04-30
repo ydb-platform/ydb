@@ -14,12 +14,14 @@ namespace NKikimr::NKqp::NOpt {
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     TKqpOptimizeContext(const TString& cluster, const NYql::TKikimrConfiguration::TPtr& config,
         const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
-        const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext)
+        const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
+        NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
         : Cluster(cluster)
         , Config(config)
         , QueryCtx(queryCtx)
         , Tables(tables)
         , UserRequestContext(userRequestContext)
+        , IsolationLevel(isolationLevel)
     {
         YQL_ENSURE(QueryCtx);
         YQL_ENSURE(Tables);
@@ -30,6 +32,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     const TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     const TIntrusivePtr<NYql::TKikimrTablesData> Tables;
     const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
+    NKqpProto::EIsolationLevel IsolationLevel;
     int JoinsCount{};
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};

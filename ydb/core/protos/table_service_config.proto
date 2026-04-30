@@ -469,6 +469,7 @@ message TTableServiceConfig {
         SnapshotRW = 1;
         SnapshotRO = 2;
         StaleRO = 3;
+        ReadCommittedRW = 4;
     }
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
@@ -498,4 +499,6 @@ message TTableServiceConfig {
     optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
+
+    optional bool EnableReadCommittedIsolation = 126 [default = false, (InvalidateCompileCache) = true];
 };

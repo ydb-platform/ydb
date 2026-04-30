@@ -55,7 +55,8 @@ public:
         bool perStatementResult,
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
-        NYql::TExprNode::TPtr splitExpr)
+        NYql::TExprNode::TPtr splitExpr,
+        NKqpProto::EIsolationLevel isolationLevel)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -83,9 +84,10 @@ public:
         , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
         , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
+        , IsolationLevel(isolationLevel)
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
+        PerStatementResult = (IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) || (perStatementResult && Config->GetEnablePerStatementQueryExecution());
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
@@ -127,6 +129,10 @@ public:
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+        }
+
+        if (IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+            config->SetEnableIndexStreamWrite(true);
         }
 
         config->FreezeDefaults();
@@ -282,6 +288,11 @@ private:
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
+        if (IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW && !Config->GetEnableReadCommittedIsolation()) {
+            NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is not supported.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+
         auto prepareSettings = PrepareCompilationSettings(ctx);
         StartCompilationWithSettings(prepareSettings);
         Continue(ctx);
@@ -354,7 +365,7 @@ private:
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
-            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext);
+            false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, IsolationLevel);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
@@ -365,6 +376,7 @@ private:
         if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         }
+        prepareSettings.IsolationLevel = IsolationLevel;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -741,6 +753,7 @@ private:
     bool EnforcedSqlVersion;
     bool EnableNewRBO;
     bool EnableFallbackToYqlOptimizer;
+    NKqpProto::EIsolationLevel IsolationLevel;
 };
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
@@ -752,7 +765,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TMaybe<TString>& applicationName, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr)
+    bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
+    NKqpProto::EIsolationLevel isolationLevel)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -760,7 +774,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr));
+                                std::move(splitCtx), std::move(splitExpr), isolationLevel);
 }
 
 } // namespace NKikimr::NKqp

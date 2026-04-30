@@ -257,4 +257,63 @@ TCoLambda MakeRowsPayloadSelector(const TCoAtomList& columns, const TKikimrTable
         .Done();
 }
 
+NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+        const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqpLockAndCheck>()) {
+        return node;
+    }
+    AFL_ENSURE(kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+
+    auto lockAndCheck = node.Cast<TKqpLockAndCheck>();
+
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lockAndCheck.Table().Path());
+
+    const TTypeAnnotationNode* inputAnnotation = lockAndCheck.Input().Ptr()->GetTypeAnn();
+    AFL_ENSURE(inputAnnotation);
+
+    TVector<TString> inputColumns;
+    const TTypeAnnotationNode* inputItemType = GetSeqItemType(inputAnnotation);
+    auto* inputStructType = inputItemType->Cast<TStructExprType>();
+    for (const auto& item : inputStructType->GetItems()) {
+        inputColumns.emplace_back(item->GetName());
+    }
+
+    TKqpStreamLookupSettings streamLookupSettings;
+    streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupAndLockRows;
+
+    auto lockStreamLookup = Build<TKqpCnStreamLookup>(ctx, lockAndCheck.Pos())
+        .Output(lockAndCheck.Input().Cast<TDqCnUnionAll>().Output().Ptr())
+        .Table(BuildTableMeta(table, lockAndCheck.Pos(), ctx).Cast<TKqpTable>())
+        .Columns(BuildColumnsList(inputColumns, lockAndCheck.Pos(), ctx))
+        .InputType(ExpandType(lockAndCheck.Pos(), *inputAnnotation, ctx))
+        .Settings(streamLookupSettings.BuildNode(ctx, lockAndCheck.Pos()))
+        .Done();
+ 
+    auto lockStage = Build<TDqStage>(ctx, lockAndCheck.Pos())
+        .Inputs()
+            .Add(lockStreamLookup)
+            .Build()
+        .Program()
+            .Args({"_locked_rows"})
+            .Body<TCoToStream>()
+                .Input("_locked_rows")
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    auto lockConnection = Build<TDqCnUnionAll>(ctx, lockAndCheck.Pos())
+        .Output()
+            .Stage(lockStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+
+    auto filteredRows = Build<TCoFilter>(ctx, lockAndCheck.Pos())
+        .Input(lockConnection)
+        .Lambda(lockAndCheck.Lambda().Ptr())
+        .Done();
+    return filteredRows;
+}
+
 } // namespace NKikimr::NKqp::NOpt

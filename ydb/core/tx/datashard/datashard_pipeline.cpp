@@ -1688,11 +1688,12 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     switch (rec.GetLockMode()) {
         case NKikimrDataEvents::OPTIMISTIC:
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             break;
 
         default:
             badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-                "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented");
+                "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented");
             return writeOp;
     }
 

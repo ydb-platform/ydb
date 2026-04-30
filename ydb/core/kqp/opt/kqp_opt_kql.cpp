@@ -616,23 +616,40 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
 }
 
 TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns,
-    const TCoLambda& filter, const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
+    const TCoLambda& filter, const TCoAtom& isBatch, const bool needPessimisticLocks, const TPositionHandle pos, TExprContext& ctx)
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
     const auto allRows = BuildReadTable(tableColumns, pos, tableData, (isBatch == "true"), {}, ctx);
 
-    return Build<TCoFilter>(ctx, pos)
+    auto result = Build<TCoFilter>(ctx, pos)
         .Input(allRows)
         .Lambda(filter)
         .Done();
+
+    if (needPessimisticLocks) {
+        return Build<TKqpLockAndCheck>(ctx, pos)
+            .Input(result)
+            .Table(BuildTableMeta(tableData, pos, ctx))
+            .Lambda(filter)
+            .Done();
+    }
+
+    return result;
 }
 
 TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescription& tableData, bool withSystemColumns,
-    TExprContext& ctx)
+    TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
+    auto rowsToDelete = BuildRowsToDelete(
+        tableData,
+        withSystemColumns,
+        del.Filter(),
+        del.IsBatch(),
+        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        del.Pos(),
+        ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
 
     return Build<TKqlDeleteRows>(ctx, del.Pos())
@@ -645,11 +662,18 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 }
 
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx)
+    bool withSystemColumns, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
     TKqpDeleteRowsIndexSettings settings;
     settings.SkipLookup = true;
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
+    auto rowsToDelete = BuildRowsToDelete(
+        tableData,
+        withSystemColumns,
+        del.Filter(),
+        del.IsBatch(),
+        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        del.Pos(),
+        ctx);
     return Build<TKqlDeleteRowsIndex>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(rowsToDelete)
@@ -660,14 +684,24 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
+    const TCoAtom& isBatch, const bool needPessimisticLocks, const TPositionHandle pos, TExprContext& ctx)
 {
     auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, (isBatch == "true"), {}, ctx);
 
-    return Build<TCoFilter>(ctx, pos)
+    auto result = Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)
         .Lambda(filter)
         .Done();
+
+    if (needPessimisticLocks) {
+        return Build<TKqpLockAndCheck>(ctx, pos)
+            .Input(result)
+            .Table(BuildTableMeta(tableData, pos, ctx))
+            .Lambda(filter)
+            .Done();
+    }
+
+    return result;
 }
 
 TExprBase BuildUpdatedRows(const TExprBase& rows, const TCoLambda& update, const THashSet<TStringBuf>& columns,
@@ -727,9 +761,16 @@ THashSet<TStringBuf> GetUpdateColumns(const TKikimrTableDescription& tableData, 
 }
 
 TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx)
+    bool withSystemColumns, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(
+        tableData,
+        withSystemColumns,
+        update.Filter(),
+        update.IsBatch(),
+        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        update.Pos(),
+        ctx);
 
     auto updateColumns = GetUpdateColumns(tableData, update.Update());
     auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
@@ -738,6 +779,9 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
     for (const auto& column : updateColumns) {
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
+
+    const bool isSink = NeedSinks(tableData, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
 
     return Build<TKqlUpsertRows>(ctx, update.Pos())
         .Table(BuildTableMeta(tableData, update.Pos(), ctx))
@@ -750,7 +794,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Build()
         .IsBatch(update.IsBatch())
         .DefaultColumns<TCoAtomList>().Build()
-        .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(useStreamIndex, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 }
@@ -758,7 +802,14 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(
+        tableData,
+        withSystemColumns,
+        update.Filter(),
+        update.IsBatch(),
+        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        update.Pos(),
+        ctx);
 
     TVector<TExprBase> effects;
 
@@ -800,6 +851,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
     const bool isSink = NeedSinks(tableData, kqpCtx);
 
     const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    AFL_ENSURE(kqpCtx.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || useStreamIndex);
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect || useStreamIndex) {
@@ -965,6 +1017,7 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
         case TYdbOperation::UpdateOn:
             return BuildUpdateOnTable(write, inputColumns, tableData, ctx);
         case TYdbOperation::Delete:
+            AFL_ENSURE(false);
             return BuildDeleteTable(write, tableData, ctx);
         case TYdbOperation::DeleteOn:
             return BuildDeleteTable(write, tableData, ctx);
@@ -1090,7 +1143,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
     if (HasIndexesToWrite(tableData)) {
         return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
-        return BuildUpdateTable(update, tableData, withSystemColumns, ctx).Ptr();
+        return BuildUpdateTable(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     }
 }
 
@@ -1107,9 +1160,9 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
     }
 
     if (HasIndexesToWrite(tableData)) {
-        return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx).Ptr();
+        return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
-        return BuildDeleteTable(del, tableData, withSystemColumns, ctx).Ptr();
+        return BuildDeleteTable(del, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     }
 }
 

@@ -2222,13 +2222,14 @@ public:
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
             case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            case NKikimrDataEvents::PESSIMISTIC_NONE:
                 break;
 
             default:
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                    TStringBuilder() << "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented"
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
                 return;
         }
@@ -2842,6 +2843,7 @@ private:
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             if (Reader->HadInconsistentResult()) {
                 HandleDeferredLockBreak(state, sysLocks, ctx);
                 handledDeferredBreak = true;
@@ -3465,6 +3467,7 @@ public:
             return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             return Reader->HadInconsistentResult();
 
         default:

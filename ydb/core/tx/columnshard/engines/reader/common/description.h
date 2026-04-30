@@ -77,7 +77,9 @@ public:
         LockId = lockId;
         LockNodeId = lockNodeId;
         LockMode = lockMode;
-        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+        auto snapshotIsolation = lockId.has_value()
+            && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
+            && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::PESSIMISTIC_NONE;
 
         readNonconflictingPortions = !readOnlyConflicts;
 

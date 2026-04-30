@@ -152,6 +152,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
             } else if (mode == "StaleRO") {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else if (mode == "ReadCommittedRW") {
+                return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
             } else {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }

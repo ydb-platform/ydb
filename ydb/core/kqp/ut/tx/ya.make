@@ -10,6 +10,7 @@ SRCS(
     kqp_locks_tricky_ut.cpp
     kqp_locks_ut.cpp
     kqp_mvcc_ut.cpp
+    kqp_read_committed_ut.cpp
     kqp_sink_locks_ut.cpp
     kqp_sink_mvcc_ut.cpp
     kqp_sink_tx_ut.cpp

@@ -704,6 +704,8 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
+        EnsureTxContextForCompilation();
+
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
@@ -1156,6 +1158,8 @@ public:
                         return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                     case NKikimrConfig::TTableServiceConfig::StaleRO:
                         return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+                    case NKikimrConfig::TTableServiceConfig::ReadCommittedRW:
+                        return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
                     default:
                         ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                             << "Unknown DefaultTxMode";
@@ -1174,6 +1178,9 @@ public:
                 case NKqpProto::ISOLATION_LEVEL_READ_STALE:
                     settings.mutable_stale_read_only();
                     break;
+                case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+                    settings.mutable_read_committed_read_write();
+                    break;
                 default:
                     ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                         << "Unknown DefaultTxMode";
@@ -1185,6 +1192,25 @@ public:
         control.set_commit_tx(QueryState->ProcessingLastStatement() && QueryState->ProcessingLastStatementPart());
         control.set_tx_id(QueryState->ImplicitTxId->GetValue().GetHumanStr());
         return control;
+    }
+
+    void EnsureTxContextForCompilation() {
+        if (QueryState->TxCtx) {
+            return;
+        }
+
+        if (!QueryState->HasTxControl()) {
+            return;
+        }
+
+        const auto& txControl = QueryState->GetTxControl();
+        if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
+            auto txId = TTxId::FromString(txControl.tx_id());
+            auto txCtx = Transactions.Find(txId);
+            if (txCtx) {
+                QueryState->TxCtx = txCtx;
+            }
+        }
     }
 
     bool PrepareQueryTransaction() {
@@ -1203,7 +1229,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl) {
+                    if (hasTxControl && QueryState->TxId.GetValue() != TTxId()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

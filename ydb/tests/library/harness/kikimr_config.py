@@ -619,6 +619,8 @@ class KikimrConfigGenerator(object):
                     "pipe_client_max_retry_time": 10,
                     "sync_requests_batch_size": 3,
                     "vchunk_size": vchunk_size,
+                    "stripe_size": 524288,
+                    "write_mode": "DirectPBuffersFilling",
                 }
             }
 

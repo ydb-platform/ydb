@@ -52,7 +52,7 @@ private:
     TKeyFromRequestHeaderCallback KeyFromRequestHeader_;
     TReconfigurationCallback ReconfigurationCallback_;
 
-    NThreading::TReaderWriterSpinLock ThrottlingEnabledFlagsSpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ThrottlingEnabledFlagsSpinLock_);
     bool WeightThrottlingEnabled_ = true;
     bool BytesThrottlingEnabled_ = false;
 };

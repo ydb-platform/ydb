@@ -1,10 +1,12 @@
 #include "common.h"
 
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <fmt/format.h>
@@ -22,6 +24,15 @@ using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
+TStreamingTestFixture::~TStreamingTestFixture () {
+    if (InternalDriver) {
+        InternalDriver->Stop(true);
+    }
+    if (ExternalDriver) {
+        ExternalDriver->Stop(true);
+    }
+}
+
 // Local kikimr settings
 
 NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
@@ -31,6 +42,24 @@ NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
     auto& result = AppConfig.emplace();
     result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
     return result;
+}
+
+void TStreamingTestFixture::UpdateConfig(NKikimrConfig::TAppConfig& appConfig) {
+    auto& runtime = GetRuntime();
+    const auto edgeActor = runtime.AllocateEdgeActor();
+    auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *evProxy->Record.MutableConfig() = appConfig;
+
+    runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+    auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+    UNIT_ASSERT(response);
+
+    auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *evStorage->Record.MutableConfig() = appConfig;
+
+    runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+    response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+    UNIT_ASSERT(response);
 }
 
 TIntrusivePtr<IMockPqGateway> TStreamingTestFixture::SetupMockPqGateway() {
@@ -79,12 +108,14 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
+            .DynamicNodeCount = DynamicNodeCount,
             .CredentialsFactory = CreateCredentialsFactory(),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .StoragePoolTypes = StoragePoolTypes,
         });
 
         Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

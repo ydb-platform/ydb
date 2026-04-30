@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include "../mkql_factories.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -85,6 +86,7 @@ struct TSetup {
     explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
         , StatsRegistry(CreateDefaultStatsRegistry())
+        , RuntimeSettings(NYql::MakeRuntimeSettingsMutable())
     {
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -119,7 +121,7 @@ struct TSetup {
         Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
                                      FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
-                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr);
+                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr, nullptr, NYql::UnknownLangVersion, RuntimeSettings);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
@@ -158,6 +160,7 @@ struct TSetup {
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     IStatsRegistryPtr StatsRegistry;
+    NYql::TRuntimeSettings::TPtr RuntimeSettings;
 
     THolder<TTypeEnvironment> Env;
     THolder<TProgramBuilder> PgmBuilder;

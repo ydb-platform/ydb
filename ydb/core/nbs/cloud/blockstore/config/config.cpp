@@ -11,7 +11,8 @@ namespace {
 
 const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
 const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MilliSeconds(0);
+const auto DefaultHedgingDelay = TDuration::MicroSeconds(1000);
+const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
 
 }   // namespace
 
@@ -26,7 +27,7 @@ TStorageConfig::TStorageConfig(
 
 // clang-format off
 #define BLOCKSTORE_STORAGE_CONFIG_RO(xxx)                                     \
-    xxx(SyncRequestsBatchSize,              ui32,     3                       )\
+    xxx(SyncRequestsBatchSize,              ui32,     10                      )\
     xxx(StripeSize,                         ui64,     512_KB                  )\
     xxx(DDiskPoolName,                      TString,  "ddp1"                  )\
     xxx(PersistentBufferDDiskPoolName,      TString,  "ddp1"                  )\
@@ -141,12 +142,20 @@ TDuration TStorageConfig::GetTraceSamplePeriod() const
                : DefaultTraceSamplePeriod;
 }
 
-TDuration TStorageConfig::GetWriteHandoffDelay() const
+TDuration TStorageConfig::GetWriteHedgingDelay() const
 {
-    return StorageServiceConfig.HasWriteHandoffDelay()
+    return StorageServiceConfig.HasWriteHedgingDelay()
                ? TDuration::MicroSeconds(
-                     StorageServiceConfig.GetWriteHandoffDelay())
+                     StorageServiceConfig.GetWriteHedgingDelay())
                : DefaultHedgingDelay;
+}
+
+TDuration TStorageConfig::GetWriteRequestTimeout() const
+{
+    return StorageServiceConfig.HasWriteRequestTimeout()
+               ? TDuration::MilliSeconds(
+                     StorageServiceConfig.GetWriteRequestTimeout())
+               : DefaultWriteRequestTimeout;
 }
 
 TDuration TStorageConfig::GetPBufferReplyTimeout() const

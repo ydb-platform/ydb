@@ -7,6 +7,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/write_stats.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
@@ -1250,8 +1252,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        // SourceId->WritenBytes
-        std::vector<std::pair<TString, ui64>> WrittenBytes;
+        // Tag -> (SourceId -> metric value) + Keys stats
+        NPQ::TWriteStats WriteStats;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;

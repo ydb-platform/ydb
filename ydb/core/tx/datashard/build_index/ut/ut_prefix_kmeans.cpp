@@ -393,9 +393,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
-
-                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\2\n"
+                similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                ? "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
+                  "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\2\n"
+                : "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \xFF\xFF\2\n"
+                  "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = \xFF\xFF\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
@@ -463,13 +465,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 44\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \x80\x10\x02\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x21\xFF\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \xFF\x20\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \xFF\xFF\x02\n"
 
-                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \x0E\x0E\x02\n"
-                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x38\xFF\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \xFF\xE7\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \xFF\x20\x02\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
@@ -502,7 +504,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "__ydb_parent = 9223372036854775855, key = 22, data = two\n"
                 "__ydb_parent = 9223372036854775855, key = 26, data = aaa\n"
                 "__ydb_parent = 9223372036854775855, key = 27, data = bbbb\n"
-                "__ydb_parent = 9223372036854775855, key = 30, data = eee\n"
             );
             recreate();
         }
@@ -640,9 +641,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
-
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\2\n"
+                similarity == VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                ? "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
+                  "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\2\n"
+                : "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \xFF\xFF\2\n"
+                  "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = \xFF\xFF\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
@@ -710,46 +713,45 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 44\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \x80\x10\x02\n"
-                "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x21\xFF\x02\n"
+                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \xFF\x20\x02\n"
+                "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = \xFF\xFF\x02\n"
 
-                "__ydb_parent = 44, __ydb_id = 45, __ydb_centroid = \x10\x80\x02\n"
-                "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \x0E\x0E\x02\n"
-                "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 44, __ydb_id = 45, __ydb_centroid = \x38\xFF\x02\n"
+                "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \xFF\xE7\x02\n"
+                "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \xFF\x20\x02\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
-                "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
-                "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
+                "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 9.424325546e-06, embedding = \x10\x80\x02, data = one\n"
+                "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
                 "key = 3, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
-                "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
-                "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
-                "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
-                "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.717749399e-06, embedding = \x11\x81\x02, data = four\n"
+                "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 5.588689634e-06, embedding = \x11\x80\x02, data = five\n"
+                "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.915982998e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 1.032230893e-06, embedding = \x81\x10\x02, data = bbbb\n"
                 "key = 8, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
                 "key = 9, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
-                "key = 10, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
+                "key = 10, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.06483141742, embedding = \x11\x09\x02, data = eee\n"
                 "key = 10, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
-                "key = 11, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 11, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.0634715565, embedding = \x09\x11\x02, data = ffff\n"
                 "key = 11, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
                 "key = 12, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
                 "key = 13, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
 
-                "key = 21, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
-                "key = 22, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
-                "key = 23, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
-                "key = 24, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
-                "key = 25, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
-                "key = 26, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
-                "key = 27, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
-                "key = 28, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
-                "key = 29, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
-                "key = 30, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
-                "key = 30, __ydb_parent = 47, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
-                "key = 31, __ydb_parent = 45, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
-                "key = 31, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
-                "key = 32, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
-                "key = 33, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
+                "key = 21, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.004212607855, embedding = \x10\x80\x02, data = one\n"
+                "key = 22, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.164636578e-07, embedding = \x80\x10\x02, data = two\n"
+                "key = 23, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x10\x10\x02, data = three\n"
+                "key = 24, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.003622927127, embedding = \x11\x81\x02, data = four\n"
+                "key = 25, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.003537384457, embedding = \x11\x80\x02, data = five\n"
+                "key = 26, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.915982998e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 27, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 1.032230893e-06, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 28, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0001814242825, embedding = \x11\x10\x02, data = ccccc\n"
+                "key = 29, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.003169301984, embedding = \x10\x11\x02, data = dddd\n"
+                "key = 30, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.03087918828, embedding = \x11\x09\x02, data = eee\n"
+                "key = 31, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0.0364222051, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 31, __ydb_parent = 46, __ydb_foreign = 1, __ydb_distance = 0.0598893529, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 32, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x09\x09\x02, data = ggggg\n"
+                "key = 33, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.00121710071, embedding = \x11\x11\x02, data = hhhh\n"
             );
             recreate();
         }
@@ -837,8 +839,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     }
 
     // Helper: sends a single PrefixKMeans request and checks the reply.
-    // Returns the parsed issues string.
-    static TString DoPrefixKMeansCheckIssues(
+    // Returns the status and parsed issues string.
+    static std::pair<NKikimrIndexBuilder::EBuildStatus, TString> DoPrefixKMeansCheckIssues(
         Tests::TServer::TPtr server, TActorId sender)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -879,15 +881,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         TAutoPtr<IEventHandle> handle;
         auto* reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvPrefixKMeansResponse>(handle);
-        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
-            "Expected DONE status");
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
-        return issues.ToOneLineString();
+        return {reply->Record.GetStatus(), issues.ToOneLineString()};
     }
 
-    Y_UNIT_TEST(InvalidEmbeddingWarning) {
+    Y_UNIT_TEST(DimensionMismatchError) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -907,27 +907,23 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // user-1: 2 valid rows, 3 invalid rows (no \x02 format byte)
+        // user-1: 2 valid rows, 1 invalid row with wrong dimension
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
             "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
             "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
-            "(\"user-1\", 13, \"invalid\", \"1-three\"),"
-            "(\"user-1\", 14, \"\", \"1-four\"),"
-            "(\"user-1\", 15, \"bad\", \"1-five\");");
+            "(\"user-1\", 13, \"\x30\x30\x30\2\", \"1-three\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoPrefixKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
     }
 
-    Y_UNIT_TEST(AllInvalidEmbeddingsWarning) {
-        // When ALL rows in a prefix group have invalid embeddings, FeedSample discards them all.
-        // FinishPrefixImpl returns early (no valid samples), and FeedFinal is never called.
-        // This test verifies the warning is still emitted in that case (counter in FeedSample).
+    Y_UNIT_TEST(EmptyEmbeddingSkipped) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -947,19 +943,62 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         CreateBuildPrefixTable(server, sender, options, "table-main");
 
-        // All rows have invalid embeddings (no \x02 format byte)
+        // Row with empty embedding (should be skipped, not fail)
         ExecSQL(server, sender,
             R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
-            "(\"user-1\", 11, \"invalid\", \"1-one\"),"
-            "(\"user-1\", 12, \"\", \"1-two\"),"
-            "(\"user-1\", 13, \"bad\", \"1-three\");");
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\", \"1-two\");");
 
         CreatePrefixTable(server, sender, options);
         CreateLevelTable(server, sender, options);
         CreatePostingTable(server, sender, options);
 
-        TString issuesStr = DoPrefixKMeansCheckIssues(server, sender);
-        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "3 row(s) with invalid vector format were skipped during index build");
+        auto [status, issuesStr] = DoPrefixKMeansCheckIssues(server, sender);
+        UNIT_ASSERT_EQUAL(status, NKikimrIndexBuilder::EBuildStatus::DONE);
+    }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+
+        // user-1: 2 valid rows, 1 row with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, data) VALUES )"
+            "(\"user-1\", 13, \"1-three\");");
+
+        CreatePrefixTable(server, sender, options);
+        CreateLevelTable(server, sender, options);
+        CreatePostingTable(server, sender, options);
+
+        ui64 seed = 0, k = 2;
+        auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, 50000);
+
+        // Valid rows should be in posting, null embedding row should be skipped
+        UNIT_ASSERT(posting.Contains("1-one"));
+        UNIT_ASSERT(posting.Contains("1-two"));
+        UNIT_ASSERT(!posting.Contains("1-three"));
     }
 }
 

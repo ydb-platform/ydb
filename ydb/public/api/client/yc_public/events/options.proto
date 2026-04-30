@@ -36,6 +36,10 @@ message EventDescriptor {
   // sequence number for event ordering. The full implications of this are described at
   // https://docs.yandex-team.ru/audit-trails/pages/sending_events/events_ordering
   bool use_event_timestamp_as_ordering_sequence_number = 5;
+
+  // The mode of the event: whether it represents a write (mutating) or read (non-mutating) operation.
+  // Exists only for legacy API of Audit Trails, will be removed in https://st.yandex-team.ru/CLOUD-276366
+  EventMode event_mode = 6;
 }
 
 enum EventCategory {
@@ -74,4 +78,15 @@ enum EventVisibility {
 
   // Event is visible to all users.
   PUBLIC = 4;
+}
+
+enum EventMode {
+  // Must not be used.
+  EVENT_MODE_UNSPECIFIED = 0;
+
+  // The event represents a write (mutating) operation.
+  WRITE = 1;
+
+  // The event represents a read (non-mutating) operation.
+  READ = 2;
 }

@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -104,6 +105,10 @@ TResult AddConsumerImpl(
         consumer->SetServiceType(defaultCientServiceType);
     }
 
+    if (auto r = ProcessConsumerType(consumer, rr); !r) {
+        return r;
+    }
+
     if (consumersAdvancedMonitoringSettings) {
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
@@ -112,7 +117,7 @@ TResult AddConsumerImpl(
 }
 
 
-TResult FillProposeRequest( // create and alter
+TResult ApplyChangesInt( // create and alter
     const TString& database,
     const TString& name,
     const Ydb::PersQueue::V1::TopicSettings& settings,
@@ -205,8 +210,7 @@ TResult FillProposeRequest( // create and alter
 
     bool local = !settings.client_write_disabled();
 
-    auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
-    if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+    if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(
                 pqConfig.GetRoot(),
                 pqConfig.GetTestDatabaseRoot(),
@@ -226,7 +230,6 @@ TResult FillProposeRequest( // create and alter
         pqTabletConfig->SetDC(converter->GetCluster());
         pqTabletConfig->SetProducer(converter->GetLegacyProducer());
         pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-        pqTabletConfig->SetIdent(converter->GetLegacyProducer());
     }
 
     //Sets legacy 'logtype'.
@@ -442,7 +445,7 @@ NPQ::NSchema::TResult ApplyChangesInt(
     NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
     const TString& localDc
 ) {
-    return FillProposeRequest(
+    return ApplyChangesInt(
         database,
         name,
         request.settings(),
@@ -461,7 +464,7 @@ NPQ::NSchema::TResult ApplyChangesInt(
 ) {
     targetConfig.SetPartitionPerTablet(1);
 
-    return FillProposeRequest(
+    return ApplyChangesInt(
         database,
         targetConfig.GetName(),
         request.settings(),

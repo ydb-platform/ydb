@@ -878,8 +878,8 @@ TString PrintNode(const TNode* node, bool singleLine) {
 
 template <>
 void Out<NKikimr::NMiniKQL::TType>(
-    IOutputStream& os,
-    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t)
+    IOutputStream& out,
+    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam value)
 {
-    os << PrintNode(&t, true);
+    out << PrintNode(&value, true);
 }

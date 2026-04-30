@@ -1280,7 +1280,9 @@ public:
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard}) {
+             TTabletTypes::ColumnShard,
+             TTabletTypes::FileStore,
+        }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << GetTabletTypeShortName(tabletType) << "</td>";

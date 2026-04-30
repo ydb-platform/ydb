@@ -223,6 +223,7 @@
   - CoreVideo/CoreVideo.h
   - CoreWLAN/CoreWLAN.h
   - DeviceCheck/DCAppAttestService.h
+  - FSKit/FSKit.h
   - Files.h
   - Foundation/Foundation.h
   - Foundation/NSException.h

@@ -828,7 +828,8 @@ namespace NKikimr::NPersQueueTests {
             TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
-                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
+                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
                 res.Wait();
                 Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());

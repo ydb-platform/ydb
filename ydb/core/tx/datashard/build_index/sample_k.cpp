@@ -56,7 +56,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
-    ui64 InvalidEmbeddingRows = 0;
+    TString InvalidEmbeddingError;
 
     TSampler Sampler;
 
@@ -141,8 +141,16 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
+        if (Clusters && (row.Get(0).IsNull() || row.Get(0).Size() == 0)) {
+            return EScan::Feed;
+        }
+
         if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
-            ++InvalidEmbeddingRows;
+            if (!row.Get(0).AsRef().empty())
+            {
+                InvalidEmbeddingError = Clusters->FormatError(row.Get(0).AsRef());
+                return EScan::Final;
+            }
             return EScan::Feed;
         }
 
@@ -205,10 +213,10 @@ public:
             FillResponse();
         }
 
-        if (InvalidEmbeddingRows > 0) {
-            Issues.AddIssue(NYql::TIssue(TStringBuilder()
-                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build")
-                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING));
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            Issues.AddIssue(NYql::TIssue(InvalidEmbeddingError)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_ERROR));
         }
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 

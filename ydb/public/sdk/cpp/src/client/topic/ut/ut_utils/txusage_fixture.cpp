@@ -967,6 +967,41 @@ void TFixture::TestWriteToTopic10()
     }
 }
 
+void TFixture::TestEmptySourceIdParallelTx()
+{
+    CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+    NTopic::TTopicClient client(GetDriver());
+
+    auto createTxAndWrite = [this, &client](const TString& message, const TString& label) {
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        NTopic::TWriteSessionSettings settings;
+        settings.Path(GetTopicUtPath("topic_A"));
+        settings.ProducerId("");
+        settings.MessageGroupId("");
+        settings.Codec(ECodec::RAW);
+        auto ws = client.CreateSimpleBlockingWriteSession(settings);
+        auto msg = NTopic::TWriteMessage(message);
+        UNIT_ASSERT_C(ws->Write(std::move(msg), tx.get()), label << " write failed");
+        UNIT_ASSERT_C(ws->Close(), label << " close write session failed");
+
+        return std::make_pair(std::move(session), std::move(tx));
+    };
+
+    auto [session1, tx1] = createTxAndWrite("message #1", "tx1");
+    auto [session2, tx2] = createTxAndWrite("message #2", "tx2");
+
+    session1->CommitTx(*tx1, EStatus::SUCCESS);
+    session2->CommitTx(*tx2, EStatus::SUCCESS);
+
+    auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "message #1");
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], "message #2");
+}
+
 void TFixture::TestWriteToTopic11()
 {
     for (auto endOfTransaction : {Commit, Rollback, CloseTableSession}) {

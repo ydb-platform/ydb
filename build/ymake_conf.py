@@ -1661,7 +1661,7 @@ class GnuCompiler(Compiler):
                     self.optimize = '-Os'
 
                 # Generate sections with address significance tables for ICF linker pass
-                if self.tc.is_clang:
+                if self.tc.is_clang and self.tc.version_at_least(7):
                     self.c_foptions.extend(['-faddrsig'])
             else:
                 self.optimize = '-O3'

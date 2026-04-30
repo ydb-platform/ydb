@@ -8,6 +8,8 @@
 
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,6 +36,9 @@ struct THedgingClientOptions
     std::vector<TIntrusivePtr<TConnectionWithPenaltyConfig>> Connections;
     TDuration BanPenalty;
     TDuration BanDuration;
+    TDuration RequestDurationHistogramMin;
+    TDuration RequestDurationHistogramMax;
+    std::optional<TDuration> RequestDurationHistogramGranularity;
     THashMap<TString, TString> Tags;
 
     REGISTER_YSON_STRUCT(THedgingClientOptions);

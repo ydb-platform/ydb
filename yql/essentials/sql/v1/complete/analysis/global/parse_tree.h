@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/core/position.h>
+
 #include <util/generic/maybe.h>
 
 #ifdef TOKEN_QUERY // Conflict with the winnt.h
@@ -18,5 +20,7 @@ using SQLv1 = NALADefaultAntlr4::SQLv1Antlr4Parser;
 using NALADefaultAntlr4::SQLv1Antlr4BaseVisitor;
 
 TMaybe<std::string> GetName(SQLv1::Bind_parameterContext* ctx);
+
+TPosition GetPosition(SQLv1::Bind_parameterContext* ctx);
 
 } // namespace NSQLComplete

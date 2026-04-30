@@ -6,7 +6,7 @@
     http://www.boost.org/LICENSE_1_0.txt).
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_FUNCTIONAL_ADAPTER_UNFUSED_HPP_INCLUDED)
+#ifndef BOOST_FUSION_FUNCTIONAL_ADAPTER_UNFUSED_HPP_INCLUDED
 #if !defined(BOOST_PP_IS_ITERATING)
 
 #include <boost/preprocessor/cat.hpp>

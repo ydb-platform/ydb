@@ -64,7 +64,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
-    ui64 InvalidEmbeddingRows = 0;
+    TString InvalidEmbeddingError;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedCellVec LastProcessedKey;
@@ -183,11 +183,11 @@ public:
 
         Uploader.Finish(record, status);
 
-        if (InvalidEmbeddingRows > 0) {
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
             auto* issue = record.AddIssues();
-            issue->set_severity(NYql::TSeverityIds::S_WARNING);
-            issue->set_message(TStringBuilder()
-                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build");
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(InvalidEmbeddingError);
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -247,6 +247,10 @@ public:
         LastProcessedKey = TSerializedCellVec(key);
 
         Feed(key, *row);
+
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
@@ -355,8 +359,14 @@ protected:
     void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
-            ++InvalidEmbeddingRows;
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);

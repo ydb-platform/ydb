@@ -1,5 +1,8 @@
+#pragma once
+
 #include <util/generic/maybe.h>
-#include <ydb/library/actors/core/actor.h>
+#include <util/generic/string.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ {
 

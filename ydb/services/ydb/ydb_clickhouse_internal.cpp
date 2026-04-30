@@ -44,7 +44,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
         requestType,                                                                \
         YDB_API_DEFAULT_COUNTER_BLOCK(clickhouse_internal, methodName),             \
         auditMode,                                                                  \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,                                   \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                                 \
         COMMON,                                                                     \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                         \
         GRpcRequestProxyId_,                                                        \

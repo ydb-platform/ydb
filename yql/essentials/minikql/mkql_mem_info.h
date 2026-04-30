@@ -147,7 +147,7 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(
     IOutputStream& out,
-    const NKikimr::NMiniKQL::TMemoryUsageInfo& memInfo)
+    const NKikimr::NMiniKQL::TMemoryUsageInfo& value)
 {
-    memInfo.PrintTo(out);
+    value.PrintTo(out);
 }

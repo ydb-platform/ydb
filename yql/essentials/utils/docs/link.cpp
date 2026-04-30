@@ -111,9 +111,9 @@ TLinks Merge(TLinks&& lhs, TLinks&& rhs) {
 } // namespace NYql::NDocs
 
 template <>
-void Out<NYql::NDocs::TLinkTarget>(IOutputStream& out, const NYql::NDocs::TLinkTarget& target) {
-    out << target.RelativePath;
-    if (target.Anchor) {
-        out << "#" << *target.Anchor;
+void Out<NYql::NDocs::TLinkTarget>(IOutputStream& out, const NYql::NDocs::TLinkTarget& value) {
+    out << value.RelativePath;
+    if (value.Anchor) {
+        out << "#" << *value.Anchor;
     }
 }

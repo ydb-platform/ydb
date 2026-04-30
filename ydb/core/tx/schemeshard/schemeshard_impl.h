@@ -276,6 +276,45 @@ public:
     ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
+    ui64 NextSchemeChangeOrder = 0;
+    ui64 MaxSchemeChangeRecords = 100000;
+    // Monotonic ceiling of coordinator plan steps ever assigned to an op.
+    // Used to seed WatermarkPlanStep in Fetch when TxInFlight is empty;
+    // persisted as SysParam_LastAssignedPlanStep so it survives reboot.
+    ui64 LastAssignedPlanStep = 0;
+    // Per-tx row cap for DeleteAckedSchemeChangeRecords. Keeps a single
+    // cleanup tx's redo log bounded; leftover work spills into a follow-up
+    // TTxSchemeChangeRecordsCleanup triggered from Complete().
+    ui64 SchemeChangeCleanupBatchSize = 1000;
+    // Delay between bounded cleanup tx batches when draining a backlog.
+    // Yields the executor so other SS work (DDL, fetches) can interleave
+    // rather than wait for a long chain of back-to-back cleanup txs.
+    TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
+
+    // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
+    // Used by unit tests to verify that a multi-part DDL persists the
+    // NextSchemeChangeOrder sysparam once per batch, not once per record.
+    mutable ui64 NextSchemeChangeOrderPersistCount = 0;
+    // Test-only: counts TTxSchemeChangeRecordsCleanup tx Completes.
+    // Used by unit tests to verify the bounded cleanup continuation chain.
+    ui64 SchemeChangeCleanupTxCount = 0;
+
+    struct TSubscriberInfo {
+        ui64 LastAckedOrder = 0;
+        TInstant LastActivityAt;
+    };
+    THashMap<TString, TSubscriberInfo> Subscribers;
+
+    ui64 GetMinSubscriberOrder() const {
+        if (Subscribers.empty()) {
+            return NextSchemeChangeOrder;
+        }
+        ui64 m = Max<ui64>();
+        for (const auto& [_, info] : Subscribers) {
+            m = Min(m, info.LastAckedOrder);
+        }
+        return m;
+    }
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
@@ -851,6 +890,64 @@ public:
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+    void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
+
+    // Persist / remove the user-level TTxTransaction body for an operation
+    // so that DoPersistSchemeChangeRecords can emit a parent-level record
+    // even if the tablet restarts between ignite and done.
+    void PersistUserLevelTransaction(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx, const TString& body) const;
+    void PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId, ui32 count) const;
+    ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
+    // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
+    // at the end of its tx; use for multi-record batches.
+    ui64 AllocateSchemeChangeOrderInMemory();
+
+    struct TSchemeChangeRecordData {
+        ui64 Order = 0;
+        TTxId TxId = InvalidTxId;
+        TTxState::ETxType TxType = TTxState::TxInvalid;
+        TPathId PathId;
+        TString Path;
+        NKikimrSchemeOp::EPathType ObjectType = NKikimrSchemeOp::EPathTypeInvalid;
+        NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
+        TString UserSid;
+        ui64 SchemaVersion = 0;
+        TInstant CompletedAtUs;
+        TStepId PlanStep = InvalidStepId;
+        TString Body;  // serialized NKikimrSchemeOp::TModifyScheme
+    };
+
+    void PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry);
+    NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxAckSchemeChangeRecords(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecordBodies(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvReplaySchemeChangeRecord::TPtr& ev, const TActorContext& ctx);
+    // Scheme change records cleanup & backpressure
+    NTabletFlatExecutor::ITransaction* CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
+    // Deletes records with (oldMinOrder, newMinOrder] up to `limit` rows per tx.
+    // Sets `hasMore = true` if the cap was hit with more rows still matching —
+    // the caller should schedule a TTxSchemeChangeRecordsCleanup continuation
+    // from Complete() to drain the rest in bounded follow-up txs.
+    // Returns false if the rowset is not ready (tx will be retried).
+    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
+        ui64 limit, bool& hasMore);
+    // Schedules a follow-up TTxSchemeChangeRecordsCleanup after
+    // SchemeChangeCleanupInterval. Used by Ack / Unregister / ForceAdvance /
+    // Cleanup Complete() to drain a backlog across multiple bounded txs
+    // without monopolising the executor. Namespace-level tx structs call
+    // this in lieu of the protected Execute().
+    void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
+    bool CheckSchemeChangeRecordsOverflow(TString& errStr) const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
@@ -1388,6 +1485,7 @@ public:
     bool ProcessPendingConditionalEraseResponseBatch(const TInstant& now, const TActorContext& ctx);
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvFlushConditionalEraseBatch::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);

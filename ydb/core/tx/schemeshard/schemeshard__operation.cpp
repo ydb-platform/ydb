@@ -108,11 +108,19 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
+    // Overflow is a whole-schemeshard condition, not per-part; compute it
+    // once for the batch instead of rescanning Subscribers each iteration.
+    TString overflowErr;
+    const bool schemeChangeRecordsOverflow = !context.SS->CheckSchemeChangeRecordsOverflow(overflowErr);
+
     for (auto& part : parts) {
         TString errStr;
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else if (schemeChangeRecordsOverflow) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {
             response = part->Propose(owner, context);
         }
@@ -285,6 +293,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
+    // Keep the pre-split (post-rewrite) user-level transactions in memory
+    // so DoPersistSchemeChangeRecords can emit parent-level records.
+    operation->UserLevelTransactions = rewrittenTransactions;
+
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
@@ -303,6 +315,19 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 break;
             default:
                 break;
+        }
+    }
+
+    // All parts accepted. Persist the user-level bodies so a reboot between
+    // now and DoPersistSchemeChangeRecords doesn't lose them. Direct DB
+    // access is safe here because the operation is past the undo-safe gate.
+    {
+        NIceDb::TNiceDb db(context.GetDB());
+        for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
+            TString body;
+            if (rewrittenTransactions[i].SerializeToString(&body)) {
+                PersistUserLevelTransaction(db, txId, i, body);
+            }
         }
     }
 
@@ -698,6 +723,15 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                         << ", message: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        // Plan step is monotonic per coordinator, so advance the ceiling
+        // once per message rather than per op. Persisting keeps the
+        // WatermarkPlanStep monotonic across reboots.
+        if (ui64(step) > Self->LastAssignedPlanStep) {
+            Self->LastAssignedPlanStep = ui64(step);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUpdateLastAssignedPlanStep(db);
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
@@ -724,6 +758,12 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                                     << " operation part is already done"
                                     << ", operationId: " << opId);
                     continue;
+                }
+
+                // Set PlanStep on txState before HandleReply so it's available
+                // for scheme change records persistence (not all operations set it themselves)
+                if (auto* txState = Self->FindTx(opId)) {
+                    txState->PlanStep = step;
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

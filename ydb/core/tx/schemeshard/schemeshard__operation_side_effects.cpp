@@ -935,7 +935,141 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
     }
 }
 
+void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+    if (DoneTransactions.empty()) {
+        return;
+    }
+
+    if (ss->Subscribers.empty()) {
+        return;
+    }
+
+    // Option B: one record per user-level transaction (the post-rewrite,
+    // post-auto-mkdir-split TModifyScheme the user originally authored).
+    // Target cluster feeds the body back through IgniteOperation, which
+    // redoes decomposition — no sub-op replay path needed.
+    struct TSortKey {
+        TStepId PlanStep;
+        TTxId TxId;
+        ui32 UserTxIdx;
+    };
+    TVector<TSortKey> keys;
+
+    for (const auto& txId : DoneTransactions) {
+        auto opIt = ss->Operations.find(txId);
+        if (opIt == ss->Operations.end() || !opIt->second->IsReadyToDone(ctx)) {
+            continue;
+        }
+        const TOperation::TPtr& operation = opIt->second;
+        if (operation->UserLevelTransactions.empty()) {
+            continue;
+        }
+
+        // All parts of this operation share one PlanStep assigned by the
+        // coordinator. Read it from any live part.
+        TStepId planStep = InvalidStepId;
+        for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
+            auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
+            if (it != ss->TxInFlight.end() && it->second.PlanStep != InvalidStepId) {
+                planStep = it->second.PlanStep;
+                break;
+            }
+        }
+
+        for (ui32 i = 0; i < operation->UserLevelTransactions.size(); ++i) {
+            keys.push_back({planStep, txId, i});
+        }
+    }
+
+    std::sort(keys.begin(), keys.end(), [](const TSortKey& a, const TSortKey& b) {
+        return std::tie(a.PlanStep, a.TxId, a.UserTxIdx) < std::tie(b.PlanStep, b.TxId, b.UserTxIdx);
+    });
+
+    NIceDb::TNiceDb db(txc.DB);
+    bool anyAllocated = false;
+
+    for (const auto& key : keys) {
+        auto opIt = ss->Operations.find(key.TxId);
+        if (opIt == ss->Operations.end()
+            || key.UserTxIdx >= opIt->second->UserLevelTransactions.size()) {
+            continue;
+        }
+        const auto& userTx = opIt->second->UserLevelTransactions[key.UserTxIdx];
+
+        TString body;
+        {
+            bool ok = userTx.SerializeToString(&body);
+            Y_DEBUG_ABORT_UNLESS(ok);
+        }
+
+        // Best-effort synthesis of a human-friendly Path by joining WorkingDir
+        // with the target name extracted from the body's typed sub-message.
+        // For ops without a single identifiable target, fall back to WorkingDir.
+        TString targetName;
+        switch (userTx.GetOperationType()) {
+            case NKikimrSchemeOp::ESchemeOpCreateTable:
+                targetName = userTx.GetCreateTable().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpAlterTable:
+                targetName = userTx.GetAlterTable().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpDropTable:
+                targetName = userTx.GetDrop().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpMkDir:
+                targetName = userTx.GetMkDir().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
+                targetName = userTx.GetCreateIndexedTable().GetTableDescription().GetName();
+                break;
+            case NKikimrSchemeOp::ESchemeOpRmDir:
+                targetName = userTx.GetDrop().GetName();
+                break;
+            default:
+                break;  // fall back to WorkingDir only
+        }
+        TString path = userTx.GetWorkingDir();
+        if (!targetName.empty()) {
+            if (path.empty() || path.back() != '/') path += '/';
+            path += targetName;
+        }
+
+        ui64 order = ss->AllocateSchemeChangeOrderInMemory();
+        anyAllocated = true;
+
+        ss->PersistSchemeChangeRecord(db, {
+            .Order = order,
+            .TxId = key.TxId,
+            // OperationType is now read from the body (external EOperationType),
+            // not from the record column. Keep TxInvalid as a placeholder.
+            .TxType = TTxState::TxInvalid,
+            .PathId = {},
+            .Path = path,
+            .ObjectType = NKikimrSchemeOp::EPathTypeInvalid,
+            .Status = NKikimrScheme::StatusSuccess,
+            .UserSid = "",
+            .SchemaVersion = 0,
+            .CompletedAtUs = ctx.Now(),
+            .PlanStep = key.PlanStep,
+            .Body = body,
+        });
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "DoPersistSchemeChangeRecords: logged user-level entry"
+                << " order=" << order
+                << " txId=" << key.TxId
+                << " userTxIdx=" << key.UserTxIdx
+                << " workingDir=" << userTx.GetWorkingDir()
+                << " opType=" << ui32(userTx.GetOperationType()));
+    }
+
+    if (anyAllocated) {
+        ss->PersistUpdateNextSchemeChangeOrder(db);
+    }
+}
+
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
+    DoPersistSchemeChangeRecords(ss, txc, ctx);  // persist scheme change records before operations are erased
     for (auto& txId: DoneTransactions) {
 
         if (!ss->Operations.contains(txId)) {
@@ -1017,6 +1151,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             };
         }
 
+        ss->PersistRemoveUserLevelTransactions(db, txId, operation->UserLevelTransactions.size());
         ss->Operations.erase(txId);
     }
 }

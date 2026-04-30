@@ -2356,6 +2356,58 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
     };
 
+    struct SchemeChangeRecords : Table<133> {
+        struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId :          Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct Path :          Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
+        struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
+        struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
+        struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
+                                      Path, ObjectType, Status, UserSID, SchemaVersion,
+                                      CompletedAtUs, PlanStep, BodySize>;
+    };
+
+    struct SchemeChangeRecordDetails : Table<135> {
+        struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Body :  Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, Body>;
+    };
+
+    struct SchemeChangeSubscribers : Table<134> {
+        struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
+        struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAt : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<SubscriberId>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt>;
+    };
+
+    // User-level TTxTransaction bodies (post-rewrite, pre-auto-mkdir-split)
+    // for every in-flight operation. Written when the operation is ignited,
+    // read at boot to restore TOperation::UserLevelTransactions, deleted
+    // when RemoveTx drops the operation. Required so DoPersistSchemeChangeRecords
+    // can emit a parent-level scheme change record even if a tablet restart
+    // happens between DoDoneParts and the record-persist tx.
+    struct UserLevelTransactions : Table<136> {
+        struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Body :      Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, UserTxIdx>;
+        using TColumns = TableColumns<TxId, UserTxIdx, Body>;
+    };
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2486,7 +2538,11 @@ struct Schema : NIceDb::Schema {
         StreamingQueryState,
         ForcedCompactions,
         WaitingForcedCompactionShards,
-        SharedShards
+        SharedShards,
+        SchemeChangeRecords,
+        SchemeChangeRecordDetails,
+        SchemeChangeSubscribers,
+        UserLevelTransactions
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2501,6 +2557,8 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
     static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
+    static constexpr ui64 SysParam_NextSchemeChangeOrder = 13;
+    static constexpr ui64 SysParam_LastAssignedPlanStep = 14;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

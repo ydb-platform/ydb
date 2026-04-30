@@ -138,6 +138,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/opt
+    ydb/core/local_indexes/bloom
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

@@ -443,6 +443,10 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                                // Bloom filter scheme objects are not supported yet in row tables
+                                break;
                         }
 
                         break;

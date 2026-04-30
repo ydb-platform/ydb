@@ -1,9 +1,11 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__local_index_migration.h"
 #include "schemeshard_login_helper.h"
 #include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
+#include "olap/operations/local_index_helpers.h"
 #include "schemeshard.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
@@ -183,6 +185,64 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     if (!sysViewUpdates.empty()) {
         Register(CreateSysViewsRosterUpdate(static_cast<TTabletId>(TabletID()), SelfId(), std::move(sysViewUpdates)).Release());
     }
+}
+
+void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
+    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+        return;
+    }
+
+    TVector<std::pair<TTxId, TLocalIndexMigrationItem>> items;
+
+    for (const auto& tablePathId : ColumnTables.GetAllPathIds()) {
+        const auto tableInfo = ColumnTables.GetVerifiedPtr(tablePathId);
+        if (!tableInfo->IsStandalone()) {
+            continue;
+        }
+
+        const auto& schema = tableInfo->Description.GetSchema();
+        if (schema.IndexesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        const auto columnIdToName = NOlap::BuildColumnIdToNameMap(schema);
+        const TString workingDir = TPath::Init(tablePathId, this).PathString();
+
+        for (const auto& indexProto : schema.GetIndexes()) {
+            const TString& indexName = indexProto.GetName();
+
+            // Skip indexes that already exist as live scheme-object children.
+            if (const TPathId* childId = tablePath->FindChild(indexName)) {
+                const auto& child = PathsById.at(*childId);
+                if (child->IsTableIndex() && !child->Dropped()) {
+                    continue;
+                }
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectLocalIndexMigrations skip index: failed to build creation config"
+                    << ", table: " << workingDir << ", index: " << indexName);
+                continue;
+            }
+
+            items.emplace_back(GetCachedTxId(ctx), TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+            });
+        }
+    }
+
+    if (items.empty()) {
+        return;
+    }
+
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "CollectLocalIndexMigrations: starting migrator for " << items.size() << " index(es)");
+
+    Register(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), std::move(items)).Release());
 }
 
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
@@ -1746,6 +1806,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSolomonVolume:
     case TTxState::TxCreateRtmrVolume:
     case TTxState::TxCreateTableIndex:
+    case TTxState::TxCreateLocalIndex:
     case TTxState::TxCreateOlapStore:
     case TTxState::TxCreateColumnTable:
     case TTxState::TxCreateCdcStream:
@@ -1780,6 +1841,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
     case TTxState::TxAlterTableIndex:
+    case TTxState::TxAlterLocalIndex:
     case TTxState::TxAlterSolomonVolume:
     case TTxState::TxDropTableIndexAtMainTable:
     case TTxState::TxAlterOlapStore:
@@ -1819,6 +1881,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropKesus:
     case TTxState::TxDropSolomonVolume:
     case TTxState::TxDropTableIndex:
+    case TTxState::TxDropLocalIndex:
     case TTxState::TxDropOlapStore:
     case TTxState::TxDropColumnTable:
     case TTxState::TxDropCdcStream:
@@ -1858,6 +1921,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         Y_UNREACHABLE();
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
+    case TTxState::TxMoveLocalIndex:
     case TTxState::TxMoveSequence:
     case TTxState::TxRotateCdcStream:
         return TPathElement::EPathState::EPathStateCreate;
@@ -7342,6 +7406,11 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         if (AppData()->FeatureFlags.GetEnableRealSystemViewPaths() && !SysViewsRosterUpdateStarted) {
             SysViewsRosterUpdateStarted = true;
             CollectSysViewUpdates(ctx);
+        }
+
+        if (!LocalIndexMigrationStarted) {
+            LocalIndexMigrationStarted = true;
+            CollectLocalIndexMigrations(ctx);
         }
 
         return;

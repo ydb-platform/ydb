@@ -2462,7 +2462,7 @@ TIndexDescription::TIndexDescription(
     const std::vector<std::string>& indexColumns,
     const std::vector<std::string>& dataColumns,
     const std::vector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
@@ -2503,7 +2503,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& TIndexDescription::GetIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
@@ -2812,6 +2812,46 @@ void TVectorIndexSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
+TLocalBloomFilterSettings TLocalBloomFilterSettings::FromProto(const Ydb::Table::LocalBloomFilterIndex& proto) {
+    TLocalBloomFilterSettings settings;
+    if (proto.has_false_positive_probability()) {
+        settings.FalsePositiveProbability = proto.false_positive_probability();
+    }
+    return settings;
+}
+
+void TLocalBloomFilterSettings::SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const {
+    if (FalsePositiveProbability) {
+        proto.set_false_positive_probability(*FalsePositiveProbability);
+    }
+}
+
+TLocalBloomNgramFilterSettings TLocalBloomNgramFilterSettings::FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto) {
+    TLocalBloomNgramFilterSettings settings;
+    if (proto.ngram_size() != 0) {
+        settings.NgramSize = proto.ngram_size();
+    }
+    if (proto.has_case_sensitive()) {
+        settings.CaseSensitive = proto.case_sensitive();
+    }
+    if (proto.has_false_positive_probability()) {
+        settings.FalsePositiveProbability = proto.false_positive_probability();
+    }
+    return settings;
+}
+
+void TLocalBloomNgramFilterSettings::SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const {
+    if (NgramSize) {
+        proto.set_ngram_size(*NgramSize);
+    }
+    if (CaseSensitive) {
+        proto.set_case_sensitive(*CaseSensitive);
+    }
+    if (FalsePositiveProbability) {
+        proto.set_false_positive_probability(*FalsePositiveProbability);
+    }
+}
+
 TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
     return {
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
@@ -2989,7 +3029,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> specializedIndexSettings = std::monostate{};
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -3049,7 +3089,15 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         type = EIndexType::GlobalJson;
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_json_index().settings()));
         break;
-    default: // fallback to global sync
+    case TProto::kLocalBloomFilterIndex:
+        type = EIndexType::LocalBloomFilter;
+        specializedIndexSettings = TLocalBloomFilterSettings::FromProto(proto.local_bloom_filter_index());
+        break;
+    case TProto::kLocalBloomNgramFilterIndex:
+        type = EIndexType::LocalBloomNgramFilter;
+        specializedIndexSettings = TLocalBloomNgramFilterSettings::FromProto(proto.local_bloom_ngram_filter_index());
+        break;
+    case TProto::TYPE_NOT_SET:
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
         break;
@@ -3151,6 +3199,20 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::LocalBloomFilter: {
+        auto* indexProto = proto.mutable_local_bloom_filter_index();
+        if (const auto* settings = std::get_if<TLocalBloomFilterSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(*indexProto);
+        }
+        break;
+    }
+    case EIndexType::LocalBloomNgramFilter: {
+        auto* indexProto = proto.mutable_local_bloom_ngram_filter_index();
+        if (const auto* settings = std::get_if<TLocalBloomNgramFilterSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(*indexProto);
+        }
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -3177,6 +3239,8 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalAsync:
     case EIndexType::GlobalUnique:
     case EIndexType::GlobalJson:
+    case EIndexType::LocalBloomFilter:
+    case EIndexType::LocalBloomNgramFilter:
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:

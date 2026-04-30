@@ -10,7 +10,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -551,7 +551,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     return true;
 }
 
-static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
@@ -692,7 +692,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    if (!FillCreateColumnTableIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+    if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
         return false;
     }
 

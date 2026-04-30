@@ -28,6 +28,26 @@ using ECompressionCodec = NKikimr::NDataShard::NBackupRestoreTraits::ECompressio
     template<ECompressionCodec Codec>                                                                                                 \
     void N(NUnitTest::TTestContext&)
 
+// Same as Y_UNIT_TEST_WITH_COMPRESSION, but also runs each codec with `OptName` false and true
+// (template<bool OptName>), e.g. EnableLocalIndexAsSchemeObject.
+#define Y_UNIT_TEST_WITH_COMPRESSION_FLAG(N, OptName)                                                                                 \
+    template<ECompressionCodec Codec, bool OptName> void N(NUnitTest::TTestContext&);                                                 \
+    struct TTestRegistration##N##WithCompressionFlag {                                                                                \
+        TTestRegistration##N##WithCompressionFlag() {                                                                                 \
+            TCurrentTest::AddTest(#N "[Raw]-" #OptName "-false",                                                                      \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::None, false>), false);                          \
+            TCurrentTest::AddTest(#N "[Raw]-" #OptName "-true",                                                                       \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::None, true>), false);                           \
+            TCurrentTest::AddTest(#N "[Zstd]-" #OptName "-false",                                                                     \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::Zstd, false>), false);                          \
+            TCurrentTest::AddTest(#N "[Zstd]-" #OptName "-true",                                                                      \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::Zstd, true>), false);                           \
+        }                                                                                                                             \
+    };                                                                                                                                \
+    static TTestRegistration##N##WithCompressionFlag testRegistration##N##WithCompressionFlag;                                        \
+    template<ECompressionCodec Codec, bool OptName>                                                                                   \
+    void N(NUnitTest::TTestContext&)
+
 namespace NAttr {
 
 enum class EKeys {

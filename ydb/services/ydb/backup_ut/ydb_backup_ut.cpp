@@ -350,6 +350,12 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalJson:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
+                case EIndexType::LocalBloomFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomFilterSettings>(indexDesc.GetIndexSettings()));
+                    break;
+                case EIndexType::LocalBloomNgramFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomNgramFilterSettings>(indexDesc.GetIndexSettings()));
+                    break;
                 case EIndexType::GlobalVectorKMeansTree: {
                     Ydb::Table::KMeansTreeSettings settings;
                     std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
@@ -3386,6 +3392,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
                 return TestTableWithIndexBackupRestore(Value);
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -3394,6 +3402,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
+        if (IsOlap) {
+            // TODO
+            // https://github.com/ydb-platform/ydb/issues/36786
+            return;
+        }
+
+
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
@@ -4693,6 +4708,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalJson:
                 TestTableWithIndexBackupRestore(Value);
                 break;
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

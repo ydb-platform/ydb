@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -679,6 +680,78 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                     TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/Table%d", i)),
                                        {NLs::PathNotExist});
                 }
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ColumnTableLocalBloomIndexesWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+            }
+
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "BloomRebootTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                    Indexes {
+                        Id: 4
+                        Name: "bloom_key"
+                        ClassName: "BLOOM_FILTER"
+                        BloomFilter {
+                            ColumnIds: [2]
+                            FalsePositiveProbability: 0.01
+                        }
+                    }
+                    Indexes {
+                        Id: 5
+                        Name: "ngram_data"
+                        ClassName: "BLOOM_NGRAMM_FILTER"
+                        BloomNGrammFilter {
+                            ColumnId: 3
+                            NGrammSize: 3
+                            FalsePositiveProbability: 0.01
+                            CaseSensitive: true
+                        }
+                    }
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/BloomRebootTable", false, NLs::PathExist);
+
+                {
+                    auto descr = DescribePath(runtime, "/MyRoot/BloomRebootTable");
+                    TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+                    const auto& children = descr.GetPathDescription().GetChildren();
+                    bool foundBloomKey = false;
+                    bool foundNgramData = false;
+                    for (const auto& child : children) {
+                        if (child.GetName() == "bloom_key") {
+                            foundBloomKey = true;
+                            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                        }
+                        if (child.GetName() == "ngram_data") {
+                            foundNgramData = true;
+                            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                        }
+                    }
+                    UNIT_ASSERT_C(foundBloomKey, "bloom_key must be visible under column table after reboots");
+                    UNIT_ASSERT_C(foundNgramData, "ngram_data must be visible under column table after reboots");
+                }
+
+                NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/BloomRebootTable", "bloom_key",
+                    NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/BloomRebootTable", "ngram_data",
+                    NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             }
         });
     }

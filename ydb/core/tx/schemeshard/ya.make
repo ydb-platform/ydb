@@ -102,6 +102,8 @@ SRCS(
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
     schemeshard__list_users.cpp
+    schemeshard__local_index_migration.cpp
+    schemeshard__local_index_migration.h
     schemeshard__login.cpp
     schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
@@ -111,7 +113,6 @@ SRCS(
     schemeshard__operation.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
-    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
@@ -263,5 +264,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         TestDescribeResult(DescribePrivatePath(runtime,
             "/MyRoot/TableCopy/ValueIndex2/" + implTable2Name),
             {NLs::PathExist});
+    }
+
+    // Priority 1 Test 3: Consistent copy of column table with local bloom indexes
+    Y_UNIT_TEST(ConsistentCopyColumnTableWithLocalBloomIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        // 1. Create column table with local bloom indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableWithLocalIndexes"));
+        env.TestWaitNotification(runtime, txId);
+
+        // 2. Perform consistent copy with backup flag (required for column tables)
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/ColumnTableWithLocalIndexes"
+                DstPath: "/MyRoot/ColumnTableWithLocalIndexesCopy"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // 3. Verify the copied table and both bloom indexes are ready scheme objects
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
     }
 }

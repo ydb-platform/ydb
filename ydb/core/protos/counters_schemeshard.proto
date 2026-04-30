@@ -283,6 +283,11 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateLocalIndex = 221 [(CounterOpts) = {Name: "InFlightOps/CreateLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 222 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 223 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 224 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
 }
 
 enum ECumulativeCounters {
@@ -465,6 +470,11 @@ enum ECumulativeCounters {
     COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
 
     COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
+
+    COUNTER_FINISHED_OPS_TxCreateLocalIndex = 141 [(CounterOpts) = {Name: "FinishedOps/CreateLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxDropLocalIndex = 142 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterLocalIndex = 143 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxMoveLocalIndex = 144 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
 }
 
 enum EPercentileCounters {

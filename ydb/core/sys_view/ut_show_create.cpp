@@ -217,7 +217,18 @@ private:
     }
 
     template <typename TProtobufDescription>
-    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
+    void CompareDescriptions(TProtobufDescription describeResultOrig, TProtobufDescription describeResultNew, const std::string& showCreateTableQuery) {
+        if constexpr (std::is_same_v<TProtobufDescription, Ydb::Table::DescribeTableResult>) {
+            auto sortIndexes = [](TProtobufDescription& desc) {
+                if (desc.indexes_size() > 1) {
+                    std::sort(desc.mutable_indexes()->begin(), desc.mutable_indexes()->end(),
+                        [](const auto& a, const auto& b) { return a.name() < b.name(); });
+                }
+            };
+            sortIndexes(describeResultOrig);
+            sortIndexes(describeResultNew);
+        }
+
         TString first;
         ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
@@ -2041,7 +2052,7 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
 }
 
 Y_UNIT_TEST(TableColumnUpsertIndex) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2095,7 +2106,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 }
 
 Y_UNIT_TEST(TableColumnAlterObject) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

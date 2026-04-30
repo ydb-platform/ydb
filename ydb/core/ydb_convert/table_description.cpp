@@ -8,7 +8,8 @@
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
+#include <util/generic/hash_set.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -870,15 +871,12 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
 }
 
-void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
-    FillColumnDescriptionImpl(out, in);
-}
+namespace {
 
-void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
-    FillColumnDescriptionImpl(out, in);
-}
-
-void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+template <bool kSetDescribeIndexStatus, typename TOut>
+void FillColumnTableIndexesFromOlapColumnSchema(
+    TOut& out, const NKikimrSchemeOp::TColumnTableDescription& in)
+{
     const auto& schema = in.GetSchema();
     THashMap<ui32, TString> idToName;
     idToName.reserve(schema.ColumnsSize());
@@ -913,6 +911,9 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 }
 
                 auto* ydbIndex = out.add_indexes();
+                if constexpr (kSetDescribeIndexStatus) {
+                    ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+                }
                 ydbIndex->set_name(olapIndex.GetName());
                 for (auto&& colId : bloom.GetColumnIds()) {
                     ydbIndex->add_index_columns(idToName.at(colId));
@@ -921,20 +922,29 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 if (bloom.HasFalsePositiveProbability()) {
                     ydbIndex->mutable_local_bloom_filter_index()->set_false_positive_probability(
                         bloom.GetFalsePositiveProbability());
+                } else {
+                    ydbIndex->mutable_local_bloom_filter_index();
                 }
 
                 break;
             }
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
                 const auto& ngram = olapIndex.GetBloomNGrammFilter();
-                auto* ydbIndex = out.add_indexes();
-                ydbIndex->set_name(olapIndex.GetName());
-                if (ngram.HasColumnId()) {
-                    const auto it = idToName.find(ngram.GetColumnId());
-                    if (it != idToName.end()) {
-                        ydbIndex->add_index_columns(it->second);
-                    }
+                if (!ngram.HasColumnId()) {
+                    continue;
                 }
+
+                const auto it = idToName.find(ngram.GetColumnId());
+                if (it == idToName.end()) {
+                    continue;
+                }
+
+                auto* ydbIndex = out.add_indexes();
+                if constexpr (kSetDescribeIndexStatus) {
+                    ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+                }
+                ydbIndex->set_name(olapIndex.GetName());
+                ydbIndex->add_index_columns(it->second);
 
                 auto* settings = ydbIndex->mutable_local_bloom_ngram_filter_index();
                 if (ngram.HasNGrammSize()) {
@@ -966,6 +976,22 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 break;
         }
     }
+}
+
+} // namespace
+
+void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+    FillColumnTableIndexesFromOlapColumnSchema<true>(out, in);
+}
+
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnDescriptionImpl(out, in);
+    FillColumnTableIndexesFromOlapColumnSchema<false>(out, in);
+}
+
+void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnTableIndexesFromOlapColumnSchema<false>(out, in);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -1624,6 +1650,27 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
+void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settings,
+    const NKikimrSchemeOp::TIndexDescription& tableIndex
+) {
+    if (tableIndex.HasBloomFilterDescription()) {
+        const auto& desc = tableIndex.GetBloomFilterDescription();
+        if (desc.HasFalsePositiveProbability()) {
+            settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
+        }
+    }
+}
+
+void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterIndex& settings,
+    const NKikimrSchemeOp::TIndexDescription& tableIndex
+) {
+    if (tableIndex.HasBloomNGrammFilterDescription()) {
+        const auto request = NKikimr::NLocalIndex::NBloom::TRequestSettings::FromProtoFilter(
+            tableIndex.GetBloomNGrammFilterDescription());
+        request.SerializeToPublicProto(settings);
+    }
+}
+
 template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
 
@@ -1718,9 +1765,13 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
-
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            FillLocalBloomFilterIndexSettings(*index->mutable_local_bloom_filter_index(), tableIndex);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            FillLocalBloomNgramFilterIndexSettings(*index->mutable_local_bloom_ngram_filter_index(), tableIndex);
+            break;
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
         };
 

@@ -809,9 +809,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        TRestoreSettings restoreSettings;
-        restoreSettings.ReplaceSysACL(true);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, TRestoreSettings().ReplaceSysACL(true));
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }

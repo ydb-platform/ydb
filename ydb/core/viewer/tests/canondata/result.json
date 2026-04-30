@@ -4547,6 +4547,22 @@
         ],
         "TotalNodes": "1"
     },
+    "test.TestViewer.test_viewer_describe_column_table_local_index": {
+        "root_child_names": [
+            ".metadata",
+            ".sys",
+            "dedicated_db",
+            "serverless_db",
+            "shared_db"
+        ],
+        "table_children": [
+            {
+                "Name": "bloom_data",
+                "PathType": 9
+            }
+        ],
+        "table_children_exist": true
+    },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
             "FieldsAvailable": "111110111111011111011110001",

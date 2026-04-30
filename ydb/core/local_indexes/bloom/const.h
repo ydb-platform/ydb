@@ -1,17 +1,27 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <optional>
-
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/system/types.h>
 
-namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <optional>
+
+namespace NKikimr::NLocalIndex::NBloom {
+
+namespace NDefaults {
+
+constexpr double FalsePositiveProbability = 0.1;
+constexpr bool CaseSensitive = true;
+constexpr std::uint32_t NGrammSize = 3;
+constexpr std::uint32_t HashesCount = 2;
+
+}   // namespace NDefaults
 
 struct TRequestSettings {
     std::optional<ui32> NGrammSize;
@@ -62,6 +72,19 @@ struct TRequestSettings {
             }
         } else if (FalsePositiveProbability) {
             bFilter.SetFalsePositiveProbability(*FalsePositiveProbability);
+        }
+    }
+
+    template <class TPublicProto>
+    void SerializeToPublicProto(TPublicProto& proto) const {
+        if (NGrammSize) {
+            proto.set_ngram_size(*NGrammSize);
+        }
+        if (CaseSensitive) {
+            proto.set_case_sensitive(*CaseSensitive);
+        }
+        if (FalsePositiveProbability) {
+            proto.set_false_positive_probability(*FalsePositiveProbability);
         }
     }
 
@@ -132,13 +155,31 @@ public:
         const double m = static_cast<double>(filterSizeBytes.value_or(CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability)) * 8);
         const double n = static_cast<double>(recordsCount.value_or(DeprecatedRecordsCount));
         const double oneMinus = 1.0 - std::exp(-(k * n) / m);
-        return std::pow(std::clamp(oneMinus, 0.0, 1.0), k); 
+        return std::pow(std::clamp(oneMinus, 0.0, 1.0), k);
     }
 
-    static TString GetHashesCountIntervalString();
-    static TString GetFilterSizeBytesIntervalString();
-    static TString GetNGrammSizeIntervalString();
-    static TString GetRecordsCountIntervalString();
+    static TString GetHashesCountIntervalString() {
+        return TStringBuilder() << "[" << MinHashesCount << ", " << MaxHashesCount << "]";
+    }
+
+    static TString GetFilterSizeBytesIntervalString() {
+        return TStringBuilder() << "[" << MinFilterSizeBytes << ", " << MaxFilterSizeBytes << "]";
+    }
+
+    static TString GetNGrammSizeIntervalString() {
+        return TStringBuilder() << "[" << MinNGrammSize << ", " << MaxNGrammSize << "]";
+    }
+
+    static TString GetRecordsCountIntervalString() {
+        return TStringBuilder() << "[" << MinRecordsCount << ", " << MaxRecordsCount << "]";
+    }
+
+    static TConclusionStatus ValidateFalsePositiveProbability(const double falsePositiveProbability) {
+        if (!std::isfinite(falsePositiveProbability) || falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
+            return TConclusionStatus::Fail("FalsePositiveProbability have to be a finite number in interval (0, 1)");
+        }
+        return TConclusionStatus::Success();
+    }
 
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize) {
         return ValidateParams(falsePositiveProbability, nGrammSize, std::nullopt, std::nullopt);
@@ -146,8 +187,8 @@ public:
 
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize,
         const std::optional<ui32>& hashesCount, const std::optional<ui32>& filterSizeBytes) {
-        if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
-            return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
+        if (auto c = ValidateFalsePositiveProbability(falsePositiveProbability); c.IsFail()) {
+            return c;
         }
 
         if (!CheckNGrammSize(nGrammSize)) {
@@ -233,4 +274,4 @@ inline ui32 TRequestSettings::ResolvedRecordsCount() const {
     return TConstants::DeprecatedRecordsCount;
 }
 
-}   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm
+}   // namespace NKikimr::NLocalIndex::NBloom

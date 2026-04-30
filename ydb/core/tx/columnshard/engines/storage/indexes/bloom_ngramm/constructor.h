@@ -6,9 +6,11 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+
+using namespace NKikimr::NLocalIndex::NBloom;
 
 class TIndexConstructor: public TSkipBitmapIndexConstructor {
 private:

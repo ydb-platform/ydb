@@ -183,17 +183,7 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
-            return false;
-        }
-
-        if (!TableSchema.Update(schemaDiff, errors)) {
-            return false;
-        }
-
-        TableSchema.ParseIndexesFromFullSchema(description.GetSchema());
-        return true;
+        return TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK());
     }
 
 private:

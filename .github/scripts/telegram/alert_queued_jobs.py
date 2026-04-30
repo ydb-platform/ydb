@@ -30,7 +30,8 @@ DASHBOARD_LINK = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj
 # (pattern, display_name, threshold_spec). threshold_spec: float or [(start_utc, end_utc, hours), ...] (overnight: start > end).
 WORKFLOW_THRESHOLDS = [
     ("PR-check", "PR-check", [(8, 20, 1), (20, 8, 3.0)]),   # 8–20 UTC: 1 h, 20–8 UTC: 3 h
-    ("Postcommit", "Postcommit", 6),
+    ("Postmerge", "Postmerge", 6),
+    ("Postcommit", "Postcommit", 6),  # Postcommit_cmake, legacy workflow names
 ]
 
 EMPTY_QUEUE_MESSAGE = (

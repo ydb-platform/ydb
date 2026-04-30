@@ -15,7 +15,7 @@ branch = os.environ.get("branch_to_compare")
 
 def get_build_size(time_of_current_commit):
     try:
-        # Используем silent режим, чтобы логи не попадали в stdout и не загрязняли результат
+        # Use silent mode so logs do not go to stdout and pollute the result
         with YDBWrapper(silent=True) as wrapper:
             if not wrapper.check_credentials():
                 print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=sys.stderr)
@@ -26,7 +26,7 @@ def get_build_size(time_of_current_commit):
             select git_commit_time,github_sha,size_bytes,size_stripped_bytes,build_preset
             from binary_size 
             where 
-            github_workflow like "Postcommit%" and 
+            (github_workflow = "Postmerge" OR github_workflow like "Postcommit%") and 
             github_ref_name="{branch}" and 
             build_preset="{build_preset}" and
             git_commit_time <= DateTime::FromSeconds({time_of_current_commit})
@@ -54,7 +54,7 @@ def get_build_size(time_of_current_commit):
                 }
             else:
                 print(
-                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
+                    f"Error: Cant get binary size in db with params: github_workflow Postmerge / Postcommit%, github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
                     file=sys.stderr
                 )
                 return 0

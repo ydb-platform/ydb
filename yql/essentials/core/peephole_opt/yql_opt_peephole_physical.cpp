@@ -3085,17 +3085,55 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         }
     } else {
         if (isStream) {
-            sort = ctx.Builder(node->Pos())
-                .Callable("OrderedFlatMap")
-                    .Callable(0, "SqueezeToDict")
-                        .Add(0, node->HeadPtr())
-                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
-                        .Add(2, MakeIdentityLambda(node->Pos(), ctx))
-                        .Add(3, std::move(settings))
+            // POC: Use Sort by [partitionKeys, sortKeys] instead of SqueezeToDict.
+            // This enables spilling through WideSort and avoids OOM on large datasets.
+            // The Chopper in the processing lambda will split at partition boundaries.
+            if (haveSort) {
+                // Build combined sort: first by partition key (ascending), then by sort keys
+                // Directions: [Bool(true), originalSortDirections...]
+                // Key selector: λ(item) → [keySelector(item), sortKeySelector(item)]
+                auto combinedDirections = ctx.Builder(node->Pos())
+                    .List()
+                        .Callable(0, "Bool")
+                            .Atom(0, "true", TNodeFlags::Default)
+                        .Seal()
+                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections))
                     .Seal()
-                    .Add(1, std::move(flatten))
-                .Seal()
-                .Build();
+                    .Build();
+
+                auto combinedKeySelector = ctx.Builder(node->Pos())
+                    .Lambda()
+                        .Param("item")
+                        .List()
+                            .Apply(0, *node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                                .With(0, "item")
+                            .Seal()
+                            .Apply(1, *node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda))
+                                .With(0, "item")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                sort = ctx.Builder(node->Pos())
+                    .Callable("Sort")
+                        .Add(0, node->HeadPtr())
+                        .Add(1, std::move(combinedDirections))
+                        .Add(2, std::move(combinedKeySelector))
+                    .Seal()
+                    .Build();
+            } else {
+                // No sort keys - just sort by partition key (ascending) to group partitions
+                sort = ctx.Builder(node->Pos())
+                    .Callable("Sort")
+                        .Add(0, node->HeadPtr())
+                        .Callable(1, "Bool")
+                            .Atom(0, "true", TNodeFlags::Default)
+                        .Seal()
+                        .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                    .Seal()
+                    .Build();
+            }
         } else {
             sort = ctx.Builder(node->Pos())
                 .Apply(*flatten)

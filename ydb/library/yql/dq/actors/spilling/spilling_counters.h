@@ -24,6 +24,12 @@ struct TSpillingCounters : public TThrRefBase {
         ::NMonitoring::TDynamicCounters::TCounterPtr FileDescriptors;
     };
 
+    struct TSortCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr YellowZoneEnabled;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MemoryUsed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MemoryLimit;
+    };
+
     TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
     TTypeCounters& GetTypeCounters(ESpillingType type) {
@@ -33,6 +39,7 @@ struct TSpillingCounters : public TThrRefBase {
     TTypeCounters ComputeSpilling;
     TTypeCounters ChannelSpilling;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIOQueueSize;
+    TSortCounters Sort;
 };
 
 struct TSpillingTaskCounters : public TThrRefBase {

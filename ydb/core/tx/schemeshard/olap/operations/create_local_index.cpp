@@ -146,9 +146,11 @@ public:
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 if (Transaction.HasInternal() && Transaction.GetInternal()) {
-                    checks
-                        .IsUnderOperation(NKikimrScheme::StatusMultipleModifications)
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
+                    // Internal callers: composite create/alter (parent under our same op)
+                    // or the local-index migrator (parent steady). Reject only foreign ops.
+                    if (parentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else {
                     checks
                         .IsUnderCreating(NKikimrScheme::StatusNameConflict)

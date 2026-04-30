@@ -1715,6 +1715,84 @@ Y_UNIT_TEST(ProjectionVisibility) {
     }
 }
 
+Y_UNIT_TEST(ProjectionUnion) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS a, 4 AS b
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                INTERSECT
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                EXCEPT
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+    }
+}
+
 Y_UNIT_TEST(ColumnFromNamedNode) {
     auto engine = MakeSqlCompletionEngineUT();
 

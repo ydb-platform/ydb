@@ -3158,8 +3158,10 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
     TExprNodeList nonCompactAggregatingFullFrames;
     TExprNodeList otherFrames;
 
+    bool seenWinFilter = false;
     for (auto& winOn : frames->ChildrenList()) {
-        if (!IsNonCompactFullFrame(*winOn, ctx)) {
+        seenWinFilter = seenWinFilter || TCoWinFilter::Match(winOn.Get());
+        if (seenWinFilter || !IsNonCompactFullFrame(*winOn, ctx)) {
             otherFrames.push_back(winOn);
             continue;
         }
@@ -3266,7 +3268,27 @@ const TStructExprType* ApplyFramesToType(const TStructExprType& inputType, const
     return ctx.MakeType<TStructExprType>(resultItems);
 }
 
-bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx) {
+bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (CanPushdownFiltersOverWindow(&types)) {
+        // other branch does the same, but less efficiently and doesn't support WinFilter
+        for (auto& frame : frames->ChildrenList()) {
+            YQL_ENSURE(TCoWinOnBase::Match(frame.Get()));
+            if (TCoWinFilter::Match(frame.Get())) {
+                continue;
+            }
+            for (size_t i = 1; i < frame->ChildrenSize(); ++i) {
+                auto item = frame->ChildPtr(i);
+                YQL_ENSURE(item->IsList());
+                YQL_ENSURE(item->ChildrenSize() >= 2);
+                auto trait = item->ChildPtr(1);
+                if (trait->IsCallable({"CumeDist","NTile","PercentRank"})) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     if (frames->ChildrenSize() == 0) {
         return false;
     }
@@ -3709,6 +3731,50 @@ TExprNode::TPtr ProcessRangeNonNumericFrames(TPositionHandle pos,
     return processed;
 }
 
+TExprNode::TPtr ApplyWinFilters(const TExprNode::TPtr& input, const TExprNodeList& filters, TExprContext& ctx) {
+    TExprNode::TPtr processed = input;
+    for (auto f : filters) {
+        YQL_ENSURE(TCoWinFilter::Match(f.Get()));
+        TCoWinFilter frame(f);
+        processed = ctx.Builder(frame.Pos())
+            .Callable("Filter")
+                .Add(0, processed)
+                .Lambda(1)
+                    .Param("row")
+                    .Apply(frame.Predicate().Ptr())
+                        .With(0)
+                            .Callable("CastStruct")
+                                .Arg(0, "row")
+                                .Add(1, frame.ItemType().Ptr())
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+    return processed;
+}
+
+TExprNode::TPtr ProcessNonFilterFrames(TPositionHandle pos, const TExprNode::TPtr& input,
+                                       const TExprNode::TPtr& frames,
+                                       const TStructExprType& outputRowType,
+                                       const TExprNode::TPtr& topLevelStreamArg,
+                                       const TMaybe<TString>& partitionRowsColumn,
+                                       const TExprNode::TPtr& sortKey,
+                                       const TExprNode::TPtr& sortTraits,
+                                       const TStructExprType*& rowType,
+                                       TExprContext& ctx, TTypeAnnotationContext& types)
+{
+    TExprNode::TPtr processed = input;
+    auto splitResult = SplitFramesByType(frames, ctx, types);
+    TExpandContext expandContext{.Ctx = ctx, .Types = types, .SortedColumnPusher = TWindowSortedColumnPusher(sortTraits, ctx, splitResult.NumericRangesAndRows)};
+
+    processed = ProcessRangeNonNumericFrames(pos, processed, *rowType, sortKey, splitResult.NonNumericRanges, partitionRowsColumn, expandContext);
+    rowType = ApplyFramesToType(*rowType, outputRowType, *splitResult.NonNumericRanges, ctx);
+    return ProcessRowsAndNumericRangeFrames(pos, processed, *rowType, topLevelStreamArg, splitResult.NumericRangesAndRows, partitionRowsColumn, sortKey, expandContext.SortedColumnPusher.SortOrder(), expandContext);
+}
+
 TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
                                            const TExprNode::TPtr& inputList,
                                            const TExprNode::TPtr& keyColumns,
@@ -3731,10 +3797,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     TExprNode::TPtr sessionInit;
     TExprNode::TPtr sessionUpdate;
     ExtractSessionWindowParams(pos, sessionTraits, sessionKey, sessionKeyType, sessionParamsType, sessionSortTraits, sessionInit, sessionUpdate, ctx);
-    auto splitResult = SplitFramesByType(frames, ctx, types);
     const auto originalRowType = inputList->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
-    TExpandContext expandContext{.Ctx=ctx, .Types=types, .SortedColumnPusher=TWindowSortedColumnPusher(sortTraits, ctx, splitResult.NumericRangesAndRows)};
 
     TVector<const TItemExprType*> rowItems = originalRowType->GetItems();
     if (sessionKeyType) {
@@ -3792,7 +3855,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     TExprNode::TPtr processed = topLevelStreamArg;
 
     TMaybe<TString> partitionRowsColumn;
-    if (NeedPartitionRows(frames, *rowType, ctx)) {
+    if (NeedPartitionRows(frames, *rowType, ctx, types)) {
         partitionRowsColumn = AllocatePartitionRowsColumn(outputRowType);
         input = AddPartitionRowsColumn(pos, input, fullKeyColumns, *partitionRowsColumn, ctx, types);
     }
@@ -3800,11 +3863,22 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos,
     // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
     // (i.e. process range frames first)
-    processed = ProcessRangeNonNumericFrames(pos, processed, *rowType, originalSortKey, splitResult.NonNumericRanges, partitionRowsColumn, expandContext);
-    rowType = ApplyFramesToType(*rowType, outputRowType, *splitResult.NonNumericRanges, ctx);
-    processed = ProcessRowsAndNumericRangeFrames(pos, processed, *rowType, topLevelStreamArg, splitResult.NumericRangesAndRows, partitionRowsColumn, originalSortKey, expandContext.SortedColumnPusher.SortOrder(), expandContext);
+    if (CanPushdownFiltersOverWindow(&types)) {
+        TVector<TExprNodeList> frameChunks = SplitByWinFilter(frames->ChildrenList());
+        for (auto chunk : frameChunks) {
+            YQL_ENSURE(!chunk.empty());
+            if (TCoWinFilter::Match(chunk.front().Get())) {
+                processed = ApplyWinFilters(processed, chunk, ctx);
+            } else {
+                auto nonFilterFrames = ctx.NewList(frames->Pos(), std::move(chunk));
+                processed = ProcessNonFilterFrames(pos, processed, nonFilterFrames, outputRowType, topLevelStreamArg, partitionRowsColumn, sortKey, sortTraits, rowType, ctx, types);
+            }
+        }
+    } else {
+        processed = ProcessNonFilterFrames(pos, processed, frames, outputRowType, topLevelStreamArg, partitionRowsColumn, sortKey, sortTraits, rowType, ctx, types);
+    }
 
-    auto topLevelStreamProcessingLambda = expandContext.Ctx.NewLambda(pos, expandContext.Ctx.NewArguments(pos, {topLevelStreamArg}), std::move(processed));
+    auto topLevelStreamProcessingLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {topLevelStreamArg}), std::move(processed));
 
     YQL_CLOG(INFO, Core) << "Expanded compact CalcOverWindow";
     auto res = BuildPartitionsByKeys(pos, input, keySelector, sortOrder, sortKey, topLevelStreamProcessingLambda, sessionKey,
@@ -3932,6 +4006,10 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
         TExprNodeList newFrames;
         for (auto frameNode : calc.Frames().Ref().Children()) {
             YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
+            if (TCoWinFilter::Match(frameNode.Get())) {
+                newFrames.push_back(frameNode);
+                continue;
+            }
             TExprNodeList winOnArgs = { frameNode->ChildPtr(0) };
             for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
                 auto kvTuple = frameNode->ChildPtr(i);
@@ -3986,14 +4064,105 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
         .Done().Ptr();
 }
 
-bool IsUnbounded(const NNodes::TCoFrameBound& bound) {
-    if (bound.Ref().ChildrenSize() < 2) {
-        return false;
+TExprNode::TPtr BuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx) {
+    if (calcs.empty()) {
+        return input;
     }
-    if (auto maybeAtom = bound.Bound().Maybe<TCoAtom>()) {
-        return maybeAtom.Cast().Value() == "unbounded";
+
+    TExprNode::TPtr result;
+    if (calcs.size() == 1) {
+        TCoCalcOverWindowTuple calc(calcs[0]);
+        if (calc.SessionSpec().Maybe<TCoVoid>()) {
+            YQL_ENSURE(calc.SessionColumns().Size() == 0);
+            result = Build<TCoCalcOverWindow>(ctx, pos)
+                .Input(input)
+                .Keys(calc.Keys())
+                .SortSpec(calc.SortSpec())
+                .Frames(calc.Frames())
+                .Done().Ptr();
+        } else {
+            result = Build<TCoCalcOverSessionWindow>(ctx, pos)
+                .Input(input)
+                .Keys(calc.Keys())
+                .SortSpec(calc.SortSpec())
+                .Frames(calc.Frames())
+                .SessionSpec(calc.SessionSpec())
+                .SessionColumns(calc.SessionColumns())
+                .Done().Ptr();
+        }
+    } else {
+        result = Build<TCoCalcOverWindowGroup>(ctx, pos)
+            .Input(input)
+            .Calcs(ctx.NewList(pos, TExprNodeList(calcs)))
+            .Done().Ptr();
     }
-    return false;
+
+    return result;
+}
+
+TExprNode::TPtr MakeRowsUPCRFrameSpec(TPositionHandle pos, const TExprNode::TPtr& sortSpec, TExprContext& ctx, TTypeAnnotationContext& types) {
+    return ctx.Builder(pos)
+        .List()
+            .List(0)
+                .Atom(0, "begin", TNodeFlags::Default)
+                .Callable(1, "Void")
+                .Seal()
+            .Seal()
+            .List(1)
+                .Atom(0, "end", TNodeFlags::Default)
+                .Callable(1, "Int32")
+                    .Atom(0, "0", TNodeFlags::Default)
+                .Seal()
+            .Seal()
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                if (!IsWindowNewPipelineEnabled(types)) {
+                    return parent;
+                }
+                parent
+                    .List(2)
+                        .Atom(0, "sortSpec", TNodeFlags::Default)
+                        .Add(1, sortSpec)
+                    .Seal();
+                return parent;
+            })
+        .Seal()
+        .Build();
+}
+
+bool HasWinFilters(const TCoCalcOverWindowTuple& calc) {
+    return AnyOf(calc.Frames().Ref().Children(), [](const TExprNode::TPtr& frame) { return TCoWinFilter::Match(frame.Get()); });
+}
+
+TVector<TExprNodeList> SplitByWinFilter(const TExprNodeList& framesOrCalcs) {
+    if (framesOrCalcs.empty()) {
+        return {};
+    }
+    bool isFilter = false;
+    const bool isCalcs = TCoCalcOverWindowTuple::Match(framesOrCalcs.front().Get());
+    TExprNodeList currentItems;
+    TVector<TExprNodeList> result;
+    for (auto curr : framesOrCalcs) {
+        bool currHasFilter;
+        if (isCalcs) {
+            TCoCalcOverWindowTuple calc(curr);
+            currHasFilter = HasWinFilters(calc);
+        } else {
+            YQL_ENSURE(TCoWinOnBase::Match(curr.Get()));
+            currHasFilter = TCoWinFilter::Match(curr.Get());
+        }
+        if (currHasFilter != isFilter) {
+            isFilter = !isFilter;
+            if (!currentItems.empty()) {
+                result.emplace_back(std::move(currentItems));
+                currentItems = {};
+            }
+        }
+        currentItems.push_back(curr);
+    }
+    if (!currentItems.empty()) {
+        result.emplace_back(currentItems);
+    }
+    return result;
 }
 
 TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode::TPtr& partitionKeySelector,

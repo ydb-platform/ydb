@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_MAKE_VECTOR_07162005_0243)
+#ifndef FUSION_MAKE_VECTOR_07162005_0243
 #define FUSION_MAKE_VECTOR_07162005_0243
 
 #include <boost/preprocessor/iterate.hpp>

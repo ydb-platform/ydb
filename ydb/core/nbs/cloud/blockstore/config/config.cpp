@@ -11,7 +11,7 @@ namespace {
 
 const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
 const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MicroSeconds(700);
+const auto DefaultHedgingDelay = TDuration::MicroSeconds(1000);
 const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
 
 }   // namespace
@@ -27,7 +27,7 @@ TStorageConfig::TStorageConfig(
 
 // clang-format off
 #define BLOCKSTORE_STORAGE_CONFIG_RO(xxx)                                     \
-    xxx(SyncRequestsBatchSize,              ui32,     3                       )\
+    xxx(SyncRequestsBatchSize,              ui32,     10                      )\
     xxx(StripeSize,                         ui64,     512_KB                  )\
     xxx(DDiskPoolName,                      TString,  "ddp1"                  )\
     xxx(PersistentBufferDDiskPoolName,      TString,  "ddp1"                  )\
@@ -36,6 +36,7 @@ TStorageConfig::TStorageConfig(
         NProto::DirectPBuffersFilling)                                         \
     xxx(VChunkSize,                         ui64,     128_MB                  )\
     xxx(ThreadPoolSize,                     ui32,     2                       )\
+    xxx(OracleConfig,                       NProto::TOracleConfig, {}         )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

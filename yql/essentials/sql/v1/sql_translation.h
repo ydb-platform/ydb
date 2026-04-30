@@ -315,7 +315,9 @@ protected:
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
 
-    TMaybe<TString> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context);
     bool ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
@@ -332,6 +334,7 @@ protected:
         TMaybe<TPosition> position = Nothing());
 
 private:
+    TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);

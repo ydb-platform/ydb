@@ -7,9 +7,11 @@ SRCS(
     function.cpp
     global.cpp
     input.cpp
-    named_node.cpp
+    named_node_resolution.cpp
+    named_node_visibility.cpp
     narrowing_visitor.cpp
     parse_tree.cpp
+    parser.cpp
     use.cpp
 )
 

@@ -38,7 +38,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
 
     auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
-    auto initResult = readMetadata->Init(self, read, false);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Simple);
     if (!initResult) {
         return initResult;
     }

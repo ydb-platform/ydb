@@ -44,6 +44,10 @@ namespace NKikimr::NKll {
             return Sketch_.Levels_;
         }
 
+        void Merge(const TDynamicKllSketch<T>& other) {
+            Sketch_.Merge(other.Sketch_);
+        }
+
     private:
         static constexpr size_t MAX_LEVELS = 30;
 

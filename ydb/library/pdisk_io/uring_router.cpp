@@ -190,6 +190,19 @@ public:
                     // PrepareSqe/ReadFixed/WriteFixed.
                     NSan::Acquire(op);
                     op->Result = cqe->res;
+                    // For read operations the kernel fills the buffer via a syscall
+                    // that MSAN cannot observe.  Mark the iov as initialized so that
+                    // subsequent reads from the buffer do not trigger false
+                    // use-of-uninitialized-value reports.
+                    if constexpr (NSan::MSanIsOn()) {
+                        if (op->OperationType == TUringOperationBase::EREAD && cqe->res > 0) {
+                            size_t unpoisonSize = static_cast<size_t>(cqe->res);
+                            if (unpoisonSize > op->Iov.iov_len) {
+                                unpoisonSize = op->Iov.iov_len;
+                            }
+                            NSan::Unpoison(op->Iov.iov_base, unpoisonSize);
+                        }
+                    }
                     op->OnComplete(Owner.ActorSystem);
                 }
                 ++count;

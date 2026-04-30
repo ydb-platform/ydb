@@ -2293,6 +2293,7 @@ message TReqPartitionTables
     optional bool adjust_data_weight_per_partition = 9;
 
     optional bool enable_cookies = 10;
+    optional bool fetch_cookie_node_descriptors = 15;
 
     optional bool omit_inaccessible_rows = 13;
 

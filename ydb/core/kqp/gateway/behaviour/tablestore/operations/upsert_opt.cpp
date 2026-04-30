@@ -12,8 +12,8 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
     SchemeNeedActualization = *value;
     ScanReaderPolicyName = features.Extract<TString>("SCAN_READER_POLICY_NAME");
     if (ScanReaderPolicyName) {
-        if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE") {
-            return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE']");
+        if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE" && *ScanReaderPolicyName != "TRIVIAL") {
+            return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {

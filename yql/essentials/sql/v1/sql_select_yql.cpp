@@ -1,13 +1,15 @@
 #include "sql_select_yql.h"
 
 #include "antlr_token.h"
-#include "sql_expression.h"
 #include "select_yql.h"
+#include "sql_expression.h"
+#include "sql_select_window.h"
 #include "sql_select.h"
 
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 
 #include <util/generic/overloaded.h>
+#include <util/generic/scope.h>
 
 namespace NSQLTranslationV1 {
 
@@ -376,12 +378,6 @@ private:
             return Unsupported("opt_set_quantifier");
         }
 
-        if (auto result = BuildProjection(rule)) {
-            setItem.Projection = std::move(*result);
-        } else {
-            return std::unexpected(result.error());
-        }
-
         if (rule.HasBlock8()) {
             Token(rule.GetBlock8().GetToken1());
             return Unsupported("WITHOUT (IF EXISTS)? without_column_list");
@@ -429,16 +425,40 @@ private:
             }
         }
 
-        if (rule.HasBlock13()) {
-            return Unsupported("window_clause");
-        }
-
         if (rule.HasBlock14()) {
             if (auto result = Build(rule.GetBlock14().GetRule_ext_order_by_clause1())) {
                 setItem.OrderBy = std::move(*result);
             } else {
                 return std::unexpected(result.error());
             }
+        }
+
+        TWinSpecs windows;
+        Ctx_.WinSpecsScopes.push_back(std::ref(windows));
+        Y_DEFER {
+            Ctx_.WinSpecsScopes.pop_back();
+        };
+
+        if (rule.HasBlock13()) {
+            const auto& w = rule.GetBlock13().GetRule_window_clause1();
+            if (!TSqlWindow(*this).Build(w, windows)) {
+                return std::unexpected(ESQLError::Basic);
+            }
+        }
+
+        if (auto result = BuildProjection(rule)) {
+            setItem.Projection = std::move(*result);
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& [name, w] : windows) {
+            auto window = Build(*w);
+            if (!window) {
+                return std::unexpected(window.error());
+            }
+
+            setItem.Windows[name] = std::move(*window);
         }
 
         if (setItem.Source && 1 < setItem.Source->Sources.size() &&
@@ -526,6 +546,30 @@ private:
         }
 
         return expr;
+    }
+
+    TSQLResult<TWindow> Build(const TWindowSpecification& legacy) {
+        TWindow window;
+
+        window.Name = *legacy.ExistingWindowName.OrElse("");
+
+        window.PartitionBy = legacy.Partitions;
+
+        if (legacy.IsCompact) {
+            return Unsupported("window_compact");
+        }
+
+        if (!legacy.OrderBy.empty()) {
+            window.OrderBy = TOrderBy{.Keys = legacy.OrderBy};
+        }
+
+        if (legacy.Session) {
+            return Unsupported("window_session");
+        }
+
+        window.Frame = legacy.Frame;
+
+        return window;
     }
 
     TSQLResult<TYqlJoin> Build(const TRule_join_source& rule) {
@@ -712,12 +756,9 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
-        TYqlSource source;
-
-        if (auto result = Build(rule.GetRule_single_source1())) {
-            source.Node = std::move(*result);
-        } else {
-            return std::unexpected(result.error());
+        TSQLResult<TYqlSource> source = Build(rule.GetRule_single_source1());
+        if (!source) {
+            return std::unexpected(source.error());
         }
 
         if (rule.HasBlock2()) {
@@ -727,16 +768,16 @@ private:
         if (rule.HasBlock3()) {
             const auto& block = rule.GetBlock3();
 
-            source.Alias.ConstructInPlace();
+            source->Alias.ConstructInPlace();
 
             if (auto name = TableAlias(block.GetBlock1())) {
-                source.Alias->Name = std::move(*name);
+                source->Alias->Name = std::move(*name);
             } else {
                 return std::unexpected(ESQLError::Basic);
             }
 
             if (block.HasBlock2()) {
-                source.Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
+                source->Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
             }
         }
 
@@ -747,20 +788,22 @@ private:
         return source;
     }
 
-    TNodeResult Build(const TRule_single_source& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_single_source& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
                 return Build(rule.GetAlt_single_source1().GetRule_table_ref1());
             case NSQLv1Generated::TRule_single_source::kAltSingleSource2:
-                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2());
+                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
-                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
+                return Build(rule.GetAlt_single_source3().GetRule_values_stmt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(const TRule_table_ref& rule) {
+    TSQLResult<TYqlSource> Build(const TRule_table_ref& rule) {
         const bool isCluterExplicit = rule.HasBlock1();
 
         TString service = Ctx_.Scoped->CurrService;
@@ -787,7 +830,7 @@ private:
             isCluterExplicit);
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -804,20 +847,19 @@ private:
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
-                return Build(
-                    block.GetAlt3(),
-                    isAnonymous,
-                    isClusterExplicit);
+                return Build(block.GetAlt3(), isAnonymous, isClusterExplicit)
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }
     }
 
-    TNodeResult Build(
+    TSQLResult<TYqlSource> Build(
         const TRule_table_key& rule,
         TString service,
         TDeferredAtom cluster,
-        bool isAnonymous) {
+        bool isAnonymous)
+    {
         if (cluster.Empty()) {
             Ctx_.Error() << "No cluster name given and no default cluster is selected";
             return std::unexpected(ESQLError::Basic);
@@ -836,11 +878,16 @@ private:
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = *cluster.GetLiteral(),
-            .Key = std::move(key),
+            .Key = key,
             .IsAnonymous = isAnonymous,
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        TYqlSource source = {
+            .Node = BuildYqlTableRef(Ctx_.Pos(), std::move(args)),
+            .Alias = TYqlSourceAlias{.Name = std::move(key)},
+        };
+
+        return std::move(source);
     }
 
     TNodeResult Build(

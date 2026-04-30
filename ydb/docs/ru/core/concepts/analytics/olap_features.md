@@ -84,7 +84,7 @@
 
 ### Управление производительностью
 
-  - [Анализ планов запросов (EXPLAIN)](../../dev/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
+  - [Анализ планов запросов (EXPLAIN)](../../dev/query-execution-optimization/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
   - [Управление нагрузкой (Resource Pools)](../../dev/resource-consumption-management.md): изоляция ресурсов CPU для разных команд или нагрузок.
   - [Стоимостной оптимизатор](../query_execution/optimizer.md): обзор принципов работы планировщика запросов.
 

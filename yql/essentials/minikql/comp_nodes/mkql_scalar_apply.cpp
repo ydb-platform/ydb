@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -53,9 +54,22 @@ public:
             , Accessors(argsTypes, returnType, *PgBuilder)
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
-            , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider,
-                                                                     originalContext.CountersProvider, originalContext.LogProvider, originalContext.LangVer),
-                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool(), originalContext.NotConsumedLinear)
+            , Ctx(
+                  HolderFactory,
+                  &ValueBuilder, TComputationOptsFull(nullptr,
+                                                      Alloc.Ref(),
+                                                      TypeEnv,
+                                                      *RandomProvider,
+                                                      *TimeProvider,
+                                                      NUdf::EValidatePolicy::Exception,
+                                                      originalContext.SecureParamsProvider,
+
+                                                      originalContext.CountersProvider,
+                                                      originalContext.LogProvider,
+                                                      originalContext.LangVer,
+                                                      originalContext.RuntimeSettings),
+
+                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool(), originalContext.NotConsumedLinear, originalContext.RuntimeSettings)
         {
             Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();

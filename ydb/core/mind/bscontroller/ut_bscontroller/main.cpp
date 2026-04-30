@@ -1432,6 +1432,23 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
     }
 
+    Y_UNIT_TEST(OverlayMapRollbackAfterCloneThenDelete) {
+        TMap<unsigned, THolder<TAlpha>> alphas;
+        alphas.emplace(1, MakeHolder<TAlpha>(1));
+
+        {
+            TOverlayMap<unsigned, TAlpha> overlay(alphas);
+            UNIT_ASSERT(overlay.FindForUpdate(1));
+            overlay.DeleteExistingEntry(1);
+            overlay.Rollback();
+        }
+
+        TOverlayMap<unsigned, TAlpha> overlay(alphas);
+        const TAlpha *alpha = overlay.FindForUpdate(1);
+        UNIT_ASSERT(alpha);
+        UNIT_ASSERT_VALUES_EQUAL(alpha->Key, 1);
+    }
+
     Y_UNIT_TEST(CommandRollbackWhenAlone) {
         TEnvironmentSetup env(1, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

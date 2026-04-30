@@ -198,7 +198,9 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                             std::exception_ptr lineageError;
                             typeCtx->LineageStats.Correct = true;
                             try {
-                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false, typeCtx->LineageSettings.LineageVersion);
+                                TLineageRunOptions lineageOptions;
+                                lineageOptions.Version = typeCtx->LineageSettings.LineageVersion;
+                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
                                 typeCtx->LineageStats.Size = calculatedLineage.size();
                                 typeCtx->LineageStats.Version = typeCtx->LineageSettings.LineageVersion;
                             } catch (const std::exception& e) {
@@ -306,21 +308,30 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
                 try {
-                    auto lineageVersion = typeCtx->LineageSettings.LineageStandaloneVersion;
+                    TLineageRunOptions lineageOptions;
+                    lineageOptions.Standalone = true;
+                    lineageOptions.Version = typeCtx->LineageSettings.LineageStandaloneVersion;
                     if (const auto attrs = typeCtx->OperationOptions.AttrsYson) {
                         const auto paramData = NYT::NodeFromYsonString(*attrs);
                         if (const auto param = paramData.AsMap().FindPtr("lineage_version")) {
-                            if (TryFromString(param->AsString(), lineageVersion)) {
-                                YQL_LOG(INFO) << "LineageVersion is provided in attributes: " << lineageVersion;
+                            if (TryFromString(param->AsString(), lineageOptions.Version)) {
+                                YQL_LOG(INFO) << "LineageVersion is provided in attributes: " << lineageOptions.Version;
                             } else {
                                 YQL_LOG(ERROR) << "LineageVersion from attributes is incorrect: " << param->AsString();
                             }
                         }
+                        if (const auto param = paramData.AsMap().FindPtr("lineage_yson_type")) {
+                            if (TryFromString(param->AsString(), lineageOptions.YsonTypeFormat)) {
+                                YQL_LOG(INFO) << "LineageYsonType is provided in attributes: " << lineageOptions.YsonTypeFormat;
+                            } else {
+                                YQL_LOG(ERROR) << "LineageYsonType from attributes is incorrect: " << param->AsString();
+                            }
+                        }
                     }
-                    lineageOut = CalculateLineage(*input, *typeCtx, ctx, true, lineageVersion);
+                    lineageOut = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
                     typeCtx->LineageStats.Size = lineageOut->size();
                     typeCtx->LineageStats.CorrectStandalone = true;
-                    typeCtx->LineageStats.Version = lineageVersion;
+                    typeCtx->LineageStats.Version = lineageOptions.Version;
                 } catch (const std::exception& e) {
                     YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                     typeCtx->LineageStats.CorrectStandalone = false;

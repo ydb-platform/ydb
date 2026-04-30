@@ -289,6 +289,8 @@ The topic settings can be updated using the expression [ALTER TOPIC](../yql/refe
 
   * `retention_period`;
   * `retention_storage_mb`;
+  * `partition_write_burst_bytes`;
+  * `partition_write_speed_bytes_per_second`.
 
 * [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
 

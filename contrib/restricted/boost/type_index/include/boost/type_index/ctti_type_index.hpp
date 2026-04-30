@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -10,13 +10,15 @@
 #define BOOST_TYPE_INDEX_CTTI_TYPE_INDEX_HPP
 
 /// \file ctti_type_index.hpp
-/// \brief Contains boost::typeindex::ctti_type_index class that is constexpr if C++14 constexpr is supported by compiler.
+/// \brief Contains boost::typeindex::ctti_type_index class that is constexpr if C++14
+/// constexpr is supported by compiler.
 ///
 /// boost::typeindex::ctti_type_index class can be used as a drop-in replacement
-/// for std::type_index.
+/// for std::type_index or as a type index that works at compile time, can provide a
+/// type name at compile time.
 ///
-/// It is used in situations when typeid() method is not available or 
-/// BOOST_TYPE_INDEX_FORCE_NO_RTTI_COMPATIBILITY macro is defined.
+/// It is used as the boost::typeindex::type_index when `typeid()` is not 
+/// available or BOOST_TYPE_INDEX_FORCE_NO_RTTI_COMPATIBILITY macro is defined.
 
 #include <boost/type_index/detail/config.hpp>
 
@@ -86,22 +88,32 @@ inline const detail::ctti_data& ctti_construct() noexcept {
     // value.
     //
     // Alignments are checked in `type_index_test_ctti_alignment.cpp` test.
-    return *reinterpret_cast<const detail::ctti_data*>(boost::detail::ctti<T>::n());
+    return *reinterpret_cast<const detail::ctti_data*>(boost::typeindex::detail::postprocessed_name<T>());
 }
 
 /// \class ctti_type_index
 /// This class is a wrapper that pretends to work exactly like stl_type_index, but does
 /// not require RTTI support. \b For \b description \b of \b functions \b see type_index_facade.
 ///
-/// This class on C++14 compatible compilers has following functions marked as constexpr:
+/// This class on C++14 compatible compilers can be used at compile time and has the following
+/// functions marked as constexpr:
 ///     * default constructor
-///     * copy constructors and assignemnt operations
+///     * copy constructors and assignment operations
 ///     * class methods: name(), before(const ctti_type_index& rhs), equal(const ctti_type_index& rhs)
 ///     * static methods type_id<T>(), type_id_with_cvr<T>()
 ///     * comparison operators
 ///
-/// This class produces slightly longer type names, so consider using stl_type_index
-/// in situations when typeid() is working.
+/// Moreover, starting from C++14 the name() function always outputs the pretty_name() of a
+/// type. For example the following static assert holds:
+/// \code
+/// static_assert(
+///     boost::typeindex::ctti_type_index:::type_id<int>().name()
+///     == std::string_view{"int"}
+/// );
+/// \endcode
+///
+/// This class produces slightly longer type names in C++11 than stl_type_index, see
+/// "Code Bloat" fore more info.
 class ctti_type_index: public type_index_facade<ctti_type_index, detail::ctti_data> {
     const char* data_;
 
@@ -112,10 +124,10 @@ class ctti_type_index: public type_index_facade<ctti_type_index, detail::ctti_da
     {}
 
 public:
-    typedef detail::ctti_data type_info_t;
+    using type_info_t = detail::ctti_data;
 
     BOOST_CXX14_CONSTEXPR inline ctti_type_index() noexcept
-        : data_(boost::detail::ctti<void>::n())
+        : data_(boost::typeindex::detail::postprocessed_name<void>())
     {}
 
     inline ctti_type_index(const type_info_t& data) noexcept
@@ -152,28 +164,42 @@ inline const ctti_type_index::type_info_t& ctti_type_index::type_info() const no
 BOOST_CXX14_CONSTEXPR inline bool ctti_type_index::equal(const ctti_type_index& rhs) const noexcept {
     const char* const left = raw_name();
     const char* const right = rhs.raw_name();
-    return /*left == right ||*/ !boost::typeindex::detail::constexpr_strcmp(left, right);
+#ifdef __cpp_lib_is_constant_evaluated
+    if (!std::is_constant_evaluated()) {
+        if (left == right) {
+            return true;
+        }
+    }
+#endif
+    return !boost::typeindex::detail::constexpr_strcmp(left, right);
 }
 
 BOOST_CXX14_CONSTEXPR inline bool ctti_type_index::before(const ctti_type_index& rhs) const noexcept {
     const char* const left = raw_name();
     const char* const right = rhs.raw_name();
-    return /*left != right &&*/ boost::typeindex::detail::constexpr_strcmp(left, right) < 0;
+#ifdef __cpp_lib_is_constant_evaluated
+    if (!std::is_constant_evaluated()) {
+        if (left == right) {
+            return false;
+        }
+    }
+#endif
+    return boost::typeindex::detail::constexpr_strcmp(left, right) < 0;
 }
 
 
 template <class T>
 BOOST_CXX14_CONSTEXPR inline ctti_type_index ctti_type_index::type_id() noexcept {
-    typedef typename std::remove_reference<T>::type no_ref_t;
-    typedef typename std::remove_cv<no_ref_t>::type no_cvr_t;
-    return ctti_type_index(boost::detail::ctti<no_cvr_t>::n());
+    using no_ref_t = typename std::remove_reference<T>::type;
+    using no_cvr_t = typename std::remove_cv<no_ref_t>::type;
+    return ctti_type_index(boost::typeindex::detail::postprocessed_name<no_cvr_t>());
 }
 
 
 
 template <class T>
 BOOST_CXX14_CONSTEXPR inline ctti_type_index ctti_type_index::type_id_with_cvr() noexcept {
-    return ctti_type_index(boost::detail::ctti<T>::n());
+    return ctti_type_index(boost::typeindex::detail::postprocessed_name<T>());
 }
 
 
@@ -193,13 +219,16 @@ BOOST_CXX14_CONSTEXPR inline const char* ctti_type_index::name() const noexcept 
 }
 
 inline std::size_t ctti_type_index::get_raw_name_length() const noexcept {
-    return std::strlen(raw_name() + detail::skip().size_at_end);
+#if defined(BOOST_NO_CXX14_CONSTEXPR)
+    return detail::constexpr_significant_part_length(raw_name());
+#else
+    return std::strlen(raw_name());
+#endif
 }
 
 
 inline std::string ctti_type_index::pretty_name() const {
     std::size_t len = get_raw_name_length();
-    while (raw_name()[len - 1] == ' ') --len; // MSVC sometimes adds whitespaces
     return std::string(raw_name(), len);
 }
 

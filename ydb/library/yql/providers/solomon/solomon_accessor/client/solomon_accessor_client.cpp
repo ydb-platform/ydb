@@ -75,13 +75,14 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Issues.ToOneLineString() <<
+        return TGetLabelsResponse(TStringBuilder() << "Monitoring api get labels response: " << response.Issues.ToOneLineString() <<
             ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Content.data() <<
-            ", internal code: " << response.Content.HttpResponseCode);
+        // Do not log the raw response body — it may contain sensitive information.
+        return TGetLabelsResponse(TStringBuilder() <<
+            "Monitoring api get labels request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
@@ -114,13 +115,14 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Issues.ToOneLineString() <<
+        return TListMetricsResponse(TStringBuilder() << "Monitoring api list metrics response: " << response.Issues.ToOneLineString() <<
             ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Content.data() <<
-            ", internal code: " << response.Content.HttpResponseCode);
+        // Do not log the raw response body — it may contain sensitive metric data.
+        return TListMetricsResponse(TStringBuilder() <<
+            "Monitoring api list metrics request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
@@ -134,9 +136,13 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
         return TListMetricsResponse("Monitoring api list metrics response doesn't contain requested info");
     }
 
+    if (!json["result"].IsArray()) {
+        return TListMetricsResponse("Monitoring api list metrics response: 'result' field is not an array");
+    }
+
     const auto pagesInfo = json["page"];
-    if (!pagesInfo.IsMap() || 
-        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
+    if (!pagesInfo.IsMap() ||
+        !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() ||
         !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
         return TListMetricsResponse("Monitoring api list metrics response doesn't contain paging info");
     }
@@ -164,20 +170,21 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     TListMetricsLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
+        return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
             ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Content.data() <<
-            ", internal code: " << response.Content.HttpResponseCode);
+        // Do not log the raw response body — it may contain sensitive label values.
+        return TListMetricsLabelsResponse(TStringBuilder() <<
+            "Monitoring api list metrics labels request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response is not a valid json: " << e.what());
+        return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response is not a valid json: " << e.what());
     }
 
     if (!json.IsMap() || !json.Has("labels") || !json.Has("totalCount")) {
@@ -208,7 +215,7 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     
             result.Labels.emplace_back(name, absent, truncated, std::move(values));
         } catch (const NJson::TJsonException& e) {
-            return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
+            return TListMetricsLabelsResponse(TStringBuilder() << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
         }
 
     }
@@ -217,10 +224,6 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
 }
 
 TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
-    static std::set<TString> whitelistIssues = {
-        "Not able to apply function count on vector with size 0"
-    };
-
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -229,17 +232,32 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        TString issues = response.Content.data();
+        // Parse the error body as JSON and look for a structured "message" field.
+        // Falling back to a substring search on raw response bodies is fragile and
+        // risks leaking sensitive data into error messages.
+        NJson::TJsonValue errJson;
+        bool parsed = false;
+        try {
+            NJson::ReadJsonTree(response.Content.data(), &errJson, /*throwOnError*/ true);
+            parsed = true;
+        } catch (...) {}
 
-        for (const auto& whitelistIssue : whitelistIssues) {
-            if (issues.find(whitelistIssue) != issues.npos) {
-                result.PointsCount = 0;
-                return TGetPointsCountResponse(std::move(result), 0);
+        if (parsed && errJson.IsMap() && errJson.Has("message") && errJson["message"].IsString()) {
+            const TString& message = errJson["message"].GetString();
+            // Known benign condition: the metric exists but has no data points in
+            // the requested time range.  Treat it as zero points rather than an error.
+            if (message.Contains("Not able to apply function count on vector with size 0")) {
+                result.PointsCount = downsampledPointsCount;
+                return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
             }
+            return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << message <<
+                ", internal code: " << response.Content.HttpResponseCode);
         }
 
-        return TGetPointsCountResponse(TStringBuilder{} << "Monitoring api points count response: " << response.Content.data() <<
-            ", internal code: " << response.Content.HttpResponseCode);
+        // Non-JSON or no "message" field — report the HTTP status code only to
+        // avoid logging potentially large / sensitive response bodies.
+        return TGetPointsCountResponse(TStringBuilder() <<
+            "Monitoring api points count request failed with HTTP " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
@@ -262,8 +280,12 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     TGetDataResult result;
 
     if (!status.Ok()) {
-        TString error = TStringBuilder{} << "Monitoring api get data response: " << status.Msg;
-        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
+        TString error = TStringBuilder() << "Monitoring api get data response: " << status.Msg;
+        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED ||
+            status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE ||
+            status.GRpcStatusCode == grpc::StatusCode::DEADLINE_EXCEEDED ||
+            status.GRpcStatusCode == grpc::StatusCode::INTERNAL ||
+            status.GRpcStatusCode == grpc::StatusCode::ABORTED) {
             return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
         return TGetDataResponse(error);
@@ -274,7 +296,9 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     }
 
     const auto& responseValue = response.response_per_query()[0];
-    YQL_ENSURE(responseValue.has_timeseries_vector());
+    if (!responseValue.has_timeseries_vector()) {
+        return TGetDataResponse("Monitoring api get data response: missing timeseries_vector in response");
+    }
     for (const auto& queryResponse : responseValue.timeseries_vector().values()) {
         auto type = MetricTypeToString(queryResponse.type());
 
@@ -290,8 +314,8 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         }
 
         TMetric metric {
-            .Selectors = selectors,
-            .Type = type,
+            .Selectors = std::move(selectors),
+            .Type = std::move(type),
         };
 
         result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
@@ -336,11 +360,15 @@ public:
             resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), selectors));
         };
 
-        DoHttpRequest(
+        auto error = DoHttpRequest(
             std::move(cb),
             std::move(url),
             std::move(body)
         );
+
+        if (error) {
+            return NThreading::MakeFuture(TGetLabelsResponse(*error));
+        }
 
         return resultPromise.GetFuture();
     }
@@ -354,11 +382,15 @@ public:
             resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
         };
 
-        DoHttpRequest(
+        auto error = DoHttpRequest(
             std::move(cb),
             std::move(url),
             std::move(body)
         );
+
+        if (error) {
+            return NThreading::MakeFuture(TListMetricsResponse(*error));
+        }
 
         return resultPromise.GetFuture();
     }
@@ -372,11 +404,15 @@ public:
             resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
         };
 
-        DoHttpRequest(
+        auto error = DoHttpRequest(
             std::move(cb),
             std::move(url),
             std::move(body)
         );
+
+        if (error) {
+            return NThreading::MakeFuture(TListMetricsLabelsResponse(*error));
+        }
 
         return resultPromise.GetFuture();
     }
@@ -402,11 +438,15 @@ public:
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
             };
     
-            DoHttpRequest(
+            auto error = DoHttpRequest(
                 std::move(cb),
                 std::move(url),
                 std::move(body)
             );
+
+            if (error) {
+                return NThreading::MakeFuture(TGetPointsCountResponse(*error));
+            }
 
         } else {
             TGetPointsCountResult result;
@@ -437,8 +477,12 @@ public:
         const auto request = BuildGetDataRequest(program, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
-        if (auto authInfo = GetAuthInfo()) {
-            callMeta.Aux.emplace_back("authorization", *authInfo);
+        TString authInfo;
+        if (auto error = GetAuthInfo(authInfo)) {
+            return NThreading::MakeFuture(TGetDataResponse(*error));
+        }
+        if (!authInfo.empty()) {
+            callMeta.Aux.emplace_back("authorization", authInfo);
         }
         callMeta.Aux.emplace_back("x-client-id", "yandex-query");
 
@@ -467,21 +511,32 @@ public:
     }
 
 private:
-    std::optional<TString> GetAuthInfo() const {
+    std::optional<TString> GetAuthInfo(TString& auth) const {
+        auth.clear();
+
         if (!Settings.GetUseSsl()) {
             return {};
         }
 
-        const TString authToken = CredentialsProvider->GetAuthInfo();
+        TString authToken;
+        try {
+            authToken = CredentialsProvider->GetAuthInfo();
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "Couldn't get auth info: " << ex.what();
+        }
 
         switch (Settings.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                return "OAuth " + authToken;
+                auth = TStringBuilder() << "OAuth " << authToken;
+                break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                return "Bearer " + authToken;
+                auth = TStringBuilder() << "Bearer " << authToken;
+                break;
             default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
+                return TStringBuilder() << "Can't provide auth info for unknown cluster type: " << static_cast<int>(Settings.GetClusterType());
         }
+
+        return {};
     }
 
     TString GetHttpSolomonEndpoint() const {
@@ -492,22 +547,15 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
-    TString GetProjectId() const {
-        switch (Settings.GetClusterType()) {
-            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                return Settings.GetProject();
-            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                return Settings.GetCluster();
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
-        }
-    }
-
     template <typename TCallback>
-    void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
+    std::optional<TString> DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
-        if (auto authInfo = GetAuthInfo()) {
-            headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
+        TString authInfo;
+        if (auto error = GetAuthInfo(authInfo)) {
+            return *error;
+        }
+        if (!authInfo.empty()) {
+            headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
         }
         headers.Fields.emplace_back("x-client-id: yandex-query");
         headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
@@ -546,6 +594,8 @@ private:
                 retryPolicy
             );
         }
+
+        return {};
     }
 
     std::tuple<TString, TString> BuildGetLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -703,18 +753,30 @@ private:
         return fullSelectors;
     }
 
+    static TString EscapeSelectorValue(const TString& value) {
+        TString escaped;
+        escaped.reserve(value.size());
+        for (char c : value) {
+            if (c == '"' || c == '\\') {
+                escaped += '\\';
+            }
+            escaped += c;
+        }
+        return escaped;
+    }
+
     TString BuildSelectorsProgram(const TSelectors& selectors, bool useNewFormat = false) const {
         std::vector<TString> mappedValues;
         for (const auto& [key, selector] : selectors) {
             if (useNewFormat && key == "name"sv) {
                 continue;
             }
-            mappedValues.push_back(TStringBuilder() << key << selector.Op << "\"" << selector.Value << "\"");
+            mappedValues.push_back(TStringBuilder() << key << selector.Op << "\"" << EscapeSelectorValue(selector.Value) << "\"");
         }
 
         TStringBuilder result;
-        if (auto it = selectors.find("name"); useNewFormat && it !=selectors.end()) {
-            result << "\"" << it->second.Value << "\"";
+        if (auto it = selectors.find("name"); useNewFormat && it != selectors.end()) {
+            result << "\"" << EscapeSelectorValue(it->second.Value) << "\"";
         }
 
         return result << "{" << JoinSeq(",", mappedValues) << "}";

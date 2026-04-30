@@ -33,6 +33,8 @@
 
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 
+#include <yt/yt/core/tracing/trace_context.h>
+
 #include <library/cpp/iterator/enumerate.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -48,8 +50,6 @@ using namespace NYT::NConcurrency;
 //   - "replication_reader_failure_timeout"
 //   - "session_timeout"
 [[maybe_unused]] const TDuration TableReaderTimeout = TDuration::Minutes(35);
-
-constexpr ssize_t MaxWriteChunkSize = 500_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -193,19 +193,6 @@ NYTree::INodePtr ToApiNode(const TNode& node)
     return NYTree::ConvertToNode(NYson::TYsonString(NodeToYsonString(node, NYson::EYsonFormat::Binary)));
 }
 
-// Write data in small chunks to avoid generating large RPC attachments.
-template <class TWriteFn>
-void WriteInChunks(const void* buf, size_t len, const TWriteFn& writeFn)
-{
-    auto data = TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len));
-    std::vector<TFuture<void>> futures;
-    futures.reserve((std::ssize(data) + MaxWriteChunkSize - 1) / MaxWriteChunkSize);
-    for (ssize_t offset = 0; offset < std::ssize(data); offset += MaxWriteChunkSize) {
-        futures.push_back(writeFn(data.Slice(offset, Min(offset + MaxWriteChunkSize, std::ssize(data)))));
-    }
-    WaitAndProcess(AllSucceeded(std::move(futures)));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSyncRpcInputStream
@@ -239,8 +226,6 @@ private:
     }
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class TSyncRpcOutputStream
     : public IOutputStream
 {
@@ -251,9 +236,8 @@ public:
 
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Underlying_->Write(ref);
-        });
+        auto sharedBuffer = TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len));
+        WaitAndProcess(Underlying_->Write(sharedBuffer));
     }
 
     void DoFinish() override
@@ -279,6 +263,8 @@ TNode TRpcRawClient::Get(
     const TYPath& path,
     const TGetOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Get");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->GetNode(newPath, SerializeOptionsForGet(transactionId, options));
     auto result = WaitAndProcess(future);
@@ -307,6 +293,8 @@ void TRpcRawClient::Set(
     const TNode& value,
     const TSetOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Set");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto ysonValue = NYson::TYsonString(NodeToYsonString(value, NYson::EYsonFormat::Binary));
     auto future = Clients_.Light->SetNode(newPath, ysonValue, SerializeOptionsForSet(mutationId, transactionId, options));
@@ -318,6 +306,8 @@ bool TRpcRawClient::Exists(
     const TYPath& path,
     const TExistsOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Exists");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->NodeExists(newPath, SerializeOptionsForExists(transactionId, options));
     return WaitAndProcess(future);
@@ -330,6 +320,8 @@ void TRpcRawClient::MultisetAttributes(
     const TNode::TMapType& value,
     const TMultisetAttributesOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.MultisetAttributes");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto attributes = NYTree::ConvertToAttributes(
         NYson::TYsonString(NodeToYsonString(value, NYson::EYsonFormat::Binary)));
@@ -344,6 +336,8 @@ TNodeId TRpcRawClient::Create(
     const ENodeType& type,
     const TCreateOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Create");
+
     auto waitGuid = [](auto future) {
         auto result = WaitAndProcess(future);
         return UtilGuidFromYtGuid(result);
@@ -367,6 +361,8 @@ TNodeId TRpcRawClient::CopyWithoutRetries(
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CopyWithoutRetries");
+
     TMutationId mutationId;
     auto newSourcePath = AddPathPrefix(sourcePath, Config_->Prefix);
     auto newDestinationPath = AddPathPrefix(destinationPath, Config_->Prefix);
@@ -382,6 +378,8 @@ TNodeId TRpcRawClient::CopyInsideMasterCell(
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CopyInsideMasterCell");
+
     auto newSourcePath = AddPathPrefix(sourcePath, Config_->Prefix);
     auto newDestinationPath = AddPathPrefix(destinationPath, Config_->Prefix);
 
@@ -400,6 +398,8 @@ TNodeId TRpcRawClient::MoveWithoutRetries(
     const TYPath& destinationPath,
     const TMoveOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.MoveWithoutRetries");
+
     TMutationId mutationId;
     auto newSourcePath = AddPathPrefix(sourcePath, Config_->Prefix);
     auto newDestinationPath = AddPathPrefix(destinationPath, Config_->Prefix);
@@ -415,6 +415,8 @@ TNodeId TRpcRawClient::MoveInsideMasterCell(
     const TYPath& destinationPath,
     const TMoveOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.MoveInsideMasterCell");
+
     auto newSourcePath = AddPathPrefix(sourcePath, Config_->Prefix);
     auto newDestinationPath = AddPathPrefix(destinationPath, Config_->Prefix);
 
@@ -433,6 +435,8 @@ void TRpcRawClient::Remove(
     const TYPath& path,
     const TRemoveOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Remove");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->RemoveNode(newPath, SerializeOptionsForRemove(mutationId, transactionId, options));
     WaitAndProcess(future);
@@ -443,6 +447,8 @@ TNode::TListType TRpcRawClient::List(
     const TYPath& path,
     const TListOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.List");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     if (path.empty() && newPath.EndsWith('/')) {
         newPath.pop_back();
@@ -459,6 +465,8 @@ TNodeId TRpcRawClient::Link(
     const TYPath& linkPath,
     const TLinkOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Link");
+
     auto newTargetPath = AddPathPrefix(targetPath, Config_->Prefix);
     auto newLinkPath = AddPathPrefix(linkPath, Config_->Prefix);
     auto future = Clients_.Light->LinkNode(newTargetPath, newLinkPath, SerializeOptionsForLink(mutationId, transactionId, options));
@@ -473,6 +481,8 @@ TLockId TRpcRawClient::Lock(
     ELockMode mode,
     const TLockOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Lock");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->LockNode(newPath, ToApiLockMode(mode), SerializeOptionsForLock(mutationId, transactionId, options));
     auto result = WaitAndProcess(future);
@@ -485,6 +495,8 @@ void TRpcRawClient::Unlock(
     const TYPath& path,
     const TUnlockOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Unlock");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->UnlockNode(newPath, SerializeOptionsForUnlock(mutationId, transactionId, options));
     WaitAndProcess(future);
@@ -496,6 +508,8 @@ void TRpcRawClient::Concatenate(
     const TRichYPath& destinationPath,
     const TConcatenateOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.Concatenate");
+
     std::vector<NYPath::TRichYPath> newSourcePaths;
     for (const auto& sourcePath : sourcePaths) {
         auto newSourcePath = ToApiRichPath(sourcePath);
@@ -519,6 +533,8 @@ TTransactionId TRpcRawClient::StartTransaction(
     const TTransactionId& parentId,
     const TStartTransactionOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.StartTransaction");
+
     auto future = Clients_.Light->StartTransaction(
         NTransactionClient::ETransactionType::Master,
         SerializeOptionsForStartTransaction(mutationId, parentId, Config_->TxTimeout, options));
@@ -528,6 +544,8 @@ TTransactionId TRpcRawClient::StartTransaction(
 
 void TRpcRawClient::PingTransaction(const TTransactionId& transactionId)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.PingTransaction");
+
     auto tx = Clients_.Light->AttachTransaction(YtGuidFromUtilGuid(transactionId));
     WaitAndProcess(tx->Ping());
 }
@@ -536,6 +554,8 @@ void TRpcRawClient::AbortTransaction(
     TMutationId& mutationId,
     const TTransactionId& transactionId)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.AbortTransaction");
+
     auto tx = Clients_.Light->AttachTransaction(YtGuidFromUtilGuid(transactionId));
     WaitAndProcess(tx->Abort(SerializeOptionsForAbortTransaction(mutationId)));
 }
@@ -544,6 +564,8 @@ void TRpcRawClient::CommitTransaction(
     TMutationId& mutationId,
     const TTransactionId& transactionId)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CommitTransaction");
+
     auto tx = Clients_.Light->AttachTransaction(YtGuidFromUtilGuid(transactionId));
     WaitAndProcess(tx->Commit(SerializeOptionsForCommitTransaction(mutationId)));
 }
@@ -554,6 +576,8 @@ TOperationId TRpcRawClient::StartOperation(
     EOperationType type,
     const TNode& spec)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.StartOperation");
+
     auto future = Clients_.Light->StartOperation(
         NScheduler::EOperationType(type),
         NYson::TYsonString(NodeToYsonString(spec, NYson::EYsonFormat::Binary)),
@@ -670,6 +694,8 @@ TOperationAttributes TRpcRawClient::GetOperation(
     const TOperationId& operationId,
     const TGetOperationOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetOperation");
+
     auto future = Clients_.Light->GetOperation(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         SerializeOptionsForGetOperation(options, /*useAlias*/ false));
@@ -681,6 +707,8 @@ TOperationAttributes TRpcRawClient::GetOperation(
     const TString& alias,
     const TGetOperationOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetOperation");
+
     auto future = Clients_.Light->GetOperation(alias, SerializeOptionsForGetOperation(options, /*useAlias*/ true));
     auto result = WaitAndProcess(future);
     return ParseOperationAttributes(result);
@@ -690,6 +718,8 @@ void TRpcRawClient::AbortOperation(
     TMutationId& /*mutationId*/,
     const TOperationId& operationId)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.AbortOperation");
+
     auto future = Clients_.Light->AbortOperation(NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)));
     WaitAndProcess(future);
 }
@@ -698,6 +728,8 @@ void TRpcRawClient::CompleteOperation(
     TMutationId& /*mutationId*/,
     const TOperationId& operationId)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CompleteOperation");
+
     auto future = Clients_.Light->CompleteOperation(NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)));
     WaitAndProcess(future);
 }
@@ -707,6 +739,8 @@ void TRpcRawClient::SuspendOperation(
     const TOperationId& operationId,
     const TSuspendOperationOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.SuspendOperation");
+
     auto future = Clients_.Light->SuspendOperation(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         SerializeOptionsForSuspendOperation(options));
@@ -718,12 +752,16 @@ void TRpcRawClient::ResumeOperation(
     const TOperationId& operationId,
     const TResumeOperationOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ResumeOperation");
+
     auto future = Clients_.Light->ResumeOperation(NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)));
     WaitAndProcess(future);
 }
 
 TListOperationsResult TRpcRawClient::ListOperations(const TListOperationsOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ListOperations");
+
     auto future = Clients_.Light->ListOperations(SerializeOptionsForListOperations(options));
     auto listOperationsResult = WaitAndProcess(future);
 
@@ -762,6 +800,8 @@ void TRpcRawClient::UpdateOperationParameters(
     const TOperationId& operationId,
     const TUpdateOperationParametersOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.UpdateOperationParameters");
+
     auto future = Clients_.Light->UpdateOperationParameters(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         SerializeParametersForUpdateOperationParameters(options));
@@ -773,6 +813,8 @@ NYson::TYsonString TRpcRawClient::GetJob(
     const TJobId& jobId,
     const TGetJobOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetJob");
+
     auto future = Clients_.Light->GetJob(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)),
@@ -849,6 +891,8 @@ TListJobsResult TRpcRawClient::ListJobs(
     const TOperationId& operationId,
     const TListJobsOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ListJobs");
+
     auto future = Clients_.Light->ListJobs(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         SerializeOptionsForListJobs(options));
@@ -932,6 +976,8 @@ IFileReaderPtr TRpcRawClient::GetJobInput(
     const TJobId& jobId,
     const TGetJobInputOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetJobInput");
+
     auto future = Clients_.Heavy->GetJobInput(NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)));
     auto result = WaitAndProcess(future);
     auto stream = std::make_unique<TSyncRpcInputStream>(CreateAbortableInputStreamAdapter(CreateCopyingAdapter(result)));
@@ -943,6 +989,8 @@ IFileReaderPtr TRpcRawClient::GetJobFailContext(
     const TJobId& jobId,
     const TGetJobFailContextOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetJobFailContext");
+
     auto future = Clients_.Light->GetJobFailContext(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)));
@@ -956,6 +1004,8 @@ IFileReaderPtr TRpcRawClient::GetJobStderr(
     const TJobId& jobId,
     const TGetJobStderrOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetJobStderr");
+
     auto future = Clients_.Light->GetJobStderr(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)));
@@ -969,6 +1019,8 @@ IFileReaderPtr TRpcRawClient::GetJobTrace(
     const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetJobTrace");
+
     auto future = Clients_.Heavy->GetJobTrace(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
         NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)),
@@ -983,6 +1035,8 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadFile(
     const TRichYPath& path,
     const TFileReaderOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadFile");
+
     auto future = Clients_.Heavy->CreateFileReader(path.Path_, SerializeOptionsForReadFile(transactionId, options));
     auto reader = WaitAndProcess(future);
     auto stream = CreateAbortableInputStreamAdapter(CreateCopyingAdapter(reader));
@@ -1002,9 +1056,7 @@ public:
 private:
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Writer_->Write(ref);
-        });
+        WaitAndProcess(Writer_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
     }
 
     void DoFinish() override
@@ -1021,6 +1073,8 @@ std::unique_ptr<IOutputStream> TRpcRawClient::WriteFile(
     const TRichYPath& path,
     const TFileWriterOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.WriteFile");
+
     auto writer = Clients_.Heavy->CreateFileWriter(ToApiRichPath(path), SerializeOptionsForWriteFile(transactionId, options));
     return std::make_unique<TRpcWriteFileRequestStream>(std::move(writer));
 }
@@ -1031,6 +1085,8 @@ TMaybe<TYPath> TRpcRawClient::GetFileFromCache(
     const TYPath& cachePath,
     const TGetFileFromCacheOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetFileFromCache");
+
     auto future = Clients_.Light->GetFileFromCache(md5Signature, SerializeOptionsForGetFileFromCache(transactionId, cachePath, options));
     auto result = WaitAndProcess(future);
     return result.Path.empty() ? Nothing() : TMaybe<TYPath>(result.Path);
@@ -1043,6 +1099,8 @@ TYPath TRpcRawClient::PutFileToCache(
     const TYPath& cachePath,
     const TPutFileToCacheOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.PutFileToCache");
+
     auto newFilePath = AddPathPrefix(filePath, Config_->Prefix);
     auto future = Clients_.Light->PutFileToCache(newFilePath, md5Signature, SerializeOptionsForPutFileToCache(transactionId, cachePath, options));
     auto result = WaitAndProcess(future);
@@ -1054,6 +1112,8 @@ void TRpcRawClient::MountTable(
     const TYPath& path,
     const TMountTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.MountTable");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->MountTable(newPath, SerializeOptionsForMountTable(mutationId, options));
     WaitAndProcess(future);
@@ -1064,6 +1124,8 @@ void TRpcRawClient::UnmountTable(
     const TYPath& path,
     const TUnmountTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.UnmountTable");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->UnmountTable(newPath, SerializeOptionsForUnmountTable(mutationId, options));
     WaitAndProcess(future);
@@ -1074,6 +1136,8 @@ void TRpcRawClient::RemountTable(
     const TYPath& path,
     const TRemountTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.RemountTable");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->RemountTable(newPath, SerializeOptionsForRemountTable(mutationId, options));
     WaitAndProcess(future);
@@ -1085,6 +1149,8 @@ void TRpcRawClient::ReshardTableByPivotKeys(
     const TVector<TKey>& keys,
     const TReshardTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReshardTableByPivotKeys");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
 
     std::vector<NTableClient::TLegacyOwningKey> pivotKeys;
@@ -1112,6 +1178,8 @@ void TRpcRawClient::ReshardTableByTabletCount(
     i64 tabletCount,
     const TReshardTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReshardTableByCount");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->ReshardTable(newPath, tabletCount, SerializeOptionsForReshardTable(mutationId, options));
     WaitAndProcess(future);
@@ -1166,6 +1234,8 @@ void TRpcRawClient::AlterTable(
     const TYPath& path,
     const TAlterTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.AlterTable");
+
     auto future = Clients_.Light->AlterTable(path, SerializeOptionsForAlterTable(mutationId, transactionId, options));
     WaitAndProcess(future);
 }
@@ -1228,6 +1298,8 @@ std::unique_ptr<IOutputStream> TRpcRawClient::WriteTable(
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.WriteTable");
+
     auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Clients_.Heavy.Get());
 
     auto apiOptions = SerializeOptionsForWriteTable(transactionId, options);
@@ -1270,6 +1342,8 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadTable(
     const TFormat& format,
     const TTableReaderOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadTable");
+
     auto apiPath = ToApiRichPath(path);
     auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTable(transactionId, options);
@@ -1291,6 +1365,8 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadTablePartition(
     const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadTablePartition");
+
     auto apiCookie = NYTree::ConvertTo<NApi::TTablePartitionCookiePtr>(NYson::TYsonString(cookie));
     auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTablePartition(options);
@@ -1309,6 +1385,8 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadBlobTable(
     const TKey& key,
     const TBlobTableReaderOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadBlobTable");
+
     auto lowerKeyNode = TNode::CreateList(key.Parts_);
     lowerKeyNode.Add(options.StartPartIndex_);
 
@@ -1363,6 +1441,8 @@ void TRpcRawClient::AlterTableReplica(
     const TReplicaId& replicaId,
     const TAlterTableReplicaOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.AlterTableReplica");
+
     auto future = Clients_.Light->AlterTableReplica(
         YtGuidFromUtilGuid(replicaId),
         SerializeOptionsForAlterTableReplica(mutationId, options));
@@ -1381,6 +1461,8 @@ void TRpcRawClient::FreezeTable(
     const TYPath& path,
     const TFreezeTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.FreezeTable");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->FreezeTable(newPath, SerializeOptionsForFreezeTable(options));
     WaitAndProcess(future);
@@ -1390,6 +1472,8 @@ void TRpcRawClient::UnfreezeTable(
     const TYPath& path,
     const TUnfreezeTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.UnfreezeTable");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->UnfreezeTable(newPath, SerializeOptionsForUnfreezeTable(options));
     WaitAndProcess(future);
@@ -1429,6 +1513,8 @@ TDistributedWriteTableSessionWithCookies TRpcRawClient::StartDistributedWriteTab
     i64 cookieCount,
     const TStartDistributedWriteTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.StartDistributedWriteTableSession");
+
     auto future = Clients_.Light->StartDistributedWriteSession(
         ToApiRichPath(richPath),
         SerializeOptionsForStartDistributedTableSession(mutationId, transactionId, cookieCount, options));
@@ -1458,6 +1544,8 @@ void TRpcRawClient::PingDistributedWriteTableSession(
     const TDistributedWriteTableSession& session,
     const TPingDistributedWriteTableOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.PingDistributedWriteTableSession");
+
     auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteSessionPtr>(ToApiNode(session.Underlying()));
 
     auto future = Clients_.Light->PingDistributedWriteSession(apiSession);
@@ -1470,6 +1558,8 @@ void TRpcRawClient::FinishDistributedWriteTableSession(
     const TVector<TWriteTableFragmentResult>& results,
     const TFinishDistributedWriteTableOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.FinishDistributedWriteTableSession");
+
     auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteSessionPtr>(ToApiNode(session.Underlying()));
 
     std::vector<NApi::TSignedWriteFragmentResultPtr> apiResults;
@@ -1540,6 +1630,8 @@ std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteTableFragment(
     const TMaybe<TFormat>& format,
     const TTableFragmentWriterOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.WriteTableFragment");
+
     using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NApi::NRpcProxy::NProto::TRspWriteTableFragment>>;
 
     auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Clients_.Heavy.Get());
@@ -1584,6 +1676,8 @@ TDistributedWriteFileSessionWithCookies TRpcRawClient::StartDistributedWriteFile
     i64 cookieCount,
     const TStartDistributedWriteFileOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.StartDistributedWriteFileSession");
+
     auto future = Clients_.Light->StartDistributedWriteFileSession(
         ToApiRichPath(richPath),
         SerializeOptionsForStartDistributedFileSession(mutationId, transactionId, cookieCount, options));
@@ -1613,6 +1707,8 @@ void TRpcRawClient::PingDistributedWriteFileSession(
     const TDistributedWriteFileSession& session,
     const TPingDistributedWriteFileOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.PingDistributedWriteFileSession");
+
     auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteFileSessionPtr>(ToApiNode(session.Underlying()));
 
     auto future = Clients_.Light->PingDistributedWriteFileSession(apiSession);
@@ -1625,6 +1721,8 @@ void TRpcRawClient::FinishDistributedWriteFileSession(
     const TVector<TWriteFileFragmentResult>& results,
     const TFinishDistributedWriteFileOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.FinishDistributedWriteFileSession");
+
     auto apiSession = NYTree::ConvertTo<NApi::TSignedDistributedWriteFileSessionPtr>(ToApiNode(session.Underlying()));
 
     std::vector<NApi::TSignedWriteFileFragmentResultPtr> apiResults;
@@ -1669,9 +1767,7 @@ private:
 
     void DoWrite(const void* buf, size_t len) override
     {
-        WriteInChunks(buf, len, [this] (const TSharedRef& ref) {
-            return Underlying_->Write(ref);
-        });
+        WaitAndProcess(Underlying_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
     }
 
     void DoFinish() override
@@ -1693,6 +1789,8 @@ std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteFileFragment(
     const TDistributedWriteFileCookie& cookie,
     const TFileFragmentWriterOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.WriteFileFragment");
+
     auto apiCookie = NYTree::ConvertTo<NApi::TSignedWriteFileFragmentCookiePtr>(ToApiNode(cookie.Underlying()));
     auto fileWriter = Clients_.Heavy->CreateFileFragmentWriter(apiCookie);
 
@@ -1705,6 +1803,8 @@ TCheckPermissionResponse TRpcRawClient::CheckPermission(
     const TYPath& path,
     const TCheckPermissionOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CheckPermission");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->CheckPermission(user, newPath, ToApiPermission(permission), SerializeOptionsForCheckPermission(options));
     auto result = WaitAndProcess(future);
@@ -1716,6 +1816,8 @@ TVector<TTabletInfo> TRpcRawClient::GetTabletInfos(
     const TVector<int>& tabletIndexes,
     const TGetTabletInfosOptions& /*options*/)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetTabletInfos");
+
     auto newPath = AddPathPrefix(path, Config_->Prefix);
     auto future = Clients_.Light->GetTabletInfos(newPath, tabletIndexes);
     auto tabletInfos = WaitAndProcess(future);
@@ -1737,6 +1839,8 @@ TVector<TTableColumnarStatistics> TRpcRawClient::GetTableColumnarStatistics(
     const TVector<TRichYPath>& paths,
     const TGetTableColumnarStatisticsOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetTableColumnarStatistics");
+
     std::vector<NYPath::TRichYPath> newPaths(paths.size());
     std::transform(paths.begin(), paths.end(), newPaths.begin(), ToApiRichPath);
 
@@ -1777,6 +1881,8 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options)
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetTablePartitions");
+
     std::vector<NYPath::TRichYPath> newPaths(paths.size());
     std::transform(paths.begin(), paths.end(), newPaths.begin(), ToApiRichPath);
 
@@ -1818,6 +1924,8 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
 
 ui64 TRpcRawClient::GenerateTimestamp()
 {
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GenerateTimestamp");
+
     auto future = Clients_.Light->GetTimestampProvider()->GenerateTimestamps();
     auto result = WaitAndProcess(future);
     return result;
@@ -1836,6 +1944,14 @@ IRawClientPtr TRpcRawClient::Clone()
 IRawClientPtr TRpcRawClient::Clone(const TClientContext& context)
 {
     return ::MakeIntrusive<TRpcRawClient>(CreateApiClients(context), context.Config);
+}
+
+NTracing::TCurrentTraceContextGuard TRpcRawClient::CreateTraceContext(const std::string& spanName)
+{
+    auto traceContext = Config_->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent(spanName)
+        : nullptr;
+    return NTracing::TCurrentTraceContextGuard(std::move(traceContext));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

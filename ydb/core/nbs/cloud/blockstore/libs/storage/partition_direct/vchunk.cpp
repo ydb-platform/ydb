@@ -3,27 +3,24 @@
 #include "flush_request.h"
 #include "range_translate.h"
 #include "read_request.h"
-#include "write_request.h"
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_direct_replication_request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_with_pb_replication_request.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NThreading;
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -52,6 +49,7 @@ TVChunk::TVChunk(
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+    // ActorSystem thread
 }
 
 TVChunk::~TVChunk() = default;
@@ -211,6 +209,14 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     return future;
 }
 
+ui64 TVChunk::GetPBufferUsedSize(ui8 hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto location = VChunkConfig.GetPBufferLocation(hostIndex);
+    auto counters = BlocksDirtyMap.GetPBufferCounters(location);
+    return counters.TotalBytesCount;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
@@ -233,6 +239,8 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 void TVChunk::DoStart()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    DirectBlockGroup->Register(weak_from_this());
 
     auto future =
         DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.VChunkIndex);

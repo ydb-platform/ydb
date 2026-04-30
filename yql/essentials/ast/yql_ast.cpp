@@ -678,16 +678,16 @@ TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::D
 } // namespace NYql
 
 template <>
-void Out<NYql::TAstNode::EType>(class IOutputStream& o, NYql::TAstNode::EType x) {
+void Out<NYql::TAstNode::EType>(class IOutputStream& out, NYql::TAstNode::EType value) {
 #define YQL_AST_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case ::NYql::TAstNode::name:                        \
-        o << #name;                                     \
+        out << #name;                                   \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_AST_NODE_TYPE_MAP(YQL_AST_NODE_TYPE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }

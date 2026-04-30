@@ -165,6 +165,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:
             return node.Q("localBloomNgramFilter");
+        case TIndexDescription::EType::LocalMinMax:
+            return node.Q("localMinMax");
     }
 }
 
@@ -1474,9 +1476,9 @@ private:
     TScopedStatePtr Scoped_;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(source), scoped);
 }
 
 namespace {
@@ -1993,8 +1995,8 @@ private:
     const bool MissingOk_;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, table, missingOk, tableType, scoped);
 }
 
 namespace {
@@ -2104,6 +2106,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2231,6 +2234,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2313,8 +2317,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, params, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, topic, params, scoped);
 }
 
 class TControlUser final: public TAstListNode {
@@ -2764,24 +2768,24 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
-TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
-TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildAlterObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                    bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
+    return new TAlterObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
-TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildDropObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                   bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
+    return new TDropObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
@@ -4125,8 +4129,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped) {
-    return new TShowCreateNode(pos, tr, type, scoped);
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, table, type, scoped);
 }
 
 class TBaseBackupCollectionNode

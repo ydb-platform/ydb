@@ -448,7 +448,7 @@ bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanCon
         if (parts[0].size() != 2) {
             return false;
         }
-        if (!TryIntFromString<10>(parts[0], version)) {
+        if (!TryIntFromString<16>(parts[0], version)) {
             return false;
         }
         parts.erase(parts.begin());

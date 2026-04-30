@@ -5,6 +5,16 @@ namespace NYdb::inline Dev::NTopic::NTests::NTxUsage {
 
 Y_UNIT_TEST_SUITE(TxUsage) {
 
+Y_UNIT_TEST_F(EmptySourceId_ParallelTx_Table, TFixtureTable)
+{
+    TestEmptySourceIdParallelTx();
+}
+
+Y_UNIT_TEST_F(EmptySourceId_ParallelTx_Query, TFixtureQuery)
+{
+    TestEmptySourceIdParallelTx();
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_11_Table, TFixtureTable)
 {
     TestWriteToTopic11();

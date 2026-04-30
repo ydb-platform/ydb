@@ -37,6 +37,7 @@ public:
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const;
     [[nodiscard]] ui64 GetVChunkSize() const;
     [[nodiscard]] ui32 GetThreadPoolSize() const;
+    [[nodiscard]] NProto::TOracleConfig GetOracleConfig() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

@@ -9,6 +9,8 @@
 #include <library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h>
 #include <library/cpp/unified_agent_client/grpc_io.h>
 
+#include <contrib/libs/grpc/include/grpcpp/support/status.h>
+
 #include <library/cpp/logger/global/global.h>
 
 #include <util/generic/deque.h>
@@ -144,9 +146,10 @@ namespace NUnifiedAgent::NPrivate {
 
         void Acknowledge(ui64 seqNo);
 
-        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo);
+        void OnGrpcCallInitialized(const TString& sessionId, ui64 lastSeqNo, const TFMaybe<ui32>& protocolVersion,
+            TString bindingToken);
 
-        void OnGrpcCallFinished();
+        void OnGrpcCallFinished(const grpc::Status& finishStatus);
 
         NThreading::TFuture<void> PreFork();
 
@@ -255,6 +258,8 @@ namespace NUnifiedAgent::NPrivate {
         TIntrusivePtr<TClient> Client;
         TFMaybe<TString> OriginalSessionId;
         TFMaybe<TString> SessionId;
+        TFMaybe<ui32> NegotiatedProtocol;
+        TString SessionBindingToken;
         TFMaybe<THashMap<TString, TString>> Meta;
         TScopeLogger Logger;
         bool CloseStarted;

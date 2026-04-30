@@ -351,7 +351,7 @@ private:
     };
 
     std::atomic<EState> State_ = EState::Uninitialized;
-    NThreading::TSpinLock InitializationLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;

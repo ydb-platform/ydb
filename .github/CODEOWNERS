@@ -53,6 +53,7 @@
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq/ @ydb-platform/fq
 
+/ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
 /ydb/core/persqueue @ydb-platform/Topics
 /ydb/services/datastreams @ydb-platform/Topics

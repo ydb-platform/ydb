@@ -8,7 +8,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 // This class represents a physical builder for OpAggregate, it emits a physical aggreation based on a given OpAggregate.
-class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
+class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
         TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
@@ -25,6 +25,7 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
         TString AggFunc;
         const TTypeAnnotationNode* InputItemType;
         const TTypeAnnotationNode* OutputItemType;
+        std::optional<TString> InputAggFunc{std::nullopt};
     };
 
     // Internal representation of the decimal type.
@@ -35,11 +36,11 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
 
 public:
     TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+        : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
         , Aggregate(aggregate) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
 
 private:
     // Following functions creates a 4 lambdas for physical aggregation:
@@ -58,7 +59,7 @@ private:
     // Build a map to fuse output from wide to narrow for aggregation.
     TExprNode::TPtr BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll);
+                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll, EOpPhase aggregationPhase);
     // Init state.
     TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg);
     TExprNode::TPtr BuildCountAggregationInitialState();
@@ -79,7 +80,8 @@ private:
 
     // Scalar aggregation wrapper.
     TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type);
+                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type,
+                                                                   EOpPhase aggregationPhase);
     // Helpers.
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
     TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns) const;
@@ -91,8 +93,8 @@ private:
 
     // Helpers for scalar aggregation.
     TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType);
-    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                      const THashMap<TString, TString>& projectionMap);
+    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
+                                      EOpPhase aggregationPhase);
 
     TExprNode::TPtr GetDataTypeForAccumulator(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
     bool IsDecimalType(const TTypeAnnotationNode* typeNode) const;

@@ -9,7 +9,7 @@ from typing import Any, Iterable, List, Tuple
 from ydb.tests.library.nemesis.safety_warden import (
     LocalCommandExecutor,
     UnifiedAgentVerifyFailedSafetyWarden,
-    GrepDMesgForPatternsSafetyWarden,
+    GrepJournalctlKernelForPatternsSafetyWarden,
 )
 from ydb.tests.library.wardens.logs import (
     kikimr_start_logs_safety_warden_factory,
@@ -76,12 +76,13 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
             ),
         ),
         SafetyCheckSpec(
-            name="kikimr_grep_dmesg",
-            description="Grep dmesg for Kikimr-related errors (local, no SSH)",
-            build_warden=lambda: GrepDMesgForPatternsSafetyWarden(
+            name="kikimr_grep_kernel_log",
+            description="Grep kernel log (journalctl -k) for Kikimr-related errors (local, no SSH)",
+            build_warden=lambda: GrepJournalctlKernelForPatternsSafetyWarden(
                 executor=local_executor,
                 list_of_markers=['Out of memory: Kill process'],
                 lines_after=5,
+                hours_back=24,
             ),
         ),
         SafetyCheckSpec(

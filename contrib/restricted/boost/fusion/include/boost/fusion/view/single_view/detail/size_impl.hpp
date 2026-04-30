@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_SINGLE_VIEW_SIZE_IMPL_JUL_07_2011_1348PM)
+#ifndef FUSION_SINGLE_VIEW_SIZE_IMPL_JUL_07_2011_1348PM
 #define FUSION_SINGLE_VIEW_SIZE_IMPL_JUL_07_2011_1348PM
 
 namespace boost { namespace fusion

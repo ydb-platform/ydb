@@ -5,12 +5,14 @@ Send batched Telegram digests for new muted-test GitHub issues.
 How it works
 ------------
 Issues are placed into ``digest_queue`` at the moment they are created
-(by create_new_muted_ya.py).  This script reads unsent rows
+(by mute/create_new_muted_ya.py).  This script reads unsent rows
 (sent_at IS NULL), sends per-team Telegram messages, then marks rows
 as sent by writing sent_at = NOW().
 
 There are no timing assumptions, no cursors, no historical-data floods.
 The queue is the single source of truth for "what still needs to be sent".
+
+Scheduled by ``.github/workflows/telegram_scheduled_notifications.yml`` (job **Mute digest to Telegram**).
 
 Reads profiles from .github/config/mute_issue_and_digest_config.json
 and runs only those whose ``schedule_utc_hours`` contains the current UTC hour
@@ -55,9 +57,10 @@ from ydb_wrapper import YDBWrapper
 
 sys.path.insert(0, os.path.dirname(__file__))
 from parse_and_send_team_issues import (
+    _sql_escape_literal,
+    get_all_team_data,
     load_team_channels,
     send_team_messages,
-    get_all_team_data,
 )
 
 
@@ -121,7 +124,7 @@ def _fetch_closed_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         INNER JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
+        WHERE q.profile_id = '{_sql_escape_literal(profile_id)}'
           AND q.sent_at IS NULL
           AND i.state = 'CLOSED'
         """,
@@ -156,7 +159,7 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         LEFT JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
+        WHERE q.profile_id = '{_sql_escape_literal(profile_id)}'
           AND q.sent_at IS NULL
           AND (i.state IS NULL OR i.state != 'CLOSED')
         ORDER BY q.owner_team, q.github_issue_number
@@ -264,7 +267,10 @@ def run_digest(
         muted_stats   = None
         all_team_data = None
         try:
-            all_team_data = get_all_team_data(build_type=profile["build_type"], branch=profile["branch"])
+            all_team_data = get_all_team_data(
+                build_type=profile["build_type"],
+                branch=profile["branch"],
+            )
             if all_team_data:
                 muted_stats = {t: d["stats"] for t, d in all_team_data.items()}
         except Exception as exc:
@@ -277,11 +283,16 @@ def run_digest(
             muted_stats=muted_stats,
             include_plots=include_plots,
             ydb_config=(
-                {"use_yesterday": False, "build_type": profile["build_type"]}
+                {
+                    "use_yesterday": False,
+                    "build_type": profile["build_type"],
+                    "branch": profile["branch"],
+                }
                 if include_plots
                 else None
             ),
             all_team_data=all_team_data,
+            show_diff=True,
         )
 
         now = datetime.now(tz=timezone.utc)

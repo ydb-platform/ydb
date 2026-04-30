@@ -1355,6 +1355,7 @@ private:
     void CallCloseCallbackImpl();
 
     void UpdateMemoryUsageStatisticsImpl();
+    void UpdateReadSizeBudgetCounter(i64 value);
 
 private:
     struct TPartitionCookieMapping {

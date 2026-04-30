@@ -1020,31 +1020,31 @@ IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index) {
 }
 
 template<>
-void Out<NYql::TOperationProgress::EState>(class IOutputStream &o, NYql::TOperationProgress::EState x) {
+void Out<NYql::TOperationProgress::EState>(class IOutputStream &out, NYql::TOperationProgress::EState value) {
 #define YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TOperationProgress::EState::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_OPERATION_PROGRESS_STATE_MAP(YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }
 
 template<>
-void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &o, NYql::TOperationProgress::EOpBlockStatus x) {
+void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &out, NYql::TOperationProgress::EOpBlockStatus value) {
 #define YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TOperationProgress::EOpBlockStatus::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_OPERATION_BLOCK_STATUS_MAP(YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }

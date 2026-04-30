@@ -33,6 +33,12 @@ This index can't be used in the following queries:
 * `WHERE a > $var1 AND b > $var2`, which is equivalent to `WHERE a > $var1` in terms of applying the index.
 * `WHERE b > $var1`.
 
+To effectively limit the result of a query using the [`LIMIT` command](../yql/reference/syntax/select/limit_offset.md), you must use one-way sorting in the [`ORDER BY` command](../yql/reference/syntax/select/order_by.md):
+
+- `WHERE a = $var1 AND b > $var2 ORDER BY a, b DESC LIMIT 1`, all index rows that match the filter conditions will be read;
+
+- `WHERE a = $var1 AND b > $var2 ORDER BY a DESC, b DESC LIMIT 1`, only one line will be read.
+
 Considering the above, there's no use in pre-indexing all possible combinations of table columns to speed up the execution of any query. An index is always a compromise between the lookup and write speed and the storage space occupied by the data. Indexes are created for specific queries and search criteria made by an app in the database.
 
 ## Using secondary indexes when selecting data {#use}

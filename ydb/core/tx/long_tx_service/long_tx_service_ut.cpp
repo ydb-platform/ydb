@@ -508,6 +508,11 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
             SendToLongTx(new TEvLongTxService::TEvWaitingLockRemove(reqId));
         }
 
+        template<class TEvent>
+        typename TEvent::TPtr GrabEvent(TDuration simTimeout = TDuration::Max()) {
+            return Runtime.GrabEdgeEventRethrow<TEvent>(ActorId, simTimeout);
+        }
+
         ~TMockDatashard() {
             for (const auto& [lock, edges] : WaitGraph) {
                 for (const auto& [reqId, blocker] : edges) {
@@ -624,8 +629,8 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(true, 4));
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
 
-        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
-        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1)));
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0), TInstant::Seconds(123456)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1), TInstant::Seconds(234567)));
 
         TMockDatashard ds1(runtime, /*nodeIdx=*/2);
         TMockDatashard ds2(runtime, /*nodeIdx=*/3);
@@ -636,10 +641,10 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         ds2.AddLock(lock2.Info);
 
         ds1.AddLock(lock2.Info);
-        ds1.AddWait(lock2.Info, lock1.Info);
+        const auto reqId = ds1.AddWait(lock2.Info, lock1.Info);
 
         ds2.AddLock(lock1.Info);
-        const auto reqId = ds2.AddWait(lock1.Info, lock2.Info);
+        ds2.AddWait(lock1.Info, lock2.Info);
 
         // Check that the wait graph is correctly instantiated on all nodes.
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
@@ -651,13 +656,16 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
                 "with nodeIdx: " << nodeIdx);
         }
 
+        auto deadlockEv = ds1.GrabEvent<TEvLongTxService::TEvWaitingLockDeadlock>();
+        UNIT_ASSERT_VALUES_EQUAL(deadlockEv->Get()->RequestId, reqId);
+
         // Break the deadlock and check that the removal is correctly propagated.
-        ds2.RemoveWait(lock1.Info, reqId);
+        ds1.RemoveWait(lock2.Info, reqId);
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
         for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 GetWaitGraphString(runtime, nodeIdx),
-                "234 -> 123\n",
+                "123 -> 234\n",
                 "with nodeIdx: " << nodeIdx);
         }
     }

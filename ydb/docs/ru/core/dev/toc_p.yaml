@@ -35,6 +35,11 @@ items:
   href: query-plans-optimization.md
 - name: Подсказки оптимизатора
   href: query-hints.md
+- name: Оптимизация выполнения запросов
+  href: query-execution-optimization/index.md
+  include:
+    mode: link
+    path: query-execution-optimization/toc_p.yaml
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод

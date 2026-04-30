@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package NYdb.NBS.NProto;
 
+import "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Mode of write requests.
@@ -16,29 +18,27 @@ enum EWriteMode {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TDDiskConfig
+message TOracleConfig
 {
-    optional bool UseSQPoll = 1;
-    optional bool UseIOPoll = 2;
-    optional bool ForcePDiskFallback = 3;
-}
+    // Interval between Oracle thinking in milliseconds.
+    optional uint32 ThinkingInterval = 1;
 
-message TPBufferConfig
-{
-    // Initial number of chunks occupied by PB, default 4
-    optional uint32 InitChunks = 1;
+    // Maximum duration before host going offline in milliseconds.
+    optional uint32 MaxDurationBeforeGoingOffline = 2;
 
-    // In memory cache limit in bytes, default 128MiB
-    optional uint64 MaxInMemoryCache = 2;
+    // The minimum number of erroneous requests after which the host is taken
+    // offline. If the number of errors is less, the host will not go offline,
+    // regardless of the time during which the errors occurred.
+    optional uint32 MinErrorsCountBeforeGoingOffline = 3;
 
-    // default 8
-    optional uint32 MaxChunkRestoreInflight = 3;
+    // The number of failed requests after which the host is taken offline,
+    // regardless of the time during which the errors occurred. Required to
+    // protect PBuffer from overflow.
+    optional uint32 ErrorsCountForGoingOffline = 4;
 
-    // default 5000ms
-    optional uint32 UpdateFreeSpaceInfoMilliseconds = 4;
-
-    // Storage limit for one tablet in bytes, default 4TiB
-    optional uint64 PerTabletStorageLimit = 5;
+    // The total size of failed requests after which the host is taken offline.
+    // Required to protect PBuffer from overflow.
+    optional uint64 ErrorsTotalSizeForGoingOffline = 5;
 }
 
 message TStorageServiceConfig
@@ -93,9 +93,14 @@ message TStorageServiceConfig
     // Thread pool size.
     optional uint32 ThreadPoolSize = 18;
 
+    // Global DDisk configuration.
     optional TDDiskConfig GlobalDDiskConfig = 19;
+    // Global PBuffer configuration.
     optional TPBufferConfig GlobalPBufferConfig = 20;
 
     // Timeout (in milliseconds) for write request handlers.
     optional uint32 WriteRequestTimeout = 21;
+
+    // Config for oracle thinking.
+    optional TOracleConfig OracleConfig = 22;
 }

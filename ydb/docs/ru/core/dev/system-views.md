@@ -301,7 +301,7 @@ LIMIT 100
 | `LastAccessedAt` | Время последнего обращения к результату компиляции запроса в кэше.<br/>Тип: `Timestamp`. |
 | `CompilationDurationMs` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
-| `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами (base64-encoded protobuf). Пустым, если у запроса нет параметров.<br/>Тип: `Utf8`. |
+| `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
 | `QueryType` | Тип запроса, значение одно из:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service в конкурентном режиме<br/>Для старых записей может быть пустым.<br/>Тип: `Utf8`. |
 | `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_PG` — PostgreSQL-совместимый синтаксис<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>Тип: `Utf8`. |

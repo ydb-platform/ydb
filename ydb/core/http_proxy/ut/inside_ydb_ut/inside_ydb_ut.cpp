@@ -1,6 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/env.h>
 
+// Touch comment to retrigger CI for this test target.
+
 Y_UNIT_TEST_SUITE(HttpProxyInsideYdb) {
 
 Y_UNIT_TEST(TestIfEnvVariableSet) {

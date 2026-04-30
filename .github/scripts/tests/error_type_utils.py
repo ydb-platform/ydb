@@ -44,6 +44,14 @@ def is_timeout_issue(source_error_type):
     return _normalize_text(source_error_type).upper() == "TIMEOUT"
 
 
+def is_verify_issue(error_text):
+    error_text = _normalize_text(error_text)
+    if not error_text:
+        return False
+
+    return bool(re.search(r'\bVERIFY\s+failed\b', error_text, re.IGNORECASE))
+
+
 def is_not_launched_issue(source_error_type, status_name=None):
     if _normalize_text(source_error_type).upper() != "NOT_LAUNCHED":
         return False
@@ -51,7 +59,7 @@ def is_not_launched_issue(source_error_type, status_name=None):
     return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
 
 
-def classify_error_type(status, status_description, source_error_type):
+def classify_error_type(status, status_description, source_error_type, verify_source_text=None):
     status_norm = _normalize_text(status).strip().lower()
     if status_norm not in ("failure", "mute", "error"):
         return ""
@@ -61,6 +69,10 @@ def classify_error_type(status, status_description, source_error_type):
 
     if is_timeout_issue(source_error_type):
         return "TIMEOUT"
+
+    verify_text = verify_source_text if verify_source_text is not None else status_description
+    if is_verify_issue(verify_text):
+        return "VERIFY"
 
     return ""
 

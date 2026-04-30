@@ -118,7 +118,36 @@ The existing `LoanTable` -> `PrepareExternalPart` -> `ApplyExternalPartSwitch` p
 4. **No replication overhead** -- parts are directly placed, followers catch up via log
 5. **Parallel per-shard** -- each shard loads independently, no coordination
 
-The bottleneck becomes pure I/O: S3 download + blob writes to blobstorage.
+### Restore Bottleneck: Blobstorage Writes
+
+The restore bottleneck is writing blobs into blobstorage via `TEvBlobStorage::TEvPut`.
+Unlike export (which just reads existing blobs), restore must create new blobs in
+the distributed storage layer. With block-4-2 erasure, each blob is written to 8
+VDisks across 8 storage nodes. This is the same replication cost as any normal write
+to YDB -- it is the unavoidable price of fault-tolerant distributed storage.
+
+Export is asymmetrically fast because blobs already exist -- `TEvGet` reads from a
+single VDisk. Restore must replicate to 8 VDisks per blob.
+
+### Performance Comparison: Physical vs CSV Restore
+
+Assuming a 400TB table where downloading from S3 takes 1 hour:
+
+| Step | Physical Restore | CSV Restore (current) |
+|------|------------------|-----------------------|
+| Download from S3 | 1h | 1h |
+| Parse data | 0 (raw blobs) | 10-20h (CSV text parsing for billions of rows) |
+| Write to storage | 2-4h (TEvPut, 8x replication) | 2-4h (same replication, via WAL + compaction) |
+| WAL / transaction overhead | 0 (LoanTable bypasses WAL) | 20-40h (per-row transaction, WAL, MVCC) |
+| Compaction | 0 (parts already compacted) | 10-30h (compaction storm from bulk inserts) |
+| Index rebuilding | 0 (indexes in SST parts) | Hours (rebuilt from scratch) |
+| **Total (pipelined)** | **~3-5h** | **~50-100h+ (days)** |
+
+Physical restore achieves ~10-20x speedup over CSV restore. The remaining time
+(2-4h for blobstorage writes) is the irreducible cost of erasure-coded distributed
+storage. The only way to reduce it further would be to lower the replication factor
+(e.g., mirror-3-dc with 3 copies instead of block-4-2 with 8), which is a
+cluster-level durability tradeoff.
 
 ## Components
 

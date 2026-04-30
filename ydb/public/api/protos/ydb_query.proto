@@ -7,6 +7,7 @@ option java_outer_classname = "QueryProtos";
 
 import "google/protobuf/duration.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
@@ -196,7 +197,7 @@ message ExecuteQueryRequest {
         QueryContent query_content = 4;
     }
 
-    map<string, TypedValue> parameters = 6;
+    map<string, TypedValue> parameters = 6 [(Ydb.sensitive) = true];
     StatsMode stats_mode = 7;
 
     // For queries with multiple result sets, some of them may be computed concurrently.
@@ -255,7 +256,7 @@ message ExecuteScriptRequest {
 
     QueryContent script_content = 3;
 
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
 
     StatsMode stats_mode = 5;
 

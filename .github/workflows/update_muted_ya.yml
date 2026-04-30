@@ -204,10 +204,23 @@ jobs:
           to_delete = read_lines("mute_update/to_delete.txt")
           to_mute = read_lines("mute_update/to_mute.txt")
           to_unmute = read_lines("mute_update/to_unmute.txt")
+          to_delete_debug = read_lines("mute_update/to_delete_debug.txt")
+          to_mute_debug = read_lines("mute_update/to_mute_debug.txt")
+          to_unmute_debug = read_lines("mute_update/to_unmute_debug.txt")
 
           body = [f"# Muted tests update for {base_branch} (build: {build_type})\n\n"]
-          append_debug_section(body, "Removed from mute", to_delete, count_override=len(to_delete))
-          append_debug_section(body, "Muted flaky", to_mute, count_override=len(to_mute))
+          append_debug_section(
+              body,
+              "Removed from mute",
+              to_delete_debug or to_delete,
+              count_override=len(to_delete),
+          )
+          append_debug_section(
+              body,
+              "Muted flaky",
+              to_mute_debug or to_mute,
+              count_override=len(to_mute),
+          )
 
           if to_mute:
               url = (
@@ -219,7 +232,12 @@ jobs:
                   url += f"&full_name={quote(test_name.replace(' ', '/'), safe='')}"
               body.append(f"[View history of muted flaky tests on Dashboard]({url})\n")
 
-          append_debug_section(body, "Unmuted stable", to_unmute, count_override=len(to_unmute))
+          append_debug_section(
+              body,
+              "Unmuted stable",
+              to_unmute_debug or to_unmute,
+              count_override=len(to_unmute),
+          )
           Path("pr_body_content.txt").write_text("".join(body), encoding="utf-8")
           PY
           echo "PR_BODY_PATH=pr_body_content.txt" >> "$GITHUB_ENV"

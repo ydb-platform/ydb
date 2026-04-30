@@ -52,15 +52,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.HugeBlobsWit
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNoDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobOneCorruptedMainOneCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorrruptedMain
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockHugeBlobTwoCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobOneCorruptedMainOneCorruptedHandoff
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorrruptedMain
-ydb/core/blobstorage/ut_blobstorage/ut_scrub DeepScrubbing.Test4Plus2BlockSmallBlobTwoCorruptedHandoff
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TombstoneRestarts
-ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
@@ -145,7 +138,6 @@ ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.Large_3
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryUnderTimeout
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryDdlRetriesUnderSchemeShardRestarts
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin-WithFeatureFlag
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
@@ -5752,14 +5744,11 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[8]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
-ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[csv-additional_args0-row]
-ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[csv-additional_args1-row]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args2-row]
 ydb/tests/functional/ydb_cli test_ydb_interactive_sql.py.TestInteractiveExitCommands.test_consequence_ctrl_c_without_prompt
 ydb/tests/olap data_read_correctness.py.TestDataReadPerformanceNoIntersections.test
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_to_compression[zstd_20_compression-algorithm=zstd,level=20]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
-ydb/tests/olap/column_compression/create py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/s3_import py3test.[*/*] chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export

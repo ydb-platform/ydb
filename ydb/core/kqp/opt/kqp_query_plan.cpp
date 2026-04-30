@@ -846,8 +846,15 @@ private:
         std::vector<TString> tokens;
         if (settings.Tokens) {
             YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
-                tokens.push_back(HexEncode(token.Cast<TCoString>().Literal()));
+                auto pair = token.Cast<TExprList>();
+                YQL_ENSURE(pair.Size() == 2, "Expected 2 items in token pair, got: " << pair.Size());
+
+                auto pathToken = TString(pair.Item(0).Cast<TCoString>().Literal().Value());
+                auto paramName = TString(pair.Item(1).Cast<TCoString>().Literal().Value());
+
+                tokens.push_back(NJsonIndex::FormatJsonIndexToken(pathToken, paramName));
             }
 
             op.Properties["Tokens"] = JoinSeq(", ", tokens);

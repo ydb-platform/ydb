@@ -5587,14 +5587,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Step E: read IncrementalRestoreItem rows. Each row identifies a
-        // per-sub-op binding between an originalOpId and an allocated TxId.
-        // Items already bound to a TxId still tracked by Self->Operations are
-        // restored to InFlightItems with the TxIdToIncrementalRestore reverse
-        // mapping. Orphan items (WaitTxId=Invalid, or TxId no longer in
-        // Operations) are dropped — the orchestrator's TEvProgressIncrementalRestore
-        // re-entry will re-enqueue them via the existing PendingTables/dispatch
-        // path.
+        // Restore InFlightItems for sub-ops still tracked by Self->Operations.
+        // Orphans are dropped; the orchestrator's re-entry re-enqueues them.
         {
             auto irow = db.Table<Schema::IncrementalRestoreItem>().Range().Select();
             if (!irow.IsReady()) {
@@ -5631,10 +5625,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     state.WaitTxIdToItemSeq[waitTxId] = itemSeq;
                     Self->TxIdToIncrementalRestore[TTxId(waitTxId)] = originalOpId;
                 } else {
-                    // Either WaitTxId was never bound, or the modify-scheme
-                    // sub-op did not survive the reboot. Drop the row; the
-                    // orchestrator's re-entry will re-enqueue from PendingTables
-                    // (rebuilt from backup-collection contents).
+                    // Sub-op didn't survive reboot. Drop; re-entry will re-enqueue.
                     db.Table<Schema::IncrementalRestoreItem>()
                         .Key(originalOpId, itemSeq).Delete();
                 }
@@ -5644,12 +5635,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
-            // A Finalizing row with no live finalize InFlightItem (Kind=Finalize)
-            // means the finalize sub-op did not survive the reboot. Reset to
-            // Running so TTxProgressIncrementalRestore re-triggers the Finalizing
-            // transition with a fresh allocator-supplied TxId. Re-execution is
-            // safe: SyncIndexSchemaVersions and ReleasePathState are no-ops the
-            // second time.
+            // Finalizing without a live finalize InFlightItem: the finalize
+            // sub-op did not survive the reboot. Reset to Running so the
+            // orchestrator re-triggers the Finalizing transition. Safe:
+            // SyncIndexSchemaVersions and ReleasePathState are idempotent.
             if (state.State == TIncrementalRestoreState::EState::Finalizing) {
                 bool finalizeStillInFlight = false;
                 for (const auto& [_, item] : state.InFlightItems) {

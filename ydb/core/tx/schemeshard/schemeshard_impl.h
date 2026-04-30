@@ -1299,11 +1299,8 @@ public:
         NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
-    // Persists a per-sub-op IncrementalRestoreItem row, stashes the prebuilt
-    // ModifyScheme request on the in-memory TItem, and asynchronously requests
-    // a TxId via TxAllocatorClient. Cookie packs (originalOpId<<32 | itemSeq)
-    // so the TEvAllocateResult handler can bind to the exact item even when
-    // multiple allocations are in flight concurrently.
+    // Cookie packs (originalOpId<<32 | itemSeq) so concurrent allocations bind
+    // to the right item.
     void EnqueueIncrementalRestoreItem(
         ui64 originalOpId,
         TIncrementalRestoreState& state,
@@ -1313,11 +1310,8 @@ public:
         NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
-    // Removes all IncrementalRestoreItem rows for the given originalOpId,
-    // sweeps TxIdToIncrementalRestore entries pointing to it, and (when
-    // `state` is non-null) clears in-memory PendingItems / InFlightItems /
-    // WaitTxIdToItemSeq. Called from PersistIncrementalRestoreTerminalState
-    // (terminal sweep) and from TIncrementalRestore::TTxForget (FORGET path).
+    // Drops all IncrementalRestoreItem rows for originalOpId and clears the
+    // matching in-memory bookkeeping when `state` is non-null.
     void CleanupIncrementalRestoreItems(
         ui64 originalOpId,
         NIceDb::TNiceDb& db,

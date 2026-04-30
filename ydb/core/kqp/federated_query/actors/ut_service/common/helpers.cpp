@@ -30,7 +30,7 @@ namespace NKikimr::NKqp {
         auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
         const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, "/Root", secretNames, promise);
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
-        actorSystem->Send(MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
+        actorSystem->Send(NKikimr::NSecrets::MakeDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
         return promise;
     }
 

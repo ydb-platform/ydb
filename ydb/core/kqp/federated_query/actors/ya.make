@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/protos
+    ydb/core/security/secret
     ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard

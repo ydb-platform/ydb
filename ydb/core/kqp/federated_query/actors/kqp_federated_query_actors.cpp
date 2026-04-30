@@ -1,7 +1,6 @@
 #include "kqp_federated_query_actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -451,7 +450,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
     if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
         actorSystem->Send(
-            MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
+            NKikimr::NSecrets::MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
             new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
         );
         return promise.GetFuture();

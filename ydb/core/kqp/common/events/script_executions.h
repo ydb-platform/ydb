@@ -431,29 +431,6 @@ struct TEvSaveScriptFinalStatusResponse : public TEventLocal<TEvSaveScriptFinalS
     NYql::TIssues Issues;
 };
 
-struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsResponse, TKqpScriptExecutionEvents::EvDescribeSecretsResponse> {
-    struct TDescription {
-        TDescription(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {}
-
-        TDescription(const std::vector<TString>& secretValues)
-            : SecretValues(secretValues)
-            , Status(Ydb::StatusIds::SUCCESS)
-        {}
-
-        std::vector<TString> SecretValues;
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
-
-    TEvDescribeSecretsResponse(const TDescription& description)
-        : Description(description)
-    {}
-
-    TDescription Description;
-};
 
 struct TEvDescribeResourceIdResponse : public TEventLocal<TEvDescribeResourceIdResponse, TKqpScriptExecutionEvents::EvDescribeResourceIdResponse> {
     struct TDescription {

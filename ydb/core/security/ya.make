@@ -40,5 +40,6 @@ RECURSE(
     certificate_check
     ldap_auth_provider
     sasl
+    secret
     util
 )

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/security/secret/events.h>
+#include <ydb/core/security/secret/service_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -17,6 +19,8 @@
 #include <util/generic/hash_multi_map.h>
 
 namespace NKikimr::NKqp {
+
+using TEvDescribeSecretsResponse = NKikimr::NSecrets::TEvDescribeSecretsResponse;
 
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {
 public:

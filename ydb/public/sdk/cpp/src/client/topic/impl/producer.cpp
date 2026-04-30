@@ -142,6 +142,9 @@ std::string TProducer::TSplittedPartitionWorker::GetStateName() const {
 }
 
 void TProducer::TSplittedPartitionWorker::DoWork() {
+    // Must be called while TProducer::GlobalLock is held. After this worker's
+    // lock is released below, we mutate producer-level workers and partitions
+    // that are protected by GlobalLock.
     std::vector<WrappedWriteSessionPtr> writeSessionsToCloseOnError;
     std::vector<std::uint32_t> writeSessionPartitionsToDestroy;
     bool handleGotMaxSeqNo = false;
@@ -296,9 +299,9 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
     }
 
     std::vector<std::uint32_t> children;
-    auto splittedPartitionIt = Producer->Partitions.find(PartitionId);
-    Y_ABORT_UNLESS(splittedPartitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
-    Producer->PartitionsIndex.erase(splittedPartitionIt->second.FromBound_);
+    std::vector<decltype(partitions.begin())> childDescribeInfos;
+    children.reserve(newPartitionsIds.size());
+    childDescribeInfos.reserve(newPartitionsIds.size());
 
     for (const auto& newPartitionId : newPartitionsIds) {
         auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
@@ -314,13 +317,22 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
             MoveTo(EState::Failed);
             return;
         }
+        children.push_back(newPartitionId);
+        childDescribeInfos.push_back(partitionDescribeInfo);
+    }
+
+    auto splittedPartitionIt = Producer->Partitions.find(PartitionId);
+    Y_ABORT_UNLESS(splittedPartitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
+    Producer->PartitionsIndex.erase(splittedPartitionIt->second.FromBound_);
+
+    for (const auto& partitionDescribeInfo : childDescribeInfos) {
+        auto newPartitionId = partitionDescribeInfo->GetPartitionId();
         Producer->PartitionsIndex[partitionDescribeInfo->GetFromBound().value_or("")] = newPartitionId;
         Producer->Partitions[newPartitionId] = TPartitionInfo()
             .PartitionId(newPartitionId)
             .FromBound(partitionDescribeInfo->GetFromBound().value_or(""))
             .ToBound(partitionDescribeInfo->GetToBound())
             .Locked(true);
-        children.push_back(newPartitionId);
     }
 
     splittedPartitionIt->second.Children(children);
@@ -1048,7 +1060,9 @@ void TProducer::TMessagesWorker::HandleReadyInitSeqNoFutures() {
 
         auto gotMaxSeqNo = it->second.GetValue();
         CurrentSeqNo = std::max(CurrentSeqNo, gotMaxSeqNo);
-        Producer->Partitions[partition].CachedMaxSeqNo = gotMaxSeqNo;
+        auto partitionIt = Producer->Partitions.find(partition);
+        Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", partition);
+        partitionIt->second.CachedMaxSeqNo = gotMaxSeqNo;
         InitGetMaxSeqNoFutures.erase(it);
     }
 
@@ -1778,7 +1792,10 @@ TProducer::~TProducer() {
             ShutdownPromise.TrySetValue();
         }
 
-        ShutdownFuture.Wait();
+        // Bounded wait to avoid hanging the destructor indefinitely if
+        // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
+        // or the state machine never reaches Idle).
+        ShutdownFuture.Wait(TDuration::Seconds(30));
     } catch (...) {
         // Destructors must not throw.
     }

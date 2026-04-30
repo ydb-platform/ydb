@@ -60,7 +60,7 @@
     };
     "coordinator" = {
         "session_inactivity_timeout_sec" = 1800;
-        "worker_deadline_lease_sec" = 25;
+        "worker_deadline_lease_sec" = 5;
         "health_check_interval_sec" = 1;
         "idempotency_key_store_time_sec" = 10;
         "time_to_sleep_between_clear_key_requests_sec" = 1;

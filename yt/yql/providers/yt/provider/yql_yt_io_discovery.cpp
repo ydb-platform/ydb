@@ -383,6 +383,7 @@ public:
                     .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                     .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                     .LangVer(State_->Types->LangVer)
+                    .RuntimeSettings(State_->Types->RuntimeSettings)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());

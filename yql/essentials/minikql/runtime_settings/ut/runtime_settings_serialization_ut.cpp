@@ -9,6 +9,7 @@ Y_UNIT_TEST_SUITE(TRuntimeSettingsSerializationTest) {
 Y_UNIT_TEST(Serialization) {
     auto config = MakeIntrusive<TRuntimeSettingsConfiguration>();
     config->DatumValidation.Set(true);
+    config->TestHostSetting.Set(true);
     config->SetUdfSetting("MyModule", "Key", "Val");
 
     const TString data = SerializeRuntimeSettingsToString(*config);
@@ -16,9 +17,13 @@ Y_UNIT_TEST(Serialization) {
     NProto::TRuntimeSettings proto;
     UNIT_ASSERT(proto.ParseFromString(data));
 
-    UNIT_ASSERT_VALUES_EQUAL(proto.HostSettingsSize(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(proto.GetHostSettings(0).GetName(), "DatumValidation");
-    UNIT_ASSERT_VALUES_EQUAL(proto.GetHostSettings(0).GetValue(), "true");
+    THashMap<TString, TString> hostSettings;
+    for (const auto& s : proto.GetHostSettings()) {
+        hostSettings[s.GetName()] = s.GetValue();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(proto.HostSettingsSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(hostSettings.at("DatumValidation"), "true");
+    UNIT_ASSERT_VALUES_EQUAL(hostSettings.at("TestHostSetting"), "true");
 
     UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetModule(), "MyModule");
@@ -29,9 +34,12 @@ Y_UNIT_TEST(Serialization) {
 
 Y_UNIT_TEST(Deserialization) {
     NProto::TRuntimeSettings proto;
-    auto* hostSetting = proto.AddHostSettings();
-    hostSetting->SetName("DatumValidation");
-    hostSetting->SetValue("true");
+    auto* datumValidation = proto.AddHostSettings();
+    datumValidation->SetName("DatumValidation");
+    datumValidation->SetValue("true");
+    auto* testHostSetting = proto.AddHostSettings();
+    testHostSetting->SetName("TestHostSetting");
+    testHostSetting->SetValue("true");
 
     auto* udfSettings = proto.AddUdfSettings();
     udfSettings->SetModule("MyModule");
@@ -45,6 +53,7 @@ Y_UNIT_TEST(Deserialization) {
     auto config = CreateRuntimeSettingsFromString(data, TString{}, nullptr);
 
     UNIT_ASSERT_VALUES_EQUAL(config->DatumValidation.Get(), true);
+    UNIT_ASSERT_VALUES_EQUAL(config->TestHostSetting.Get(), true);
     UNIT_ASSERT_VALUES_EQUAL(config->GetUdfSetting("MyModule", "Key"), "Val");
     UNIT_ASSERT_VALUES_EQUAL(config->GetUdfSetting("MyModule", "Key2"), "");
     UNIT_ASSERT_VALUES_EQUAL(config->GetUdfSetting("MyModule2", "Key"), "");

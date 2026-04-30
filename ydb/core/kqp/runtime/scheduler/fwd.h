@@ -55,6 +55,11 @@ namespace NKikimr::NKqp::NScheduler {
     using TSchedulableTaskPtr = std::shared_ptr<TSchedulableTask>;
     using TSchedulableTaskList = std::list<std::pair<TSchedulableTaskPtr::weak_type, std::atomic<bool> /* isThrottled */>>;
 
+    struct TSchedulableRead;
+    class TSchedulableReadFactory;
+    using TSchedulableReadPtr = std::shared_ptr<TSchedulableRead>;
+    using TSchedulableReadFactoryPtr = std::unique_ptr<TSchedulableReadFactory>;
+
     // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
     struct TDelayParams {
         const TDuration MaxDelay;

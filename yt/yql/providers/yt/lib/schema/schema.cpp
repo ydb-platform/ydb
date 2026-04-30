@@ -145,12 +145,10 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
 static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& hasYson, ui64& nativeYtTypeFlags) {
     if (raw.IsString()) {
         if (raw.AsString() == "null") {
-            nativeYtTypeFlags |= NTCF_NULL;
             return NYT::TNode().Add("NullType");
         }
 
         if (raw.AsString() == "void") {
-            nativeYtTypeFlags |= NTCF_VOID;
             return NYT::TNode().Add("VoidType");
         }
 
@@ -227,22 +225,22 @@ static NYT::TNode ConvertNativeYtType(const NYT::TNode& raw, bool root, bool& ha
                    .Add(list));
         }
     } else if (typeName == "tagged") {
-        nativeYtTypeFlags |= NTCF_COMPLEX;
         auto tag = raw["tag"].AsString();
-        if (tag == "_EmptyList") {
-            return NYT::TNode().Add("EmptyListType");
-        }
-
-        if (tag == "_EmptyDict") {
-            return NYT::TNode().Add("EmptyDictType");
-        }
-
         if (tag == "_Void") {
             return NYT::TNode().Add("VoidType");
         }
 
         if (tag == "_Null") {
             return NYT::TNode().Add("NullType");
+        }
+
+        nativeYtTypeFlags |= NTCF_COMPLEX;
+        if (tag == "_EmptyList") {
+            return NYT::TNode().Add("EmptyListType");
+        }
+
+        if (tag == "_EmptyDict") {
+            return NYT::TNode().Add("EmptyDictType");
         }
 
         return NYT::TNode()
@@ -923,15 +921,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             YQL_ENSURE(false, "Not supported variant base type: " << base[0].AsString());
         }
     } else if ((*type)[0] == TStringBuf("VoidType")) {
-        if (nativeYtTypeFlags & NTCF_VOID) {
-            return NYT::TNode("void");
-        }
-        return NYT::TNode::CreateMap({
-            {"type_name", "tagged"},
-            {"tag", "_Void"},
-            {"item", "null"}
-        });
-
+        return NYT::TNode("void");
     } else if ((*type)[0] == TStringBuf("EmptyListType")) {
         return NYT::TNode::CreateMap({
             {"type_name", "tagged"},
@@ -945,14 +935,7 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             {"item", "null"}
         });
     } else if ((*type)[0] == TStringBuf("NullType")) {
-        if (nativeYtTypeFlags & NTCF_NULL) {
-            return NYT::TNode("null");
-        }
-        return NYT::TNode::CreateMap({
-            {"type_name", "tagged"},
-            {"tag", "_Null"},
-            {"item", "null"}
-        });
+        return NYT::TNode("null");
     } else if ((*type)[0] == TStringBuf("TaggedType")) {
         return NYT::TNode::CreateMap()
             ("type_name", "tagged")

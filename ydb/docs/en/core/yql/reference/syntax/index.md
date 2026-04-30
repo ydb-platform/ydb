@@ -141,6 +141,14 @@
 * [DROP TRANSFER](drop-transfer.md)
 
 {% endif %}
+{% if feature_backup_collections %}
+
+* [CREATE BACKUP COLLECTION](create-backup-collection.md)
+* [BACKUP](backup.md)
+* [RESTORE](restore-backup-collection.md)
+* [DROP BACKUP COLLECTION](drop-backup-collection.md)
+
+{% endif %}
 
 * [COMMIT](commit.md)
 

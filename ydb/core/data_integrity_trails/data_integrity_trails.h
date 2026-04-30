@@ -3,14 +3,14 @@
 #include <util/stream/str.h>
 
 #include <ydb/core/protos/data_integrity_trails.pb.h>
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
 
 struct TTLILogMessage {
     TStringStream Text;
-    NStructLog::TStructuredMessage Struct;
+    NStructuredLog::TStructuredMessage Struct;
 };
 
 /*
@@ -44,7 +44,7 @@ struct TTLILogMessage {
 inline void LogKeyValue(const TStringBuf key, const TStringBuf value, TTLILogMessage& ss, bool last = false) {
     ss.Text << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ", ");
 
-    NKikimr::NStructLog::TKeyName keyName(key);
+    NKikimr::NStructuredLog::TKeyName keyName(key);
     ss.Struct.AppendValue({std::move(keyName)}, TString(value));
 }
 

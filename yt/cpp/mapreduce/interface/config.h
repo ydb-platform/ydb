@@ -291,6 +291,9 @@ struct TConfig
     /// Pattern for generating operation web link in |GetOperationWebInterfaceUrl|.
     TPatchableField<TString> OperationLinkPattern = TPatchableField<TString>("operation_link_pattern", "https://yt.yandex-team.ru/{cluster_ui_host}/operations/{operation_id}");
 
+    /// Allow to create trace_id on client side and propogate with request
+    bool EnableClientTracing = true;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);

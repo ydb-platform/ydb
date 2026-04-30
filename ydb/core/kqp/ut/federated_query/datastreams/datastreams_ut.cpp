@@ -1138,23 +1138,35 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        ++DynamicNodeCount;
+        auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
-        constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
+        constexpr char cloudId[] =  "testcloud4";
 
-        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
-        CreateTopic(inputTopicName);
-        constexpr char secretPath[] = "eds_iam_token";
-        ExecQuery(fmt::format(R"(
-            CREATE SECRET {secret} WITH (value = "{token}");
-            )",
-            "secret"_a = secretPath,
-            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
-            ));
+        constexpr char sourceName[] = "sourceName";
+        constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
+        constexpr char serviceAccountId[] = "foobar"; // not verified
 
-        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
-        constexpr char pqSourceName[] = "sourceNameCloud";
-        ExecQuery(fmt::format(R"(
+        // Prepare "mock cloud" database
+        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto location = GetKikimrRunner()->GetEndpoint();
+        {
+            NYdb::TDriver driver(
+                NYdb::TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase(databasePath)
+            );
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            auto result = topicClient.CreateTopic(topicName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        constexpr char missingSecretPath[] = "eds_missing_iam_token";
+
+        // Check missing INITIAL_TOKEN secret
+        constexpr auto createExternalDataSourceTemplate = R"(
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{pq_location}",
@@ -1162,15 +1174,64 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 AUTH_METHOD = "IAM",
                 INITIAL_TOKEN_SECRET_PATH = "{secret}",
                 SERVICE_ACCOUNT_ID = "{service_account_id}"
-            );)",
-            "pq_source"_a = pqSourceName,
-            "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE,
+            );)";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = missingSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::BAD_REQUEST,
+            fmt::format(
+                R"(Error: secret `/Root/{secret}` not found)",
+                "secret"_a = missingSecretPath));
+
+        // Check bad INITIAL_TOKEN
+        constexpr char badSecretPath[] = "eds_bad_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
+            "secret"_a = badSecretPath,
+            "token"_a = "xyz@builtin"
+            ));
+
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNAUTHORIZED, "Error: Access denied");
+
+        constexpr char secretPath[] = "eds_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
             "secret"_a = secretPath,
-            "service_account_id"_a = serviceAccountId
+            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
+            ));
+
+        // Check successful EDS creation
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
         ));
+
+        // Verify EDS description
         {
-            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/" + std::string(pqSourceName), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -1185,7 +1246,39 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT(iam.HasResourceId());
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
-        // cannot verify use without some kind of "mock IAM"
+
+        // Cannot verify successful use without some kind of "mock IAM"
+        // Check with disabled feature-flag
+        {
+            auto& runtime = GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableExternalDataSourceAuthMethodIam(false);
+            appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(false);
+
+            UpdateConfig(appConfig);
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // a) Attempt to use existing EDS fails
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+
+        // b) Attempt to create new EDS fails
+        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNSUPPORTED,
+            "Error: AUTH_METHOD=IAM is disabled");
     }
 }
 

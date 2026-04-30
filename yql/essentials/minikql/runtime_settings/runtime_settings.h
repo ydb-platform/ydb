@@ -40,6 +40,9 @@ struct TRuntimeSettings {
 
     // =============================== Host settings ===============================
     TRuntimeSetting<bool> DatumValidation{false};
+    // Noop feature.
+    // Used for testing only.
+    TRuntimeSetting<bool> TestHostSetting{false};
     // =============================== Host settings end ===========================
     using TUdfSettings = THashMap<TString, TString>;
 

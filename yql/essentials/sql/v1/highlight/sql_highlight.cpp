@@ -270,8 +270,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
 } // namespace NSQLHighlight
 
 template <>
-void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind kind) {
-    switch (kind) {
+void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind value) {
+    switch (value) {
         case NSQLHighlight::EUnitKind::Keyword:
             out << "keyword";
             break;

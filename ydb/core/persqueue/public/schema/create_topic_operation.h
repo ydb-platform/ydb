@@ -14,6 +14,7 @@ public:
     virtual const TString& GetTopicName() const = 0;
 
     virtual TResult ApplyChanges(
+        const TString& localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig

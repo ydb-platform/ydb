@@ -4,11 +4,13 @@
 
 Подробно будут разобраны операции:
 
-* [Подключение к YDB](#connect-ydb)
-* [Создание таблицы для хранения векторов](#create-table)
-* [Вставка векторов в таблицу](#insert-vectors)
-* [Добавление векторного индекса](#add-vector-index)
-* [Поиск ближайших векторов](#search-by-vector)
+- [Векторный поиск](#векторный-поиск)
+  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
+  - [Создание таблицы](#create-table)
+  - [Вставка векторов](#insert-vectors)
+  - [Добавление индекса](#add-vector-index)
+  - [Поиск по вектору](#search-by-vector)
+  - [Итоговый пример](#full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -1003,8 +1005,7 @@
             ],
         )
 
-      ```python
-      import ydb
+    ```
 
     {% endcut %}
 
@@ -1046,21 +1047,19 @@
                 ),
             ],
         )
-
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
+        pool.execute_with_retries(query)
+        driver.table_client.alter_table(
+            f"{driver._driver_config.database}/{table_name}",
+            rename_indexes=[
+                ydb.RenameIndexItem(
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
+                    replace_destination=True,
+                ),
+            ],
+        )
+        print(f"Table index {index_name} created.")
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1106,8 +1105,6 @@
 
           print(f"Table index {index_name} created.")
       ```
-
-    {% endlist %}
 
 - C++
 

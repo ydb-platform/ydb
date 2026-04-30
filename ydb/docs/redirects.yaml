@@ -508,6 +508,10 @@ ru:
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
 en:
   - from: /concepts/query_execution/index.md

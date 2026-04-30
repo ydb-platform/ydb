@@ -34,6 +34,7 @@ SRCS(
     secret_settings.cpp
     select_yql.cpp
     select_yql_aggregation.cpp
+    select_yql_window.cpp
     select.cpp
     source.cpp
     sql.cpp

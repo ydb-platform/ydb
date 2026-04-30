@@ -6,8 +6,8 @@
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/kqp/common/events/events.h>
 
-#include <ydb/core/util/struct_log/create_message.h>
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {

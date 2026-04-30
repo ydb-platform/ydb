@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/util/struct_log/create_message.h>
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -11,7 +11,7 @@
 using namespace NMonitoring;
 using namespace NActors;
 using namespace NActors::NLog;
-using namespace NKikimr::NStructLog;
+using namespace NKikimr::NStructuredLog;
 
 namespace {
     const TString& ServiceToString(int) {
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
     }
 
     Y_UNIT_TEST(WriteWithContext) {
-        using namespace NKikimr::NStructLog;
+        using namespace NKikimr::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
     }
 
     Y_UNIT_TEST(WriteWithContext) {
-        using namespace NKikimr::NStructLog;
+        using namespace NKikimr::NStructuredLog;
 
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);

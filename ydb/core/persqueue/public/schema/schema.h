@@ -122,7 +122,6 @@ struct TCreateTopicSettings {
     TString PeerName;
     Ydb::Topic::CreateTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString LocalDc;
     ui64 Cookie = 0;
 };
 

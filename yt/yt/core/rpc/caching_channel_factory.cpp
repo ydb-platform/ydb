@@ -220,7 +220,7 @@ private:
                     lastActivityTime,
                     IdleChannelTtl_);
                 expiredItems.emplace_back(std::move(it->first), std::move(channel));
-                *it = std::move(TtlCheckQueue_.back());
+                std::swap(*it, TtlCheckQueue_.back());
                 TtlCheckQueue_.pop_back();
             } else {
                 ++it;

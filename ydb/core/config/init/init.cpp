@@ -207,7 +207,7 @@ class TDefaultNodeBrokerClient
             const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, nodeRegistrationToken);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -353,11 +353,11 @@ RetryResult RetryWithJitter(
         ui64 multiplier = 1ULL << exponent;
         TDuration delay = baseDelay * multiplier;
         delay = Min(delay, maxDelay);
-        
+
         ui64 maxMs = delay.MilliSeconds();
         ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
         TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
-        
+
         env.Sleep(jitteredDelay);
     };
 
@@ -370,22 +370,22 @@ RetryResult RetryWithJitter(
         for (const auto& addr : addrs) {
             success = attempt(addr);
             ++totalAttempts;
-            
+
             if (success) {
                 break;
             }
-            
+
             // Exponential delay between individual addresses - delay grows with each address in the round
             if (addrs.size() > 1) {
                 sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
             }
-            
+
             ++addressIndex;
         }
-        
+
         if (!success) {
             ++round;
-            
+
             if (round < maxRounds) {
                 sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
             }
@@ -462,8 +462,8 @@ public:
         const auto result = RetryWithJitter(addrs, env, attempt);
 
         if (!result.Success) {
-            logger.Err() << "WARNING: couldn't load config from Console after " 
-                        << result.TotalAttempts << " attempts across " << result.Rounds 
+            logger.Err() << "WARNING: couldn't load config from Console after "
+                        << result.TotalAttempts << " attempts across " << result.Rounds
                         << " rounds: " << error << Endl;
         }
 
@@ -475,7 +475,7 @@ class TConfigResultWrapper
     : public IStorageConfigResult
 {
 public:
-    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString()) 
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString())
         : Success(result.IsSuccess())
         , TransportError(result.IsTransportError())
         , Endpoint(result.GetEndpoint())
@@ -599,8 +599,8 @@ private:
         const auto retryResult = RetryWithJitter(addrs, env, attempt);
 
         if (!retryResult.Success) {
-             logger.Err() << "WARNING: couldn't fetch config from Console after " 
-                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
+             logger.Err() << "WARNING: couldn't fetch config from Console after "
+                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds
                         << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
         }
         return {*result, sourceAddress};
@@ -971,7 +971,7 @@ void UpdateConfigUpdateTracer(
     }
 }
 
-NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::string& database, const std::optional<TString>& authToken) {
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdb::TDriverConfig config;
     if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
@@ -984,6 +984,7 @@ NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, con
             config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
         }
     }
+    config.SetDatabase(database);
     if (authToken) {
         config.SetAuthToken(authToken.value());
     }

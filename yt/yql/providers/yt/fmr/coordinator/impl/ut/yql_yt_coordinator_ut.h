@@ -15,12 +15,15 @@
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
 
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
 
 struct TFmrTestSetup {
 
     TFmrTestSetup(ui64 fileStorageNumThreads = 3) {
+        NLog::InitLogger(&Cerr);
+        NLog::YqlLogger().SetComponentLevel(NLog::EComponent::FastMapReduce, NLog::ELevel::TRACE);
         TFileStorageConfig fsConfig;
         fsConfig.SetThreads(fileStorageNumThreads);
         FileStorage = WithAsync(CreateFileStorage(fsConfig, {}));

@@ -70,10 +70,6 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             default:
                 return NTCF_NONE;
             }
-        case ETypeAnnotationKind::Null:
-            return NTCF_NULL;
-        case ETypeAnnotationKind::Void:
-            return NTCF_VOID;
         case ETypeAnnotationKind::Optional:
             return NTCF_COMPLEX | GetNativeYtTypeFlagsImpl(itemType->Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::List:
@@ -103,6 +99,8 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
         case ETypeAnnotationKind::EmptyDict:
         case ETypeAnnotationKind::EmptyList:
             return NTCF_COMPLEX;
+        case ETypeAnnotationKind::Null:
+        case ETypeAnnotationKind::Void:
         case ETypeAnnotationKind::World:
         case ETypeAnnotationKind::Unit:
         case ETypeAnnotationKind::Universal:
@@ -124,6 +122,24 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             break;
     }
     return NTCF_NONE;
+}
+
+NYT::TNode FilterSchemaColumns(const NYT::TNode& origSchema, const NYT::TNode& filterSchema) {
+    THashSet<TString> filterColumns;
+    for (const auto& entry : filterSchema.AsList()) {
+        YQL_ENSURE(entry.HasKey("name"), "No 'name' in schema tuple");
+        filterColumns.insert(entry["name"].AsString());
+    }
+
+    NYT::TNode filteredSchema = NYT::TNode::CreateList();
+    for (const auto& entry : origSchema.AsList()) {
+        YQL_ENSURE(entry.HasKey("name"), "No 'name' in schema tuple");
+        if (filterColumns.contains(entry["name"].AsString())) {
+            filteredSchema.Add(entry);
+        }
+    }
+
+    return filteredSchema;
 }
 
 }
@@ -148,23 +164,6 @@ ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMem
     }
     flags &= ~NTCF_NO_YT_SUPPORT;
     return flags;
-}
-
-void UpdateNativeYtTypeFlags(NYT::TNode& spec, ui64 nativeTypeCompat) {
-    if (spec.HasKey(YqlRowSpecAttribute)) {
-        auto& rowSpec = spec[YqlRowSpecAttribute];
-        ui64 nativeYtTypeFlags = 0;
-        if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
-            nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
-        } else {
-            if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-            } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-            }
-        }
-        rowSpec[RowSpecAttrNativeYtTypeFlags] = ui64(nativeYtTypeFlags & nativeTypeCompat);
-    }
 }
 
 TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers) {
@@ -232,7 +231,7 @@ bool TYqlRowSpecInfo::ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap
     if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
         return false;
     }
-    ParseFlags(schemaAsRowSpec);
+    ParseFlagsFromNativeSchema(schemaAsRowSpec);
 
     auto typePatch = NCommon::ParseTypeFromYson(rowSpecAttr[RowSpecAttrTypePatch], ctx, ctx.GetPosition(pos));
     if (!typePatch) {
@@ -320,7 +319,6 @@ bool TYqlRowSpecInfo::ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap
     }
 
     ParseColumnOrder(rowSpecAttr);
-    ParseFlags(rowSpecAttr);
     ParseDefValues(rowSpecAttr);
     ParseConstraints(rowSpecAttr);
     ParseConstraintsNode(ctx);
@@ -332,13 +330,15 @@ bool TYqlRowSpecInfo::ParseFull(const NYT::TNode& rowSpecAttr, const THashMap<TS
         return false;
     }
     ParseColumnOrder(rowSpecAttr);
-    ParseFlags(rowSpecAttr);
     ParseDefValues(rowSpecAttr);
     ParseConstraints(rowSpecAttr);
     ParseConstraintsNode(ctx);
 
     if (auto schemaAttr = attrs.FindPtr(SCHEMA_ATTR_NAME)) {
         auto schema = NYT::NodeFromYsonString(*schemaAttr);
+        auto schemaAsRowSpec = YTSchemaToRowSpec(schema);
+        ParseFlagsFromNativeSchema(schemaAsRowSpec);
+
         auto modeAttr = schema.GetAttributes()[SCHEMA_MODE_ATTR_NAME];
         const bool weak = !modeAttr.IsUndefined() && modeAttr.AsString() == "weak";
         // Validate type for non weak schema only
@@ -414,23 +414,30 @@ bool TYqlRowSpecInfo::Parse(const THashMap<TString, TString>& attrs, TExprContex
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
                 return false;
             }
-            ParseFlags(schemaAsRowSpec);
-        } else if (auto readSchema = attrs.FindPtr(READ_SCHEMA_ATTR_NAME)) {
+            // inferred schema does not contain native yt types
+        } else if (auto readSchemaAttr = attrs.FindPtr(READ_SCHEMA_ATTR_NAME)) {
+            NYT::TNode readSchema = NYT::NodeFromYsonString(*readSchemaAttr);
+            NYT::TNode schema;
             TYTSortInfo sortInfo;
             if (auto schemaAttr = attrs.FindPtr(SCHEMA_ATTR_NAME)) {
-                sortInfo = KeyColumnsFromSchema(NYT::NodeFromYsonString(*schemaAttr));
+                schema = NYT::NodeFromYsonString(*schemaAttr);
+                sortInfo = KeyColumnsFromSchema(schema);
             }
-            auto schemaAsRowSpec = YTSchemaToRowSpec(NYT::NodeFromYsonString(*readSchema), &sortInfo);
+            auto schemaAsRowSpec = YTSchemaToRowSpec(readSchema, &sortInfo);
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
                 return false;
             }
-            ParseFlags(schemaAsRowSpec);
+            if (!schema.IsUndefined()) {
+                // Derive native YT type flags from actual YT schema columns used by read schema
+                auto filteredSchema = FilterSchemaColumns(schema, readSchema);
+                ParseFlagsFromNativeSchema(YTSchemaToRowSpec(filteredSchema));
+            }
         } else if (auto schema = attrs.FindPtr(SCHEMA_ATTR_NAME)) {
             auto schemaAsRowSpec = YTSchemaToRowSpec(NYT::NodeFromYsonString(*schema));
             if (!ParseType(schemaAsRowSpec, ctx, pos) || !ParseSort(schemaAsRowSpec, ctx, pos)) {
                 return false;
             }
-            ParseFlags(schemaAsRowSpec);
+            ParseFlagsFromNativeSchema(schemaAsRowSpec);
         } else {
             YQL_LOG_CTX_THROW yexception() << "Table has no supported schema attributes";
         }
@@ -549,6 +556,10 @@ void TYqlRowSpecInfo::ParseFlags(const NYT::TNode& rowSpecAttr) {
     if (NativeYtTypeFlags) {
         NativeYtTypeFlags &= NYql::GetNativeYtTypeFlags(*Type);
     }
+}
+
+void TYqlRowSpecInfo::ParseFlagsFromNativeSchema(const NYT::TNode& schemaAsRowSpec) {
+    NativeYtTypeFlags = schemaAsRowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
 }
 
 void TYqlRowSpecInfo::ParseDefValues(const NYT::TNode& rowSpecAttr) {
@@ -1067,14 +1078,11 @@ NYT::TNode TYqlRowSpecInfo::GetTypeNode(const NCommon::TStructMemberMapper& mapp
     return typeNode;
 }
 
-void TYqlRowSpecInfo::SetType(const TStructExprType* type, TMaybe<ui64> nativeYtTypeFlags) {
+void TYqlRowSpecInfo::SetType(const TStructExprType* type, ui64 nativeTypeCompatibility) {
     Type = type;
     Columns = {};
     TypeNode = {};
-    if (nativeYtTypeFlags) {
-        NativeYtTypeFlags = *nativeYtTypeFlags;
-    }
-    NativeYtTypeFlags &= NYql::GetNativeYtTypeFlags(*Type);
+    NativeYtTypeFlags = NYql::GetNativeYtTypeFlags(*Type) & nativeTypeCompatibility;
 }
 
 void TYqlRowSpecInfo::SetColumnOrder(const TMaybe<TColumnOrder>& columns) {
@@ -1302,7 +1310,7 @@ void TYqlRowSpecInfo::FillCodecNode(NYT::TNode& attrs, const NCommon::TStructMem
     FillColumnOrder(attrs);
 }
 
-void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibility, bool useCompactForm) const {
+void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const {
     attrs = NYT::TNode::CreateMap();
 
     if (!useCompactForm) {
@@ -1326,7 +1334,7 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibili
                 itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
             }
             auto flags = GetNativeYtTypeFlagsImpl(itemType);
-            if (flags != (flags & NativeYtTypeFlags & nativeTypeCompatibility)) {
+            if (flags != (flags & NativeYtTypeFlags)) {
                 patchedFields.insert(item->GetName());
             }
         }

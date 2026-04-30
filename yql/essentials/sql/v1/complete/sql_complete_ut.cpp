@@ -774,13 +774,12 @@ Y_UNIT_TEST(SelectFromWithUse) {
     {
         TVector<TCandidate> expected = {
             {.Kind = TableName, .Content = "`maxim`"},
-            {.Kind = BindingName, .Content = "$hello"},
             {.Kind = ClusterName, .Content = "example"},
             {.Kind = ClusterName, .Content = "loggy"},
             {.Kind = ClusterName, .Content = "saurus"},
             {.Kind = Keyword, .Content = "ANY"},
         };
-        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, R"(
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, R"(
                 USE example;
                 DEFINE ACTION $hello() AS
                     USE yt:saurus;
@@ -1728,7 +1727,6 @@ Y_UNIT_TEST(ColumnFromNamedNode) {
         prefix + R"sql(SELECT # FROM $source)sql",
         prefix + R"sql(SELECT * FROM $source WHERE #)sql",
         prefix + R"sql(SELECT * FROM $source GROUP BY #)sql",
-        prefix + R"sql(SELECT * FROM $source AS x FROM x.#)sql",
     };
 
     TVector<TCandidate> expected = {
@@ -1753,6 +1751,41 @@ Y_UNIT_TEST(ColumnFromIndirectNamedNode) {
 
     TVector<TCandidate> expected = {
         {.Kind = ColumnName, .Content = "a"},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+}
+
+Y_UNIT_TEST(TableFromRedefinedNamedNode) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString query = R"sql(
+        USE example;
+        $x = '/pe';
+        $x = $x || 'op';
+        $x = $x || 'le';
+        SELECT # FROM $x;
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {.Kind = ColumnName, .Content = "Age"},
+        {.Kind = ColumnName, .Content = "Name"},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+}
+
+Y_UNIT_TEST(TableAtRedefinedNamedNode) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString query = R"sql(
+        USE example;
+        $x = '/people';
+        $x = SELECT a# FROM $x;
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {.Kind = ColumnName, .Content = "Age"},
     };
 
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);

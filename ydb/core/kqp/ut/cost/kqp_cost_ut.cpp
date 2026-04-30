@@ -470,8 +470,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
-                {"/Root/Vectors", 24}
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 31},
+                {"/Root/Vectors", 31}
             });
         }
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 31},
             });
         }
 

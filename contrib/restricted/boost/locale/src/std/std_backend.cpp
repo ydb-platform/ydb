@@ -121,6 +121,7 @@ namespace boost { namespace locale { namespace impl_std {
 
             if(!data_.is_utf8()) {
                 utf_mode_ = utf8_support::none;
+                name_ = "C";
                 if(loadable(lid))
                     name_ = lid;
                 else if(l_win && loadable(l_win.name)) {
@@ -128,15 +129,19 @@ namespace boost { namespace locale { namespace impl_std {
                         name_ = l_win.name;
                     else {
                         int codepage_int;
-                        if(util::try_to_int(l_win.codepage, codepage_int)
-                           && codepage_int == util::encoding_to_windows_codepage(data_.encoding()))
-                        {
-                            name_ = l_win.name;
-                        } else
-                            name_ = "C";
+                        if(util::try_to_int(l_win.codepage, codepage_int)) {
+                            if(codepage_int == util::encoding_to_windows_codepage(data_.encoding()))
+                                name_ = l_win.name;
+                            else if(codepage_int == util::encoding_to_windows_codepage("windows-1252")
+                                    && util::are_encodings_equal(data_.encoding(), "ISO8859-1"))
+                                name_ = l_win.name; // windows-1252 is superset of ISO8859-1
+                            else if(codepage_int == util::encoding_to_windows_codepage("windows-1255")
+                                    && util::are_encodings_equal(data_.encoding(), "ISO8859-8"))
+                                name_ = l_win.name; // windows-1255 is superset of ISO8859-8
+                        }
                     }
-                } else
-                    name_ = "C";
+                }
+
             } else {
                 if(loadable(lid)) {
                     name_ = lid;

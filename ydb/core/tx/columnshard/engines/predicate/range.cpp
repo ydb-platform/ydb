@@ -31,9 +31,18 @@ bool TPKRangeFilter::IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema
     if (PredicateFrom.IsAll() || PredicateTo.IsAll()) {
         return false;
     }
+    if (!PredicateFrom.IsSchemaEqualTo(pkSchema) || !PredicateTo.IsSchemaEqualTo(pkSchema)) {
+        return false;
+    }
+    if (PredicateFrom.NumColumns() != PredicateTo.NumColumns()) {
+        return false;
+    }
+    if ((i64)PredicateFrom.NumColumns() != pkSchema->num_fields()) {
+        return false;
+    }
     return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
-            PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
-            PredicateFrom.IsSchemaEqualTo(pkSchema);
+            PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL &&
+            PredicateFrom.IsEqualPointTo(PredicateTo);
 }
 
 

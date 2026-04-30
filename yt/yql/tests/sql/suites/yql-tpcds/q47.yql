@@ -1,6 +1,6 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: Window function Rank */
+/* custom error: No such column: avg_monthly_sales */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -68,11 +68,11 @@ $v2 = (
         v1_lag.sum_sales AS psum,
         v1_lead.sum_sales AS nsum
     FROM
-        v1
+        $v1 AS v1
     ,
-        v1 AS v1_lag
+        $v1 AS v1_lag
     ,
-        v1 AS v1_lead
+        $v1 AS v1_lead
     WHERE
         v1.i_category == v1_lag.i_category
         AND v1.i_category == v1_lead.i_category

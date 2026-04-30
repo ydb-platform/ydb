@@ -89,6 +89,23 @@ const char* BuildTableWithOverlapIn = R"(UPSERT INTO `/Root/table-main`
 )";
 
 const char* BuildToBuildWithOverlapOut =
+    "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.08298983986, embedding = \x10\x80\x02, data = one\n"
+    "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0.004212607855, embedding = \x80\x10\x02, data = two\n"
+    "key = 3, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.03127728353, embedding = \x10\x10\x02, data = three\n"
+    "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.08034868813, embedding = \x11\x81\x02, data = four\n"
+    "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.07995177147, embedding = \x11\x80\x02, data = five\n"
+    "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0.003622927127, embedding = \x81\x11\x02, data = aaa\n"
+    "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0.004300553754, embedding = \x81\x10\x02, data = bbbb\n"
+    "key = 8, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.03923787087, embedding = \x11\x10\x02, data = ccccc\n"
+    "key = 9, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.02420563656, embedding = \x10\x11\x02, data = dddd\n"
+    "key = 10, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0.0364222051, embedding = \x11\x09\x02, data = eee\n"
+    "key = 11, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.001139017482, embedding = \x09\x11\x02, data = ffff\n"
+    "key = 12, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.03127728353, embedding = \x09\x09\x02, data = ggggg\n"
+    "key = 13, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.03127728353, embedding = \x11\x11\x02, data = hhhh\n"
+    "key = 14, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.03127728353, embedding = \x12\x12\x02, data = 1414\n"
+    "key = 15, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.03046508777, embedding = \x12\x09\x02, data = 1515\n";
+
+const char* BuildToBuildWithOverlapOutReshuffle =
     "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.008950848554, embedding = \x10\x80\x02, data = one\n"
     "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0.0001086457909, embedding = \x80\x10\x02, data = two\n"
     "key = 3, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0.1357536248, embedding = \x10\x10\x02, data = three\n"

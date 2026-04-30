@@ -41,7 +41,6 @@ SRCS(
     simple_cache_ut.cpp
     spsc_circular_queue_ut.cpp
     stlog_ut.cpp
-    struct_log_ut.cpp
     token_bucket_ut.cpp
     ui64id_ut.cpp
     ulid_ut.cpp

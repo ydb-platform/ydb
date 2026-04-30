@@ -668,7 +668,8 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         outMembers.insert(x->Content());
     }
 
-    // TODOD: remove ExtractMembers pushdown to inputs when FieldSubsetEnableMultiusage is enabled
+    // TODO: this code can be simplified - no need to duplicate the logic of AggregateSubsetFieldsAnalyzer here
+    // ApplyExtractMembersToAggregate can simply remove unneded payloads - the remaining will be done by AggregateSubsetFieldsAnalyzer
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(aggr.Settings().Ref(), "session");
     if (sessionSetting) {

@@ -1,6 +1,16 @@
 // NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
+Y_UNIT_TEST(Syntax) {
+    TCases cases = {
+        {"--!syntax_v0\nselect 1", "--!syntax_v0\nselect 1"},
+        {"--!syntax_v1\nselect 1", "--!syntax_v1\nSELECT\n\t1\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
         {"pragma user = user;", "PRAGMA user = user;\n"},

@@ -92,6 +92,15 @@ def get_gateway_cfg_filename():
         return 'gateways-' + suffix + '.conf'
 
 
+def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
+    """Merge gateway config patch from a file path, if it exists."""
+    if not patch_cfg_file:
+        return
+    if os.path.exists(patch_cfg_file):
+        with open(patch_cfg_file) as f:
+            text_format.Merge(f.read(), gateway_config)
+
+
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
 
     with open(yql_source_path(os.path.join(cfg_dir, 'gateways.conf'))) as f:
@@ -583,6 +592,13 @@ def is_canonize_yt(cfg):
         if item[0] == 'canonize_yt':
             return True
     return False
+
+
+def get_gateway_cfg_patch(cfg):
+    for item in cfg:
+        if item[0] == 'gateway_cfg_patch':
+            return item[1]
+    return None
 
 
 def is_with_final_result_issues(cfg):

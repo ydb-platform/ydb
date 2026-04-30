@@ -1,5 +1,9 @@
 #include "base_test_fixture.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
+
+#include <ydb/core/base/appdata_fwd.h>
+
 #include <util/random/fast.h>
 
 using namespace NKikimr;

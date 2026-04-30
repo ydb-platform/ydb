@@ -6,7 +6,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -15,7 +15,7 @@
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
-            NKikimr::NStructLog::TStructuredMessage auditStructMessage;                                                         \
+            NKikimr::NStructuredLog::TStructuredMessage auditStructMessage;                                                         \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
             YDBLOG_COMP_NOTICE(AUDIT_LOG_WRITER, "Audit event", auditStructMessage);                                            \

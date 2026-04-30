@@ -8,7 +8,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 // This class represents a physical builder for OpAggregate, it emits a physical aggreation based on a given OpAggregate.
-class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
+class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
         TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
@@ -35,11 +35,11 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
 
 public:
     TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+        : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
         , Aggregate(aggregate) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
 
 private:
     // Following functions creates a 4 lambdas for physical aggregation:

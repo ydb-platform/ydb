@@ -5,7 +5,12 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
+#include <yt/yt/core/tracing/trace_context.h>
+
 #include <library/cpp/yson/node/node_io.h>
+
+#include <util/stream/format.h>
+#include <util/string/builder.h>
 
 namespace NYT {
 
@@ -98,6 +103,23 @@ void LogRequest(const THttpHeader& header, const TString& url, bool includeParam
         requestId,
         hostName,
         GetLoggedAttributes(header, url, includeParameters, Max<size_t>()));
+}
+
+TString FormatTraceParentHeader(const NTracing::TTraceId& traceId, const NTracing::TSpanId& spanId)
+{
+    // Formatting according to W3C traceparent header format
+    // See https://www.w3.org/TR/trace-context/#traceparent-header for more detailed info
+    TString traceparent = ::TStringBuilder()
+        << "00-"
+        << Hex(traceId.Parts32[3], HF_FULL)
+        << Hex(traceId.Parts32[2], HF_FULL)
+        << Hex(traceId.Parts32[1], HF_FULL)
+        << Hex(traceId.Parts32[0], HF_FULL)
+        << "-"
+        << Hex(spanId, HF_FULL)
+        << "-01";
+    traceparent.to_lower();
+    return traceparent;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

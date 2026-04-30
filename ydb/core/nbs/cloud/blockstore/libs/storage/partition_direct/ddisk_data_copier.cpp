@@ -8,6 +8,9 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;

@@ -19,6 +19,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/settings/translation_sql_flags.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -411,6 +412,9 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TTypeAnnotationContext();
+    ~TTypeAnnotationContext() override;
+
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TLangVersion LangVer = MinLangVersion;
@@ -506,6 +510,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
+    TRuntimeSettings::TPtr RuntimeSettings;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

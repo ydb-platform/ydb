@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
 
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
         { // no connect right (for the ordinary user)

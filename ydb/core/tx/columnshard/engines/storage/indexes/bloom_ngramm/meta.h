@@ -1,6 +1,6 @@
 #pragma once
 
-#include "const.h"
+#include <ydb/core/local_indexes/bloom/const.h>
 
 #include <optional>
 
@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+
+using namespace NKikimr::NLocalIndex::NBloom;
 
 class TIndexMeta: public TSkipBitmapIndex {
 public:

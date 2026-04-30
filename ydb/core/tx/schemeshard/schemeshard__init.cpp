@@ -5842,7 +5842,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         bool anyErrors = false;
         bool anySkipped = false;
 
-        for (const TPathId& tablePathId : Self->ColumnTables.GetAllPathIds()) {
+        for (const auto& tablePathId : Self->ColumnTables.GetAllPathIds()) {
             const TColumnTableInfo& tableInfo = *Self->ColumnTables.at(tablePathId);
 
             if (!tableInfo.IsStandalone()) {

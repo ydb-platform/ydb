@@ -2829,9 +2829,6 @@ void TLocalBloomFilterSettings::SerializeTo(Ydb::Table::LocalBloomFilterIndex& p
 TLocalBloomNgramFilterSettings TLocalBloomNgramFilterSettings::FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto) {
     TLocalBloomNgramFilterSettings settings;
     settings.NgramSize = proto.ngram_size();
-    settings.HashesCount = proto.hashes_count();
-    settings.FilterSizeBytes = proto.filter_size_bytes();
-    settings.RecordsCount = proto.records_count();
     if (proto.has_case_sensitive()) {
         settings.CaseSensitive = proto.case_sensitive();
     }
@@ -2844,15 +2841,6 @@ TLocalBloomNgramFilterSettings TLocalBloomNgramFilterSettings::FromProto(const Y
 void TLocalBloomNgramFilterSettings::SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const {
     if (NgramSize != 0) {
         proto.set_ngram_size(NgramSize);
-    }
-    if (HashesCount != 0) {
-        proto.set_hashes_count(HashesCount);
-    }
-    if (FilterSizeBytes != 0) {
-        proto.set_filter_size_bytes(FilterSizeBytes);
-    }
-    if (RecordsCount != 0) {
-        proto.set_records_count(RecordsCount);
     }
     if (CaseSensitive) {
         proto.set_case_sensitive(*CaseSensitive);

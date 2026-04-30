@@ -20,7 +20,7 @@
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>

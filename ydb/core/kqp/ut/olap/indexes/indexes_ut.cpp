@@ -8,7 +8,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
@@ -2387,7 +2387,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
         UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
 
-        constexpr ui64 MaxFilterSizeBytes = NOlap::NIndexes::NBloomNGramm::TConstants::MaxFilterSizeBytes;
+        constexpr ui64 MaxFilterSizeBytes = NLocalIndex::NBloom::TConstants::MaxFilterSizeBytes;
 
         auto sizes = csController->GetCompactionIndexBlobSizes();
         UNIT_ASSERT_C(!sizes.empty(), "Compaction should produce at least one index blob");

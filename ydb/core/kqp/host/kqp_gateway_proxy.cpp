@@ -10,7 +10,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -614,18 +614,6 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 ngram->SetColumnId(columnIdIt->second);
                 if (settings.NgramSize) {
                     ngram->SetNGrammSize(*settings.NgramSize);
-                }
-
-                if (settings.HashesCount) {
-                    ngram->SetHashesCount(*settings.HashesCount);
-                }
-
-                if (settings.FilterSizeBytes) {
-                    ngram->SetFilterSizeBytes(*settings.FilterSizeBytes);
-                }
-
-                if (settings.RecordsCount) {
-                    ngram->SetRecordsCount(*settings.RecordsCount);
                 }
 
                 if (settings.CaseSensitive) {

@@ -28,6 +28,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/docapi
+    ydb/core/local_indexes/bloom
     ydb/core/scheme
     ydb/core/kqp/query_data
     ydb/library/aclib

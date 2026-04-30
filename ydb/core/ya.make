@@ -35,6 +35,7 @@ RECURSE(
     keyvalue
     kqp
     load_test
+    local_indexes
     local_pgwire
     local_proxy
     log_backend

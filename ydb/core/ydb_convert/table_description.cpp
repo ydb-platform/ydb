@@ -8,7 +8,7 @@
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <util/generic/hash_set.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
@@ -1665,25 +1665,9 @@ void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterInd
     const NKikimrSchemeOp::TIndexDescription& tableIndex
 ) {
     if (tableIndex.HasBloomNGrammFilterDescription()) {
-        const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
-        if (desc.HasFalsePositiveProbability()) {
-            settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
-        }
-        if (desc.HasNGrammSize()) {
-            settings.set_ngram_size(desc.GetNGrammSize());
-        }
-        if (desc.HasHashesCount()) {
-            settings.set_hashes_count(desc.GetHashesCount());
-        }
-        if (desc.HasFilterSizeBytes()) {
-            settings.set_filter_size_bytes(desc.GetFilterSizeBytes());
-        }
-        if (desc.HasRecordsCount()) {
-            settings.set_records_count(desc.GetRecordsCount());
-        }
-        if (desc.HasCaseSensitive()) {
-            settings.set_case_sensitive(desc.GetCaseSensitive());
-        }
+        const auto request = NKikimr::NLocalIndex::NBloom::TRequestSettings::FromProtoFilter(
+            tableIndex.GetBloomNGrammFilterDescription());
+        request.SerializeToPublicProto(settings);
     }
 }
 

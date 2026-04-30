@@ -26,7 +26,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
-if PDISK_SIZE_STR.endswith("GB"):
+if PDISK_SIZE_STR.endswith("KB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024
+elif PDISK_SIZE_STR.endswith("MB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024
+elif PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)

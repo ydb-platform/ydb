@@ -135,34 +135,7 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     } else if (!request->MTlsClientCertificate.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
-        return nullptr;
-    }
-}
-
-NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) {
-    if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided",
-                {})
-        );
-    } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                {},
-                {},
-                token,
-                {}
-            )
-        );
-    } else {
-        return nullptr;
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
     }
 }
 
@@ -230,11 +203,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
 }
 
 NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
-    if (eventHandle != nullptr) {
-        return eventHandle;
-    }
-    return GetAuthorizeTicketResult(owner);
+    return SelectAuthorizationScheme(owner, request);
 }
 
 // compatibility layer

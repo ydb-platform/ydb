@@ -176,7 +176,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/ver': {
-        None: 200,
+        None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
@@ -200,7 +200,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/static/css/bootstrap.min.css': {
-        None: 200,
+        None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
@@ -216,7 +216,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/internal': {
-        None: 200,
+        None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
@@ -224,7 +224,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/actors/': {
-        None: 200,
+        None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,

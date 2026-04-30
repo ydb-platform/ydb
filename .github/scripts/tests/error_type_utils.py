@@ -72,7 +72,12 @@ def is_verify_classification(source_error_type, status_description=None, verify_
     if _normalize_text(source_error_type).upper() == "VERIFY":
         return True
 
-    verify_text = verify_source_text if verify_source_text is not None else status_description
+    status_desc = _normalize_text(status_description)
+    if verify_source_text is None:
+        return is_verify_issue(status_desc)
+
+    stderr_text = _normalize_text(verify_source_text).strip()
+    verify_text = stderr_text if stderr_text else status_desc
     return is_verify_issue(verify_text)
 
 

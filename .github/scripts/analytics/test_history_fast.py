@@ -102,7 +102,11 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     stderr_urls = [row.get("stderr") for row in results]
     stderr_fetch_cache = prefetch_texts_by_urls(stderr_urls)
     if stderr_urls:
-        norm_urls = {normalize_fetch_url(u) for u in stderr_urls if normalize_fetch_url(u)}
+        norm_urls = set()
+        for u in stderr_urls:
+            nu = normalize_fetch_url(u)
+            if nu:
+                norm_urls.add(nu)
         total_urls = len(norm_urls)
         failed_count = sum(1 for url in norm_urls if not stderr_fetch_cache.get(url))
         print(f"stderr prefetch: done, total={total_urls}, success={total_urls - failed_count}, failed={failed_count}")

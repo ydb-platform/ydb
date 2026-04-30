@@ -275,7 +275,7 @@ class TDropPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }
@@ -358,11 +358,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (path.IsResolved() && path.Base()->IsPQGroup() && path.Base()->PlannedToDrop()) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
@@ -391,19 +391,19 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
 
         if (dropPolicy != NKikimrSchemeOp::EDropFailOnChanges) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, "drop policy isn't supported", context);
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, context);
             return result;
         }
 
@@ -411,7 +411,7 @@ public:
         Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter", context);
             return result;
         }
 
@@ -445,7 +445,10 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
         }
 
+        // Activate main tx state machine
         SetState(NextState());
+        context.OnComplete.ActivateTx(OperationId);
+
         return result;
     }
 

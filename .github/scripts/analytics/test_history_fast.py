@@ -3,71 +3,12 @@
 import ydb
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
-from tempfile import NamedTemporaryFile
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 from ydb_wrapper import YDBWrapper
 
 TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
 if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
-from error_type_utils import classify_error_type  # noqa: E402
-
-
-_STDERR_FETCH_TIMEOUT_SEC = 5
-_STDERR_MAX_BYTES = 1024 * 1024
-_STDERR_FETCH_MAX_WORKERS = 100
-
-
-def _fetch_stderr_text(stderr_url):
-    if not stderr_url:
-        return ""
-
-    tmp_file_path = None
-    try:
-        with urllib_request.urlopen(stderr_url, timeout=_STDERR_FETCH_TIMEOUT_SEC) as response:
-            with NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
-                tmp_file_path = tmp_file.name
-                tmp_file.write(response.read(_STDERR_MAX_BYTES + 1))
-
-        with open(tmp_file_path, "rb") as tmp_file:
-            stderr_bytes = tmp_file.read(_STDERR_MAX_BYTES + 1)
-
-        stderr_text = stderr_bytes[:_STDERR_MAX_BYTES].decode("utf-8", errors="replace")
-    except (urllib_error.URLError, TimeoutError, ValueError):
-        stderr_text = ""
-    finally:
-        if tmp_file_path:
-            try:
-                os.remove(tmp_file_path)
-            except OSError:
-                pass
-
-    return stderr_text
-
-
-def _prefetch_stderr_texts(stderr_urls, fetch_cache):
-    unique_urls = [url for url in set(stderr_urls) if url and url not in fetch_cache]
-    if not unique_urls:
-        print("stderr prefetch: no urls to download")
-        return
-
-    workers = min(_STDERR_FETCH_MAX_WORKERS, len(unique_urls))
-    print(f"stderr prefetch: downloading {len(unique_urls)} urls with {workers} workers")
-    failed_count = 0
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_url = {pool.submit(_fetch_stderr_text, url): url for url in unique_urls}
-        for future, url in future_to_url.items():
-            try:
-                stderr_text = future.result()
-                fetch_cache[url] = stderr_text
-                if not stderr_text:
-                    failed_count += 1
-            except Exception:
-                fetch_cache[url] = ""
-                failed_count += 1
-    print(f"stderr prefetch: done, success={len(unique_urls) - failed_count}, failed={failed_count}")
+from error_type_utils import classify_error_type, prefetch_texts_by_urls  # noqa: E402
 
 
 def create_test_history_fast_table(ydb_wrapper, table_path):
@@ -158,8 +99,14 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
 
     print(f'missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
-    stderr_fetch_cache = {}
-    _prefetch_stderr_texts([row.get("stderr") for row in results], stderr_fetch_cache)
+    stderr_urls = [row.get("stderr") for row in results]
+    stderr_fetch_cache = prefetch_texts_by_urls(stderr_urls)
+    if stderr_urls:
+        total_urls = len({url for url in stderr_urls if url})
+        failed_count = sum(1 for url in {url for url in stderr_urls if url} if not stderr_fetch_cache.get(url))
+        print(f"stderr prefetch: done, total={total_urls}, success={total_urls - failed_count}, failed={failed_count}")
+    else:
+        print("stderr prefetch: no urls to download")
     verify_count = 0
     for row in results:
         stderr_url = row.get("stderr")

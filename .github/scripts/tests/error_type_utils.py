@@ -1,4 +1,14 @@
 import re
+import os
+from concurrent.futures import ThreadPoolExecutor
+from tempfile import NamedTemporaryFile
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+
+
+DEFAULT_FETCH_TIMEOUT_SEC = 5
+DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
+DEFAULT_FETCH_MAX_WORKERS = 100
 
 
 def _normalize_text(value):
@@ -52,6 +62,55 @@ def is_verify_issue(error_text):
     return bool(re.search(r'\bVERIFY\s+failed\b', error_text, re.IGNORECASE))
 
 
+def is_verify_classification(source_error_type, status_description=None, verify_source_text=None):
+    if _normalize_text(source_error_type).upper() == "VERIFY":
+        return True
+
+    verify_text = verify_source_text if verify_source_text is not None else status_description
+    return is_verify_issue(verify_text)
+
+
+def fetch_text_by_url(url, timeout_sec=DEFAULT_FETCH_TIMEOUT_SEC, max_bytes=DEFAULT_FETCH_MAX_BYTES):
+    if not url:
+        return ""
+
+    tmp_file_path = None
+    try:
+        with urllib_request.urlopen(url, timeout=timeout_sec) as response:
+            with NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
+                tmp_file_path = tmp_file.name
+                tmp_file.write(response.read(max_bytes + 1))
+
+        with open(tmp_file_path, "rb") as tmp_file:
+            data = tmp_file.read(max_bytes + 1)
+        return data[:max_bytes].decode("utf-8", errors="replace")
+    except (urllib_error.URLError, TimeoutError, ValueError, OSError):
+        return ""
+    finally:
+        if tmp_file_path:
+            try:
+                os.remove(tmp_file_path)
+            except OSError:
+                pass
+
+
+def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_FETCH_MAX_WORKERS):
+    cache = existing_cache if existing_cache is not None else {}
+    unique_urls = [url for url in set(urls) if url and url not in cache]
+    if not unique_urls:
+        return cache
+
+    workers = min(max_workers, len(unique_urls))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_url = {pool.submit(fetch_text_by_url, url): url for url in unique_urls}
+        for future, url in future_to_url.items():
+            try:
+                cache[url] = future.result()
+            except Exception:
+                cache[url] = ""
+    return cache
+
+
 def is_not_launched_issue(source_error_type, status_name=None):
     if _normalize_text(source_error_type).upper() != "NOT_LAUNCHED":
         return False
@@ -70,8 +129,7 @@ def classify_error_type(status, status_description, source_error_type, verify_so
     if is_timeout_issue(source_error_type):
         return "TIMEOUT"
 
-    verify_text = verify_source_text if verify_source_text is not None else status_description
-    if is_verify_issue(verify_text):
+    if is_verify_classification(source_error_type, status_description, verify_source_text):
         return "VERIFY"
 
     return ""

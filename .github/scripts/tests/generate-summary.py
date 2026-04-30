@@ -11,7 +11,13 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
-from error_type_utils import is_sanitizer_issue, is_timeout_issue, is_not_launched_issue
+from error_type_utils import (
+    is_sanitizer_issue,
+    is_timeout_issue,
+    is_not_launched_issue,
+    is_verify_classification,
+    prefetch_texts_by_urls,
+)
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -56,9 +62,11 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    stderr_url: str = ""
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_verify_issue: bool = False
     is_not_launched: bool = False
 
     @property
@@ -173,9 +181,11 @@ class TestResult:
             count_of_passed=0,
             owners='',
             status_description=status_description or '',
+            stderr_url=log_urls.get('stderr', ''),
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
             is_timeout_issue=is_timeout_issue(error_type),
+            is_verify_issue=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
             is_not_launched=is_not_launched_issue(error_type, status.name)
         )
@@ -565,6 +575,7 @@ def iter_build_results_files(path):
 
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
+    stderr_fetch_cache = {}
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -572,6 +583,18 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         for fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
+
+        stderr_fetch_cache = prefetch_texts_by_urls(
+            [test.stderr_url for test in summary_line.tests],
+            existing_cache=stderr_fetch_cache,
+        )
+        for test in summary_line.tests:
+            stderr_text = stderr_fetch_cache.get(test.stderr_url, "")
+            test.is_verify_issue = is_verify_classification(
+                test.error_type,
+                test.status_description,
+                verify_source_text=stderr_text,
+            )
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

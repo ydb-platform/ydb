@@ -1,5 +1,6 @@
 import re
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from tempfile import NamedTemporaryFile
 from urllib import error as urllib_error
@@ -9,6 +10,8 @@ from urllib import request as urllib_request
 DEFAULT_FETCH_TIMEOUT_SEC = 5
 DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
 DEFAULT_FETCH_MAX_WORKERS = 100
+DEFAULT_FETCH_MAX_ATTEMPTS = 3
+DEFAULT_FETCH_RETRY_DELAY_SEC = 0.5
 
 
 def _normalize_text(value):
@@ -70,28 +73,39 @@ def is_verify_classification(source_error_type, status_description=None, verify_
     return is_verify_issue(verify_text)
 
 
-def fetch_text_by_url(url, timeout_sec=DEFAULT_FETCH_TIMEOUT_SEC, max_bytes=DEFAULT_FETCH_MAX_BYTES):
+def fetch_text_by_url(
+    url,
+    timeout_sec=DEFAULT_FETCH_TIMEOUT_SEC,
+    max_bytes=DEFAULT_FETCH_MAX_BYTES,
+    max_attempts=DEFAULT_FETCH_MAX_ATTEMPTS,
+    retry_delay_sec=DEFAULT_FETCH_RETRY_DELAY_SEC,
+):
     if not url:
         return ""
 
-    tmp_file_path = None
-    try:
-        with urllib_request.urlopen(url, timeout=timeout_sec) as response:
-            with NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
-                tmp_file_path = tmp_file.name
-                tmp_file.write(response.read(max_bytes + 1))
+    for attempt in range(max_attempts):
+        tmp_file_path = None
+        try:
+            with urllib_request.urlopen(url, timeout=timeout_sec) as response:
+                with NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
+                    tmp_file_path = tmp_file.name
+                    tmp_file.write(response.read(max_bytes + 1))
 
-        with open(tmp_file_path, "rb") as tmp_file:
-            data = tmp_file.read(max_bytes + 1)
-        return data[:max_bytes].decode("utf-8", errors="replace")
-    except (urllib_error.URLError, TimeoutError, ValueError, OSError):
-        return ""
-    finally:
-        if tmp_file_path:
-            try:
-                os.remove(tmp_file_path)
-            except OSError:
-                pass
+            with open(tmp_file_path, "rb") as tmp_file:
+                data = tmp_file.read(max_bytes + 1)
+            return data[:max_bytes].decode("utf-8", errors="replace")
+        except (urllib_error.URLError, TimeoutError, ValueError, OSError):
+            if attempt < max_attempts - 1:
+                time.sleep(retry_delay_sec)
+            continue
+        finally:
+            if tmp_file_path:
+                try:
+                    os.remove(tmp_file_path)
+                except OSError:
+                    pass
+
+    return ""
 
 
 def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_FETCH_MAX_WORKERS):

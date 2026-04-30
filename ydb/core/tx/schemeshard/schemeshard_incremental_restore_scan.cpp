@@ -608,7 +608,7 @@ void TSchemeShard::DispatchPendingTables(
           << " cap=" << cap);
 }
 
-void TSchemeShard::TrackSubOpAndExpectedShards(
+void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
     TOperationId subOpId,
     TPathId tablePathId,
     ui64 incrementalRestoreId,
@@ -680,7 +680,7 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
         TPathId tablePathId = (itemPath.IsResolved() && itemPath.Base()->IsTable())
             ? itemPath.Base()->PathId
             : TPathId{};
-        TrackSubOpAndExpectedShards(tableRestoreOpId, tablePathId, operationId, stateIt->second);
+        TrackIncrementalRestoreSubOpAndExpectedShards(tableRestoreOpId, tablePathId, operationId, stateIt->second);
         LOG_I("Table operation " << tableRestoreOpId << " expects "
               << stateIt->second.TableOperations[tableRestoreOpId].ExpectedShards.size() << " shards");
         LOG_I("Tracking operation " << tableRestoreOpId << " for incremental restore " << operationId);
@@ -902,7 +902,7 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt != IncrementalRestoreStates.end()) {
-        TrackSubOpAndExpectedShards(indexRestoreOpId, indexImplTablePathId, operationId, stateIt->second);
+        TrackIncrementalRestoreSubOpAndExpectedShards(indexRestoreOpId, indexImplTablePathId, operationId, stateIt->second);
         LOG_I("Index operation " << indexRestoreOpId << " expects "
               << stateIt->second.TableOperations[indexRestoreOpId].ExpectedShards.size() << " shards");
         LOG_I("Tracking index operation " << indexRestoreOpId << " for incremental restore " << operationId);

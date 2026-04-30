@@ -1311,7 +1311,7 @@ public:
         const TActorContext& ctx);
 
     // Registers the sub-op in orchestrator maps and seeds ExpectedShards from the table's shards.
-    void TrackSubOpAndExpectedShards(
+    void TrackIncrementalRestoreSubOpAndExpectedShards(
         TOperationId subOpId,
         TPathId tablePathId,
         ui64 incrementalRestoreId,

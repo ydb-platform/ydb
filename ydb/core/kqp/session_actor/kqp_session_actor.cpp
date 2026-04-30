@@ -1927,6 +1927,7 @@ public:
                 }
             }
             request.TopicOperations = std::move(txCtx.TopicOperations);
+            request.TopicOperations.SetSkipConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || txCtx.EnableOlapSink.value_or(false))) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 

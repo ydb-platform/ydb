@@ -16,6 +16,8 @@
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
+#include <algorithm>
+
 namespace NYql::NSo {
 
 using namespace yandex::cloud::priv::monitoring::v3;

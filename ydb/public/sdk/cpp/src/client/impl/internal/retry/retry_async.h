@@ -29,8 +29,6 @@ public:
     TAsyncStatusType Execute() {
         ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
 
-        [[maybe_unused]] auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
-
         this->RetryStartTime_ = TInstant::Now();
         TPtr self(this);
         DoRetry(self);
@@ -74,9 +72,11 @@ protected:
     virtual TAsyncStatusType RunOperation() = 0;
 
     static void DoRetry(TPtr self) {
+        [[maybe_unused]] auto parentScope = self->ParentSpan_ ? self->ParentSpan_->Activate() : nullptr;
+
         self->StartAttemptSpan();
 
-        [[maybe_unused]] auto scope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
+        [[maybe_unused]] auto attemptScope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
         self->Retry();
     }
 

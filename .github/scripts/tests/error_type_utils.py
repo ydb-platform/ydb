@@ -1,8 +1,6 @@
 import re
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor
-from tempfile import NamedTemporaryFile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
@@ -84,26 +82,14 @@ def fetch_text_by_url(
         return ""
 
     for attempt in range(max_attempts):
-        tmp_file_path = None
         try:
             with urllib_request.urlopen(url, timeout=timeout_sec) as response:
-                with NamedTemporaryFile(mode="wb", delete=False) as tmp_file:
-                    tmp_file_path = tmp_file.name
-                    tmp_file.write(response.read(max_bytes + 1))
-
-            with open(tmp_file_path, "rb") as tmp_file:
-                data = tmp_file.read(max_bytes + 1)
+                data = response.read(max_bytes + 1)
             return data[:max_bytes].decode("utf-8", errors="replace")
         except (urllib_error.URLError, TimeoutError, ValueError, OSError):
             if attempt < max_attempts - 1:
                 time.sleep(retry_delay_sec)
             continue
-        finally:
-            if tmp_file_path:
-                try:
-                    os.remove(tmp_file_path)
-                except OSError:
-                    pass
 
     return ""
 
@@ -117,7 +103,8 @@ def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_FETCH_
     workers = min(max_workers, len(unique_urls))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_url = {pool.submit(fetch_text_by_url, url): url for url in unique_urls}
-        for future, url in future_to_url.items():
+        for future in as_completed(future_to_url):
+            url = future_to_url[future]
             try:
                 cache[url] = future.result()
             except Exception:

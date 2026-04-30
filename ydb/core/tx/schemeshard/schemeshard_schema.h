@@ -2217,9 +2217,6 @@ struct Schema : NIceDb::Schema {
         struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
         struct FinalStatus : Column<5, NScheme::NTypeIds::Uint32> {};
         struct FinalIssues : Column<6, NScheme::NTypeIds::String> {};
-        // Column<7> previously held FinalizeTxId; per-item finalize is now tracked
-        // via the IncrementalRestoreItem table (Table<133>). The column id is left
-        // unallocated to avoid silent reuse on the same physical storage.
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<

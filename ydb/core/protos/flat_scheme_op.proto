@@ -2530,7 +2530,7 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
-    reserved 7;  // formerly InvolvedShards (never written; cleanup paths key by OperationId)
+    reserved 7;
 }
 
 message TChangePathState {

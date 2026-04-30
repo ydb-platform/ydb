@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/minikql/dom/json.h>
 

@@ -8,7 +8,7 @@ PEERDIR(
     library/cpp/resource
     contrib/libs/protobuf
     yql/essentials/public/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 RESOURCE(

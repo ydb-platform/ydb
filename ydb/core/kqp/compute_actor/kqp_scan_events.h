@@ -5,7 +5,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/event_local.h>

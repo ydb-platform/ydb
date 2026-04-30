@@ -16,6 +16,7 @@ SRCS(
     test_eval.cpp
     test_fatal_err.cpp
     test_pool.cpp
+    test_runtime_settings.cpp
     test_mixed_allocators.cpp
 )
 

@@ -18,7 +18,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_paths.h>

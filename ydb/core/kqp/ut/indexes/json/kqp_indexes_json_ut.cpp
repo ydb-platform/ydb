@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/json_index.h>
 
 #include <optional>
 
@@ -229,7 +230,7 @@ void FillTestTable(TQueryClient& db, const std::string& tableName, const std::st
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
+void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams params = TParamsBuilder().Build()) {
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -239,10 +240,10 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate) {
         )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
     };
 
-    auto mainResult = db.ExecuteQuery(query("", predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto mainResult = db.ExecuteQuery(query("", predicate), TTxControl::NoTx(), params).ExtractValueSync();
     UNIT_ASSERT_C(mainResult.IsSuccess(), mainResult.GetIssues().ToString());
 
-    auto indexResult = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
+    auto indexResult = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx(), params).ExtractValueSync();
     UNIT_ASSERT_C(indexResult.IsSuccess(), indexResult.GetIssues().ToString());
 
     // Cerr << "MAIN: " << Endl << FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
@@ -328,19 +329,24 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate, std::vector<
     auto op = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["DefaultOperator"].GetString();
     UNIT_ASSERT_VALUES_EQUAL_C(op, '"' + defaultOperator + '"', "for predicate = " << predicate);
 
-    auto splitTokens = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["Tokens"].GetString();
-    auto tokens = SplitString(splitTokens, ", ");
-    UNIT_ASSERT_VALUES_EQUAL_C(tokens.size(), expected.size(), "for predicate = " << predicate);
+    const auto& tokensJson = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["Tokens"];
+    UNIT_ASSERT_C(tokensJson.IsArray(), "Tokens field is not a JSON array, for predicate = " << predicate);
+    UNIT_ASSERT_VALUES_EQUAL_C(tokensJson.GetArray().size(), expected.size(), "for predicate = " << predicate);
 
     std::vector<std::string> actual;
-    for (const auto& token : tokens) {
-        actual.push_back(HexDecode(token));
+    for (const auto& t : tokensJson.GetArray()) {
+        actual.push_back(t.GetString());
+    }
+
+    std::vector<std::string> expectedFormatted;
+    for (const auto& e : expected) {
+        expectedFormatted.push_back(TString(NJsonIndex::FormatJsonIndexToken(TString(e), "")));
     }
 
     std::sort(actual.begin(), actual.end());
-    std::sort(expected.begin(), expected.end());
+    std::sort(expectedFormatted.begin(), expectedFormatted.end());
 
-    UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "for predicate = " << predicate);
+    UNIT_ASSERT_VALUES_EQUAL_C(actual, expectedFormatted, "for predicate = " << predicate);
 }
 
 TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& stmt, const std::string& tableName,

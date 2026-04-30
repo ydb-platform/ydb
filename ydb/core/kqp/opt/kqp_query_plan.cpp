@@ -855,7 +855,11 @@ private:
                 tokens.push_back(NJsonIndex::FormatJsonIndexToken(pathToken, paramName));
             }
 
-            op.Properties["Tokens"] = JoinSeq(", ", tokens);
+            auto& tokensJson = op.Properties["Tokens"];
+            tokensJson.SetType(NJson::JSON_ARRAY);
+            for (const auto& t : tokens) {
+                tokensJson.AppendValue(t);
+            }
         }
 
         NTableIndex::NFulltext::EDefaultOperator defaultOperator = NTableIndex::NFulltext::EDefaultOperator::Invalid;

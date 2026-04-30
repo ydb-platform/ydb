@@ -33,7 +33,10 @@ public:
     virtual void SetAttribute(const std::string& key, const std::string& value) = 0;
     virtual void SetAttribute(const std::string& key, int64_t value) = 0;
     virtual void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) = 0;
-    virtual std::unique_ptr<IScope> Activate() = 0;
+
+    virtual std::unique_ptr<IScope> Activate() {
+        return nullptr;
+    }
 
     virtual void SetStatus(ESpanStatus /*status*/, const std::string& /*description*/ = {}) {}
 };
@@ -45,8 +48,16 @@ public:
     virtual std::shared_ptr<ISpan> StartSpan(
         const std::string& name
         , ESpanKind kind = ESpanKind::INTERNAL
-        , ISpan* parent = nullptr
     ) = 0;
+
+    virtual std::shared_ptr<ISpan> StartSpan(
+        const std::string& name
+        , ESpanKind kind
+        , ISpan* parent
+    ) {
+        (void)parent;
+        return StartSpan(name, kind);
+    }
 };
 
 class ITraceProvider {

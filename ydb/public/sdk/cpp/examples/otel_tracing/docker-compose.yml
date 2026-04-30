@@ -1,6 +1,6 @@
 services:
   ydb:
-    image: cr.yandex/yc/yandex-docker-local-ydb:24.4
+    image: cr.yandex/yc/yandex-docker-local-ydb:25.2.1
     platform: linux/amd64
     hostname: localhost
     ports:

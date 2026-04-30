@@ -95,6 +95,13 @@ class TFakeTracer : public NTrace::ITracer {
 public:
     std::shared_ptr<NTrace::ISpan> StartSpan(
         const std::string& name,
+        NTrace::ESpanKind kind
+    ) override {
+        return StartSpan(name, kind, /*parent=*/ nullptr);
+    }
+
+    std::shared_ptr<NTrace::ISpan> StartSpan(
+        const std::string& name,
         NTrace::ESpanKind kind,
         NTrace::ISpan* parent
     ) override {

@@ -66,9 +66,9 @@ std::shared_ptr<TFakeHistogram> GetDuration(
         {"db.namespace", dbNamespace},
         {"db.operation.name", operation},
         {"ydb.client.api", "Query"},
+        {"db.response.status_code", ToString(status)},
     };
     if (status != EStatus::SUCCESS) {
-        labels["db.response.status_code"] = ToString(status);
         labels["error.type"] = std::string(NObservability::CategorizeErrorType(status));
     }
     return registry->GetHistogram("db.client.operation.duration", labels);

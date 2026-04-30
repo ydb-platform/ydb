@@ -327,9 +327,9 @@ public:
                     {"db.namespace", Database_},
                     {"db.operation.name", operationName},
                     {"ydb.client.api", YdbClientApiAttributeValue(ClientType_)},
+                    {"db.response.status_code", TStringBuilder() << status},
                 };
                 if (status != EStatus::SUCCESS) {
-                    labels["db.response.status_code"] = TStringBuilder() << status;
                     labels["error.type"] = std::string(NObservability::CategorizeErrorType(status));
                 }
                 ExternalRegistry_->Histogram(

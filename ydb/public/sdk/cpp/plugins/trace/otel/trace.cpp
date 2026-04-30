@@ -99,6 +99,10 @@ public:
         : Tracer_(std::move(tracer))
     {}
 
+    std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind) override {
+        return StartSpan(name, kind, /*parent*/ nullptr);
+    }
+
     std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind, ISpan* parent) override {
         otel_trace::StartSpanOptions options;
         options.kind = MapSpanKind(kind);

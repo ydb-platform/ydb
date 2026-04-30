@@ -1017,7 +1017,11 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         predSettings.MergeAdjacentPointRanges = false;
         predSettings.HaveNextValueCallable = true;
         predSettings.BuildLiteralRange = true;
-
+        if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
+            kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
+        {
+            predSettings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
+        }
         auto extractor = MakePredicateRangeExtractor(predSettings);
         YQL_ENSURE(tableDesc.SchemeNode);
         if (extractor->Prepare(flatMap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx)) {

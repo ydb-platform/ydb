@@ -1430,6 +1430,208 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
         UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
     }
+
+    Y_UNIT_TEST_TWIN(InPrefixLevel1, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 1, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index IN query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index IN query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(InPrefixLevel2, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 2, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index IN query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index IN query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(InParamPrefixLevel1, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10);
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 1, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            DECLARE $users AS List<String>;
+            DECLARE $target AS String;
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN $users
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            DECLARE $users AS List<String>;
+            DECLARE $target AS String;
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN $users
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$users")
+                .BeginList()
+                .AddListItem().String("user_a")
+                .AddListItem().String("user_b")
+                .EndList()
+                .Build()
+            .AddParam("$target")
+                .String("\x67\x68\x02")
+                .Build()
+            .Build();
+
+        {
+            auto result = session.ExecuteDataQuery(plainQuery,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << plainQuery << "` with " << result.GetIssues().ToString());
+
+            std::vector<i64> mainResults;
+            auto sets = result.GetResultSets();
+            for (const auto& set : sets) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    mainResults.push_back(value.GetProto().int64_value());
+                }
+            }
+            absl::c_sort(mainResults);
+            UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+            auto result2 = session.ExecuteDataQuery(indexQuery,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(),
+                "Failed to execute: `" << indexQuery << "` with " << result2.GetIssues().ToString());
+
+            std::vector<i64> indexResults;
+            auto sets2 = result2.GetResultSets();
+            for (const auto& set : sets2) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    indexResults.push_back(value.GetProto().int64_value());
+                }
+            }
+            absl::c_sort(indexResults);
+            UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+                "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+            bool hasUserA = false, hasUserB = false;
+            for (auto pk : indexResults) {
+                if (pk % 2 == 1) hasUserA = true;
+                if (pk % 2 == 0) hasUserB = true;
+            }
+            UNIT_ASSERT_C(hasUserA, "Index IN $param query returned no results from user_a");
+            UNIT_ASSERT_C(hasUserB, "Index IN $param query returned no results from user_b");
+
+            UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+        }
+    }
 }
 }
 }

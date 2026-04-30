@@ -47,9 +47,9 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes:
  * Fill stages in given txPlan with ExecutionStats fields. Each plan stage stores StageGuid which is
  * used to find corresponding TKqpStatsExecution object.
  */
-TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats);
+TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, bool newRboEnabled);
 
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, TIntrusiveConstPtr<NYql::TKikimrConfiguration> config = {}, const TString& poolId = "");
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId = "");
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans);
 

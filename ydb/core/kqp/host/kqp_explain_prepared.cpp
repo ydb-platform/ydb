@@ -146,7 +146,6 @@ public:
             const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
             NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
 
-        Y_UNUSED(query);
         Y_UNUSED(peepHoleOptimizedQuery);
         Y_UNUSED(pureTxResults);
         Y_UNUSED(database);
@@ -157,8 +156,17 @@ public:
         Y_UNUSED(optCtx);
 
         if (TransformCtx->PlanJson.has_value()) {
+            //FIXME: We set the plan for the last transaction in the query
+            auto txId = query.Transactions().Size() - 1;
+            auto & txProto = (*queryProto.MutableTransactions())[txId];
+            auto & plan = TransformCtx->PlanJson.value();
+
+            NJsonWriter::TBuf txWriter;
+            txWriter.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
+            txProto.SetPlan(txWriter.Str());
+
             NJsonWriter::TBuf writer;
-            auto plan = TransformCtx->PlanJson.value();
+            //plan = CleanUpPlan(plan);
             writer.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
             queryProto.SetQueryPlan(writer.Str());
         }

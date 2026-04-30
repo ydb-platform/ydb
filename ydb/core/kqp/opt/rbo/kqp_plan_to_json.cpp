@@ -64,11 +64,13 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
     return result;
 }
 
+[[maybe_unused]]
 void FindPlanNodes(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
     if (node.IsArray()) {
         for (const auto& item: node.GetArray()) {
             FindPlanNodes(item, key, results);
         }
+        return;
     }
 
     if (!node.IsMap()) {
@@ -229,9 +231,8 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
 }
 
 
-TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
-    Y_UNUSED(optCtx);
-    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: AddExecStatsToNewRboPlan";
+TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats) {
+    Y_UNUSED(stats);
 
     THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
     THashMap<ui32, TString> stageIdToGuid;
@@ -249,7 +250,10 @@ TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TD
     FindPlanNodes(root, "StageGuid", stageNodes);
 
     for (auto& stageGuid : stageNodes) {
-        Y_ENSURE(stageGuids.contains(stageGuid.GetStringSafe()));
+        if (!stageGuids.contains(stageGuid.GetStringSafe())) {
+            YQL_CVLOG(NYql::NLog::ELevel::WARN, NYql::NLog::EComponent::Core) << "JSON_PLAN: Stage not found: " << stageGuid.GetStringSafe();
+            return "{}";
+        }
     }
 
     return txPlan;
@@ -259,7 +263,7 @@ TString AddExecStatsToNewRboPlans(const TVector<const TString>& txPlans, const N
     Y_UNUSED(txPlans);
     Y_UNUSED(queryStats);
     Y_UNUSED(poolId);
-    return "";
+    return txPlans.at(txPlans.size()-1);
 }
 
 }

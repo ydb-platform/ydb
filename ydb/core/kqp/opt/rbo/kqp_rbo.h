@@ -106,7 +106,7 @@ public:
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 
-TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
+TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats);
 TString AddExecStatsToNewRboPlans(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");
 
 } // namespace NKqp

@@ -6,7 +6,6 @@ namespace NKikimr::NTopicHelpers {
 enum class EAuthResult {
     AuthOk,
     AccessDenied,
-    TokenRequired
 };
 
 EAuthResult CheckAccess(const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& describeEntry,

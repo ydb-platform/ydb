@@ -60,7 +60,6 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
             case NKikimr::NTopicHelpers::EAuthResult::AuthOk:
                 break;
             case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
-            case NKikimr::NTopicHelpers::EAuthResult::TokenRequired:
                 return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", authError));
         }
     }

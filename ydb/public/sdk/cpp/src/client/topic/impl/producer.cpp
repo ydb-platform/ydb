@@ -151,27 +151,34 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
     std::unique_lock lock(Lock);
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     switch (State) {
-        case EState::Init:
+        case EState::Init: {
             DescribeTopicFuture = Producer->Client->DescribeTopic(Producer->Settings.Path_, TDescribeTopicSettings());
             lock.unlock();
-            DescribeTopicFuture.Subscribe([this, producer](const NThreading::TFuture<TDescribeTopicResult>&) {
+            std::weak_ptr<TSplittedPartitionWorker> self = weak_from_this();
+            DescribeTopicFuture.Subscribe([self, producer](const NThreading::TFuture<TDescribeTopicResult>&) {
+                auto selfPtr = self.lock();
+                if (!selfPtr) {
+                    return;
+                }
+
                 auto producerPtr = producer.lock();
                 if (!producerPtr) {
                     return;
                 }
 
                 {
-                    std::lock_guard lock(Lock);
-                    MoveTo(EState::GotDescribe);
+                    std::lock_guard lock(selfPtr->Lock);
+                    selfPtr->MoveTo(EState::GotDescribe);
                 }
 
-                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(selfPtr->PartitionId));
             });
             lock.lock();
             if (State == EState::Init) {
                 MoveTo(EState::PendingDescribe);
             }
             break;
+        }
         case EState::GotDescribe:
             HandleDescribeResult();
             if (State != EState::GotDescribe) {
@@ -213,13 +220,19 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
     if (handleGotMaxSeqNo) {
         Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
         Producer->MessagesWorker->ScheduleResendMessages(PartitionId, maxSeqNo);
-        for (const auto& child : Producer->Partitions[PartitionId].Children_) {
-            Producer->Partitions[child].Locked(false);
+        auto partitionIt = Producer->Partitions.find(PartitionId);
+        Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
+        for (const auto& child : partitionIt->second.Children_) {
+            auto childIt = Producer->Partitions.find(child);
+            Y_ABORT_UNLESS(childIt != Producer->Partitions.end(), "Child partition %u not found", child);
+            childIt->second.Locked(false);
         }
-        Producer->Partitions[PartitionId].Locked_ = false;
+        partitionIt->second.Locked_ = false;
 
         for (const auto& [partitionId, cachedMaxSeqNo] : cachedMaxSeqNos) {
-            Producer->Partitions[partitionId].CachedMaxSeqNo = cachedMaxSeqNo;
+            auto cachedPartitionIt = Producer->Partitions.find(partitionId);
+            Y_ABORT_UNLESS(cachedPartitionIt != Producer->Partitions.end(), "Partition %u not found", partitionId);
+            cachedPartitionIt->second.CachedMaxSeqNo = cachedMaxSeqNo;
         }
     }
 
@@ -273,8 +286,9 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
     }
 
     std::vector<std::uint32_t> children;
-    const auto& splittedPartition = Producer->Partitions[PartitionId];
-    Producer->PartitionsIndex.erase(splittedPartition.FromBound_);
+    auto splittedPartitionIt = Producer->Partitions.find(PartitionId);
+    Y_ABORT_UNLESS(splittedPartitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
+    Producer->PartitionsIndex.erase(splittedPartitionIt->second.FromBound_);
 
     for (const auto& newPartitionId : newPartitionsIds) {
         auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
@@ -290,7 +304,7 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
         children.push_back(newPartitionId);
     }
 
-    Producer->Partitions[PartitionId].Children(children);
+    splittedPartitionIt->second.Children(children);
 }
 
 void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock) {
@@ -322,9 +336,11 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
 
     NotReadyFutures = ancestors.size();
     for (const auto& ancestor : ancestors) {
-        if (Producer->Partitions[ancestor].CachedMaxSeqNo.has_value()) {
+        auto ancestorIt = Producer->Partitions.find(ancestor);
+        Y_ABORT_UNLESS(ancestorIt != Producer->Partitions.end(), "Ancestor partition %u not found", ancestor);
+        if (ancestorIt->second.CachedMaxSeqNo.has_value()) {
             --NotReadyFutures;
-            UpdateMaxSeqNo(ancestor, Producer->Partitions[ancestor].CachedMaxSeqNo.value());
+            UpdateMaxSeqNo(ancestor, ancestorIt->second.CachedMaxSeqNo.value());
             continue;
         }
         auto wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(ancestor, false);
@@ -333,37 +349,43 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
 
         auto future = wrappedSession->Session->GetInitSeqNo();
         std::weak_ptr<TProducer> producer = Producer->shared_from_this();
+        std::weak_ptr<TSplittedPartitionWorker> self = weak_from_this();
         lock.unlock();
-        future.Subscribe([this, producer, wrappedSession, ancestor](const NThreading::TFuture<uint64_t>& result) {
+        future.Subscribe([self, producer, wrappedSession, ancestor](const NThreading::TFuture<uint64_t>& result) {
+            auto selfPtr = self.lock();
+            if (!selfPtr) {
+                return;
+            }
+
             auto producerPtr = producer.lock();
             if (!producerPtr) {
                 return;
             }
 
-            if (IsDone()) {
+            if (selfPtr->IsDone()) {
                 return;
             }
             
             bool needRunMainWorker = false;
             {
-                std::lock_guard lock(Lock);
+                std::lock_guard lock(selfPtr->Lock);
                 if (result.HasException()) {
-                    LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
-                    WriteSessionsToCloseOnError.push_back(wrappedSession);
-                    MoveTo(EState::Failed);
+                    LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << selfPtr->PartitionId);
+                    selfPtr->WriteSessionsToCloseOnError.push_back(wrappedSession);
+                    selfPtr->MoveTo(EState::Failed);
                     needRunMainWorker = true;
                 } else {
-                    UpdateMaxSeqNo(ancestor, result.GetValue());
-                    WriteSessionPartitionsToDestroy.push_back(ancestor);
-                    if (--NotReadyFutures == 0) {
-                        MoveTo(EState::GotMaxSeqNo);
+                    selfPtr->UpdateMaxSeqNo(ancestor, result.GetValue());
+                    selfPtr->WriteSessionPartitionsToDestroy.push_back(ancestor);
+                    if (--selfPtr->NotReadyFutures == 0) {
+                        selfPtr->MoveTo(EState::GotMaxSeqNo);
                         needRunMainWorker = true;
                     }
                 }
             }
 
             if (needRunMainWorker) {
-                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(selfPtr->PartitionId));
             }
         });
         lock.lock();
@@ -920,7 +942,13 @@ void TProducer::TSessionsWorker::DoWork() {
 
         auto expiredIdleSession = *it;
         const auto partition = expiredIdleSession->Session->Partition;
-        if (Producer->Partitions[partition].Locked_) {
+        auto partitionIt = Producer->Partitions.find(partition);
+        if (partitionIt == Producer->Partitions.end()) {
+            IdlerSessions.erase(it);
+            IdlerSessionsIndex.erase(partition);
+            continue;
+        }
+        if (partitionIt->second.Locked_) {
             break;
         }
 
@@ -949,8 +977,9 @@ TProducer::TMessagesWorker::TMessagesWorker(TProducer* producer)
 }
 
 void TProducer::TMessagesWorker::RechoosePartitionIfNeeded(MessageIter message) {
-    const auto& partitionInfo = Producer->Partitions[message->Partition];
-    if (partitionInfo.Children_.empty()) {
+    auto partitionIt = Producer->Partitions.find(message->Partition);
+    Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", message->Partition);
+    if (partitionIt->second.Children_.empty()) {
         return;
     }
 
@@ -1103,15 +1132,19 @@ void TProducer::TMessagesWorker::DoWork() {
     iterateMessagesIndex(
         MessagesToResendIndex,
         [this](MessageIter head) {
-            return Producer->Partitions[head->Partition].Locked_;
+            auto partitionIt = Producer->Partitions.find(head->Partition);
+            Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", head->Partition);
+            return partitionIt->second.Locked_;
         }
     );
 
     iterateMessagesIndex(
         PendingMessagesIndex,
         [this](MessageIter head) {
-        return Producer->Partitions[head->Partition].Locked_ ||
-            MessagesToResendIndex.contains(head->Partition);
+            auto partitionIt = Producer->Partitions.find(head->Partition);
+            Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", head->Partition);
+            return partitionIt->second.Locked_ ||
+                MessagesToResendIndex.contains(head->Partition);
         }
     );
 }
@@ -1662,7 +1695,6 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
 
     auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
     if (sessionClosedEvent && sessionClosedEvent->GetStatus() != EStatus::SUCCESS) {
-        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return TCloseResult{
             .Status = ECloseStatus::Error,
             .ClosedDescription = sessionClosedEvent ? std::make_optional<TCloseDescription>(*sessionClosedEvent) : std::nullopt
@@ -1683,14 +1715,18 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 }
 
 TProducer::~TProducer() {
-    auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-    Settings.EventHandlers_.HandlersExecutor_->Stop();
+    try {
+        auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
+        Settings.EventHandlers_.HandlersExecutor_->Stop();
 
-    if (MainWorkerState.load() == 0) {
-        ShutdownPromise.TrySetValue();
+        if (MainWorkerState.load() == 0) {
+            ShutdownPromise.TrySetValue();
+        }
+
+        ShutdownFuture.Wait();
+    } catch (...) {
+        // Destructors must not throw.
     }
-
-    ShutdownFuture.Wait();
 }
 
 NThreading::TFuture<void> TProducer::WaitEvent() {
@@ -1857,13 +1893,16 @@ TStringBuilder TProducer::LogPrefix() {
 }
 
 void TProducer::NextEpoch() {
-    auto maxEpoch = MAX_EPOCH - 1;
-    if (Epoch.compare_exchange_weak(maxEpoch, 0)) {
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Epoch overflow, resetting to 0");
-        return;
+    auto epoch = Epoch.load(std::memory_order_relaxed);
+    for (;;) {
+        auto nextEpoch = epoch >= MAX_EPOCH - 1 ? 0 : epoch + 1;
+        if (Epoch.compare_exchange_weak(epoch, nextEpoch, std::memory_order_relaxed)) {
+            if (nextEpoch == 0) {
+                LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Epoch overflow, resetting to 0");
+            }
+            return;
+        }
     }
-
-    Epoch.fetch_add(1);
 }
 
 void TProducer::RunMainWorker(std::int64_t owner) {
@@ -1997,7 +2036,14 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         std::string key;
         std::string choosePartitionKey;
         if (message.GetPartition().has_value()) {
-            if (!Partitions[message.GetPartition().value()].Children_.empty()) {
+            auto partitionIt = Partitions.find(message.GetPartition().value());
+            if (partitionIt == Partitions.end()) {
+                return TWriteResult{
+                    .Status = EWriteStatus::Error,
+                    .ErrorMessage = "Unknown partition",
+                };
+            }
+            if (!partitionIt->second.Children_.empty()) {
                 return TWriteResult{
                     .Status = EWriteStatus::Error,
                     .ErrorMessage = "Partition was split",

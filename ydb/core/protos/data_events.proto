@@ -74,6 +74,7 @@ enum ELockMode {
     PESSIMISTIC_EXCLUSIVE_NO_KEY = 3;
     PESSIMISTIC_SHARED = 4;
     PESSIMISTIC_SHARED_KEY = 5;
+    PESSIMISTIC_NONE = 6;
 }
 
 enum EDataFormat {

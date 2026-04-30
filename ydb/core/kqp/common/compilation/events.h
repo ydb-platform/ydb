@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -21,7 +22,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool isWarmupCompilation = false)
+        bool isWarmupCompilation = false, NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -43,6 +44,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , IsWarmupCompilation(isWarmupCompilation)
+        , IsolationLevel(isolationLevel)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -76,6 +78,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     NYql::TExprNode::TPtr SplitExpr = nullptr;
 
     bool IsWarmupCompilation = false;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -84,7 +87,8 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
-        bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
+        bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
+        NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -102,6 +106,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , Split(split)
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
+        , IsolationLevel(isolationLevel)
     {
     }
 
@@ -127,6 +132,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
 
     std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

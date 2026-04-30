@@ -444,6 +444,11 @@ public:
             return true;
         }
 
+        if (TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+            // Read Committed transactions can't be committed with changes
+            return false;
+        }
+
         if (TxCtx->HasOlapTable) {
             // Olap sink results can't be committed with changes
             return false;
@@ -466,7 +471,8 @@ public:
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
-                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
         }
 
@@ -539,6 +545,8 @@ public:
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestEv->GetTxControl();
     }
+
+    NKqpProto::EIsolationLevel GetIsolationLevel() const;
 
     bool ProcessingLastStatement() const {
         return CurrentStatementId + 1 >= Statements.size();

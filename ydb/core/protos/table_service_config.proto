@@ -469,6 +469,7 @@ message TTableServiceConfig {
         SnapshotRW = 1;
         SnapshotRO = 2;
         StaleRO = 3;
+        ReadCommittedRW = 4;
     }
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
@@ -502,4 +503,6 @@ message TTableServiceConfig {
     optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
 
     optional uint64 DqChannelReconciliationCount = 127 [default = 3];
+
+    optional bool EnableReadCommittedIsolation = 128 [default = false, (InvalidateCompileCache) = true];
 };

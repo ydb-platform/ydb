@@ -57,7 +57,8 @@ struct TKqpCompileRequest {
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
-        NYql::TExprNode::TPtr splitExpr = nullptr)
+        NYql::TExprNode::TPtr splitExpr = nullptr,
+        NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -76,6 +77,7 @@ struct TKqpCompileRequest {
         , QueryAst(std::move(queryAst))
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
+        , IsolationLevel(isolationLevel)
     {}
 
     TActorId Sender;
@@ -99,6 +101,8 @@ struct TKqpCompileRequest {
 
     std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
+
+    NKqpProto::EIsolationLevel IsolationLevel;
 
     bool FindInCache = true;
 
@@ -510,16 +514,16 @@ private:
             request.Deadline,
             ev->Get()->Split
                 ? ECompileActorAction::SPLIT
-                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : ((request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
                     ? ECompileActorAction::PARSE
                     : ECompileActorAction::COMPILE,
             request.IsWarmupCompilation);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr, request.IsolationLevel);
 
-        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
+        if ((request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
@@ -581,7 +585,7 @@ private:
                 request.Deadline,
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
-                    : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                    : ((request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || TableServiceConfig.GetEnableAstCache()) && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
@@ -599,10 +603,10 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.IsolationLevel);
                 compileRequest.FindInCache = false;
 
-            if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
+            if ((request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || TableServiceConfig.GetEnableAstCache()) && request.QueryAst) {
                 return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
@@ -665,7 +669,7 @@ private:
         }
 
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
-        bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
+        bool isPerStatementExecution = (compileRequest.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || TableServiceConfig.GetEnableAstCache()) && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 
@@ -899,7 +903,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr, request.IsolationLevel);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

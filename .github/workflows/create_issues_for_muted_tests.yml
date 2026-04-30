@@ -69,7 +69,7 @@ jobs:
 
   create-issues-for-muted-tests:
     needs: resolve-build-types
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
       ((github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||

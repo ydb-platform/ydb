@@ -11,7 +11,7 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, yq_v2, YQ_STATS_FULL
+from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
 
 
 class TestS3Formats:
@@ -38,26 +38,6 @@ class TestS3Formats:
         assert result_set.rows[2].items[0].bytes_value == b"Pear"
         assert result_set.rows[2].items[1].int32_value == 15
         assert result_set.rows[2].items[2].int32_value == 33
-
-    def validate_result_inference(self, result_set):
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 3
-        assert result_set.columns[0].name == "Fruit"
-        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
-        assert result_set.columns[1].name == "Price"
-        assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
-        assert result_set.columns[2].name == "Weight"
-        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
-        assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].int64_value == 3
-        assert result_set.rows[0].items[2].int64_value == 100
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].int64_value == 2
-        assert result_set.rows[1].items[2].int64_value == 22
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].int64_value == 15
-        assert result_set.rows[2].items[2].int64_value == 33
 
     def validate_pg_result(self, result_set):
         logging.debug(str(result_set))
@@ -123,35 +103,6 @@ class TestS3Formats:
             assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
             if type_format != "json_list":
                 assert stat["ResultSet"]["IngressRows"]["sum"] == 3
-
-    @yq_v2
-    @pytest.mark.parametrize(
-        "filename, type_format",
-        [
-            ("test.csv", "csv_with_names"),
-            ("test.tsv", "tsv_with_names"),
-            ("test_each_row.json", "json_each_row"),
-            ("test_list.json", "json_list"),
-            ("test.parquet", "parquet"),
-        ],
-    )
-    def test_format_inference(self, kikimr, s3, client, filename, type_format, unique_prefix):
-        self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
-
-        sql = f'''
-            SELECT *
-            FROM `{storage_connection_name}`.`{filename}`
-            WITH (format=`{type_format}`, with_infer='true');
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        self.validate_result_inference(result_set)
 
     @yq_all
     def test_btc(self, kikimr, s3, client, unique_prefix):
@@ -549,6 +500,7 @@ Pear,15,33'''
         describe_string = "{}".format(describe_result)
         assert r"Only one column in schema supported in raw format" in describe_string
 
+<<<<<<< HEAD
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_with_infer_and_unsupported_option(self, kikimr, s3, client, unique_prefix):
@@ -569,10 +521,17 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
+=======
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_no_header_three_rows(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
+<<<<<<< HEAD
         # XXX replace with other unsupported parameter when/if this one become supported
         sql = f'''
             SELECT *
@@ -589,3 +548,135 @@ Pear,15,33'''
             "couldn\\'t load table metadata: parameter is not supported with type inference: data.datetime.format"
             in describe_string
         )
+=======
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`test_no_header.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result(result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_no_header_select_price(self, kikimr, s3, client, unique_prefix):
+        # Same file as test_csv_no_header_three_rows (3 columns, no header row).
+        # Request a single column that is not the first in alphabetical order
+        # (Fruit < Price < Weight тЖТ Price is the middle column).
+        self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT Price
+            FROM `{storage_connection_name}`.`test_no_header.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "Price"
+        assert result_set.columns[0].type.type_id == ydb.Type.INT32
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].int32_value == 3
+        assert result_set.rows[1].items[0].int32_value == 2
+        assert result_set.rows[2].items[0].int32_value == 15
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_physical_column_order(self, kikimr, s3, client, unique_prefix):
+        # Physical file columns are Weight,Price,Fruit (first row 100,3,Banana).
+        # SCHEMA lists Weight, Price, Fruit тАФ parser must map by position, not by name
+        # matching alphabetical order. Result column order from API may be sorted by name.
+        # File columns: Weight,Price,Fruit (reversed order)
+        fruits = '''100,3,Banana
+22,2,Apple
+33,15,Pear'''
+        self.create_bucket_and_upload_file_body(fruits, "fruits_reversed.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits_reversed.csv`
+            WITH (
+                format = csv,
+                SCHEMA (
+                    Weight Int32 NOT NULL,
+                    Price Int32 NOT NULL,
+                    Fruit String NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        col = {c.name: i for i, c in enumerate(result_set.columns)}
+        for name in ("Weight", "Price", "Fruit"):
+            assert name in col
+        row0 = result_set.rows[0].items
+        assert row0[col["Weight"]].int32_value == 100
+        assert row0[col["Price"]].int32_value == 3
+        assert row0[col["Fruit"]].bytes_value == b"Banana"
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_format_custom_delimiter(self, kikimr, s3, client, unique_prefix):
+        """csv + csv_delimiter (same scenario as `test_custom_csv_delimiter_csv`)."""
+        # csv format with custom delimiter (semicolon)
+        fruits = '''Banana;3;100
+Apple;2;22
+Pear;15;33'''
+        self.create_bucket_and_upload_file_body(fruits, "fruits_semicolon.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`fruits_semicolon.csv`
+            WITH (
+                format = csv,
+                csv_delimiter = ";",
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int32 NOT NULL,
+                    Weight Int32 NOT NULL
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result(result_set)
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))

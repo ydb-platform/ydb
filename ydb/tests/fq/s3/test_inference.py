@@ -147,6 +147,7 @@ Pear,15,33,2024-05-06'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
+<<<<<<< HEAD
         # (name, pyarrow_array, expected_ydb_type, nullable)
         # `nullable` is the parquet-schema nullability (REQUIRED vs OPTIONAL):
         # parquet inference takes it as-is from arrow::Field::nullable(), so it
@@ -177,6 +178,30 @@ Pear,15,33,2024-05-06'''
 
         schema = pa.schema([pa.field(name, arr.type, nullable=nullable) for name, arr, _t, nullable in columns])
         table = pa.Table.from_arrays([arr for _n, arr, _t, _o in columns], schema=schema)
+=======
+        # (name, pyarrow_array, expected_ydb_type, expected_optional)
+        # Reflects current kPrimitiveTypeTable in arrow_inferencinator.cpp.
+        # ShouldBeOptional() returns false for STRING / BINARY / LARGE_BINARY / NA,
+        # and true for everything else. DATE64, LARGE_*, and unsigned integer
+        # types are excluded because they don't survive a parquet round-trip
+        # cleanly (parquet's default reader widens unsigned ints to signed int64).
+        columns = [
+            ("c01_bool",       pa.array([True],                          type=pa.bool_()),                          ydb.Type.BOOL,      True),
+            ("c02_int8",       pa.array([1],                             type=pa.int8()),                           ydb.Type.INT8,      True),
+            ("c03_int16",      pa.array([1],                             type=pa.int16()),                          ydb.Type.INT16,     True),
+            ("c04_int32",      pa.array([1],                             type=pa.int32()),                          ydb.Type.INT32,     True),
+            ("c05_int64",      pa.array([1],                             type=pa.int64()),                          ydb.Type.INT64,     True),
+            ("c06_float",      pa.array([1.0],                           type=pa.float32()),                        ydb.Type.FLOAT,     True),
+            ("c07_double",     pa.array([1.0],                           type=pa.float64()),                        ydb.Type.DOUBLE,    True),
+            ("c08_string",     pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      False),
+            ("c09_binary",     pa.array([b"b"],                          type=pa.binary()),                         ydb.Type.STRING,    False),
+            ("c10_date32",     pa.array([date(2024, 1, 2)],              type=pa.date32()),                         ydb.Type.DATE,      True),
+            ("c11_timestamp",  pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, True),
+            ("c12_decimal",    pa.array([decimal.Decimal("1.5")],        type=pa.decimal128(precision=5, scale=2)), ydb.Type.DOUBLE,    True),
+        ]
+
+        table = pa.table([col[1] for col in columns], names=[col[0] for col in columns])
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
         buf = io.BytesIO()
         pq.write_table(table, buf)
         s3_client.put_object(
@@ -204,14 +229,24 @@ Pear,15,33,2024-05-06'''
         logging.debug(str(result_set))
 
         assert len(result_set.columns) == len(columns)
+<<<<<<< HEAD
         for actual, (name, _arr, expected_type, nullable) in zip(result_set.columns, columns):
             assert actual.name == name, f"unexpected column name: got {actual.name}, want {name}"
             if nullable:
+=======
+        for actual, (name, _arr, expected_type, expected_optional) in zip(result_set.columns, columns):
+            assert actual.name == name, f"unexpected column name: got {actual.name}, want {name}"
+            if expected_optional:
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
                 assert actual.type.optional_type.item.type_id == expected_type, \
                     f"column {name}: got {actual.type}, want Optional<{expected_type}>"
             else:
                 assert actual.type.type_id == expected_type, \
+<<<<<<< HEAD
                     f"column {name}: got {actual.type}, want {expected_type} (non-Optional)"
+=======
+                    f"column {name}: got {actual.type}, want {expected_type}"
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -836,6 +871,7 @@ Pear,15,33'''
         s3_helpers.create_bucket_and_put_object(s3.s3_url, bucket_name, object_key, body, content_type)
         kikimr.control_plane.wait_bootstrap(1)
 
+<<<<<<< HEAD
     def _validate_result_inference(self, result_set, fruit_nullable=False):
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
@@ -844,6 +880,13 @@ Pear,15,33'''
             assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.UTF8
         else:
             assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+=======
+    def _validate_result_inference(self, result_set):
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
         assert result_set.columns[1].name == "Price"
         assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
         assert result_set.columns[2].name == "Weight"
@@ -886,7 +929,11 @@ Pear,15,33'''
 
         data = client.get_result_data(query_id)
         result_set = data.result.result_set
+<<<<<<< HEAD
         self._validate_result_inference(result_set, fruit_nullable=(type_format == "parquet"))
+=======
+        self._validate_result_inference(result_set)
+>>>>>>> 204c1b5771b (added schema inference support for csv format, as well as general inference refactoring & minor fixes (#39107))
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

@@ -93,7 +93,11 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
         AddAllowConcurrentListingsExtension(),
         AddDataInflightExtension(),
         DefaultConfigExtension(s3.s3_url),
-        YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
+        YQv2Extension(
+            yq_version,
+            kikimr_settings.get("is_replace_if_exists", False),
+            kikimr_settings.get("enable_schema_inference", True),
+        ),
         ComputeExtension(),
         YdbMvpExtension(mvp_external_ydb_endpoint),
         StatsModeExtension(kikimr_settings.get("stats_mode", "")),

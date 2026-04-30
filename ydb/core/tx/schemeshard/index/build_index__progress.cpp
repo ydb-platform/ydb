@@ -33,7 +33,7 @@ static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClust
     const auto count = kmeans.ChildCount();
     NTableIndex::NKMeans::TClusterId step = 1;
     auto parts = count;
-    auto shards = tableInfo.GetShard2PartitionIdx().size();
+    auto shards = tableInfo.GetPartitionStore().size();
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
         return {1, 1, 1};
     }
@@ -354,9 +354,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         // This also means that we can directly copy split boundaries from the main table!
         const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
         size_t parts = tableInfo->GetPartitions().size();
-        for (const auto& x: tableInfo->GetPartitions()) {
+        for (const auto* x: tableInfo->GetPartitions()) {
             if (--parts > 0) {
-                op.AddSplitBoundary()->SetSerializedKeyPrefix(x.EndOfRange);
+                op.AddSplitBoundary()->SetSerializedKeyPrefix(x->EndOfRange);
             }
         }
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
@@ -2045,8 +2045,8 @@ private:
         std::vector<const TSerializedTableRange*> sortedRanges;
         sortedRanges.reserve(buildInfo.Shards.size());
         Y_ENSURE(buildInfo.Shards.size() == table->GetPartitions().size());
-        for (const auto& x: table->GetPartitions()) {
-            auto it = buildInfo.Shards.find(x.ShardIdx);
+        for (const auto* x: table->GetPartitions()) {
+            auto it = buildInfo.Shards.find(x->ShardIdx);
             Y_ENSURE(it != buildInfo.Shards.end());
             Y_ENSURE(it->second.Status == NKikimrIndexBuilder::EBuildStatus::DONE);
             sortedRanges.emplace_back(&it->second.Range);
@@ -2502,23 +2502,23 @@ public:
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
-            Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
+            Y_ENSURE(Self->ShardInfos.contains(x->ShardIdx));
             // In case of unique index validation the real range will arrive after index validation for each shard:
             // it will describe the first and the last index keys for further validation.
             TSerializedTableRange shardRange = (buildInfo.IsValidatingUniqueIndex()
-                ? TSerializedTableRange() : TSerializedTableRange(prevBound, x.EndOfRange, true, false));
+                ? TSerializedTableRange() : TSerializedTableRange(prevBound, x->EndOfRange, true, false));
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
-                LOG_D("InitiateShard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
-                buildInfo.AddParent(shardRange, x.ShardIdx);
+                LOG_D("InitiateShard " << x->ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+                buildInfo.AddParent(shardRange, x->ShardIdx);
             } else {
-                LOG_D("InitiateShard " << x.ShardIdx);
+                LOG_D("InitiateShard " << x->ShardIdx);
             }
-            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
+            auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
-            prevBound = x.EndOfRange;
+            prevBound = x->EndOfRange;
 
-            Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x.ShardIdx, it->second);
+            Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x->ShardIdx, it->second);
         }
 
         return true;

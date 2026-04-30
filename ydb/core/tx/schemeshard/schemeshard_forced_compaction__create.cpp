@@ -111,8 +111,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
         TVector<TShardIdx> shardsToCompact;
         shardsToCompact.reserve(tableInfo->GetPartitions().size());
-        for (const auto& shardInfo : tableInfo->GetPartitions()) {
-            shardsToCompact.push_back(shardInfo.ShardIdx);
+        for (const auto* shardInfo : tableInfo->GetPartitions()) {
+            shardsToCompact.push_back(shardInfo->ShardIdx);
         }
         info->TotalShardCount = shardsToCompact.size();
 

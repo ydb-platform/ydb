@@ -246,9 +246,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             boundaries.reserve(partitions.size() - 1);
 
             for (ui32 i = 0; i < partitions.size(); ++i) {
-                const auto& partition = partitions.at(i);
+                const auto* partition = partitions.at(i);
                 if (i != partitions.size() - 1) {
-                    boundaries.push_back(partition.EndOfRange);
+                    boundaries.push_back(partition->EndOfRange);
                 }
             }
 
@@ -295,9 +295,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         const auto& indexPartitions = indexTable->GetPartitions();
                         indexBoundaries.reserve(indexPartitions.size() - 1);
                         for (ui32 i = 0; i < indexPartitions.size(); ++i) {
-                            const auto& partition = indexPartitions.at(i);
+                            const auto* partition = indexPartitions.at(i);
                             if (i != indexPartitions.size() - 1) {
-                                indexBoundaries.push_back(partition.EndOfRange);
+                                indexBoundaries.push_back(partition->EndOfRange);
                             }
                         }
 

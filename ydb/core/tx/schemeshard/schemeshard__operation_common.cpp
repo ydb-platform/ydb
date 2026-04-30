@@ -735,8 +735,8 @@ bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperat
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
-    for (auto& shard : table->GetPartitions()) {
-        shardIdxsLeft.insert(shard.ShardIdx);
+    for (const auto* shard : table->GetPartitions()) {
+        shardIdxsLeft.insert(shard->ShardIdx);
     }
 
     for (auto& shardOp : txState.Shards) {
@@ -863,8 +863,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     }
 
     // Fill new list of tx shards
-    for (auto& shard : table->GetPartitions()) {
-        auto shardIdx = shard.ShardIdx;
+    for (const auto* shard : table->GetPartitions()) {
+        auto shardIdx = shard->ShardIdx;
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
         auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -908,8 +908,8 @@ bool SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperat
     const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
 
     THashSet<TShardIdx> srcShardIdxsLeft;
-    for (const auto& p : srcTableInfo->GetPartitions()) {
-        srcShardIdxsLeft.insert(p.ShardIdx);
+    for (const auto* p : srcTableInfo->GetPartitions()) {
+        srcShardIdxsLeft.insert(p->ShardIdx);
     }
 
     for (const auto& shard : txState.Shards) {
@@ -1006,7 +1006,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     for (const auto& part : newPartitioning) {
         newShardsIdx.push_back(part.ShardIdx);
     }
-    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
+    context.SS->UpdatePartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
     if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }
@@ -1022,15 +1022,15 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     context.SS->PersistUpdateNextPathId(db);
     context.SS->PersistUpdateNextShardIdx(db);
     // Persist new shards info
-    for (const auto& shard : dstTableInfo->GetPartitions()) {
-        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
-        const auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
-        context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
-        context.SS->PersistChannelsBinding(db, shard.ShardIdx, channelsBinding);
+    for (const auto* shard : dstTableInfo->GetPartitions()) {
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard->ShardIdx), "shard info is set before");
+        const auto tabletType = context.SS->ShardInfos[shard->ShardIdx].TabletType;
+        context.SS->PersistShardMapping(db, shard->ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
+        context.SS->PersistChannelsBinding(db, shard->ShardIdx, channelsBinding);
 
         if (storePerShardConfig) {
-            dstTableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
-            context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+            dstTableInfo->PerShardPartitionConfig[shard->ShardIdx].CopyFrom(perShardConfig);
+            context.SS->PersistAddTableShardPartitionConfig(db, shard->ShardIdx, perShardConfig);
         }
     }
 
@@ -1038,14 +1038,22 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
 }
 
 TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
-    TVector<TTableShardInfo> dstPartitions = srcTableInfo->GetPartitions();
+    // Build a mutable copy of src partitions for the dst table.
+    TVector<TTableShardInfo> dstPartitions;
+    {
+        const auto& srcParts = srcTableInfo->GetPartitions();
+        dstPartitions.reserve(srcParts.size());
+        for (const auto* p : srcParts) {
+            dstPartitions.push_back(*p);
+        }
+    }
 
     // Source table must not be altered or drop while we are performing copying. So we put it into a special state.
     ui64 count = dstPartitions.size();
     txState.Shards.reserve(count*2);
     for (ui64 i = 0; i < count; ++i) {
         // Source shards need to get "Send parts" transaction
-        auto srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+        auto srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
         Y_ABORT_UNLESS(ss->ShardInfos.contains(srcShardIdx), "Source table shard not found");
         auto srcTabletId = ss->ShardInfos[srcShardIdx].TabletID;
         Y_ABORT_UNLESS(srcTabletId != InvalidTabletId);

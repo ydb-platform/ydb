@@ -33,6 +33,10 @@ bool BuildTopicCloudEventInfo(
     }
 
     info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
+    const auto parentPath = TPath::Resolve(workingDir, context.SS);
+    if (parentPath.IsResolved() && parentPath.Base()->IsCdcStream()) {
+        info.TopicPath = workingDir;
+    }
 
     // Cloud / folder / database
     TPath dbPath = DatabasePathFromModifySchemeOperation(context.SS, operation);

@@ -108,15 +108,15 @@ def _failure_like_status(status):
 
 
 def _classify_failure_branch(status, status_description, source_error_type, error_file_text):
-    """SANITIZER / TIMEOUT / XFAILED / VERIFY / '' (failure-like status already checked)."""
-    if is_sanitizer_issue(status_description):
-        return "SANITIZER"
+    """Explicit error_type / VERIFY before heuristic SANITIZER on snippet (failure-like status already checked)."""
     if is_timeout_issue(source_error_type):
         return "TIMEOUT"
     if is_xfailed_issue(source_error_type):
         return "XFAILED"
     if is_verify_classification(source_error_type, status_description, error_file_text):
         return "VERIFY"
+    if is_sanitizer_issue(status_description):
+        return "SANITIZER"
     return ""
 
 

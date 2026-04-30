@@ -98,7 +98,7 @@ class TCreateLocalIndex: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -119,12 +119,13 @@ public:
 
         const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = tableIndexCreation.GetName();
 
         if (!tableIndexCreation.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in CreateTableIndex");
             return result;
         }
+
+        const TString& name = tableIndexCreation.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateLocalIndex Propose"

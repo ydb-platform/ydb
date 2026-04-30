@@ -11,73 +11,43 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
     const TString& tableName = createDescription.GetName();
     const TString& workingDir = tx.GetWorkingDir();
 
-    // Validate schema and indexes before pushing any parts to result
-    // This ensures that if validation fails, we return a reject with the correct part ID (subTxId=0)
-    // rather than a reject with subTxId=1 after already pushing the table creation part
-    if (!createDescription.HasSchemaPresetName() && createDescription.HasSchema()) {
-        if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-            const auto& schema = createDescription.GetSchema();
-            if (schema.IndexesSize()) {
-                TSimpleErrorCollector errors;
-                TOlapSchema tableSchema;
-                if (!tableSchema.ParseFromProto(schema, errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
-                    TString msg = errors->Ok() ? TString("Failed to parse column table schema") : errors->GetErrorMessage();
-                    return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, msg)};
-                }
+    // Local-index scheme-object children are needed only when the table carries an inline
+    // schema with indexes and the feature flag is on.
+    const bool createLocalIndexes = !createDescription.HasSchemaPresetName()
+        && createDescription.HasSchema()
+        && AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()
+        && createDescription.GetSchema().IndexesSize() > 0;
 
-                NKikimrSchemeOp::TColumnTableSchema normalizedSchema;
-                tableSchema.Serialize(normalizedSchema);
+    // Parse + validate up-front so any reject is reported as part 0 (before pushing the
+    // table-creation part). The validated configs are reused below to build the sub-ops.
+    TVector<NKikimrSchemeOp::TIndexCreationConfig> indexConfigs;
+    if (createLocalIndexes) {
+        const auto& schema = createDescription.GetSchema();
+        TSimpleErrorCollector errors;
+        TOlapSchema tableSchema;
+        if (!tableSchema.ParseFromProto(schema, errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+            TString msg = errors->Ok() ? TString("Failed to parse column table schema") : errors->GetErrorMessage();
+            return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, msg)};
+        }
 
-                auto columnIdToName = NOlap::BuildColumnIdToNameMap(normalizedSchema);
+        NKikimrSchemeOp::TColumnTableSchema normalizedSchema;
+        tableSchema.Serialize(normalizedSchema);
+        const auto columnIdToName = NOlap::BuildColumnIdToNameMap(normalizedSchema);
 
-                // Validate all indexes before creating any operations
-                for (const auto& indexProto : normalizedSchema.GetIndexes()) {
-                    NKikimrSchemeOp::TIndexCreationConfig indexConfig;
-                    if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
-                        return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
-                            TStringBuilder() << "Failed to convert index '" << indexProto.GetName() << "' to creation config")};
-                    }
-                }
+        indexConfigs.reserve(normalizedSchema.GetIndexes().size());
+        for (const auto& indexProto : normalizedSchema.GetIndexes()) {
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Failed to convert index '" << indexProto.GetName() << "' to creation config")};
             }
+            indexConfigs.push_back(std::move(indexConfig));
         }
     }
 
-    // Now that validation has passed, push the table creation operation
     result.push_back(CreateNewColumnTable(NextPartId(nextId, result), tx));
 
-    if (createDescription.HasSchemaPresetName() || !createDescription.HasSchema()) {
-        return result;
-    }
-
-    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
-        return result;
-    }
-
-    const auto& schema = createDescription.GetSchema();
-    if (!schema.IndexesSize()) {
-        return result;
-    }
-
-    // Re-parse the schema (we already validated it above, so this should succeed)
-    TSimpleErrorCollector errors;
-    TOlapSchema tableSchema;
-    if (!tableSchema.ParseFromProto(schema, errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
-        TString msg = errors->Ok() ? TString("Failed to parse column table schema after validation") : errors->GetErrorMessage();
-        return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError, msg)};
-    }
-
-    NKikimrSchemeOp::TColumnTableSchema normalizedSchema;
-    tableSchema.Serialize(normalizedSchema);
-
-    auto columnIdToName = NOlap::BuildColumnIdToNameMap(normalizedSchema);
-
-    for (const auto& indexProto : normalizedSchema.GetIndexes()) {
-        NKikimrSchemeOp::TIndexCreationConfig indexConfig;
-        if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
-            return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "Failed to convert index '" << indexProto.GetName() << "' to creation config after validation")};
-        }
-
+    for (auto& indexConfig : indexConfigs) {
         auto scheme = TransactionTemplate(
             workingDir + "/" + tableName,
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);

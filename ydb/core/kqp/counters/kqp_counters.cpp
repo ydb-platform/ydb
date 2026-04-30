@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/generic/size_literals.h>
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr {

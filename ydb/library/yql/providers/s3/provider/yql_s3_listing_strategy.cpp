@@ -1,6 +1,6 @@
 #include "yql_s3_listing_strategy.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_future_algorithms.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_path.h>

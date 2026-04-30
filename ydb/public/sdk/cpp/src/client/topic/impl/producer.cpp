@@ -142,7 +142,7 @@ std::string TProducer::TSplittedPartitionWorker::GetStateName() const {
 }
 
 void TProducer::TSplittedPartitionWorker::DoWork() {
-    std::optional<WrappedWriteSessionPtr> writeSessionToCloseOnError;
+    std::vector<WrappedWriteSessionPtr> writeSessionsToCloseOnError;
     std::vector<std::uint32_t> writeSessionPartitionsToDestroy;
     bool handleGotMaxSeqNo = false;
     std::uint64_t maxSeqNo = 0;
@@ -188,10 +188,7 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
         case EState::Done:
             break;
         case EState::Failed:
-            if (WriteSessionToCloseOnError) {
-                writeSessionToCloseOnError = WriteSessionToCloseOnError;
-                WriteSessionToCloseOnError.reset();
-            }
+            writeSessionsToCloseOnError.swap(WriteSessionsToCloseOnError);
             writeSessionPartitionsToDestroy.swap(WriteSessionPartitionsToDestroy);
             MoveTo(EState::Done);
             break;
@@ -205,9 +202,12 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
     }
     lock.unlock();
 
-    if (writeSessionToCloseOnError && *writeSessionToCloseOnError) {
+    for (const auto& writeSession : writeSessionsToCloseOnError) {
+        if (!writeSession) {
+            continue;
+        }
         TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
-        Producer->GetSessionClosedEventAndDie(*writeSessionToCloseOnError, std::move(sessionClosedEvent));
+        Producer->GetSessionClosedEventAndDie(writeSession, std::move(sessionClosedEvent));
     }
 
     if (handleGotMaxSeqNo) {
@@ -349,7 +349,7 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
                 std::lock_guard lock(Lock);
                 if (result.HasException()) {
                     LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
-                    WriteSessionToCloseOnError = wrappedSession;
+                    WriteSessionsToCloseOnError.push_back(wrappedSession);
                     MoveTo(EState::Failed);
                     needRunMainWorker = true;
                 } else {

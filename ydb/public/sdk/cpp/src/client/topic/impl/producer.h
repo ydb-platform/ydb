@@ -237,7 +237,7 @@ private:
         std::uint32_t PartitionId;
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
-        WrappedWriteSessionPtr WriteSessionToCloseOnError;
+        std::vector<WrappedWriteSessionPtr> WriteSessionsToCloseOnError;
         std::vector<std::uint32_t> WriteSessionPartitionsToDestroy;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
         std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;

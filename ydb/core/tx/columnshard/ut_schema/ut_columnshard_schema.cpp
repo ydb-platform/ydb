@@ -11,7 +11,6 @@
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
@@ -19,7 +18,6 @@
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/testing/hook/hook.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {

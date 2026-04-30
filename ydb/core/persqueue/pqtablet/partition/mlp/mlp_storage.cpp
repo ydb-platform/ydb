@@ -1331,7 +1331,7 @@ TString TStorage::DebugString() const {
         dump(FirstOffset + i, Messages[i], 'f');
     }
 
-    sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId().begin(), LockedMessageGroupsId().end()) << "]";
+    sb << "] LockedGroups [" << JoinRange(", ", GetLockedMessageGroupsId().begin(), GetLockedMessageGroupsId().end()) << "]";
     sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
     sb << " DLQMessages [" << JoinRange(", ", DLQMessages.begin(), DLQMessages.end()) << "]";
     sb << " Metrics {"

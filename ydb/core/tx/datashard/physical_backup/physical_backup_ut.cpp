@@ -5,8 +5,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <algorithm>
-
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -24,6 +22,14 @@ namespace NTabletFlatExecutor {
 // ============================================================================
 
 namespace {
+
+ui32 CountOf(const TString& s, char c) {
+    ui32 n = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == c) ++n;
+    }
+    return n;
+}
 
 enum : ui32 {
     TableId = 101,
@@ -185,7 +191,7 @@ struct TTxBorrow : public ITransaction {
         , TargetTabletId(targetTabletId)
     {}
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
         // BorrowSnapshot needs Executor access. Use the Env's LoanTable
         // approach instead - just collect parts info.
         // For this test, we use the standard borrow path.
@@ -365,7 +371,7 @@ Y_UNIT_TEST_SUITE(PhysicalBackup) {
         // Read source data for comparison
         TString sourceData;
         env.SendSync(new NFake::TEvExecute{new TTxReadAllRows(sourceData)});
-        Cerr << "Source rows: " << std::count(sourceData.begin(), sourceData.end(), '\n') << Endl;
+        Cerr << "Source rows: " << CountOf(sourceData, '\n') << Endl;
         UNIT_ASSERT(!sourceData.empty());
 
         // ================================================================
@@ -381,7 +387,7 @@ Y_UNIT_TEST_SUITE(PhysicalBackup) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // Borrow via TEvCall which gives us direct Executor access
-        env.SendSync(new NFake::TEvCall([&](NTabletFlatExecutor::TExecutor* executor, const TActorContext&) {
+        env.SendSync(new NFake::TEvCall([&](NFake::TEvCall::IExecutor* executor, const TActorContext&) {
             snapBody = executor->BorrowSnapshot(TableId, *snapContext, {}, {}, env.Tablet + 1);
         }));
 
@@ -414,7 +420,7 @@ Y_UNIT_TEST_SUITE(PhysicalBackup) {
         Cerr << "=== Verify ===" << Endl;
         TString destData;
         env.SendSync(new NFake::TEvExecute{new TTxReadAllRows(destData)});
-        Cerr << "Dest rows: " << std::count(destData.begin(), destData.end(), '\n') << Endl;
+        Cerr << "Dest rows: " << CountOf(destData, '\n') << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(sourceData, destData);
         Cerr << "=== Round-trip PASSED ===" << Endl;

@@ -15,6 +15,7 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/test_shard_control.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
@@ -1725,6 +1726,27 @@ message TAlterSolomonVolume {
     optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
+message TTestShardSetDescription {
+    optional string Name = 1; // mandatory
+    optional uint64 PathId = 2;
+    repeated uint64 TabletIds = 3; // do not set
+    optional uint64 Version = 4; // do not set
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
+    repeated TTestShardDescription Shards = 6;
+}
+
+message TTestShardDescription {
+    optional uint64 ShardIdx = 1;
+    optional uint64 TabletId = 2;
+}
+
+message TCreateTestShardSet {
+    optional string Name = 1; // mandatory
+    optional uint32 Count = 2;
+    optional TKeyValueStorageConfig StorageConfig = 3;
+    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 5;
+}
+
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
     optional string NewMountToken = 2 [(Ydb.sensitive) = true]; // unset to unassign
@@ -2065,6 +2087,8 @@ message TModifyScheme {
 
     optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
+    optional TCreateTestShardSet CreateTestShardSet = 94;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -2137,6 +2161,7 @@ enum EPathType {
     EPathTypeSysView = 24;
     EPathTypeSecret = 25;
     EPathTypeStreamingQuery = 26;
+    EPathTypeTestShardSet = 27;
 }
 
 enum EPathSubType {
@@ -2201,6 +2226,7 @@ message TPathVersion {
     optional uint64 SysViewVersion = 32;
     optional uint64 SecretVersion = 33;
     optional uint64 StreamingQueryVersion = 34;
+    optional uint64 TestShardVersion = 35;
 }
 
 // Describes single path
@@ -2262,9 +2288,9 @@ message TLastBackupResult {
 // Result for TDescribePath request
 message TPathDescription {
     optional TDirEntry Self = 1;                    // info about the path itself
-    repeated TDirEntry Children = 2;                // for directory
+    repeated TDirEntry Children = 2; // for directory
     optional TTableDescription Table = 3;           // for table
-    repeated TTablePartition TablePartitions = 4;   // for table
+    repeated TTablePartition TablePartitions = 4; // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
@@ -2295,6 +2321,7 @@ message TPathDescription {
     optional TSysViewDescription SysViewDescription = 32;
     optional TSecretDescription SecretDescription = 33;
     optional TStreamingQueryDescription StreamingQueryDescription = 34;
+    optional TTestShardSetDescription TestShardSetDescription = 35;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB

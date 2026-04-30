@@ -144,6 +144,7 @@ public:
     bool IsBackupCollection() const;
     bool IsSecret() const;
     bool IsStreamingQuery() const;
+    bool IsTestShardSet() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

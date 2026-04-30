@@ -46,6 +46,7 @@ RECURSE(
     table
     table/impl
     table/query_stats
+    test_shard
     topic
     topic/codecs
     topic/impl

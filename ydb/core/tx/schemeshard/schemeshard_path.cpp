@@ -1216,6 +1216,19 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     return *this;
 }
 
+const TPath::TChecker& TPath::TChecker::IsTestShardSet(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTestShardSet()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a test shard set"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "
@@ -1847,6 +1860,12 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsTestShardSet() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTestShardSet();
 }
 
 bool TPath::IsSupportedInExports() const {

@@ -188,13 +188,7 @@ TRequestSpan::TRequestSpan(const std::string& ydbClientType
 }
 
 TRequestSpan::~TRequestSpan() noexcept {
-    if (Span_) {
-        try {
-            Span_->End();
-        } catch (...) {
-            SafeLogRequestSpanError(Log_, "failed to end span", std::current_exception());
-        }
-    }
+    End(EStatus::CLIENT_INTERNAL_ERROR);
 }
 
 void TRequestSpan::SetPeerEndpoint(const std::string& endpoint) noexcept {
@@ -249,10 +243,10 @@ std::unique_ptr<NTrace::IScope> TRequestSpan::Activate() noexcept {
 void TRequestSpan::End(EStatus status) noexcept {
     if (Span_) {
         try {
+            const auto statusName = ToString(status);
+            Span_->SetAttribute("db.response.status_code", statusName);
             if (status != EStatus::SUCCESS) {
-                const auto statusName = ToString(status);
                 const auto errorType = CategorizeErrorType(status);
-                Span_->SetAttribute("db.response.status_code", statusName);
                 Span_->SetAttribute("error.type", std::string(errorType));
                 EmitExceptionEvent(*Span_, statusName, statusName, /*stacktrace=*/"");
                 Span_->SetStatus(NTrace::ESpanStatus::Error, statusName);

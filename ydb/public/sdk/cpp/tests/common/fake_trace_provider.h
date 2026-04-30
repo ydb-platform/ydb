@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 
+#include <util/system/yassert.h>
+
 #include <map>
 #include <mutex>
 #include <string>
@@ -130,6 +132,7 @@ public:
 
     TSpanRecord GetLastSpanRecord() const {
         std::lock_guard lock(Mutex_);
+        Y_ABORT_UNLESS(!Spans_.empty(), "GetLastSpanRecord called before any span was started");
         return Spans_.back();
     }
 

@@ -35,11 +35,15 @@ std::chrono::microseconds Backoff(const NRetry::TBackoffSettings& settings, std:
 }
 
 std::chrono::microseconds AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
-    std::uint32_t retryNumber, const std::function<void()>& fn)
+    std::uint32_t retryNumber, std::function<void(std::chrono::microseconds)> fn)
 {
     const auto duration = CalcBackoffTime(settings, retryNumber);
-    client->ScheduleTask(fn, std::chrono::duration_cast<TDeadline::Duration>(duration));
-    return std::chrono::duration_cast<std::chrono::microseconds>(duration);
+    const auto durationMicro = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+    client->ScheduleTask(
+        [fn = std::move(fn), durationMicro]() { fn(durationMicro); },
+        std::chrono::duration_cast<TDeadline::Duration>(duration)
+    );
+    return durationMicro;
 }
 
 }

@@ -83,9 +83,12 @@ protected:
     static void DoBackoff(TPtr self, bool fast) {
         auto backoffSettings = fast ? self->Settings_.FastBackoffSettings_
                                     : self->Settings_.SlowBackoffSettings_;
-        const auto backoff = AsyncBackoff(self->Client_.Impl_, backoffSettings, self->RetryNumber_,
-            [self]() {DoRetry(self);});
-        self->LastBackoffMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count();
+        AsyncBackoff(self->Client_.Impl_, backoffSettings, self->RetryNumber_,
+            [self](std::chrono::microseconds backoff) {
+                self->LastBackoffMs_ =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count();
+                DoRetry(self);
+            });
     }
 
     static void HandleExceptionAsync(TPtr self, std::exception_ptr e) {
@@ -117,6 +120,7 @@ protected:
     static void DoRunOperation(TPtr self) {
         self->RunOperation().Subscribe(
             [self](const TAsyncStatusType& result) {
+                [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
                 try {
                     HandleStatusAsync(self, result.GetValue());
                 } catch (...) {

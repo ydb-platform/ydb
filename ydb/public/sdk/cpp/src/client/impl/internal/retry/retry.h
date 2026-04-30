@@ -23,7 +23,7 @@ namespace NYdb::inline Dev::NRetry {
 
 std::chrono::microseconds Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
 std::chrono::microseconds AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
-    std::uint32_t retryNumber, const std::function<void()>& fn);
+    std::uint32_t retryNumber, std::function<void(std::chrono::microseconds)> fn);
 
 enum class NextStep {
     RetryImmediately,

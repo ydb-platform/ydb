@@ -173,7 +173,7 @@ TEST_P(SpanTest, SuccessStatusDoesNotSetErrorAttrs) {
 
     auto fakeSpan = Tracer->GetLastSpan();
     ASSERT_NE(fakeSpan, nullptr);
-    EXPECT_FALSE(fakeSpan->HasStringAttribute("db.response.status_code"));
+    EXPECT_EQ(fakeSpan->GetStringAttribute("db.response.status_code"), ToString(EStatus::SUCCESS));
     EXPECT_FALSE(fakeSpan->HasStringAttribute("error.type"));
 }
 

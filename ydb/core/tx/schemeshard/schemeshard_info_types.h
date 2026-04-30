@@ -3760,7 +3760,7 @@ struct TIncrementalRestoreState {
 
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingTables.
+    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingIncrementalRestoreTables.
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
 

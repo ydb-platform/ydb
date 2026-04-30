@@ -1289,7 +1289,7 @@ public:
         const TString& backupName,
         const TActorContext& ctx);
 
-    void DispatchPendingTables(
+    void DispatchPendingIncrementalRestoreTables(
         TIncrementalRestoreState& state,
         ui64 operationId,
         const TActorContext& ctx);
@@ -1302,7 +1302,7 @@ public:
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TActorContext& ctx);
 
-    void EnqueueIndexesRecursive(
+    void EnqueueIncrementalRestoreIndexesRecursive(
         ui64 operationId,
         const TString& backupName,
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
@@ -1334,7 +1334,7 @@ public:
         const TActorContext& ctx,
         const TString& specificImplTableName = "");
 
-    TString FindTargetTablePath(
+    TString FindIncrementalRestoreTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TString& relativeTablePath);
 

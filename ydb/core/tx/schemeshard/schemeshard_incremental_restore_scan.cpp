@@ -300,7 +300,7 @@ private:
 
         // Top-up freed capacity; skip if a retry is pending (it will rebuild the queue).
         if (!state.RetryNeeded) {
-            Self->DispatchPendingTables(state, OperationId, ctx);
+            Self->DispatchPendingIncrementalRestoreTables(state, OperationId, ctx);
         }
     }
     
@@ -324,7 +324,7 @@ private:
 
         state.CurrentIncrementalStarted = true;
 
-        Self->DispatchPendingTables(state, OperationId, ctx);
+        Self->DispatchPendingIncrementalRestoreTables(state, OperationId, ctx);
 
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
@@ -567,7 +567,7 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
           << " sub-ops for incremental backup: " << backupName);
 }
 
-void TSchemeShard::DispatchPendingTables(
+void TSchemeShard::DispatchPendingIncrementalRestoreTables(
     TIncrementalRestoreState& state,
     ui64 operationId,
     const TActorContext& ctx) {
@@ -603,7 +603,7 @@ void TSchemeShard::DispatchPendingTables(
         }
     }
 
-    LOG_I("DispatchPendingTables: in-flight=" << state.InProgressOperations.size()
+    LOG_I("DispatchPendingIncrementalRestoreTables: in-flight=" << state.InProgressOperations.size()
           << " pending=" << state.PendingTables.size()
           << " cap=" << cap);
 }
@@ -690,7 +690,7 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
     Send(SelfId(), tableRequest.Release());
 }
 
-TString TSchemeShard::FindTargetTablePath(
+TString TSchemeShard::FindIncrementalRestoreTargetTablePath(
     const TBackupCollectionInfo::TPtr& backupCollectionInfo,
     const TString& relativeTablePath) {
 
@@ -708,7 +708,7 @@ TString TSchemeShard::FindTargetTablePath(
     return {};
 }
 
-void TSchemeShard::EnqueueIndexesRecursive(
+void TSchemeShard::EnqueueIncrementalRestoreIndexesRecursive(
     ui64 operationId,
     const TString& backupName,
     const TBackupCollectionInfo::TPtr& backupCollectionInfo,
@@ -721,7 +721,7 @@ void TSchemeShard::EnqueueIndexesRecursive(
         return;
     }
 
-    TString targetTablePath = FindTargetTablePath(backupCollectionInfo, accumulatedRelativePath);
+    TString targetTablePath = FindIncrementalRestoreTargetTablePath(backupCollectionInfo, accumulatedRelativePath);
 
     if (!targetTablePath.empty()) {
         LOG_I("Found table mapping: " << accumulatedRelativePath << " -> " << targetTablePath);
@@ -747,7 +747,7 @@ void TSchemeShard::EnqueueIndexesRecursive(
                 ? childName
                 : accumulatedRelativePath + "/" + childName;
 
-            EnqueueIndexesRecursive(
+            EnqueueIncrementalRestoreIndexesRecursive(
                 operationId,
                 backupName,
                 backupCollectionInfo,
@@ -788,7 +788,7 @@ void TSchemeShard::EnqueueAndDiscoverIndexRestoreOperations(
 
     LOG_I("Discovering indexes for restore at: " << indexMetaBasePath);
 
-    EnqueueIndexesRecursive(
+    EnqueueIncrementalRestoreIndexesRecursive(
         operationId,
         backupName,
         backupCollectionInfo,

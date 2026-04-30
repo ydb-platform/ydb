@@ -62,7 +62,6 @@ Y_UNIT_TEST(LocalNamesCollected) {
         "b",
         "i",
         "plus",
-        "sum",
         "x",
         "y",
     };

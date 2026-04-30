@@ -1,25 +1,27 @@
-#include "config_helpers.h"
 #include "configs_dispatcher.h"
+#include "config_helpers.h"
 #include "console_configs_subscriber.h"
 #include "console.h"
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/util/config_index.h>
-#include <ydb/library/yaml_config/util.h>
-#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/config/init/init.h>
 #include <ydb/core/config/init/mock.h>
-#include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/protobuf_printer/security_json_printer.h>
+#include <ydb/library/yaml_config/util.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-#include <ydb/core/config/init/init.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -489,7 +491,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
-    response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
     
     auto state = GetState();
     if (auto it = Labels.find("config_source"); it != Labels.end()) {
@@ -506,14 +508,9 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("last_replay_dynamic_config", state.LastReplayUsedDynamicConfigPath);
 
     if (DebugInfo) {
-        // TODO: write custom json serializer for security fields
-        // for now json info not documented and used only for some very specifigc
-        // debug purproses, so we can disable it for now without any risks
-        // and postpone implementation
-        //
-        // response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
-        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
-        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
     }
 
     NJson::WriteJson(&str, &response, {});

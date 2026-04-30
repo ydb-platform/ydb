@@ -1,6 +1,5 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -11,6 +10,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -2078,9 +2078,29 @@ public:
             }
         }
 
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead && !schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::OVERLOADED,
+                TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
+                    << " (shard# " << Self->TabletID()
+                    << " node# " << ctx.SelfID.NodeId() << ")");
+            Result->Record.SetThrottled(true);
+            return EExecutionStatus::DelayComplete;
+        }
+
         LWTRACK(ReadExecute, state.Request->Orbit);
-        if (!Read(txc, ctx, state))
+        bool readResult = Read(txc, ctx, state);
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+        }
+
+        if (!readResult) {
             return EExecutionStatus::Restart;
+        }
 
         // Check if successful result depends on unresolved volatile transactions
         if (Result && !Result->Record.HasStatus() && !Reader->GetVolatileReadDependencies().empty()) {
@@ -3367,14 +3387,38 @@ public:
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
-        Reader.reset(new TReader(
+        Reader = std::make_unique<TReader>(
             state,
             *BlockBuilder,
             TableInfo,
             AppData()->MonotonicTimeProvider->Now(),
-            Self));
+            Self);
 
         LWTRACK(ReadExecute, state.Request->Orbit);
+
+        // Try to consume schedulable read quota before reading
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead) {
+            if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+                // KQP read quota exhausted, reschedule with delay.
+                // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
+                state.ReadContinuePending = true;
+                Reader.reset();
+                Result.reset();
+                ctx.Schedule(
+                    schedulableRead->EstimateQuotaDelay(TDuration::MilliSeconds(10)),
+                    new TEvDataShard::TEvReadContinue(LocalReadId));
+                return true;
+            }
+        }
+
+        // Return read quota after reading
+        Y_DEFER {
+            if (schedulableRead) {
+                Reader->UpdateCycles();
+                schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            }
+        };
 
         if (Reader->Read(txc)) {
             // Retry later when dependencies are resolved
@@ -3561,6 +3605,7 @@ public:
             Reader->UpdateState(state, useful);
             if (!state.IsExhausted()) {
                 state.ReadContinuePending = true;
+
                 ctx.Send(
                     Self->SelfId(),
                     new TEvDataShard::TEvReadContinue(LocalReadId));
@@ -3739,14 +3784,18 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         sessionId = ev->InterconnectSession;
     }
 
+    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory && *SchedulableReadFactory) {
+        schedulableRead = (*SchedulableReadFactory)->Get(record.GetDatabaseId(), record.GetPoolId());
+    }
+
     ui64 localReadId = NextTieBreakerIndex++;
     auto pr = ReadIterators.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(readId),
         std::forward_as_tuple(
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
-            sessionId, readVersion, isHeadRead,
-            AppData()->MonotonicTimeProvider->Now()));
+            sessionId, readVersion, isHeadRead, AppData()->MonotonicTimeProvider->Now(), schedulableRead));
     Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;
@@ -3997,6 +4046,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
     if (state.EnqueuedLocalTxId) {
         Executor()->CancelTransaction(state.EnqueuedLocalTxId);
     }
+
     ReadIteratorsByLocalReadId.erase(state.LocalReadId);
     ReadIterators.erase(it);
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());

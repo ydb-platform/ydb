@@ -59,7 +59,13 @@
 
 ### Неявные транзакции {#implicit}
 
-Если для запроса не задан [режим транзакции](../transactions.md#modes), {{ ydb-short-name }} автоматически управляет его поведением. Такой режим называется неявной транзакцией.
+Логика неявных транзакций применяется при отправке одного YQL-скрипта на сервер без явного выбора [режима транзакции](#modes). Типичные точки входа:
+
+* [Встроенный UI](../../reference/embedded-ui/index.md) — вкладка **Query** на странице базы данных ([форма выполнения запроса](../../reference/embedded-ui/ydb-monitoring.md#tenant_scheme)), при запуске без выбора режима транзакции в настройках.
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — разовая отправка скрипта командой [`ydb sql`](../../reference/ydb-cli/sql.md).
+* Приложения на [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — режим [ImplicitTx](../../recipes/ydb-sdk/tx-control.md#implicittx).
+
+Если для запроса не задан [режим транзакции](../transactions.md#modes), {{ ydb-short-name }} автоматически управляет его поведением. Такой режим называется **неявной транзакцией**.
 
 В этом режиме {{ ydb-short-name }} на основе запроса определяет, выполнить его вне транзакции или обернуть в транзакцию с режимом *Serializable*. Режим неявной транзакции является универсальным для выполнения запроса, так как поддерживает инструкции любого вида с определённым поведением, описанным ниже.
 
@@ -81,6 +87,12 @@
 | DDL            | Вне транзакции                                    | Да (только DDL)                 | Нет                   |
 | DML            | Автоматическая транзакция (Serializable)          | Да (только DML)                 | Да                    |
 | Инструкции пакетного изменения | Вне транзакции                    | Нет                             | Нет                   |
+
+Чтобы явно задать режим транзакции, используйте соответствующие настройки в каждой точке входа:
+
+* [Встроенный UI](../../reference/embedded-ui/index.md) — выберите режим транзакции в настройках выполнения на вкладке **Query**.
+* [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) — у подкоманды [`table query execute`](../../reference/ydb-cli/table-query-execute.md) для запросов типа `data` задайте параметр [`--tx-mode`](../../reference/ydb-cli/table-query-execute.md#options) (по умолчанию `serializable-rw`, что соответствует режиму *Serializable*).
+* [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) — см. [установку режима в {{ ydb-short-name }} SDK](../../recipes/ydb-sdk/tx-control.md).
 
 ## Язык YQL {#language-yql}
 

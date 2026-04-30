@@ -1,7 +1,6 @@
 
 ## 2.31.0 ##
 
-* Added the `--no-producer-id-track` option to `ydb workload topic run write|full` to disable ProducerId tracking in transactions when using `--use-tx`.
 * Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
 
 ## 2.30.0 ##

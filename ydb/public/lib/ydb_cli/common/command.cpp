@@ -58,7 +58,7 @@ TClientCommand::TClientCommand(
 }
 
 
-size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosity(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {
         TStringBuf arg = argv[i];
@@ -336,14 +336,22 @@ void TClientCommand::SaveParseResult(TConfig& config) {
     }
 }
 
-void TClientCommand::Prepare(TConfig& config) {
+void TClientCommand::PrepareOptions(TConfig& config, bool validate) {
     config.ArgsSettings = TConfig::TArgSettings();
-    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
     config.Opts = &Opts;
     Config(config);
-    CheckForExecutableOptions(config);
-    config.CheckParamsCount();
+
+    if (validate) {
+        CheckForExecutableOptions(config);
+        config.CheckParamsCount();
+    }
+
     SetCustomUsage(config);
+}
+
+void TClientCommand::Prepare(TConfig& config) {
+    PrepareOptions(config);
     SaveParseResult(config);
     config.ParseResult = ParseResult.get();
     Parse(config);
@@ -360,7 +368,7 @@ bool TClientCommand::Prompt(TConfig& config) {
 
 int TClientCommand::ValidateAndRun(TConfig& config) {
     config.ActiveLeafCommand = this;
-    Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
     ExtractParams(config);
@@ -370,6 +378,10 @@ int TClientCommand::ValidateAndRun(TConfig& config) {
     } else {
         return EXIT_FAILURE;
     }
+}
+
+TClientCommand* TClientCommand::FindNextCommand(TString cmd) const {
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 void TClientCommand::SetCustomUsage(TConfig& config) {
@@ -511,7 +523,7 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
@@ -538,18 +550,29 @@ void TClientCommandTree::Parse(TConfig& config) {
         if (it != Aliases.end())
             cmd = it->second;
     }
+    SelectedCommand = FindNextCommand(cmd);
+}
+
+TClientCommand* TClientCommandTree::FindNextCommand(TString cmd) const {
+    if (const auto it = Aliases.find(cmd); it != Aliases.end()) {
+        cmd = it->second;
+    }
+
     auto it = SubCommands.find(cmd);
     if (it == SubCommands.end()) {
-        if (IsNumber(cmd))
+        if (IsNumber(cmd)) {
             it = SubCommands.find("#");
-        if (it == SubCommands.end())
+        }
+        if (it == SubCommands.end()) {
             it = SubCommands.find("*");
+        }
     }
+
     if (it != SubCommands.end()) {
-        SelectedCommand = it->second.get();
-    } else {
-        throw yexception() << "Invalid command '" << cmd << "'";
+        return it->second.get();
     }
+
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 int TClientCommandTree::Run(TConfig& config) {

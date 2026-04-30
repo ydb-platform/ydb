@@ -1,11 +1,10 @@
 PROTO_LIBRARY()
 
-ONLY_TAGS(CPP_PROTO)
-
+EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(
+    http_config.proto
     source.proto
 )
 
 END()
-

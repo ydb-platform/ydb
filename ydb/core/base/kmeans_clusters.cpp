@@ -9,6 +9,8 @@
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
+#include <algorithm>
+#include <cmath>
 #include <span>
 
 namespace NKikimr::NKMeans {
@@ -103,13 +105,15 @@ template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
     using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
+    static constexpr bool AggregateNormalized = false;
 };
 
 template <typename TCoord>
 struct TCosineDistance : TMetric<TCoord> {
-    using TSum = typename TMetric<TCoord>::TSum;
+    using TSum = double;
     // double used to avoid precision issues
     using TRes = double;
+    static constexpr bool AggregateNormalized = true;
 
     static TRes Init()
     {
@@ -384,15 +388,30 @@ public:
         auto* coords = aggregate.data();
         Y_ENSURE(IsExpectedFormat(embedding));
 
-        if (IsBitQuantized()) {
-            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
-            for (size_t i = 0; i < Dimensions; ++i) {
-                const bool coord = data[i / 8] & (1 << (i % 8));
-                *coords++ += (TSum)coord * weight;
+        if constexpr (TMetric::AggregateNormalized) {
+            const auto norm = GetEmbeddingNorm(embedding);
+            if (IsBitQuantized()) {
+                const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    const bool coord = data[i / 8] & (1 << (i % 8));
+                    *coords++ += norm != 0 ? static_cast<TSum>(coord ? weight / norm : 0.0) : 0;
+                }
+            } else {
+                for (const auto coord : this->GetCoords(embedding.data())) {
+                    *coords++ += norm != 0 ? static_cast<TSum>(coord * (weight / norm)) : 0;
+                }
             }
         } else {
-            for (const auto coord : this->GetCoords(embedding.data())) {
-                *coords++ += (TSum)coord * weight;
+            if (IsBitQuantized()) {
+                const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    const bool coord = data[i / 8] & (1 << (i % 8));
+                    *coords++ += static_cast<TSum>(coord) * weight;
+                }
+            } else {
+                for (const auto coord : this->GetCoords(embedding.data())) {
+                    *coords++ += static_cast<TSum>(coord) * weight;
+                }
             }
         }
         NextClusterSizes.at(pos) += weight;
@@ -408,6 +427,28 @@ public:
         }
 
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
+    }
+
+    TString FormatError(const TArrayRef<const char>& data) override {
+        if (!data.size()) {
+            return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
+        }
+        if (FormatByte != data.back()) {
+            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
+                << " expected " << static_cast<ui8>(FormatByte);
+        }
+        if (IsBitQuantized()) {
+            auto actualDim = 0;
+            if (data.size() >= 2) {
+                actualDim = (data.size() - 2) * 8 - static_cast<ui8>(data[data.size() - 2]);
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
+                << " expected " << Dimensions;
+        }
+        auto actualDim = (data.size() - 1) / sizeof(TCoord);
+        return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
+            << " (size " << data.size() << " bytes) expected " << Dimensions
+            << " (size " << (1 + sizeof(TCoord) * Dimensions) << " bytes)";
     }
 
     TString GetEmptyRow() const override {
@@ -426,7 +467,7 @@ private:
         return std::is_same_v<TCoord, bool>;
     }
 
-    auto GetCoords(const char* coords) {
+    auto GetCoords(const char* coords) const {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }
 
@@ -434,9 +475,91 @@ private:
         return std::span{reinterpret_cast<TCoord*>(data), Dimensions};
     }
 
+    double GetEmbeddingNorm(const TArrayRef<const char>& embedding) const {
+        double normSquared = 0;
+        if (IsBitQuantized()) {
+            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                const bool coord = data[i / 8] & (1 << (i % 8));
+                normSquared += coord ? 1.0 : 0.0;
+            }
+        } else {
+            for (const auto coord : GetCoords(embedding.data())) {
+                const double value = static_cast<double>(coord);
+                normSquared += value * value;
+            }
+        }
+        return std::sqrt(normSquared);
+    }
+
+    double GetCentroidNorm(const TSum* embedding, ui64 count) const {
+        double normSquared = 0;
+        for (size_t i = 0; i < Dimensions; ++i) {
+            const double value = static_cast<double>(embedding[i]) / static_cast<double>(count);
+            normSquared += value * value;
+        }
+        return std::sqrt(normSquared);
+    }
+
+    double GetNormalizedScale(const TSum* embedding, ui64 count, double norm) const {
+        double maxAbsValue = 0;
+        for (size_t i = 0; i < Dimensions; ++i) {
+            const double value = norm != 0
+                ? static_cast<double>(embedding[i]) / (static_cast<double>(count) * norm)
+                : 0;
+            maxAbsValue = std::max(maxAbsValue, std::abs(value));
+        }
+        if (maxAbsValue == 0) {
+            return 0;
+        }
+        return static_cast<double>(std::numeric_limits<TCoord>::max()) / maxAbsValue;
+    }
+
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
+
+        if constexpr (TMetric::AggregateNormalized) {
+            const double norm = GetCentroidNorm(embedding, c);
+            if (IsBitQuantized()) {
+                ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
+                for (size_t i = 0; i < Dimensions; ++i) {
+                    if (i % 8 == 0) {
+                        data[i / 8] = 0;
+                    }
+                    const double value = norm != 0
+                        ? static_cast<double>(embedding[i]) / (static_cast<double>(c) * norm)
+                        : 0;
+                    const bool bitValue = value >= 0.5;
+                    if (bitValue) {
+                        data[i / 8] |= (1 << (i % 8));
+                    }
+                }
+                return;
+            }
+
+            auto data = GetData(d.MutRef().data());
+            if constexpr (std::is_floating_point_v<TCoord>) {
+                for (auto& coord : data) {
+                    coord = norm != 0
+                        ? static_cast<TCoord>(static_cast<double>(*embedding) / (static_cast<double>(c) * norm))
+                        : 0;
+                    ++embedding;
+                }
+            } else {
+                const double scale = GetNormalizedScale(embedding, c, norm);
+                const double minValue = static_cast<double>(std::numeric_limits<TCoord>::min());
+                const double maxValue = static_cast<double>(std::numeric_limits<TCoord>::max());
+                for (auto& coord : data) {
+                    const double value = norm != 0
+                        ? static_cast<double>(*embedding) / (static_cast<double>(c) * norm)
+                        : 0;
+                    coord = static_cast<TCoord>(std::clamp(std::round(value * scale), minValue, maxValue));
+                    ++embedding;
+                }
+            }
+            return;
+        }
 
         if (IsBitQuantized()) {
             ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
@@ -658,10 +781,9 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
     return true;
 }
 
-bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
-    const TString nameLower = to_lower(name);
     if (nameLower == "distance") {
         if (settings.mutable_settings()->has_metric()) {
             error = "only one of distance or similarity should be set, not both";
@@ -677,17 +799,17 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
     } else if (nameLower =="vector_type") {
         settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
     } else if (nameLower =="vector_dimension") {
-        settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
+        settings.mutable_settings()->set_vector_dimension(ParseUInt32(nameLower, value, MinVectorDimension, MaxVectorDimension, error));
     } else if (nameLower =="clusters") {
-        settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+        settings.set_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {
-        settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+        settings.set_levels(ParseUInt32(nameLower, value, MinLevels, MaxLevels, error));
     } else if (nameLower == "overlap_clusters") {
-        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+        settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
-        settings.set_overlap_ratio(ParseDouble(name, value, error));
+        settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else {
-        error = TStringBuilder() << "Unknown index setting: " << name;
+        error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;
     }
 

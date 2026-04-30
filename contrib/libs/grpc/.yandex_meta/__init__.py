@@ -1,5 +1,4 @@
 import os.path
-import os.path as P
 import shutil
 
 from devtools.yamaker.arcpath import ArcPath
@@ -30,19 +29,6 @@ def post_build(self):
 
 
 def post_install(self):
-    def fix_protos(m):
-        srcs = getattr(m, "SRCS", None)
-        if not srcs:
-            return
-
-        protos = set()
-        for s in srcs:
-            if s.endswith(".proto"):
-                protos.add(s)
-                m.PEERDIR.add(P.join("contrib/libs/grpc/src", P.dirname(s)))
-
-        srcs -= protos
-
     def fix_ssl_certificates():
         with self.yamakes["."] as m:
             m.SRCS.add("src/core/lib/security/security_connector/add_arcadia_root_certs.cpp")
@@ -50,8 +36,6 @@ def post_install(self):
 
     for name, m in self.yamakes.items():
         with m:
-            fix_protos(m)
-
             if hasattr(m, "CFLAGS"):
                 m.before(
                     "SRCS",
@@ -71,25 +55,24 @@ def post_install(self):
 
     fix_ssl_certificates()
 
-    # remove unnecessary folder with protos duplicates
+    # remove proto sources as we use contrib/proto/grpc instead
     shutil.rmtree(f"{self.dstdir}/protos")
 
     # Let grpc++_reflection register itself (r6449480).
     with self.yamakes["grpc++_reflection"] as m:
+        # Mark proto_server_reflection_plugin.cc as GLOBAL
         m.SRCS.remove("src/cpp/ext/proto_server_reflection_plugin.cc")
         m.SRCS.add(GLOBAL("src/cpp/ext/proto_server_reflection_plugin.cc"))
-
-    # fix path for protos
-    with self.yamakes["grpc++_reflection"] as m:
-        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1")
+        # Use protos from contrib/proto/grpc
+        m.SRCS.remove("protos/src/proto/grpc/reflection/v1alpha/reflection.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1alpha")
+        m.SRCS.remove("protos/src/proto/grpc/reflection/v1/reflection.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
-        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
+        m.SRCS.remove("protos/src/proto/grpc/channelz/channelz.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/channelz/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     # fix induced deps
@@ -131,10 +114,6 @@ grpc = CMakeNinjaNixProject(
     license="Apache-2.0",
     keep_paths=[
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
-        "src/proto/grpc/channelz/ya.make",
-        "src/proto/grpc/health/v1/ya.make",
-        "src/proto/grpc/reflection/v1/ya.make",
-        "src/proto/grpc/reflection/v1alpha/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -203,14 +182,6 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/windows/iocp.h",
         "src/core/lib/event_engine/socket_notifier.h",
         "src/core/lib/event_engine/poller.h",
-        # Copy necessary .proto files only
-        "src/proto/grpc/channelz/**/*.proto",
-        "src/proto/grpc/health/**/*.proto",
-        "src/proto/grpc/reflection/**/*.proto",
-    ],
-    copy_sources_except=[
-        # Proto library with testing services
-        "src/proto/grpc/testing/",
     ],
     disable_includes=[
         # if OPENSSL_VERSION_NUMBER >= 0x30000000L

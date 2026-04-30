@@ -9,7 +9,7 @@ namespace {
 
 class TVisitor: public TSQLv1NarrowingVisitor {
 public:
-    TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
+    TVisitor(const TParsedInput& input, const INamedNodes* nodes)
         : TSQLv1NarrowingVisitor(input)
         , Nodes_(nodes)
     {
@@ -37,12 +37,12 @@ public:
     }
 
 private:
-    const TNamedNodes* Nodes_;
+    const INamedNodes* Nodes_;
 };
 
 class TClusterVisitor: public TSQLv1BaseVisitor {
 public:
-    explicit TClusterVisitor(const TNamedNodes* nodes)
+    explicit TClusterVisitor(const INamedNodes* nodes)
         : Nodes_(nodes)
     {
     }
@@ -90,12 +90,12 @@ private:
         return node.AsString();
     }
 
-    const TNamedNodes* Nodes_;
+    const INamedNodes* Nodes_;
 };
 
 } // namespace
 
-TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const TNamedNodes& nodes) {
+TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const INamedNodes& nodes) {
     std::any result = TClusterVisitor(&nodes).visit(ctx);
     if (!result.has_value()) {
         return Nothing();
@@ -104,7 +104,7 @@ TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, con
 }
 
 // TODO(YQL-19747): Use any to maybe conversion function
-TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
+TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const INamedNodes& nodes) {
     std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
     if (!result.has_value()) {
         return Nothing();

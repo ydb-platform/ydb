@@ -457,6 +457,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
         .Item("use_abortable_response").Value(config.UseAbortableResponse)
         .Item("enable_debug_metrics").Value(config.EnableDebugMetrics)
+        .Item("use_halting_response").Value(config.UseHaltingResponse)
+        .Item("halting_response_bytes_limit").Value(config.HaltingResponseBytesLimit)
         .Item("enable_local_mode_optimization").Value(config.EnableLocalModeOptimization)
         .Item("write_stderr_successful_jobs").Value(config.WriteStderrSuccessfulJobs)
         .Item("trace_http_requests_mode").Value(::ToString(config.TraceHttpRequestsMode))
@@ -474,6 +476,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("redirect_stdout_to_stderr").Value(config.RedirectStdoutToStderr)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
         .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
+        .Item("enable_client_tracing").Value(config.EnableClientTracing)
     .EndMap();
 }
 
@@ -533,6 +536,8 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
     DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);
     DESERIALIZE_ITEM("enable_debug_metrics", config.EnableDebugMetrics);
+    DESERIALIZE_ITEM("use_halting_response", config.UseHaltingResponse);
+    DESERIALIZE_ITEM("halting_response_bytes_limit", config.HaltingResponseBytesLimit);
     DESERIALIZE_ITEM("enable_local_mode_optimization", config.EnableLocalModeOptimization);
     DESERIALIZE_ITEM("write_stderr_successful_jobs", config.WriteStderrSuccessfulJobs);
     DESERIALIZE_ITEM("trace_http_requests_mode", config.TraceHttpRequestsMode);
@@ -543,6 +548,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("redirect_stdout_to_stderr", config.RedirectStdoutToStderr);
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
     DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
+    DESERIALIZE_ITEM("enable_client_tracing", config.EnableClientTracing);
 }
 
 #undef DESERIALIZE_ITEM

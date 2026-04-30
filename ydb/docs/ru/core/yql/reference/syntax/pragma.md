@@ -493,7 +493,7 @@ SELECT $foo;
 
 ### `ydb.OptimizerHints` {#optimizerhints}
 
-Значение прагмы описано в [отдельном разделе](../../../dev/query-hints.md).
+Значение прагмы описано в [отдельном разделе](../../../dev/query-execution-optimization/query-hints.md).
 {% if tech %}
 
 ### `kikimr.IsolationLevel`

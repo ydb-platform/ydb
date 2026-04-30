@@ -9,21 +9,51 @@ static const auto LagPenaltyProviderProfiler = NProfiling::TRegistry{"/lag_penal
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCounter::TCounter(const NProfiling::TRegistry& registry)
+TCounter::TCounter(
+    const NProfiling::TRegistry& registry,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    const std::optional<TDuration>& requestDurationHistogramGranularity)
     : SuccessRequestCount(registry.Counter("/requests_success"))
     , CancelRequestCount(registry.Counter("/requests_cancel"))
     , ErrorRequestCount(registry.Counter("/requests_error"))
     , EffectivePenalty(registry.TimeGauge("/effective_penalty"))
     , ExternalPenalty(registry.TimeGauge("/external_penalty"))
-    , RequestDuration(registry.TimeHistogram("/request_duration", TDuration::MilliSeconds(1), TDuration::MilliSeconds(70)))
+    , RequestDuration(
+        requestDurationHistogramGranularity
+            ? registry.TimeHistogram(
+                "/request_duration",
+                requestDurationHistogramMin,
+                requestDurationHistogramMax,
+                requestDurationHistogramGranularity.value())
+            : registry.TimeHistogram(
+                "/request_duration",
+                requestDurationHistogramMin,
+                requestDurationHistogramMax))
 { }
 
-TCounter::TCounter(const std::string& clusterName)
-    : TCounter(HedgingClientProfiler.WithTag("yt_cluster", clusterName))
+TCounter::TCounter(
+    const std::string& clusterName,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    const std::optional<TDuration>& requestDurationHistogramGranularity)
+    : TCounter(
+        HedgingClientProfiler.WithTag("yt_cluster", clusterName),
+        requestDurationHistogramMin,
+        requestDurationHistogramMax,
+        requestDurationHistogramGranularity)
 { }
 
-TCounter::TCounter(const NProfiling::TTagSet& tagSet)
-    : TCounter(HedgingClientProfiler.WithTags(tagSet))
+TCounter::TCounter(
+    const NProfiling::TTagSet& tagSet,
+    TDuration requestDurationHistogramMin,
+    TDuration requestDurationHistogramMax,
+    const std::optional<TDuration>& requestDurationHistogramGranularity)
+    : TCounter(
+        HedgingClientProfiler.WithTags(tagSet),
+        requestDurationHistogramMin,
+        requestDurationHistogramMax,
+        requestDurationHistogramGranularity)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

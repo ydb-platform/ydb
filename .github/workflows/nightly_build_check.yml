@@ -45,11 +45,14 @@ defaults:
 
 jobs:
   build:
+    # Skip scheduled runs in forks; manual dispatch still works everywhere
+    if: github.event_name != 'schedule' || github.repository == 'ydb-platform/ydb'
     uses: ./.github/workflows/build_binaries.yml
     with:
       build-target: ${{ inputs.build-target || 'ydb/apps/ydb' }}
       binary-name: ${{ inputs.binary-name || 'ydb' }}
-      ref: main
+      # Scheduled runs always build main; manual dispatch uses the branch it was launched from.
+      ref: ${{ github.event_name == 'schedule' && 'main' || github.ref_name }}
       build-linux-amd: ${{ github.event_name != 'schedule' && inputs.build-linux-amd || false }}
       build-linux-arm: ${{ github.event_name != 'schedule' && inputs.build-linux-arm || false }}
       build-darwin-amd: ${{ github.event_name != 'schedule' && inputs.build-darwin-amd || false }}
@@ -58,15 +61,31 @@ jobs:
 
   notify:
     needs: build
-    if: always() && (success() || failure())
+    if: failure()
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           sparse-checkout: .github/scripts/telegram
       - name: Install dependencies
         run: pip install requests
+      # Best-effort: if gh query fails (permissions/rate limits/transient errors),
+      # we still want to deliver the failure notification without the job list.
+      - name: Collect failed job names
+        id: failed-jobs
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "jobs=" >> "$GITHUB_OUTPUT"
+          if FAILED=$(gh run view ${{ github.run_id }} --repo ${{ github.repository }} \
+            --json jobs --jq '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")'); then
+            echo "Failed jobs: $FAILED"
+            echo "jobs=$FAILED" >> "$GITHUB_OUTPUT"
+          else
+            echo "Warning: failed to collect failed job names; continuing without them."
+          fi
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
@@ -74,12 +93,13 @@ jobs:
           BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
-          if [ "${{ needs.build.result }}" == "success" ]; then
-            STATUS="OK"
+          FAILED="${{ steps.failed-jobs.outputs.jobs }}"
+          if [ -n "$FAILED" ]; then
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed jobs: ${FAILED}. [View run](${RUN_URL})"
           else
-            STATUS="FAILED"
+            MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. [View run](${RUN_URL})"
           fi
           python .github/scripts/telegram/send_telegram_message.py \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
             --chat-id "$CHAT_ID" \
-            --message "Nightly build check ${STATUS} for *${BUILD_TARGET}*. [View run](${RUN_URL})"
+            --message "$MESSAGE"

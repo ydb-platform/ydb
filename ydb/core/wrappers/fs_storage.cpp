@@ -44,6 +44,7 @@ private:
             : Key(key)
             , File(key, OpenAlways | WrOnly | ForAppend)
         {
+            FsyncParentDir(key);
             File.Flock(LOCK_EX | LOCK_NB);
             File.Resize(0);
         }
@@ -247,7 +248,6 @@ public:
             TMultipartUploadSession session(key);
             session.File.Write(body.data(), body.size());
             session.File.Flush();
-            FsyncParentDir(fsPath);
             session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
@@ -391,17 +391,14 @@ public:
     static constexpr int DefaultMaxListKeys = 1000;
 
     bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
-                            Aws::S3::Model::ListObjectsResult& result) {
+        Aws::S3::Model::ListObjectsResult& result)
+    {
         TVector<TString> children;
         dir.ListNames(children);
         Sort(children);
         for (const auto& name : children) {
             TFsPath child = dir / name;
-            if (child.IsDirectory()) {
-                if (ListFilesRecursive(child, marker, maxKeys, result)) {
-                    return true;
-                }
-            } else if (child.IsFile()) {
+            if (child.IsFile()) {
                 const TString& path = child.GetPath();
                 if (!marker.empty() && path <= marker) {
                     continue;
@@ -412,6 +409,10 @@ public:
                 Aws::S3::Model::Object obj;
                 obj.SetKey(Aws::String(path.data(), path.size()));
                 result.AddContents(std::move(obj));
+            } else if (child.IsDirectory()) {
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
+                }
             }
         }
         return false;

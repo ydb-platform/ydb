@@ -1,6 +1,8 @@
 items:
 - name: Системные требования
   href: system-requirements.md
+- name: Настройки CPU для production
+  href: cpu-production-settings.md
 - name: Версионирование
   href: versioning.md
 - name: Обслуживание

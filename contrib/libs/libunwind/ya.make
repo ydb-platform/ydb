@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.1.2)
+VERSION(22.1.3)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.3.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -40,6 +40,12 @@ CFLAGS(
     -fno-rtti
     -funwind-tables
 )
+
+IF (OS_LINUX)
+    CFLAGS(
+        -D_LIBUNWIND_HAVE_GETAUXVAL
+    )
+ENDIF()
 
 IF (SANITIZER_TYPE == memory)
     CFLAGS(

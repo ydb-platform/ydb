@@ -17,84 +17,111 @@ on:
             required: false
             type: string
             default: main
+        build_type:
+            description: 'Optional single build type override (empty = use build types from mute_issue_and_digest_config.json)'
+            required: false
+            type: string
+            default: ''
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
-  BUILD_TYPE: relwithdebinfo
+  WORKFLOW_CHECKOUT_REF: ${{ github.ref_name }}
 
 jobs:
-  create-issues-for-muted-tests:
-    runs-on: ubuntu-latest
-    if: |
-      ((github.event_name == 'pull_request' &&
-        github.event.pull_request.merged == true ) ||
-       github.event_name == 'workflow_dispatch')
-
+  resolve-build-types:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    outputs:
+      base_branch: ${{ steps.resolve.outputs.base_branch }}
+      matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
     steps:
-      - name: Check mute-unmute label via API
-        id: label_check
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
-            });
-            const labels = pr.labels.map(l => l.name);
-            console.log('PR labels:', labels);
-            const has = labels.includes('mute-unmute');
-            core.setOutput('has_mute_unmute_label', has ? 'true' : 'false');
-            if (!has) {
-              core.notice(`PR #${pr.number} does not have mute-unmute label (labels: ${labels.join(', ')}), skipping`);
-            }
-
-      - name: Set environment variables for branches
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "BASE_BRANCH=${{ github.event.inputs.base_branch }}" >> "$GITHUB_ENV"
-          else
-            echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> "$GITHUB_ENV"
-          fi
-
-      - name: Checkout repository
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
+      - name: Checkout config
         uses: actions/checkout@v4
         with:
-            ref: main
+          ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+          sparse-checkout: |
+            .github/config/mute_issue_and_digest_config.json
+            .github/scripts/tests/mute/mute_helper.py
+            .github/scripts/tests/mute/mute_utils.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve build types matrix
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BASE_BRANCH="${{ github.event.inputs.base_branch }}"
+          else
+            BASE_BRANCH="${{ github.event.pull_request.base.ref || github.base_ref }}"
+            if [ -z "$BASE_BRANCH" ]; then
+              echo "BASE_BRANCH is empty for pull_request event" >&2
+              exit 1
+            fi
+          fi
+          echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.build_type }}" ]; then
+            MATRIX_BUILD_TYPES='["${{ github.event.inputs.build_type }}"]'
+          else
+            MATRIX_BUILD_TYPES="$(python3 .github/scripts/tests/mute/mute_helper.py issue-build-types \
+              --profiles-config ".github/config/mute_issue_and_digest_config.json" \
+              --branch "$BASE_BRANCH")"
+          fi
+          echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
+
+  create-issues-for-muted-tests:
+    needs: resolve-build-types
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    if: |
+      ((github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
+       github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: ${{ fromJson(needs.resolve-build-types.outputs.matrix_build_types) }}
+
+    steps:
+      - name: Set environment variables for branches
+        run: |
+          echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+            ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+
+      - name: Resolve and load muted YA from base branch
+        run: |
+          set -euo pipefail
+          MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ matrix.build_type }}")"
+          git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
+          git show "origin/${{ env.BASE_BRANCH }}:${MUTED_YA_RELATIVE}" > base_muted_ya.txt
+          echo "MUTED_YA_FILE_PATH=${{ github.workspace }}/base_muted_ya.txt" >> "$GITHUB_ENV"
+          echo "Using base_branch=${{ env.BASE_BRANCH }} build_type=${{ matrix.build_type }} muted_ya_file=$MUTED_YA_RELATIVE"
 
       - name: Install dependencies
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         run: |
             python -m pip install --upgrade pip
             pip install ydb[yc] PyGithub requests matplotlib numpy pandas
 
       - name: Setup ydb access
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
             ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Create issues for muted tests
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }} --build-type=${{ env.BUILD_TYPE }}
+        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
 
       - name: Comment PR
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ env.GH_TOKEN }}
@@ -115,15 +142,12 @@ jobs:
             });
 
       - name: Update muted tests in DB
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }} --muted_ya_file="${{ env.MUTED_YA_FILE_PATH }}"
 
       - name: Collect test history data
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
 
       - name: Update test monitor
-        if: github.event_name != 'pull_request' || steps.label_check.outputs.has_mute_unmute_label == 'true'
-        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ matrix.build_type }}
 
       # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)

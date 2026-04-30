@@ -18,7 +18,7 @@ bool IsSuitableToPushPredicateToColumnTables(const TIntrusivePtr<IOperator>& inp
     }
 
     const auto read = CastOperator<TOpRead>(maybeRead);
-    return read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OlapFilterLambda;
+    return read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OlapFilterLambda && read->IsSingleConsumer();
 }
 }
 

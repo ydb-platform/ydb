@@ -15,4 +15,6 @@ struct TYqlAggregationArgs {
 
 TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args);
 
+TNodePtr BuildYqlGrouping(TPosition position, TVector<TNodePtr> args);
+
 } // namespace NSQLTranslationV1

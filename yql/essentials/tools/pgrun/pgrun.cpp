@@ -1004,7 +1004,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     rowSpec->SetColumnOrder(std::move(columnOrder));
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], false);
 
     NYT::TNode spec;
     rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);

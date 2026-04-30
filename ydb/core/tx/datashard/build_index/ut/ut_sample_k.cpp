@@ -334,9 +334,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         });
         CreateShardedTable(server, sender, "/Root", "table-1", options);
 
-        // Upsert some initial values
+        // Only valid vectors (with \x02 format byte)
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, __ydb_foreign) VALUES "
-            "(1, \"ab\", false), (2, \"ab\x02\", false), (3, \"\", false), (4, \"cdef\", false), (5, \"de\x02\", false);");
+            "(2, \"ab\x02\", false), (5, \"de\x02\", false);");
 
         auto snapshot = CreateVolatileSnapshot(server, {kTable});
 
@@ -350,6 +350,120 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
             *rec.MutableSettings() = settings;
         });
         UNIT_ASSERT_VALUES_EQUAL(data, "value = de\x02, key = 5\nvalue = ab\x02, key = 2\n");
+    }
+
+    Y_UNIT_TEST(DimensionMismatchError) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "String", false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
+
+        // First row has wrong dimension (correct format byte but 4 bytes instead of 3), should stop immediately
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+            "(1, \"\x30\x30\x30\x02\"), (2, \"ab\x02\"), (5, \"de\x02\");");
+
+        auto snapshot = CreateVolatileSnapshot(server, {kTable});
+        auto datashards = GetTableShards(server, sender, kTable);
+        TTableId tableId = ResolveTableId(server, sender, kTable);
+
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto tid = datashards[0];
+
+        auto ev = std::make_unique<TEvDataShard::TEvSampleKRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(tid);
+        tableId.PathId.ToProto(rec.MutablePathId());
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+        rec.AddColumns("value");
+        rec.AddColumns("key");
+        rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
+        rec.SetSeed(0);
+        rec.SetK(10);
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
+
+        runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvSampleKResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        TString issuesStr = issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
+    }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"value", "String", false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-1", options);
+
+        // 2 valid rows, 1 row with NULL embedding (column omitted)
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+            "(2, \"ab\x02\"), (5, \"de\x02\");");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (3);");
+
+        auto snapshot = CreateVolatileSnapshot(server, {kTable});
+        auto datashards = GetTableShards(server, sender, kTable);
+        UNIT_ASSERT_VALUES_EQUAL(datashards.size(), 1);
+
+        ui64 seed = 0, k = 10;
+        TString data = DoSampleK(server, sender, kTable, snapshot, seed, k, [&](NKikimrTxDataShard::TEvSampleKRequest& rec) {
+            VectorIndexSettings settings;
+            settings.set_vector_dimension(2);
+            settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+            settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+            *rec.MutableSettings() = settings;
+        });
+
+        // Valid rows should be sampled, null row should be skipped
+        UNIT_ASSERT_STRING_CONTAINS(data, "key = 2");
+        UNIT_ASSERT_STRING_CONTAINS(data, "key = 5");
+        UNIT_ASSERT(!data.Contains("key = 3"));
     }
 }
 

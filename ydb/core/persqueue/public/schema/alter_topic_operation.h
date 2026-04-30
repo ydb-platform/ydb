@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -13,10 +14,11 @@ public:
     virtual const TString& GetTopicName() const = 0;
 
     virtual TResult ApplyChanges(
+        const TString& localCluster,
+        const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
-        bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) = 0;
 };
 
@@ -26,6 +28,7 @@ struct TAlterTopicOperationSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<IAlterTopicStrategy> Strategy;
     bool IfExists = false;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 

@@ -1,6 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -86,7 +85,7 @@ public:
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
-        NDDisk::TPersistentBufferFormat pbFormat{256, 4, 128 << 20, 8, 5000, 512 * 1024};
+        NDDisk::TPersistentBufferFormat pbFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024};
         const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
             NodeId);
@@ -677,7 +676,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetSelector().GetOffsetInBytes(), selector.OffsetInBytes);
         UNIT_ASSERT_VALUES_EQUAL(record.GetSelector().GetSize(), selector.Size);
 
-        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn, 1));
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn));
 
         auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
@@ -873,7 +872,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(writeResult, TReplyStatus::OK);
         UNIT_ASSERT(writeResult->Get()->Record.GetPDiskNormalizedOccupancy() == expected);
 
-        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn, 1));
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn));
 
         auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
@@ -1235,6 +1234,59 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResult, TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(PersistentBufferReadSequential) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.PBServiceId, 40, 1);
+
+        const ui64 lsn = 10;
+        const ui32 size = BlockSize * 100;
+        TString payload = NUnitTest::RandomString(size);
+        const NDDisk::TBlockSelector selector{3, 0, size};
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            UNIT_ASSERT(pbWriteRaw->Get()->Data.size() == size + BlockSize);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+
+        { // Overfill inmemory cache - pop previous lsn data
+            NDDisk::TQueryCredentials creds2 = Connect(ctx, disk.PBServiceId, 50, 1);
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds2, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            UNIT_ASSERT(pbWriteRaw->Get()->Data.size() == size + BlockSize);
+            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        }
+
+        {
+            for (auto i : xrange(3)) {
+                const NDDisk::TBlockSelector readSelector{3, BlockSize * (i + 1), BlockSize * (i + 10)};
+                SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(creds, readSelector, lsn, 1, {true}), i);
+            }
+
+            auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            ctx.SendPDiskResponse(disk, *readRaw, new NPDisk::TEvChunkReadRawResult(TRope(payload)));
+
+            for (auto _ : xrange(3)) {
+                auto readResult = WaitFromDDisk<NDDisk::TEvReadPersistentBufferResult>(ctx);
+                AssertStatus(readResult, TReplyStatus::OK);
+                auto actual = readResult->Get()->GetPayload(0).ConvertToString();
+                auto expected = payload.substr(BlockSize * (readResult->Cookie + 1), BlockSize * (readResult->Cookie + 10));
+                UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+            }
+        }
     }
 }
 

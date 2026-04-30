@@ -487,13 +487,13 @@ class TAggregateAmbiguityException : public yexception {};
 } // namespace NYql::NPg
 
 template <>
-inline void Out<NYql::NPg::ETypType>(IOutputStream& o, NYql::NPg::ETypType typType) {
-    o.Write(static_cast<std::underlying_type<NYql::NPg::ETypType>::type>(typType));
+inline void Out<NYql::NPg::ETypType>(IOutputStream& out, NYql::NPg::ETypType value) {
+    out.Write(static_cast<std::underlying_type<NYql::NPg::ETypType>::type>(value));
 }
 
 template <>
-inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercionCode coercionCode) {
-    o.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(coercionCode));
+inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& out, NYql::NPg::ECoercionCode value) {
+    out.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(value));
 }
 
 template <>

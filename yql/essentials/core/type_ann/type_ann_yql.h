@@ -16,4 +16,13 @@ IGraphTransformer::TStatus YqlAggFactoryWrapper(
 IGraphTransformer::TStatus YqlAggWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
+IGraphTransformer::TStatus YqlWinFactoryWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
+IGraphTransformer::TStatus YqlAggWinWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
+IGraphTransformer::TStatus YqlWinWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
 } // namespace NYql::NTypeAnnImpl

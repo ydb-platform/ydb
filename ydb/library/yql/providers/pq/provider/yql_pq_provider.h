@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 #include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_integration.h>

@@ -111,13 +111,15 @@ namespace NKikimr {
                                            ui64 logStartLsn,
                                            ui32 appendBlockSize,
                                            const TEntryPointDbgInfo &lastEntryPointDbgInfo,
-                                           const TSyncLogHeader &header)
+                                           const TSyncLogHeader &header,
+                                           const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData)
             : DiskSnapPtr(diskSnapPtr)
             , MemSnapPtr(memSnapPtr)
             , LogStartLsn(logStartLsn)
             , AppendBlockSize(appendBlockSize)
             , LastEntryPointDbgInfo(lastEntryPointDbgInfo)
             , Header(header)
+            , PhantomFlagStorageData(phantomFlagStorageData)
         {
             CheckSnapshotConsistency(); // For debug
         }
@@ -146,6 +148,10 @@ namespace NKikimr {
             pb.SetPDiskGuid(Header.PDiskGuid);
             pb.SetVDiskIncarnationGuid(Header.VDiskIncarnationGuid);
             pb.SetLogStartLsn(LogStartLsn);
+            if (PhantomFlagStorageData) {
+                auto* data = pb.MutablePhantomFlagStorageData();
+                PhantomFlagStorageData->Serialize(data);
+            }
             // DiskRecLog
             TStringStream s;
             ui32 indexRecsNum = DiskSnapPtr->Serialize(s, delta);
@@ -276,7 +282,8 @@ namespace NKikimr {
                                                             LogStartLsn,
                                                             DiskRecLog.AppendBlockSize,
                                                             LastEntryPointDbgInfo,
-                                                            Header));
+                                                            Header,
+                                                            PhantomFlagStorageData));
         }
 
         bool TSyncLog::CheckMemAndDiskRecLogsDoNotIntersect() const {
@@ -398,6 +405,23 @@ namespace NKikimr {
         }
 
         ////////////////////////////////////////////////////////////////////////
+        // TSyncLog: PhantomFlagStorageData
+        ////////////////////////////////////////////////////////////////////////
+        void TSyncLog::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
+            PhantomFlagStorageData = std::move(data);
+        }
+
+        TPhantomFlagStorageData TSyncLog::GetPhantomFlagStorageData() const {
+            TPhantomFlagStorageData res;
+            if (PhantomFlagStorageData) {
+                res = *PhantomFlagStorageData;
+            } else {
+                res.ChunkSize = GetChunkSize();
+            }
+            return res;
+        }
+
+        ////////////////////////////////////////////////////////////////////////
         // TSyncLog: PRIVATE
         ////////////////////////////////////////////////////////////////////////
         TSyncLog::TSyncLog(const TSyncLogHeader &header,
@@ -503,6 +527,14 @@ namespace NKikimr {
             ChunksToDelete.reserve(chunksToDeleteDelayedSize);
             for (ui64 i = 0; i != chunksToDeleteDelayedSize; ++i) {
                 ChunksToDelete.push_back(pb.GetChunksToDeleteDelayed(i));
+            }
+
+            if (pb.HasPhantomFlagStorageData()) {
+                TPhantomFlagStorageData data;
+                data.Deserialize(pb.GetPhantomFlagStorageData());
+                SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
+            } else {
+                SyncLogPtr->UpdatePhantomFlagStorageData(std::nullopt);
             }
 
             return true;

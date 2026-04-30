@@ -9,6 +9,15 @@
 
 #include <yt/yt/client/api/public.h>
 
+// Forward declaration as we don't want to include yt/yt/core/tracing/trace_context.h to avoid possible namespaces conflicts
+namespace NYT::NTracing {
+
+class TCurrentTraceContextGuard;
+
+} // namespace NYT::NTracing
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -211,7 +220,7 @@ public:
 
     // Files
 
-    std::unique_ptr<IInputStream> ReadFile(
+    std::unique_ptr<IAbortableInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
@@ -291,18 +300,18 @@ public:
         const TMaybe<TFormat>& format,
         const TTableWriterOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTable(
+    std::unique_ptr<IAbortableInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadTablePartition(
+    std::unique_ptr<IAbortableInputStream> ReadTablePartition(
         const TString& cookie,
         const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
-    std::unique_ptr<IInputStream> ReadBlobTable(
+    std::unique_ptr<IAbortableInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TKey& key,
@@ -413,6 +422,8 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    NTracing::TCurrentTraceContextGuard CreateTraceContext(const std::string& spanName);
+
     const TApiClients Clients_;
     const TConfigPtr Config_;
 };

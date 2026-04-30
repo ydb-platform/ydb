@@ -1,5 +1,6 @@
 #include "partition_direct_actor.h"
 
+#include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
 

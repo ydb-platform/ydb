@@ -1484,7 +1484,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(VectorIndexBuildParallelOne) {
+    void DoTestCustomParallel(const TString& createIndex) {
         auto serverSettings = TKikimrSettings()
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false);
@@ -1505,17 +1505,29 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         };
         runtime->SetEventFilter(captureEvents);
 
-        const TString createIndex(Q_(R"(
+        auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(Q_(createIndex)).ExtractValueSync(); });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
+    }
+
+    Y_UNIT_TEST(VectorIndexBuildCustomParallel) {
+        DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL USING vector_kmeans_tree
                 ON (emb)
-                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=1);
-        )"));
-        auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(createIndex).ExtractValueSync(); });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
+        )");
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 1);
+    Y_UNIT_TEST(SecondaryIndexBuildCustomParallel) {
+        DoTestCustomParallel(R"(
+            ALTER TABLE `/Root/TestTable`
+                ADD INDEX index1
+                GLOBAL ON (emb)
+                WITH (parallel=2);
+        )");
     }
 }
 

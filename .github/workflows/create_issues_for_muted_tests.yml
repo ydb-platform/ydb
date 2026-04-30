@@ -41,6 +41,7 @@ jobs:
           sparse-checkout: |
             .github/config/mute_issue_and_digest_config.json
             .github/scripts/tests/mute/mute_helper.py
+            .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
 
       - name: Resolve build types matrix

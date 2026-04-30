@@ -2177,7 +2177,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Tier-A budget = 1: one tier-A retry permitted, then FAIL.
+        // Per-incremental retry budget = 1: a second retry would FAIL.
         TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
@@ -2210,7 +2210,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Restore must SUCCEED despite N empty allocator results, because
-        // tier-B retries are budget-independent.
+        // allocator retries are budget-independent.
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
             "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
         UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,

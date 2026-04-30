@@ -1069,12 +1069,8 @@ public:
         }
 
         if (Ev->Get()->TxIds.empty()) {
-            // Allocator transient failure. Re-send TEvAllocate for the same
-            // (originalOpId, itemSeq) cookie after a small backoff. The item
-            // stays in PendingItems and the persisted row stays at
-            // WaitTxId=Invalid until the next allocator reply binds a TxId.
-            // Tier-B retry: does NOT consume the per-incremental retry
-            // budget (CurrentIncrementalRetryCount is unchanged).
+            // Allocator transient failure: re-send TEvAllocate after a backoff.
+            // Does NOT consume the per-incremental retry budget.
             LOG_W("TTxProgressIncrementalRestoreAllocateResult: empty TxIds; "
                   << "scheduling allocator retry for op " << originalOpId
                   << " itemSeq " << itemSeq);
@@ -1138,11 +1134,9 @@ private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr Ev;
 
     void ScheduleAllocatorRetry(ui64 originalOpId, ui32 itemSeq, const TActorContext& ctx) {
-        // Tier-B retry: re-send TEvAllocate for the same packed cookie after
-        // a small backoff. We Schedule an IEventHandle directly to the
-        // TxAllocatorClient mailbox so the response routes back to SS via the
-        // same cookie path. CurrentIncrementalRetryCount is intentionally NOT
-        // touched — tier-A retry budget is independent.
+        // Re-send TEvAllocate for the same cookie after a small backoff.
+        // CurrentIncrementalRetryCount is intentionally not touched — the
+        // per-incremental retry budget is independent of allocator retries.
         const ui64 cookie = (originalOpId << 32) | itemSeq;
         const TActorId txAllocator = Self->TxAllocatorClient;
         std::unique_ptr<IEventHandle> ev(new IEventHandle(

@@ -948,17 +948,17 @@ bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compa
             Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
             return false;
         }
-    } else if (to_lower(id.Name) == "max_shards_in_flight") {
-        if (compactEntry.MaxShardsInFlight) {
+    } else if (to_lower(id.Name) == "parallel") {
+        if (compactEntry.Parallel) {
             Ctx_.Error() << "Duplicated " << to_upper(id.Name);
             return false;
         }
-        compactEntry.MaxShardsInFlight = ParseLiteral(value, *this, "Int32");
-        if (!compactEntry.MaxShardsInFlight) {
+        compactEntry.Parallel = ParseLiteral(value, *this, "Int32");
+        if (!compactEntry.Parallel) {
             Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
             return false;
         }
-        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        i32 value = FromString<i32>(compactEntry.Parallel->GetLiteralValue());
         if (value <= 0) {
             Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
             return false;

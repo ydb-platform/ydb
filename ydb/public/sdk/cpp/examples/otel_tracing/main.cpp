@@ -22,6 +22,7 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
+#include <opentelemetry/metrics/provider.h>
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/scope.h>
 
@@ -392,6 +393,9 @@ int main(int argc, char** argv) {
     auto tracerProvider = InitTracing(cfg);
     auto meterProvider = InitMetrics(cfg);
 
+    opentelemetry::trace::Provider::SetTracerProvider(tracerProvider);
+    opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
+
     auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
     auto ydbMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
 
@@ -437,6 +441,11 @@ int main(int argc, char** argv) {
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    opentelemetry::trace::Provider::SetTracerProvider(
+        nostd::shared_ptr<opentelemetry::trace::TracerProvider>{});
+    opentelemetry::metrics::Provider::SetMeterProvider(
+        nostd::shared_ptr<opentelemetry::metrics::MeterProvider>{});
 
     std::cout << "Done. Open Grafana at http://localhost:3000" << std::endl;
     std::cout << "  Jaeger UI at http://localhost:16686" << std::endl;

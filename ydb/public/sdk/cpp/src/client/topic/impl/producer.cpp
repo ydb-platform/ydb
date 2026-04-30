@@ -298,10 +298,16 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
         return;
     }
 
+    struct TChildPartitionInfo {
+        std::uint32_t PartitionId;
+        std::string FromBound;
+        std::optional<std::string> ToBound;
+    };
+
     std::vector<std::uint32_t> children;
-    std::vector<decltype(partitions.begin())> childDescribeInfos;
+    std::vector<TChildPartitionInfo> childPartitionInfos;
     children.reserve(newPartitionsIds.size());
-    childDescribeInfos.reserve(newPartitionsIds.size());
+    childPartitionInfos.reserve(newPartitionsIds.size());
 
     for (const auto& newPartitionId : newPartitionsIds) {
         auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
@@ -318,20 +324,23 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
             return;
         }
         children.push_back(newPartitionId);
-        childDescribeInfos.push_back(partitionDescribeInfo);
+        childPartitionInfos.push_back({
+            .PartitionId = newPartitionId,
+            .FromBound = partitionDescribeInfo->GetFromBound().value_or(""),
+            .ToBound = partitionDescribeInfo->GetToBound(),
+        });
     }
 
     auto splittedPartitionIt = Producer->Partitions.find(PartitionId);
     Y_ABORT_UNLESS(splittedPartitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
     Producer->PartitionsIndex.erase(splittedPartitionIt->second.FromBound_);
 
-    for (const auto& partitionDescribeInfo : childDescribeInfos) {
-        auto newPartitionId = partitionDescribeInfo->GetPartitionId();
-        Producer->PartitionsIndex[partitionDescribeInfo->GetFromBound().value_or("")] = newPartitionId;
-        Producer->Partitions[newPartitionId] = TPartitionInfo()
-            .PartitionId(newPartitionId)
-            .FromBound(partitionDescribeInfo->GetFromBound().value_or(""))
-            .ToBound(partitionDescribeInfo->GetToBound())
+    for (const auto& childPartitionInfo : childPartitionInfos) {
+        Producer->PartitionsIndex[childPartitionInfo.FromBound] = childPartitionInfo.PartitionId;
+        Producer->Partitions[childPartitionInfo.PartitionId] = TPartitionInfo()
+            .PartitionId(childPartitionInfo.PartitionId)
+            .FromBound(childPartitionInfo.FromBound)
+            .ToBound(childPartitionInfo.ToBound)
             .Locked(true);
     }
 

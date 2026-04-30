@@ -32,6 +32,24 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
     }
+
+    for (auto& rec: SetColumnConstraintStateChanges) {
+        TIndexBuildId operationId;
+        TSetColumnConstraintOperationInfo::TOperationState state;
+        std::tie(operationId, state) = rec;
+
+        const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
+        Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
+        auto& operationInfo = *operationInfoPtr->get();
+        LOG_I("Change SetColumnConstraint state from " << operationInfo.OperationState.GetStringValue() << " to " << state.GetStringValue());
+        if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+            operationInfo.EndTime = TAppData::TimeProvider->Now();
+        }
+        operationInfo.OperationState = state;
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistSetColumnConstraintState(db, operationInfo);
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
@@ -186,6 +204,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state) {
     StateChanges.push_back(TChangeStateRec(id, state));
+}
+
+void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state) {
+    SetColumnConstraintStateChanges.push_back(TChangeSetColumnConstraintStateRec(id, state));
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
@@ -360,6 +382,17 @@ void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildIn
     if (buildInfo->Uid) {
         Y_ASSERT(!IndexBuildsByUid.contains(buildInfo->Uid));
         IndexBuildsByUid[buildInfo->Uid] = buildInfo;
+    }
+}
+
+void TSchemeShard::AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& operationInfo) {
+    Y_ASSERT(!SetColumnConstraintOperations.contains(operationInfo->Id));
+    SetColumnConstraintOperations[operationInfo->Id] = operationInfo;
+    SetColumnConstraintOperationsByTime.emplace(operationInfo->StartTime, operationInfo->Id);
+
+    if (operationInfo->Uid) {
+        Y_ASSERT(!SetColumnConstraintOperationsByUid.contains(operationInfo->Uid));
+        SetColumnConstraintOperationsByUid[operationInfo->Uid] = operationInfo;
     }
 }
 

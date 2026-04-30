@@ -16,6 +16,8 @@ SRCS(
     build_index__progress.cpp
     build_index_tx_base.cpp
     build_index_tx_base.h
+    common.h
+    common.cpp
     index_build_info.cpp
     index_build_info.h
     index_utils.cpp

@@ -30,6 +30,11 @@ public:
                 << "Index build with id '" << BuildId << "' already exists");
         }
 
+        if (Self->SetColumnConstraintOperations.contains(BuildId)) {
+            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
+                << "Another long-running operation with id '" << BuildId << "' already exists");
+        }
+
         const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

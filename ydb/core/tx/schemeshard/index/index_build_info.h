@@ -49,9 +49,17 @@ struct TIndexBuildShardStatus {
     }
 };
 
-// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
+// TODO(???) [thank you, mbkkt]
+// Separate it to 4 classes:
+// > TBuildColumnsInfo
+// > TBuildSecondaryInfo
+// > TBuildVectorInfo
+// > TSetColumnConstraintOperationInfo
+// with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
+
+    virtual ~TIndexBuildInfo() = default;
 
     enum class EState: ui32 {
         Invalid = 0,
@@ -688,42 +696,46 @@ public:
             << " for index type " << static_cast<int>(IndexType);
     }
 
-    bool IsBuildSecondaryIndex() const {
+    virtual bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
     }
 
-    bool IsBuildSecondaryUniqueIndex() const {
+    virtual bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
-    bool IsBuildPrefixedVectorIndex() const {
+    virtual bool IsBuildPrefixedVectorIndex() const {
         return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
     }
 
-    bool IsBuildVectorIndex() const {
+    virtual bool IsBuildVectorIndex() const {
         return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
-    bool IsBuildFulltextIndex() const {
+    virtual bool IsBuildFulltextIndex() const {
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
-    bool IsBuildIndex() const {
+    virtual bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
-    bool IsBuildColumns() const {
+    virtual bool IsBuildColumns() const {
         return BuildKind == EBuildKind::BuildColumns;
     }
 
-    bool IsPreparing() const {
+    virtual bool IsSetColumnConstraint() const {
+        return false;
+    }
+
+    virtual bool IsPreparing() const {
         return State == EState::AlterMainTable ||
                State == EState::Locking ||
                State == EState::GatheringStatistics ||
                State == EState::Initiating;
     }
 
-    bool IsTransferring() const {
+    virtual bool IsTransferring() const {
         return State == EState::Filling ||
                State == EState::DropBuild ||
                State == EState::CreateBuild ||
@@ -731,28 +743,28 @@ public:
                State == EState::AlterSequence;
     }
 
-    bool IsApplying() const {
+    virtual bool IsApplying() const {
         return State == EState::Applying ||
                State == EState::Unlocking;
     }
 
-    bool IsDone() const {
+    virtual bool IsDone() const {
         return State == EState::Done;
     }
 
-    bool IsCancelled() const {
+    virtual bool IsCancelled() const {
         return State == EState::Cancelled || State == EState::Rejected;
     }
 
-    bool IsFinished() const {
+    virtual bool IsFinished() const {
         return IsDone() || IsCancelled();
     }
 
-    bool IsValidatingUniqueIndex() const {
+    virtual bool IsValidatingUniqueIndex() const {
         return SubState == ESubState::UniqIndexValidation || SubState == ESubState::UniqConsistentValidation;
     }
 
-    bool IsFlatRelevanceFulltext() const {
+    virtual bool IsFlatRelevanceFulltext() const {
         if (BuildKind != EBuildKind::BuildFulltext) {
             return false;
         }
@@ -833,6 +845,81 @@ public:
 
 };
 
+struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
+    enum class EOperationState: ui32 {
+        Invalid = 0,
+        LockTableOnSchemaOps = 10,
+        LockNullWrites = 20,
+        Validate = 30,
+        UnlockNullWrites = 40,
+        UnlockTableOnSchemaOps = 50,
+        Done = 60
+    };
+
+    struct TOperationState {
+        EOperationState Value = EOperationState::Invalid;
+
+        TOperationState() = default;
+        TOperationState(EOperationState value)
+            : Value(value)
+        {}
+
+        operator EOperationState() const {
+            return Value;
+        }
+
+        TString GetStringValue() const {
+            switch (Value) {
+                case EOperationState::Invalid:
+                    return "Invalid";
+                case EOperationState::LockTableOnSchemaOps:
+                    return "LockTableOnSchemaOps";
+                case EOperationState::LockNullWrites:
+                    return "LockNullWrites";
+                case EOperationState::Validate:
+                    return "Validate";
+                case EOperationState::UnlockNullWrites:
+                    return "UnlockNullWrites";
+                case EOperationState::UnlockTableOnSchemaOps:
+                    return "UnlockTableOnSchemaOps";
+                case EOperationState::Done:
+                    return "Done";
+            }
+        }
+    };
+
+    TOperationState OperationState = EOperationState::Invalid;
+    std::vector<std::string> NotNullColumns;
+
+    TTxId LockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool LockNullWritesTxDone = false;
+
+    TTxId UnlockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool UnlockNullWritesTxDone = false;
+
+    THashMap<TShardIdx, TIndexBuildShardStatus> ValidationShards;
+    
+    TDeque<TShardIdx> ToValidateShards;
+    THashSet<TShardIdx> InProgressValidationShards;
+    TVector<TShardIdx> DoneValidationShards;
+    
+    TTxId ValidationSnapshotTxId = TTxId();
+    TStepId ValidationSnapshotStep = TStepId();
+    
+    ui32 MaxInProgressValidationShards = 10;
+    
+    bool ValidationFailed = false;  // true if any shard found NULL values
+
+    bool IsDone() const override {
+        return OperationState == EOperationState::Done;
+    }
+    
+    bool IsSetColumnConstraint() const override {
+        return true;
+    }
+};
 
 }
 

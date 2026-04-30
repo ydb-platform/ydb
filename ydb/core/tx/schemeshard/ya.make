@@ -61,6 +61,7 @@ RECURSE_FOR_TESTS(
     ut_split_merge_reboots
     ut_secret
     ut_secret_reboots
+    ut_set_column_constraint
     ut_stats
     ut_streaming_query
     ut_streaming_query_reboots
@@ -292,6 +293,10 @@ SRCS(
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
+    schemeshard_set_column_constraint.cpp
+    schemeshard_set_column_constraint.h
+    schemeshard_set_column_constraint__create.cpp
+    schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
     schemeshard_subop_state_types.cpp

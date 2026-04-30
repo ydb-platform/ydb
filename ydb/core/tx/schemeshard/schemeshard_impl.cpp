@@ -5212,6 +5212,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
+    EnableSetColumnConstraint = appData->FeatureFlags.GetEnableSetColumnConstraint();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();
@@ -5490,6 +5491,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
 
         //namespace NIndexBuilder {
+        HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCancelRequest, Handle);
@@ -7353,6 +7356,8 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (SetColumnConstraintOperations.contains(TIndexBuildId(id))) {
+        return Execute(CreateTxReplyAllocateSetColumnConstraint(ev), ctx);
     }
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -7379,6 +7384,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        return Execute(CreateTxReplyModifySetColumnConstraint(ev), ctx);
     } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
@@ -7437,6 +7444,10 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     }
     if (TxIdToIndexBuilds.contains(txId)) {
         Execute(CreateTxReply(txId), ctx);
+        executed = true;
+    }
+    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }
     if (BackgroundCleaningTxToDirPathId.contains(txId)) {
@@ -7544,6 +7555,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             descr->SetFamily(colInfo.Family);
+            descr->SetNotNull(colInfo.NotNull);            
         }
     }
 
@@ -8059,6 +8071,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();
+    EnableSetColumnConstraint = featureFlags.GetEnableSetColumnConstraint();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();

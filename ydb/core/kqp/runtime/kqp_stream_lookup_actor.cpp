@@ -121,6 +121,17 @@ public:
             }
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
+
+            // Add lock stats for broken locks from stream lookup operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 

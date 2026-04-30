@@ -33,6 +33,13 @@ static void Aggregate(NKikimrSysView::TQueryMetrics& metrics, TQueryStatsPtr sta
     Aggregate(*metrics.MutableUpdateRows(), dataStats.GetUpdateRows());
     Aggregate(*metrics.MutableUpdateBytes(), dataStats.GetUpdateBytes());
     Aggregate(*metrics.MutableDeleteRows(), dataStats.GetDeleteRows());
+
+    if (stats->HasLocksBrokenAsBreaker()) {
+        metrics.SetLocksBrokenAsBreaker(metrics.GetLocksBrokenAsBreaker() + stats->GetLocksBrokenAsBreaker());
+    }
+    if (stats->HasLocksBrokenAsVictim()) {
+        metrics.SetLocksBrokenAsVictim(metrics.GetLocksBrokenAsVictim() + stats->GetLocksBrokenAsVictim());
+    }
 }
 
 static void Aggregate(NKikimrSysView::TQueryMetrics::TMetrics& metrics,
@@ -56,6 +63,13 @@ void Aggregate(NKikimrSysView::TQueryMetrics& metrics,
     Aggregate(*metrics.MutableUpdateRows(), from.GetUpdateRows());
     Aggregate(*metrics.MutableUpdateBytes(), from.GetUpdateBytes());
     Aggregate(*metrics.MutableDeleteRows(), from.GetDeleteRows());
+
+    if (from.HasLocksBrokenAsBreaker()) {
+        metrics.SetLocksBrokenAsBreaker(metrics.GetLocksBrokenAsBreaker() + from.GetLocksBrokenAsBreaker());
+    }
+    if (from.HasLocksBrokenAsVictim()) {
+        metrics.SetLocksBrokenAsVictim(metrics.GetLocksBrokenAsVictim() + from.GetLocksBrokenAsVictim());
+    }
 }
 
 bool TQueryInterval::Empty() const {

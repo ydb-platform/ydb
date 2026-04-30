@@ -132,10 +132,12 @@ std::string TProducer::TSplittedPartitionWorker::GetStateName() const {
             return "GotDescribe";
         case EState::PendingMaxSeqNo:
             return "PendingMaxSeqNo";
-        case EState::Done:
-            return "Done";
         case EState::GotMaxSeqNo:
             return "GotMaxSeqNo";
+        case EState::Failed:
+            return "Failed";
+        case EState::Done:
+            return "Done";
     }
 }
 
@@ -179,6 +181,18 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
         case EState::PendingMaxSeqNo:
         case EState::Done:
             break;
+        case EState::Failed:
+            if (WriteSessionToCloseOnError) {
+                TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
+                Producer->GetSessionClosedEventAndDie(WriteSessionToCloseOnError, std::move(sessionClosedEvent));
+                WriteSessionToCloseOnError.reset();
+            }
+            for (const auto& partitionId : WriteSessionPartitionsToDestroy) {
+                Producer->SessionsWorker->DestroyWriteSession(partitionId);
+            }
+            WriteSessionPartitionsToDestroy.clear();
+            MoveTo(EState::Done);
+            break;
         case EState::GotMaxSeqNo:
             Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
             Producer->MessagesWorker->ScheduleResendMessages(PartitionId, MaxSeqNo);
@@ -190,6 +204,10 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
             for (const auto& [partitionId, maxSeqNo] : CachedMaxSeqNos) {
                 Producer->Partitions[partitionId].CachedMaxSeqNo = maxSeqNo;
             }
+            for (const auto& partitionId : WriteSessionPartitionsToDestroy) {
+                Producer->SessionsWorker->DestroyWriteSession(partitionId);
+            }
+            WriteSessionPartitionsToDestroy.clear();
             MoveTo(EState::Done);
             break;
     }
@@ -311,28 +329,27 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
                 return;
             }
             
-            bool gotMaxSeqNo = false;
+            bool needRunMainWorker = false;
             {
                 std::lock_guard lock(Lock);
                 if (result.HasException()) {
                     LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
-                    TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
-                    producerPtr->GetSessionClosedEventAndDie(wrappedSession, std::move(sessionClosedEvent));
-                    MoveTo(EState::Done);
-                    return;
-                }
-
-                UpdateMaxSeqNo(ancestor, result.GetValue());
-                if (--NotReadyFutures == 0) {
-                    MoveTo(EState::GotMaxSeqNo);   
-                    gotMaxSeqNo = true;
+                    WriteSessionToCloseOnError = wrappedSession;
+                    MoveTo(EState::Failed);
+                    needRunMainWorker = true;
+                } else {
+                    UpdateMaxSeqNo(ancestor, result.GetValue());
+                    WriteSessionPartitionsToDestroy.push_back(ancestor);
+                    if (--NotReadyFutures == 0) {
+                        MoveTo(EState::GotMaxSeqNo);
+                        needRunMainWorker = true;
+                    }
                 }
             }
 
-            if (gotMaxSeqNo) {
+            if (needRunMainWorker) {
                 producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
             }
-            producerPtr->SessionsWorker->DestroyWriteSession(ancestor);
         });
         lock.lock();
         GetMaxSeqNoFutures.push_back(future);
@@ -1571,6 +1588,7 @@ TProducer::TProducer(
 }
 
 std::vector<TProducer::TPartitionInfo> TProducer::GetPartitions() const {
+    std::lock_guard lock(GlobalLock);
     std::vector<TPartitionInfo> partitions;
     partitions.reserve(Partitions.size());
     for (const auto& [partitionId, partitionInfo] : Partitions) {
@@ -1580,10 +1598,12 @@ std::vector<TProducer::TPartitionInfo> TProducer::GetPartitions() const {
 }
 
 std::unordered_map<std::uint32_t, TProducer::TPartitionInfo> TProducer::GetPartitionsMap() const {
+    std::lock_guard lock(GlobalLock);
     return Partitions;
 }
 
 std::map<std::string, std::uint32_t> TProducer::GetPartitionsIndex() const {
+    std::lock_guard lock(GlobalLock);
     return PartitionsIndex;
 }
 
@@ -1618,8 +1638,11 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     RunUserEventLoop();
     Done.store(true);
 
-    if (MessagesWorker->IsQueueEmpty()) {
-        return TCloseResult{ .Status = ECloseStatus::Success };
+    {
+        std::lock_guard lock(GlobalLock);
+        if (MessagesWorker->IsQueueEmpty()) {
+            return TCloseResult{ .Status = ECloseStatus::Success };
+        }
     }
 
     auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();

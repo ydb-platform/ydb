@@ -214,7 +214,8 @@ private:
             GotDescribe = 2,
             PendingMaxSeqNo = 3,
             GotMaxSeqNo = 4,
-            Done = 5,
+            Failed = 5,
+            Done = 6,
         };
 
         void MoveTo(EState state);
@@ -236,6 +237,8 @@ private:
         std::uint32_t PartitionId;
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
+        WrappedWriteSessionPtr WriteSessionToCloseOnError;
+        std::vector<std::uint32_t> WriteSessionPartitionsToDestroy;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
         std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;
         std::mutex Lock;
@@ -441,7 +444,7 @@ private:
     NThreading::TPromise<void> ShutdownPromise;
     NThreading::TFuture<void> ShutdownFuture;
 
-    std::mutex GlobalLock;
+    mutable std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     std::atomic_bool Done = false;
     TInstant CloseDeadline = TInstant::Now();

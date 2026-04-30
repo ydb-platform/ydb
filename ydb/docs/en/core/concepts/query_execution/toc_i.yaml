@@ -11,7 +11,7 @@ items:
     href: vector_search.md
   - name: Fulltext search
     href: fulltext_search.md
-  - name: Bloom skip indexes
+  - name: Local indexes
     href: bloom_skip_indexes.md
   - name: Federated query
     include:

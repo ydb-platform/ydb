@@ -12,9 +12,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
-#include <thread>
-#include <atomic>
-#include <set>
+#include <util/generic/set.h>
 
 using namespace NActors;
 using namespace NKikimr;

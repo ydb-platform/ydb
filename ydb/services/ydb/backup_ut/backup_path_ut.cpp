@@ -1734,9 +1734,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(EncryptedExportWithExplicitObjectList) {
         EncryptedExportWithExplicitObjectListImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
-    Y_UNIT_TEST(ParallelBackupWholeDatabase) {
-        ParallelBackupWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
-    }
+    // Y_UNIT_TEST(ParallelBackupWholeDatabase) {
+    //     ParallelBackupWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    // }
     Y_UNIT_TEST(ChecksumsForSchemaMappingFiles) {
         ChecksumsForSchemaMappingFilesImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }

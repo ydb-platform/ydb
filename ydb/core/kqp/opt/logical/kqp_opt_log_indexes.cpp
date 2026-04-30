@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
 #include <util/generic/hash.h>
@@ -919,7 +920,7 @@ TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHand
 
 TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
-    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
@@ -940,7 +941,10 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
     const auto levelColumns = BuildKeyColumnsList(pos, ctx,
-        std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
+        std::initializer_list<std::string_view>{
+            NTableIndex::NKMeans::ParentColumn,
+            NTableIndex::NKMeans::IdColumn,
+            NTableIndex::NKMeans::CentroidColumn});
     const auto prefixColumns = [&] {
         auto columns = indexDesc.KeyColumns;
         columns.back().assign(NTableIndex::NKMeans::IdColumn);
@@ -1001,6 +1005,29 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
             .Done();
     }
 
+    TVector<TString> prefixKeys;
+    for (size_t i = 0; i < indexDesc.KeyColumns.size() - 1; ++i) {
+        prefixKeys.push_back(indexDesc.KeyColumns[i]);
+    }
+
+    size_t numPrefixGroups = 1;
+    {
+        THashSet<TString> possibleKeys;
+        TPredicateExtractorSettings predSettings;
+        predSettings.MergeAdjacentPointRanges = false;
+        predSettings.HaveNextValueCallable = true;
+        predSettings.BuildLiteralRange = true;
+
+        auto extractor = MakePredicateRangeExtractor(predSettings);
+        YQL_ENSURE(tableDesc.SchemeNode);
+        if (extractor->Prepare(flatMap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx)) {
+            auto buildResult = extractor->BuildComputeNode(prefixKeys, ctx, typesCtx);
+            if (buildResult.PointPrefixLen >= prefixKeys.size() && buildResult.ExpectedMaxRanges.Defined()) {
+                numPrefixGroups = std::max<size_t>(1, *buildResult.ExpectedMaxRanges);
+            }
+        }
+    }
+
     auto read = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
 
     read = Build<TCoFlatMap>(ctx, pos)
@@ -1017,32 +1044,47 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     auto prefixLeafRows = FilterLeafRows<TCoCmpGreaterOrEqual>(TExprBase(read), ctx, pos);
     auto prefixRootRows = FilterLeafRows<TCoCmpLess>(TExprBase(read), ctx, pos);
 
-    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
-
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
 
-    TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
-    settings.VectorTopIndex = indexDesc.Name;
-    settings.VectorTopTarget = targetVector;
-    settings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal().Build();
-    auto settingsNode = settings.BuildNode(ctx, pos);
+    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
+    const auto levelTopTotal = levelTop * numPrefixGroups;
+
+    TKqpStreamLookupSettings firstLevelSettings;
+    firstLevelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
+    firstLevelSettings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
+    firstLevelSettings.VectorTopIndex = indexDesc.Name;
+    firstLevelSettings.VectorTopTarget = targetVector;
+    firstLevelSettings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default).Seal().Build();
+    auto firstLevelSettingsNode = firstLevelSettings.BuildNode(ctx, pos);
     auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
         .LookupKeys(prefixRootRows)
         .Columns(levelColumns)
-        .Settings(settingsNode)
+        .Settings(firstLevelSettingsNode)
         .Done().Ptr();
-    VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, settings.VectorTopLimit, settingsNode, levelRows);
+
+    {
+        auto levelTopCount = ctx.Builder(pos)
+            .Callable("Uint64")
+            .Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default)
+            .Seal().Build();
+        TKqpStreamLookupSettings levelSettings;
+        levelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
+        auto levelSettingsNode = levelSettings.BuildNode(ctx, pos);
+        VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, levelTopCount, levelSettingsNode, levelRows);
+    }
 
     read = Build<TCoUnionAll>(ctx, pos)
         .Add(levelRows)
         .Add(prefixLeafRows)
         .Done().Ptr();
 
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
+    settings.VectorTopIndex = indexDesc.Name;
+    settings.VectorTopTarget = targetVector;
     settings.VectorTopLimit = top.Count().Ptr();
     settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
@@ -1923,8 +1965,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
 // Additionally if there is TopSort or Take over filter, and filter depends only on columns available in index,
 // we also push copy of filter through TKqlLookupTable.
-TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-                                        const TParentsMap& parentsMap) {
+TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
+                                        const TKqpOptimizeContext& kqpCtx, const TParentsMap& parentsMap) {
     if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
@@ -1961,7 +2003,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                 return reject("only simple conditions supported for now");
             }
             return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
-                                                          ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
+                                                          ctx, typesCtx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
         if (!canUseVectorIndex) {
             auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();

@@ -274,9 +274,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
 
         SetupLogging(runtime);
 
-        // Enable feature flags for local indexes as scheme objects and column table backup
-        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
-        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
 

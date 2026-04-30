@@ -1016,8 +1016,6 @@ namespace {
         void ExportImportStandaloneColumnTableWithLocalBloomIndexes(bool enableLocalIndexAsSchemeObject) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            Runtime().GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
-            Runtime().GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
             Runtime().GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
 
             ui64 txId = 100;

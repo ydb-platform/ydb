@@ -1,10 +1,5 @@
 #pragma once
 
-<<<<<<< HEAD:ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-
-=======
->>>>>>> 54fd2e591aa (xyliganSereja review fixes):ydb/core/local_indexes/bloom/const.h
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
@@ -14,11 +9,6 @@
 
 #include <algorithm>
 #include <cmath>
-<<<<<<< HEAD:ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h
-#include <optional>
-
-namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
-=======
 #include <cstdint>
 #include <optional>
 
@@ -32,7 +22,6 @@ constexpr std::uint32_t NGrammSize = 3;
 constexpr std::uint32_t HashesCount = 2;
 
 }   // namespace NDefaults
->>>>>>> 54fd2e591aa (xyliganSereja review fixes):ydb/core/local_indexes/bloom/const.h
 
 struct TRequestSettings {
     std::optional<ui32> NGrammSize;

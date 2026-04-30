@@ -300,4 +300,214 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             }
         );
     }
+
+    Y_UNIT_TEST_F(PassEncryptionKey, TImportFixture) {
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("source/prefix")
+                .ExpectSymmetricKey("1234567890");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--source-prefix", "source/prefix",
+                },
+                {
+                    {"YDB_ENCRYPTION_KEY", "31323334353637383930"} // Hex
+                }
+            );
+        }
+
+        const TString keyFile = EnvFile("encryption-key", "key");
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("source/prefix")
+                .ExpectSymmetricKey("encryption-key");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--source-prefix", "source/prefix",
+                },
+                {
+                    {"YDB_ENCRYPTION_KEY_FILE", keyFile}
+                }
+            );
+        }
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("source/prefix")
+                .ExpectSymmetricKey("encryption-key");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--source-prefix", "source/prefix",
+                    "--encryption-key-file", keyFile,
+                }
+            );
+        }
+    }
+
+    Y_UNIT_TEST_F(SelectAwsParameters, TImportFixture) {
+        EnvHomeFile(".aws/credentials", R"(
+            [default]
+            aws_access_key_id = default-test-key
+            aws_secret_access_key = default-test-access-key
+
+            [test-profile]
+            aws_access_key_id = test-key
+            aws_secret_access_key = test-access-key
+        )");
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("default-test-key")
+                .ExpectS3SecretKey("default-test-access-key")
+                .ExpectCommonSourcePrefix("common/prefix");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--source-prefix", "common/prefix",
+                }
+            );
+        }
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("common/prefix");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--aws-profile", "test-profile",
+                    "--source-prefix", "common/prefix",
+                }
+            );
+        }
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonSourcePrefix("common/prefix");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--source-prefix", "common/prefix",
+                },
+                {
+                    {"AWS_PROFILE", "test-profile"},
+                }
+            );
+        }
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("opt-test-key")
+                .ExpectS3SecretKey("opt-test-access-key")
+                .ExpectCommonSourcePrefix("common/prefix");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "opt-test-key",
+                    "--secret-key", "opt-test-access-key",
+                    "--source-prefix", "common/prefix",
+                }
+            );
+        }
+
+        {
+            Service<TImportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("env-test-key")
+                .ExpectS3SecretKey("env-test-access-key")
+                .ExpectCommonSourcePrefix("common/prefix");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "import", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--source-prefix", "common/prefix",
+                },
+                {
+                    {"AWS_ACCESS_KEY_ID", "env-test-key"},
+                    {"AWS_SECRET_ACCESS_KEY", "env-test-access-key"},
+                }
+            );
+        }
+    }
 }

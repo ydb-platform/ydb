@@ -157,65 +157,6 @@ TString TEraseHints::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
-{
-    TotalBlockCount = totalBlockCount;
-    SetFlushWatermark(operationalBlockCount);
-    SetReadWatermark(operationalBlockCount);
-}
-
-TDDiskState::EState TDDiskState::GetState() const
-{
-    return State;
-}
-
-bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
-{
-    return State == EState::Operational || range.End < OperationalBlockCount;
-}
-
-bool TDDiskState::NeedFlushToDDisk(TBlockRange64 range) const
-{
-    return State == EState::Operational || range.Start < FlushableBlockCount;
-}
-
-void TDDiskState::SetReadWatermark(ui64 blockCount)
-{
-    OperationalBlockCount = blockCount;
-    UpdateState();
-}
-
-void TDDiskState::SetFlushWatermark(ui64 blockCount)
-{
-    FlushableBlockCount = blockCount;
-    UpdateState();
-}
-
-ui64 TDDiskState::GetOperationalBlockCount() const
-{
-    return OperationalBlockCount;
-}
-
-TString TDDiskState::DebugPrint() const
-{
-    return TStringBuilder()
-           << "{" << ToString(State) << "," << OperationalBlockCount << ","
-           << FlushableBlockCount << "}";
-}
-
-void TDDiskState::UpdateState()
-{
-    Y_ABORT_UNLESS(OperationalBlockCount <= TotalBlockCount);
-    Y_ABORT_UNLESS(FlushableBlockCount <= TotalBlockCount);
-
-    State = (OperationalBlockCount == TotalBlockCount &&
-             FlushableBlockCount == TotalBlockCount)
-                ? EState::Operational
-                : EState::Fresh;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBlocksDirtyMap::TBlocksDirtyMap(
     ui32 blockSize,
     ui64 blockCount,

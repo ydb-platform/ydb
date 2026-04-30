@@ -4,6 +4,7 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/ddisk_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
@@ -116,45 +117,6 @@ public:
 
 private:
     THints Hints;
-};
-
-class TDDiskState
-{
-public:
-    enum class EState
-    {
-        Operational,   // The ddisk is fully functional and can be read from
-                       // anywhere.
-        Fresh,   // The ddisk is only partially filled, and you can only read
-                 // from the blocks below the OperationalBlockCount.
-    };
-
-    void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
-
-    [[nodiscard]] EState GetState() const;
-    [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
-    [[nodiscard]] bool NeedFlushToDDisk(TBlockRange64 range) const;
-
-    void SetReadWatermark(ui64 blockCount);
-    void SetFlushWatermark(ui64 blockCount);
-    [[nodiscard]] ui64 GetOperationalBlockCount() const;
-
-    [[nodiscard]] TString DebugPrint() const;
-
-private:
-    void UpdateState();
-
-    EState State = EState::Operational;
-
-    ui64 TotalBlockCount = 0;
-
-    // If the block address below OperationalBlockCount, then it can be read
-    // from DDisk.
-    ui64 OperationalBlockCount = 0;
-
-    // If the block address below FlushableBlockCount, then it should be written
-    // (flushed) to DDisk.
-    ui64 FlushableBlockCount = 0;
 };
 
 struct TPBufferCounters

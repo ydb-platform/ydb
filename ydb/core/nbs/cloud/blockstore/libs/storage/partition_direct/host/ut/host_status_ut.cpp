@@ -17,7 +17,6 @@ Y_UNIT_TEST_SUITE(THostStatusListTest)
         UNIT_ASSERT(list.Get(4) == EHostStatus::HandOff);
         UNIT_ASSERT_VALUES_EQUAL(3u, list.GetPrimary().Count());
         UNIT_ASSERT_VALUES_EQUAL(2u, list.GetHandOff().Count());
-        UNIT_ASSERT(list.GetDisabled().Empty());
     }
 
     Y_UNIT_TEST(MakeRotating_VChunk1)
@@ -50,8 +49,6 @@ Y_UNIT_TEST_SUITE(THostStatusListTest)
         UNIT_ASSERT(list.GetPrimary().Test(0));
         UNIT_ASSERT(!list.GetPrimary().Test(1));
         UNIT_ASSERT(list.GetPrimary().Test(2));
-        UNIT_ASSERT_VALUES_EQUAL(1u, list.GetDisabled().Count());
-        UNIT_ASSERT(list.GetDisabled().Test(1));
         UNIT_ASSERT_VALUES_EQUAL(4u, list.GetActive().Count());
     }
 }

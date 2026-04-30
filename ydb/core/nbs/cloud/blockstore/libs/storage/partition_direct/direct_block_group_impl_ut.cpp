@@ -21,9 +21,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // Run multiple times to ensure deterministic selection (no ties at
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
-            const THostIndex selected = TDirectBlockGroup::SelectBestPBufferHost(
-                hostIndexes,
-                [&](THostIndex hostIndex) { return inflight[hostIndex]; });
+            const THostIndex selected =
+                TDirectBlockGroup::SelectBestPBufferHost(
+                    hostIndexes,
+                    [&](THostIndex hostIndex) { return inflight[hostIndex]; });
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
         }
@@ -48,9 +49,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         const std::array<size_t, 5> inflight = {0, 5, 0, 2, 0};
 
         for (size_t iter = 0; iter < 100; ++iter) {
-            const THostIndex selected = TDirectBlockGroup::SelectBestPBufferHost(
-                hostIndexes,
-                [&](THostIndex hostIndex) { return inflight[hostIndex]; });
+            const THostIndex selected =
+                TDirectBlockGroup::SelectBestPBufferHost(
+                    hostIndexes,
+                    [&](THostIndex hostIndex) { return inflight[hostIndex]; });
 
             // Out of {1, 3}, host 3 has the lower inflight count.
             UNIT_ASSERT_VALUES_EQUAL(3u, selected);
@@ -68,9 +70,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         std::map<THostIndex, size_t> counts;
         const size_t iterations = 3000;
         for (size_t iter = 0; iter < iterations; ++iter) {
-            const THostIndex selected = TDirectBlockGroup::SelectBestPBufferHost(
-                hostIndexes,
-                [](THostIndex) { return 0u; });
+            const THostIndex selected =
+                TDirectBlockGroup::SelectBestPBufferHost(
+                    hostIndexes,
+                    [](THostIndex) { return 0u; });
             ++counts[selected];
         }
 
@@ -98,9 +101,10 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         const std::array<size_t, 5> inflight = {5, 5, 1, 5, 5};
 
         for (size_t iter = 0; iter < 200; ++iter) {
-            const THostIndex selected = TDirectBlockGroup::SelectBestPBufferHost(
-                hostIndexes,
-                [&](THostIndex hostIndex) { return inflight[hostIndex]; });
+            const THostIndex selected =
+                TDirectBlockGroup::SelectBestPBufferHost(
+                    hostIndexes,
+                    [&](THostIndex hostIndex) { return inflight[hostIndex]; });
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
         }

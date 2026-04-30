@@ -55,9 +55,6 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT_VALUES_EQUAL(3u, a.Include(b).Count());
         UNIT_ASSERT_VALUES_EQUAL(1u, a.Exclude(b).Count());
         UNIT_ASSERT(a.Exclude(b).Test(0));
-
-        UNIT_ASSERT(a.Contains(THostMask::MakeOne(0)));
-        UNIT_ASSERT(!a.Contains(THostMask::MakeOne(2)));
     }
 
     Y_UNIT_TEST(IterationAscending)

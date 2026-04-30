@@ -21,10 +21,10 @@ THostMask THostMask::MakeEmpty()
 }
 
 // static
-THostMask THostMask::MakeOne(THostIndex h)
+THostMask THostMask::MakeOne(THostIndex host)
 {
-    Y_ABORT_UNLESS(h < MaxHostCount);
-    return THostMask(static_cast<ui32>(1) << h);
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    return THostMask(static_cast<ui32>(1) << host);
 }
 
 // static
@@ -37,22 +37,22 @@ THostMask THostMask::MakeAll(size_t hostCount)
     return THostMask((ui32(1) << hostCount) - 1);
 }
 
-void THostMask::Set(THostIndex h)
+void THostMask::Set(THostIndex host)
 {
-    Y_ABORT_UNLESS(h < MaxHostCount);
-    Bits |= ui32(1) << h;
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    Bits |= ui32(1) << host;
 }
 
-void THostMask::Reset(THostIndex h)
+void THostMask::Reset(THostIndex host)
 {
-    Y_ABORT_UNLESS(h < MaxHostCount);
-    Bits &= ~(ui32(1) << h);
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    Bits &= ~(ui32(1) << host);
 }
 
-bool THostMask::Test(THostIndex h) const
+bool THostMask::Test(THostIndex host) const
 {
-    Y_ABORT_UNLESS(h < MaxHostCount);
-    return (Bits & (ui32(1) << h)) != 0;
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    return (Bits & (ui32(1) << host)) != 0;
 }
 
 bool THostMask::Empty() const
@@ -78,11 +78,6 @@ THostMask THostMask::Include(THostMask other) const
 THostMask THostMask::Exclude(THostMask other) const
 {
     return THostMask(Bits & ~other.Bits);
-}
-
-bool THostMask::Contains(THostMask other) const
-{
-    return (Bits & other.Bits) == other.Bits;
 }
 
 THostMask::TIterator::TIterator(ui32 bits)

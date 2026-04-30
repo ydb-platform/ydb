@@ -2,7 +2,6 @@
 
 #include "host_mask.h"
 
-#include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -28,17 +27,14 @@ public:
     MakeRotating(size_t hostCount, ui32 vChunkIndex, size_t primaryCount);
 
     [[nodiscard]] size_t HostCount() const;
-    [[nodiscard]] EHostStatus Get(THostIndex h) const;
-    void Set(THostIndex h, EHostStatus status);
+    [[nodiscard]] EHostStatus Get(THostIndex host) const;
+    void Set(THostIndex host, EHostStatus status);
 
     [[nodiscard]] THostMask GetPrimary() const;
     [[nodiscard]] THostMask GetHandOff() const;
     [[nodiscard]] THostMask GetActive() const;
-    [[nodiscard]] THostMask GetDisabled() const;
 
     bool operator==(const THostStatusList& other) const = default;
-
-    [[nodiscard]] TString Print() const;
 
 private:
     TVector<EHostStatus> Statuses;

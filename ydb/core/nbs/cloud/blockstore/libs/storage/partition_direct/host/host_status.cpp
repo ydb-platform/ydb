@@ -1,7 +1,6 @@
 #include "host_status.h"
 
 #include <util/generic/yexception.h>
-#include <util/string/builder.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -36,16 +35,16 @@ size_t THostStatusList::HostCount() const
     return Statuses.size();
 }
 
-EHostStatus THostStatusList::Get(THostIndex h) const
+EHostStatus THostStatusList::Get(THostIndex host) const
 {
-    Y_ABORT_UNLESS(h < Statuses.size());
-    return Statuses[h];
+    Y_ABORT_UNLESS(host < Statuses.size());
+    return Statuses[host];
 }
 
-void THostStatusList::Set(THostIndex h, EHostStatus status)
+void THostStatusList::Set(THostIndex host, EHostStatus status)
 {
-    Y_ABORT_UNLESS(h < Statuses.size());
-    Statuses[h] = status;
+    Y_ABORT_UNLESS(host < Statuses.size());
+    Statuses[host] = status;
 }
 
 THostMask THostStatusList::GetPrimary() const
@@ -73,42 +72,6 @@ THostMask THostStatusList::GetHandOff() const
 THostMask THostStatusList::GetActive() const
 {
     return GetPrimary().Include(GetHandOff());
-}
-
-THostMask THostStatusList::GetDisabled() const
-{
-    THostMask result;
-    for (size_t i = 0; i < Statuses.size(); ++i) {
-        if (Statuses[i] == EHostStatus::Disabled) {
-            result.Set(static_cast<THostIndex>(i));
-        }
-    }
-    return result;
-}
-
-TString THostStatusList::Print() const
-{
-    TStringBuilder result;
-    result << "[";
-    for (size_t i = 0; i < Statuses.size(); ++i) {
-        if (i > 0) {
-            result << ",";
-        }
-        result << "H" << i << ":";
-        switch (Statuses[i]) {
-            case EHostStatus::Primary:
-                result << "P";
-                break;
-            case EHostStatus::HandOff:
-                result << "H";
-                break;
-            case EHostStatus::Disabled:
-                result << "D";
-                break;
-        }
-    }
-    result << "]";
-    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

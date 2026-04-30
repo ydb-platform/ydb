@@ -18,14 +18,10 @@ Y_UNIT_TEST_SUITE(TDDiskStateListTest)
     {
         TDDiskStateList list(3, BlockSize, TotalBlocks);
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, list.HostCount());
-        for (THostIndex h = 0; h < 3; ++h) {
-            UNIT_ASSERT(!list.GetFreshWatermark(h).has_value());
-            UNIT_ASSERT(list.CanReadFromDDisk(
-                h,
-                TBlockRange64::WithLength(0, TotalBlocks)));
+        for (THostIndex host = 0; host < 3; ++host) {
+            UNIT_ASSERT(!list.GetFreshWatermark(host).has_value());
             UNIT_ASSERT(list.NeedFlushToDDisk(
-                h,
+                host,
                 TBlockRange64::WithLength(0, TotalBlocks)));
         }
     }
@@ -35,7 +31,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateListTest)
         TDDiskStateList list(2, BlockSize, TotalBlocks);
 
         const ui64 watermarkBytes = 10 * BlockSize;
-        list.MarkFresh(/*h=*/1, watermarkBytes);
+        list.MarkFresh(/*host=*/1, watermarkBytes);
 
         // Host 0 untouched.
         UNIT_ASSERT(!list.GetFreshWatermark(0).has_value());
@@ -45,29 +41,8 @@ Y_UNIT_TEST_SUITE(TDDiskStateListTest)
         UNIT_ASSERT(wm.has_value());
         UNIT_ASSERT_VALUES_EQUAL(watermarkBytes, *wm);
 
-        // Below watermark — readable and needs flush.
-        UNIT_ASSERT(list.CanReadFromDDisk(1, TBlockRange64::WithLength(0, 5)));
+        // Below watermark — needs flush.
         UNIT_ASSERT(list.NeedFlushToDDisk(1, TBlockRange64::WithLength(0, 5)));
-    }
-
-    Y_UNIT_TEST(CanReadOnlyBelowReadWatermark)
-    {
-        TDDiskStateList list(1, BlockSize, TotalBlocks);
-        list.MarkFresh(0, 10 * BlockSize);
-
-        // Range fully below watermark (last block index 9 < 10).
-        UNIT_ASSERT(
-            list.CanReadFromDDisk(0, TBlockRange64::MakeClosedInterval(0, 9)));
-
-        // Range crossing the watermark.
-        UNIT_ASSERT(!list.CanReadFromDDisk(
-            0,
-            TBlockRange64::MakeClosedInterval(5, 15)));
-
-        // Range above watermark.
-        UNIT_ASSERT(!list.CanReadFromDDisk(
-            0,
-            TBlockRange64::MakeClosedInterval(10, 20)));
     }
 
     Y_UNIT_TEST(NeedFlushOnlyBelowFlushWatermark)
@@ -100,9 +75,6 @@ Y_UNIT_TEST_SUITE(TDDiskStateListTest)
         list.SetFlushWatermark(0, TotalBytes);
         // Both at total -> Operational.
         UNIT_ASSERT(!list.GetFreshWatermark(0).has_value());
-        UNIT_ASSERT(list.CanReadFromDDisk(
-            0,
-            TBlockRange64::WithLength(0, TotalBlocks)));
         UNIT_ASSERT(list.NeedFlushToDDisk(
             0,
             TBlockRange64::WithLength(0, TotalBlocks)));

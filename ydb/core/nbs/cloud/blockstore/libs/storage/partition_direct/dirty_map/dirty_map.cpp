@@ -102,9 +102,9 @@ TFlushHints::THints TFlushHints::TakeAllHints()
 TString TFlushHints::DebugPrint() const
 {
     TStringBuilder builder;
-    for (const auto& [r, hint]: Hints) {
-        builder << "H" << ui32(r.SourceHostIndex) << "->H"
-                << ui32(r.DestinationHostIndex) << ":" << hint.DebugPrint()
+    for (const auto& [route, hint]: Hints) {
+        builder << "H" << ui32(route.SourceHostIndex) << "->H"
+                << ui32(route.DestinationHostIndex) << ":" << hint.DebugPrint()
                 << ";";
     }
     return builder;

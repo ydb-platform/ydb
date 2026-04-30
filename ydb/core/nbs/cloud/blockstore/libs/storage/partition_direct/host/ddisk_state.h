@@ -57,24 +57,18 @@ private:
 class TDDiskStateList
 {
 public:
-    TDDiskStateList() = default;
     TDDiskStateList(size_t hostCount, ui32 blockSize, ui64 totalBlockCount);
 
-    [[nodiscard]] size_t HostCount() const;
-
-    void MarkFresh(THostIndex h, ui64 bytesOffset);
-    void SetReadWatermark(THostIndex h, ui64 bytesOffset);
-    void SetFlushWatermark(THostIndex h, ui64 bytesOffset);
+    void MarkFresh(THostIndex host, ui64 bytesOffset);
+    void SetReadWatermark(THostIndex host, ui64 bytesOffset);
+    void SetFlushWatermark(THostIndex host, ui64 bytesOffset);
 
     // Returns the offset (bytes) up to which the ddisk holds data.
     // nullopt means the ddisk is fully Operational.
-    [[nodiscard]] std::optional<ui64> GetFreshWatermark(THostIndex h) const;
+    [[nodiscard]] std::optional<ui64> GetFreshWatermark(THostIndex host) const;
 
-    [[nodiscard]] bool CanReadFromDDisk(
-        THostIndex h,
-        TBlockRange64 range) const;
     [[nodiscard]] bool NeedFlushToDDisk(
-        THostIndex h,
+        THostIndex host,
         TBlockRange64 range) const;
 
     // Returns the subset of `mask` whose ddisks can serve a read for `range`.

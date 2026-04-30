@@ -37,12 +37,12 @@ public:
     THostMask() = default;
 
     static THostMask MakeEmpty();
-    static THostMask MakeOne(THostIndex h);
+    static THostMask MakeOne(THostIndex host);
     static THostMask MakeAll(size_t hostCount);
 
-    void Set(THostIndex h);
-    void Reset(THostIndex h);
-    [[nodiscard]] bool Test(THostIndex h) const;
+    void Set(THostIndex host);
+    void Reset(THostIndex host);
+    [[nodiscard]] bool Test(THostIndex host) const;
 
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t Count() const;
@@ -50,7 +50,6 @@ public:
     [[nodiscard]] THostMask LogicalAnd(THostMask other) const;
     [[nodiscard]] THostMask Include(THostMask other) const;
     [[nodiscard]] THostMask Exclude(THostMask other) const;
-    [[nodiscard]] bool Contains(THostMask other) const;
 
     [[nodiscard]] TIterator begin() const;
     [[nodiscard]] TIterator end() const;

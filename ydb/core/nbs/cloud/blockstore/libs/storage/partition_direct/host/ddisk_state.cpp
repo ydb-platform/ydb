@@ -82,49 +82,40 @@ TDDiskStateList::TDDiskStateList(
     }
 }
 
-size_t TDDiskStateList::HostCount() const
+void TDDiskStateList::MarkFresh(THostIndex host, ui64 bytesOffset)
 {
-    return States.size();
+    Y_ABORT_UNLESS(host < States.size());
+    States[host].SetReadWatermark(bytesOffset / BlockSize);
+    States[host].SetFlushWatermark(bytesOffset / BlockSize);
 }
 
-void TDDiskStateList::MarkFresh(THostIndex h, ui64 bytesOffset)
+void TDDiskStateList::SetReadWatermark(THostIndex host, ui64 bytesOffset)
 {
-    Y_ABORT_UNLESS(h < States.size());
-    States[h].SetReadWatermark(bytesOffset / BlockSize);
-    States[h].SetFlushWatermark(bytesOffset / BlockSize);
+    Y_ABORT_UNLESS(host < States.size());
+    States[host].SetReadWatermark(bytesOffset / BlockSize);
 }
 
-void TDDiskStateList::SetReadWatermark(THostIndex h, ui64 bytesOffset)
+void TDDiskStateList::SetFlushWatermark(THostIndex host, ui64 bytesOffset)
 {
-    Y_ABORT_UNLESS(h < States.size());
-    States[h].SetReadWatermark(bytesOffset / BlockSize);
+    Y_ABORT_UNLESS(host < States.size());
+    States[host].SetFlushWatermark(bytesOffset / BlockSize);
 }
 
-void TDDiskStateList::SetFlushWatermark(THostIndex h, ui64 bytesOffset)
+std::optional<ui64> TDDiskStateList::GetFreshWatermark(THostIndex host) const
 {
-    Y_ABORT_UNLESS(h < States.size());
-    States[h].SetFlushWatermark(bytesOffset / BlockSize);
-}
-
-std::optional<ui64> TDDiskStateList::GetFreshWatermark(THostIndex h) const
-{
-    Y_ABORT_UNLESS(h < States.size());
-    if (States[h].GetState() == TDDiskState::EState::Operational) {
+    Y_ABORT_UNLESS(host < States.size());
+    if (States[host].GetState() == TDDiskState::EState::Operational) {
         return std::nullopt;
     }
-    return States[h].GetOperationalBlockCount() * BlockSize;
+    return States[host].GetOperationalBlockCount() * BlockSize;
 }
 
-bool TDDiskStateList::CanReadFromDDisk(THostIndex h, TBlockRange64 range) const
+bool TDDiskStateList::NeedFlushToDDisk(
+    THostIndex host,
+    TBlockRange64 range) const
 {
-    Y_ABORT_UNLESS(h < States.size());
-    return States[h].CanReadFromDDisk(range);
-}
-
-bool TDDiskStateList::NeedFlushToDDisk(THostIndex h, TBlockRange64 range) const
-{
-    Y_ABORT_UNLESS(h < States.size());
-    return States[h].NeedFlushToDDisk(range);
+    Y_ABORT_UNLESS(host < States.size());
+    return States[host].NeedFlushToDDisk(range);
 }
 
 THostMask TDDiskStateList::FilterReadable(
@@ -132,9 +123,9 @@ THostMask TDDiskStateList::FilterReadable(
     TBlockRange64 range) const
 {
     THostMask result = mask;
-    for (auto h: result) {
-        if (!States[h].CanReadFromDDisk(range)) {
-            result.Reset(h);
+    for (auto host: result) {
+        if (!States[host].CanReadFromDDisk(range)) {
+            result.Reset(host);
         }
     }
     return result;
@@ -143,8 +134,8 @@ THostMask TDDiskStateList::FilterReadable(
 TString TDDiskStateList::DebugPrint() const
 {
     TStringBuilder result;
-    for (size_t h = 0; h < States.size(); ++h) {
-        result << "H" << h << States[h].DebugPrint() << ";";
+    for (size_t host = 0; host < States.size(); ++host) {
+        result << "H" << host << States[host].DebugPrint() << ";";
     }
     return result;
 }

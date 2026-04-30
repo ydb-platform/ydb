@@ -13,7 +13,6 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT(cfg.PBufferHosts == cfg.DDiskHosts);
         UNIT_ASSERT_VALUES_EQUAL(3u, cfg.PBufferHosts.GetPrimary().Count());
         UNIT_ASSERT_VALUES_EQUAL(2u, cfg.PBufferHosts.GetHandOff().Count());
-        UNIT_ASSERT(cfg.PBufferHosts.GetDisabled().Empty());
         UNIT_ASSERT(cfg.IsValid());
     }
 

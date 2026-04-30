@@ -13902,7 +13902,7 @@ Y_UNIT_TEST(TopLevelHintBeatsPragmaAuto) {
 
     res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        SELECT /*+ yqlselect(force) */ DISTINCT 1;
+        SELECT /*+ yqlselect(force) */ STREAM 1;
     )sql", settings);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "was forced, but unsupported");

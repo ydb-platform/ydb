@@ -374,8 +374,17 @@ private:
             return Unsupported("STREAM");
         }
 
-        if (rule.GetRule_opt_set_quantifier4().HasBlock1()) {
-            return Unsupported("opt_set_quantifier");
+        if (auto q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
+            const auto& token = q.GetBlock1().GetToken1();
+
+            if (IS_TOKEN(token.GetId(), ALL)) {
+                setItem.Distinct = false;
+            } else if (IS_TOKEN(token.GetId(), DISTINCT)) {
+                setItem.Distinct = true;
+            } else {
+                Error() << "Expected ALL or DISTINCT, got " << Token(token);
+                return std::unexpected(ESQLError::Basic);
+            }
         }
 
         if (rule.HasBlock8()) {

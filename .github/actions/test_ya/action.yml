@@ -331,14 +331,8 @@ runs:
         # Scripts to checkout from main
         MAIN_SCRIPTS=(
           ".github/scripts/config/ydb_qa_config.json"
-          ".github/scripts/analytics/upload_tests_results.py"
-          ".github/scripts/analytics/ydb_wrapper.py"
-          ".github/scripts/send_build_stats.py"
-          ".github/scripts/get_build_diff.py"
-          ".github/scripts/get_current_build_size.py"
-          ".github/scripts/get_main_build_size.py"
+          ".github/scripts/analytics/ydb_wrapper.py",
           ".github/scripts/check_ydb_qa_config.py"
-          ".github/scripts/tests/generate-summary.py"
           ".github/scripts/tests/fail-checker.py"
         )
         

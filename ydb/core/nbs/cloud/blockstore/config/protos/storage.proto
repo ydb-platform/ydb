@@ -18,6 +18,29 @@ enum EWriteMode {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TOracleConfig
+{
+    // Interval between Oracle thinking in milliseconds.
+    optional uint32 ThinkingInterval = 1;
+
+    // Maximum duration before host going offline in milliseconds.
+    optional uint32 MaxDurationBeforeGoingOffline = 2;
+
+    // The minimum number of erroneous requests after which the host is taken
+    // offline. If the number of errors is less, the host will not go offline,
+    // regardless of the time during which the errors occurred.
+    optional uint32 MinErrorsCountBeforeGoingOffline = 3;
+
+    // The number of failed requests after which the host is taken offline,
+    // regardless of the time during which the errors occurred. Required to
+    // protect PBuffer from overflow.
+    optional uint32 ErrorsCountForGoingOffline = 4;
+
+    // The total size of failed requests after which the host is taken offline.
+    // Required to protect PBuffer from overflow.
+    optional uint64 ErrorsTotalSizeForGoingOffline = 5;
+}
+
 message TStorageServiceConfig
 {
     // SchemeShard directory for volumes.
@@ -77,4 +100,7 @@ message TStorageServiceConfig
 
     // Timeout (in milliseconds) for write request handlers.
     optional uint32 WriteRequestTimeout = 21;
+
+    // Config for oracle thinking.
+    optional TOracleConfig OracleConfig = 22;
 }

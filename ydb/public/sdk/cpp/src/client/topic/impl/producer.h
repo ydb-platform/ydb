@@ -468,7 +468,12 @@ private:
     // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
-    std::atomic<std::uint8_t> MainWorkerState = 0;
+    enum EMainWorkerState : std::uint8_t {
+        Idle = 0,
+        Running = 1,
+        Rerun = 2,
+    };
+    std::atomic<std::uint8_t> MainWorkerState = Idle;
     // MainWorker has an owner, which can be:
     // - user's thread, in this case the value of MainWorkerOwner is -1
     // - subsession's thread, in this case the value of MainWorkerOwner is the subsession's partition ID

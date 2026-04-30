@@ -280,9 +280,17 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
     }
 
     if (newPartitionsIds.empty()) {
+        if (++Retries >= 40) {
+            // Server keeps returning incomplete describe responses; give up gracefully
+            // instead of aborting the whole user process.
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix()
+                << "Too many retries (" << Retries << ") waiting for complete describe response for partition "
+                << PartitionId << "; giving up.");
+            MoveTo(EState::Failed);
+            return;
+        }
         // describe response is incomplete, we need to resend describe request
         MoveTo(EState::Init);
-        Y_ABORT_UNLESS(++Retries < 40, "Too many retries for partition %u", PartitionId);
         LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Describe response is incomplete, we need to resend describe request for partition " << PartitionId);
         return;
     }
@@ -296,7 +304,16 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
         auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
             return partition.GetPartitionId() == newPartitionId;
         });
-        Y_ABORT_UNLESS(partitionDescribeInfo != partitions.end(), "Partition describe info not found");
+        if (partitionDescribeInfo == partitions.end()) {
+            // Server returned a child partition id without a corresponding describe entry.
+            // This is a server bug; fail this worker gracefully rather than aborting the process.
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix()
+                << "Describe response for partition " << PartitionId
+                << " references child partition " << newPartitionId
+                << " without a describe entry; failing worker.");
+            MoveTo(EState::Failed);
+            return;
+        }
         Producer->PartitionsIndex[partitionDescribeInfo->GetFromBound().value_or("")] = newPartitionId;
         Producer->Partitions[newPartitionId] = TPartitionInfo()
             .PartitionId(newPartitionId)
@@ -843,7 +860,9 @@ std::string TProducer::TSessionsWorker::GetProducerId(std::uint32_t partitionId)
 }
 
 TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession(std::uint32_t partition, bool directToPartition) {
-    auto partitionId = Producer->Partitions[partition].PartitionId_;
+    auto partitionIt = Producer->Partitions.find(partition);
+    Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", partition);
+    auto partitionId = partitionIt->second.PartitionId_;
     auto producerId = GetProducerId(partitionId);
     TWriteSessionSettings alteredSettings = Producer->Settings;
 
@@ -1755,7 +1774,7 @@ TProducer::~TProducer() {
             handlersExecutor->Stop();
         }
 
-        if (MainWorkerState.load() == 0) {
+        if (MainWorkerState.load() == Idle) {
             ShutdownPromise.TrySetValue();
         }
 
@@ -1946,11 +1965,7 @@ void TProducer::RunMainWorker(std::int64_t owner) {
     // We must handle two properties:
     // - TFuture::Subscribe may call back synchronously when future is already ready.
     // - A callback may race with the runner trying to go idle (avoid lost wakeups).
-    enum : std::uint8_t {
-        Idle = 0,
-        Running = 1,
-        Rerun = 2,
-    };
+    // States Idle/Running/Rerun are defined in the EMainWorkerState enum on TProducer.
 
     // Try to become the runner. If already running, just request a rerun.
     std::uint8_t state = MainWorkerState.load(std::memory_order_acquire);
@@ -2217,9 +2232,12 @@ std::pair<std::uint32_t, std::string> TProducer::TBoundPartitionChooser::ChooseP
 
 TProducer::THashPartitionChooser::THashPartitionChooser(std::vector<std::uint32_t>&& partitions)
     : Partitions(std::move(partitions))
-{}
+{
+    Y_ABORT_UNLESS(!Partitions.empty(), "THashPartitionChooser requires at least one partition");
+}
 
 std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePartition(const std::string_view key) {
+    // Partitions is guaranteed non-empty by the constructor invariant.
     auto hash = MurmurHash<std::uint64_t>(key.data(), key.size());
     return {Partitions[hash % Partitions.size()], ""};
 }

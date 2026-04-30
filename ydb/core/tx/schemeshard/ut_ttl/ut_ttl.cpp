@@ -944,7 +944,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     }
 
     Y_UNIT_TEST(MoveTableDuringInFlightCondErase) {
-        // UpdatePartitioning (called during MoveTable) clears InFlightCondErase and
+        // MovePartitioning (called during MoveTable) clears InFlightCondErase and
         // reschedules all partitions.  After the move, the shard is in CondEraseSchedule
         // and fires exactly one erase request in the next TTL cycle.
         TTestBasicRuntime runtime;

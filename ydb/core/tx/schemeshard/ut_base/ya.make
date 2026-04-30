@@ -22,6 +22,7 @@ SRCS(
     ut_counters.cpp
     ut_info_types.cpp
     ut_table_decimal_types.cpp
+    ut_table_info.cpp
     ut_table_pg_types.cpp
     ut_commit_redo_limit.cpp
 )

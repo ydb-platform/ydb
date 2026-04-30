@@ -7863,22 +7863,10 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 
-    if (!tableInfo->IsBackup) {
-        const auto& partitionStats = tableInfo->GetStats().PartitionStats;
-        TInstant now = AppData()->TimeProvider->Now();
-        for (const auto& p : newPartitioning) {
-            auto it = partitionStats.find(p.ShardIdx);
-            if (it != partitionStats.end()) {
-                EnqueueBackgroundCompaction(p.ShardIdx, it->second);
-                UpdateShardMetrics(p.ShardIdx, it->second, now);
-            }
-        }
-    }
-
     tableInfo->SetPartitioning(std::move(newPartitioning));
 }
 
-void TSchemeShard::UpdatePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
+void TSchemeShard::MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
     TVector<std::pair<ui64, ui64>> shardIndices;
     shardIndices.reserve(newPartitioning.size());
     for (auto& info : newPartitioning) {
@@ -7886,33 +7874,48 @@ void TSchemeShard::UpdatePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo
             std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId()))
         );
     }
-
     auto path = TPath::Init(pathId, this);
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
     ev->ShardIndices.swap(shardIndices);
     Send(SysPartitionStatsCollector, ev.Release());
 
     if (!tableInfo->IsBackup) {
-        THashSet<TShardIdx> newSet;
-        newSet.reserve(newPartitioning.size());
         const auto& partitionStats = tableInfo->GetStats().PartitionStats;
-        TInstant now = AppData()->TimeProvider->Now();
+        const TInstant now = AppData()->TimeProvider->Now();
         for (const auto& p : newPartitioning) {
-            newSet.insert(p.ShardIdx);
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
-        for (const auto& [shardIdx, p] : tableInfo->GetPartitionStore()) {
-            if (!newSet.contains(shardIdx)) {
-                OnShardRemoved(shardIdx); // note that queues might not contain the shard
-            }
-        }
+        // No OnShardRemoved — same physical shards, just a new path.
     }
 
-    tableInfo->UpdatePartitioning(std::move(newPartitioning));
+    tableInfo->MovePartitioning(std::move(newPartitioning));
+}
+
+void TSchemeShard::CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
+    TVector<std::pair<ui64, ui64>> shardIndices;
+    shardIndices.reserve(newPartitioning.size());
+    for (auto& info : newPartitioning) {
+        shardIndices.push_back(
+            std::make_pair(ui64(info.ShardIdx.GetOwnerId()), ui64(info.ShardIdx.GetLocalId()))
+        );
+    }
+    auto path = TPath::Init(pathId, this);
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+    ev->ShardIndices.swap(shardIndices);
+    Send(SysPartitionStatsCollector, ev.Release());
+
+    if (!tableInfo->IsBackup) {
+        for (const auto& [shardIdx, p] : tableInfo->GetPartitionStore()) {
+            OnShardRemoved(shardIdx); // note that queues might not contain the shard
+        }
+        // No EnqueueBackgroundCompaction — new shards have no stats yet.
+    }
+
+    tableInfo->CopyPartitioning(std::move(newPartitioning));
 }
 
 void TSchemeShard::ApplySplitMerge(
@@ -7922,13 +7925,13 @@ void TSchemeShard::ApplySplitMerge(
     const TVector<TShardIdx>& removedShards,
     ui64 splitStartIdx
 ) {
+    const TInstant now = AppData()->TimeProvider->Now();
     if (!tableInfo->IsBackup) {
         for (const TShardIdx& shardIdx : removedShards) {
             OnShardRemoved(shardIdx);
         }
         // New dst shards have no stats yet; they are enqueued on their first EvPeriodicTableStats.
         const auto& partitionStats = tableInfo->GetStats().PartitionStats;
-        const TInstant now = AppData()->TimeProvider->Now();
         for (const auto& dst : dstPartitions) {
             auto it = partitionStats.find(dst.ShardIdx);
             if (it != partitionStats.end()) {
@@ -7938,7 +7941,7 @@ void TSchemeShard::ApplySplitMerge(
         }
     }
 
-    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx);
+    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now);
 
     TVector<std::pair<ui64, ui64>> shardIndices;
     shardIndices.reserve(tableInfo->GetPartitions().size());

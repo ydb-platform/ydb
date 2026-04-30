@@ -288,7 +288,7 @@ public:
                 for (const auto* p : tableInfo->GetPartitions()) {
                     newParts.push_back(*p);
                 }
-                context.SS->UpdatePartitioning(dstPath.Base()->PathId, tableInfo, std::move(newParts));
+                context.SS->MovePartitioning(dstPath.Base()->PathId, tableInfo, std::move(newParts));
             }
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);

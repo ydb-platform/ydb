@@ -544,6 +544,11 @@ struct TTableAggregatedStats {
         const TShardIdx& shardIdx,
         const TPartitionStats& newStats
     );
+
+    // Subtracts current-state metrics of each shard from Aggregated
+    // and removes each shard from PartitionStats/UpdatedStats.
+    // Silently skips shards not in PartitionStats.
+    void RemoveShardStats(const TVector<TShardIdx>& keys, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
@@ -553,6 +558,143 @@ struct TAggregatedStats : public TTableAggregatedStats {
 };
 
 struct TSubDomainInfo;
+
+// Indexed min-heap keyed by TShardIdx.
+// Pos map enables O(log N) targeted Erase (O(1) position lookup + O(log N) sift).
+class TCondEraseSchedule {
+public:
+    using TEntry = std::pair<TInstant, TShardIdx>;
+
+    void Push(TInstant t, const TShardIdx& shardIdx) {
+        Y_ABORT_UNLESS(!Contains(shardIdx));
+        const ui32 i = Heap.size();
+        Heap.push_back({t, shardIdx});
+        Pos[shardIdx] = i;
+        SiftUp(i);
+    }
+
+    // Batch load: call PushRaw for each entry, then BuildHeap once — O(N) total.
+    void PushRaw(TInstant t, const TShardIdx& shardIdx) {
+        Heap.push_back({t, shardIdx});
+    }
+    void BuildHeap() {
+        std::make_heap(Heap.begin(), Heap.end(), TGreater{});
+        Pos.clear();
+        Pos.reserve(Heap.size());
+        for (ui32 i = 0; i < Heap.size(); ++i) {
+            Pos[Heap[i].second] = i;
+        }
+    }
+
+    void Pop() {
+        Y_ABORT_UNLESS(!Heap.empty());
+        Pos.erase(Heap[0].second);
+        if (Heap.size() > 1) {
+            Heap[0] = std::move(Heap.back());
+            Pos[Heap[0].second] = 0;
+        }
+        Heap.pop_back();
+        if (!Heap.empty()) {
+            SiftDown(0);
+        }
+    }
+
+    // O(log N) targeted removal; no-op if shardIdx not present.
+    void Erase(const TShardIdx& shardIdx) {
+        auto posIt = Pos.find(shardIdx);
+        if (posIt == Pos.end()) {
+            return;
+        }
+        const ui32 i = posIt->second;
+        Pos.erase(posIt);
+        const ui32 last = Heap.size() - 1;
+        if (i < last) {
+            Heap[i] = std::move(Heap[last]);
+            Pos[Heap[i].second] = i;
+            Heap.pop_back();
+            SiftUp(i);
+            SiftDown(i);
+        } else {
+            Heap.pop_back();
+        }
+    }
+
+    bool Empty() const {
+        return Heap.empty();
+    }
+    bool Contains(const TShardIdx& shardIdx) const {
+        return Pos.contains(shardIdx);
+    }
+    void Clear() {
+        Heap.clear(); Pos.clear();
+    }
+    const TEntry& Top() const {
+        Y_ABORT_UNLESS(!Heap.empty());
+        return Heap[0];
+    }
+    const TVector<TEntry>& Container() const {
+        return Heap;
+    }
+
+    bool IsValidHeap() const {
+        if (Pos.size() != Heap.size()) {
+            return false;
+        }
+        for (ui32 i = 0; i < Heap.size(); ++i) {
+            auto it = Pos.find(Heap[i].second);
+            if (it == Pos.end() || it->second != i) {
+                return false;
+            }
+        }
+        return std::is_heap(Heap.begin(), Heap.end(), TGreater{});
+    }
+
+private:
+    struct TGreater {
+        bool operator()(const TEntry& a, const TEntry& b) const {
+            return a.first > b.first;
+        }
+    };
+
+    void SwapAt(ui32 i, ui32 j) {
+        std::swap(Heap[i], Heap[j]);
+        Pos[Heap[i].second] = i;
+        Pos[Heap[j].second] = j;
+    }
+
+    void SiftUp(ui32 i) {
+        while (i > 0) {
+            const ui32 p = (i - 1) >> 1;
+            if (Heap[p].first <= Heap[i].first) {
+                break;
+            }
+            SwapAt(i, p);
+            i = p;
+        }
+    }
+
+    void SiftDown(ui32 i) {
+        const ui32 n = Heap.size();
+        while (true) {
+            ui32 best = i;
+            const ui32 l = 2*i + 1, r = l + 1;
+            if (l < n && Heap[l].first < Heap[best].first) {
+                best = l;
+            }
+            if (r < n && Heap[r].first < Heap[best].first) {
+                best = r;
+            }
+            if (best == i) {
+                break;
+            }
+            SwapAt(i, best);
+            i = best;
+        }
+    }
+
+    TVector<TEntry> Heap;
+    THashMap<TShardIdx, ui32> Pos;
+};
 
 struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     using TPtr = TIntrusivePtr<TTableInfo>;
@@ -771,131 +913,6 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
 
-    // Indexed min-heap keyed by TShardIdx.
-    // Pos map enables O(log N) targeted Erase (O(1) position lookup + O(log N) sift).
-    class TCondEraseSchedule {
-    public:
-        using TEntry = std::pair<TInstant, TShardIdx>;
-
-        void Push(TInstant t, const TShardIdx& shardIdx) {
-            const ui32 i = Heap.size();
-            Heap.push_back({t, shardIdx});
-            Pos[shardIdx] = i;
-            SiftUp(i);
-        }
-
-        // Batch load: call PushRaw for each entry, then BuildHeap once — O(N) total.
-        void PushRaw(TInstant t, const TShardIdx& shardIdx) {
-            Heap.push_back({t, shardIdx});
-        }
-        void BuildHeap() {
-            std::make_heap(Heap.begin(), Heap.end(), TGreater{});
-            Pos.clear();
-            Pos.reserve(Heap.size());
-            for (ui32 i = 0; i < Heap.size(); ++i) {
-                Pos[Heap[i].second] = i;
-            }
-        }
-
-        void Pop() {
-            Y_ABORT_UNLESS(!Heap.empty());
-            Pos.erase(Heap[0].second);
-            if (Heap.size() > 1) {
-                Heap[0] = std::move(Heap.back());
-                Pos[Heap[0].second] = 0;
-            }
-            Heap.pop_back();
-            if (!Heap.empty()) {
-                SiftDown(0);
-            }
-        }
-
-        // O(log N) targeted removal; no-op if shardIdx not present.
-        void Erase(const TShardIdx& shardIdx) {
-            auto posIt = Pos.find(shardIdx);
-            if (posIt == Pos.end()) {
-                return;
-            }
-            const ui32 i = posIt->second;
-            Pos.erase(posIt);
-            const ui32 last = Heap.size() - 1;
-            if (i < last) {
-                Heap[i] = std::move(Heap[last]);
-                Pos[Heap[i].second] = i;
-                Heap.pop_back();
-                SiftUp(i);
-                SiftDown(i);
-            } else {
-                Heap.pop_back();
-            }
-        }
-
-        bool Empty() const { return Heap.empty(); }
-        bool Contains(const TShardIdx& shardIdx) const { return Pos.contains(shardIdx); }
-        void Clear() { Heap.clear(); Pos.clear(); }
-        const TEntry& Top() const { return Heap[0]; }
-        const TVector<TEntry>& Container() const { return Heap; }
-
-        bool IsValidHeap() const {
-            if (Pos.size() != Heap.size()) {
-                return false;
-            }
-            for (ui32 i = 0; i < Heap.size(); ++i) {
-                auto it = Pos.find(Heap[i].second);
-                if (it == Pos.end() || it->second != i) {
-                    return false;
-                }
-            }
-            return std::is_heap(Heap.begin(), Heap.end(), TGreater{});
-        }
-
-    private:
-        struct TGreater {
-            bool operator()(const TEntry& a, const TEntry& b) const {
-                return a.first > b.first;
-            }
-        };
-
-        void SwapAt(ui32 i, ui32 j) {
-            std::swap(Heap[i], Heap[j]);
-            Pos[Heap[i].second] = i;
-            Pos[Heap[j].second] = j;
-        }
-
-        void SiftUp(ui32 i) {
-            while (i > 0) {
-                const ui32 p = (i - 1) >> 1;
-                if (Heap[p].first <= Heap[i].first) {
-                    break;
-                }
-                SwapAt(i, p);
-                i = p;
-            }
-        }
-
-        void SiftDown(ui32 i) {
-            const ui32 n = Heap.size();
-            while (true) {
-                ui32 best = i;
-                const ui32 l = 2*i + 1, r = l + 1;
-                if (l < n && Heap[l].first < Heap[best].first) {
-                    best = l;
-                }
-                if (r < n && Heap[r].first < Heap[best].first) {
-                    best = r;
-                }
-                if (best == i) {
-                    break;
-                }
-                SwapAt(i, best);
-                i = best;
-            }
-        }
-
-        TVector<TEntry> Heap;
-        THashMap<TShardIdx, ui32> Pos;
-    };
-
     // Stable-address store: THashMap uses separate chaining, so element references
     // survive insert.  Also serves as the O(1) ShardIdx lookup index.
     THashMap<TShardIdx, TTableShardInfo> PartitionStore;
@@ -938,6 +955,9 @@ public:
             copy->Partitions[i] = copy->PartitionStore.FindPtr(other.Partitions[i]->ShardIdx);
             Y_ABORT_UNLESS(copy->Partitions[i]);
         }
+
+        copy->VerifyConsistency();
+
         return copy;
     }
 
@@ -1043,14 +1063,18 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
-    // Like SetPartitioning but also removes shards absent from new partitioning.
-    void UpdatePartitioning(TVector<TTableShardInfo>&& newPartitioning);
+    // Rebuild PartitionStore/Partitions from newPartitioning; Stats are already correct
+    // (caller is a DeepCopy of a table with the same physical shard set).
+    void MovePartitioning(TVector<TTableShardInfo>&& newPartitioning);
+    // Rebuild PartitionStore/Partitions and Stats from scratch for all-new shard IDs
+    // (caller is a fresh dst table whose old placeholder shards had zero stats).
+    void CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning);
 
     // O(N) consistency check across Partitions, PartitionStore, Stats, and CondEraseSchedule.
     void VerifyConsistency() const;
 
     // In-place split/merge: replaces the contiguous src shard range with dst shards.
-    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const THashSet<TShardIdx>& removedShards, ui64 splitFirstIdx);
+    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const TVector<TShardIdx>& removedShards, ui64 splitFirstIdx, TInstant now);
 
     const TVector<TTableShardInfo*>& GetPartitions() const {
         return Partitions;

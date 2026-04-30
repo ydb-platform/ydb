@@ -254,7 +254,8 @@ public:
             if (txShard.Operation == TTxState::TransferData) {
                 allSrcShardIdxs.push_back(txShard.Idx);
             } else if (txShard.Operation == TTxState::CreateParts) {
-                // TODO: make sure dst are sorted by range end
+                //NOTE: proper dst order in txState->Shards is determined at operation start
+                // and preserved schemeshard restarts
                 Y_ABORT_UNLESS(context.SS->ShardInfos.contains(txShard.Idx));
                 TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
                 if (tableInfo->IsTTLEnabled()) {
@@ -883,6 +884,19 @@ public:
                 << "cannot split/merge restore table " << info.GetTablePath();
             setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
             return result;
+        }
+
+        // Duplication check: no internal path produces duplicates,
+        // but manual request via ydb cli can contain anything.
+        {
+            THashSet<ui64> seen;
+            for (const auto i : info.GetSourceTabletId()) {
+                if (!seen.insert(i).second) {
+                    TString errMsg = TStringBuilder() << "Duplicate SourceTabletId: " << i;
+                    setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
+                    return result;
+                }
+            }
         }
 
         TVector<ui64> srcPartitionIdxs;

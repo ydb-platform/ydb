@@ -756,8 +756,10 @@ public:
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
-    // Like SetPartitioning but also calls OnShardRemoved for shards present in old partitioning but absent in new.
-    void UpdatePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    // MoveTable: same physical shards, new path — preserves Stats, enqueues compaction.
+    void MovePartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    // CopyTable: all-new shard IDs — calls OnShardRemoved for old shards, rebuilds Stats.
+    void CopyPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
     void ApplySplitMerge(
         TPathId pathId,
         TTableInfo::TPtr tableInfo,

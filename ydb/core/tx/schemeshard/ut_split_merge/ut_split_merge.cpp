@@ -2542,3 +2542,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         );
     }
 }
+
+Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeValidation) {
+    Y_UNIT_TEST(SplitWithDuplicateSourceTabletId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "Key" Type: "Uint64"}
+            Columns { Name: "Value" Type: "Utf8"}
+            KeyColumnNames: ["Key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to split with duplicate SourceTabletId - should fail with StatusInvalidParameter
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409546
+            SourceTabletId: 72075186233409546
+        )", {{NKikimrScheme::StatusInvalidParameter, "Duplicate SourceTabletId"}});
+    }
+}

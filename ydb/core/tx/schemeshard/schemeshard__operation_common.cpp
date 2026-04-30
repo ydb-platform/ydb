@@ -957,7 +957,6 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
             context.SS->ShardInfos.erase(shard.Idx);
             domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
-            context.SS->OnShardRemoved(shard.Idx);
         }
     }
     txState.Shards.clear();
@@ -1006,7 +1005,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     for (const auto& part : newPartitioning) {
         newShardsIdx.push_back(part.ShardIdx);
     }
-    context.SS->UpdatePartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
+    context.SS->CopyPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
     if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }

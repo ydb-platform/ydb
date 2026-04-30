@@ -113,6 +113,10 @@ message TEvNodeState {
     optional uint64 InputInflightBytes  = 8;
     optional uint64 OutputInflightBytes = 9;
     optional uint64 LocalInflightBytes  = 10;
+
+    optional uint64 MemQuotaLimit = 11;
+    optional uint64 MemQuotaUsed  = 12;
+    optional uint64 MemQuotaExtra = 13;
 }
 
 message TEvComputeChannelData {

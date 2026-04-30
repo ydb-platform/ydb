@@ -229,6 +229,7 @@ public:
         : NodeId(nodeId), MemPhysicalUsage("RSS", true), MemSysAllocated("Allocated"), MemSysFragmented("Fragmented")
         , MemArrowDefault("Arrow"), MemMkqlAllocated("MKQL Allocated"), MemMkqlFreeList("MKQL FreeList")
         , OutputInflightBytes("Output"), LocalInflightBytes("Local"), InputInflightBytes("Input")
+        , MemQuotaLimit("Quota Limit", true), MemQuotaAllocated("Quota Allocated"), MemQuotaExternal("Quota External")
     {
     }
     const ui32 NodeId;
@@ -252,6 +253,9 @@ public:
     TMutableMetric OutputInflightBytes;
     TMutableMetric LocalInflightBytes;
     TMutableMetric InputInflightBytes;
+    TMutableMetric MemQuotaLimit;
+    TMutableMetric MemQuotaAllocated;
+    TMutableMetric MemQuotaExternal;
 };
 
 struct TColorPalette {

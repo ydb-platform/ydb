@@ -265,6 +265,12 @@ struct TPlannerPlacingOptions {
     bool PreferLocalDatacenterExecution = true;
 };
 
+struct TKqpNodeMemInfo {
+    ui64 MemoryLimit = 0;
+    ui64 MemoryAllocated = 0;
+    ui64 MemoryExternal = 0;
+};
+
 /// per node singleton with instant API
 class IKqpResourceManager : private TNonCopyable {
 public:
@@ -284,6 +290,7 @@ public:
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
+    virtual TKqpNodeMemInfo GetLocalMemInfo() const = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 

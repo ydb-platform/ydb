@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -109,8 +110,8 @@ public:
     virtual ~IDqChannelService() {}
     virtual IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) = 0;
     virtual IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) = 0;
-    virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) = 0;
-    virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) = 0;
+    virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) = 0;
+    virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) = 0;
 };
 
 inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {

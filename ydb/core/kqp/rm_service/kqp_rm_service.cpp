@@ -465,6 +465,16 @@ public:
         return result;
     }
 
+    TKqpNodeMemInfo GetLocalMemInfo() const override {
+        with_lock (Lock) {
+            return TKqpNodeMemInfo {
+                .MemoryLimit = TotalMemoryResource->GetLimit(),
+                .MemoryAllocated = TotalMemoryResource->GetLimit() - TotalMemoryResource->Available(),
+                .MemoryExternal = static_cast<ui64>(ExternalDataQueryMemory.load()),
+            };
+        }
+    }
+
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
         with_lock (Lock) {
             return PatternCache;

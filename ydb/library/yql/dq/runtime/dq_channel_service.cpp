@@ -132,12 +132,18 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         } else {
             InflightBytes += data.Bytes;
             *Registry->LocalBufferInflightBytes += data.Bytes;
+            if (QuotaManager) {
+                Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+            }
             Queue.push(std::move(data));
             fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
         InflightBytes += data.Bytes;
         *Registry->LocalBufferInflightBytes += data.Bytes;
+        if (QuotaManager) {
+            Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+        }
         Queue.push(std::move(data));
         fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
@@ -189,6 +195,10 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
     data = std::move(Queue.front());
     Queue.pop();
+
+    if (QuotaManager) {
+        QuotaManager->FreeQuota(data.Bytes);
+    }
 
     if (PopStats.CollectBasic()) {
         PopStats.Chunks++;
@@ -296,6 +306,9 @@ void TLocalBuffer::StorageWakeupHandler() {
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
+        if (QuotaManager) {
+            Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+        }
         Queue.emplace(std::move(data));
         SpilledBytes -= info.Bytes;
 
@@ -359,6 +372,12 @@ void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
 
 void TLocalBuffer::ExportPopStats(TDqAsyncStats& stats) {
     PopStats.Export(stats);
+}
+
+TOutputDescriptor::~TOutputDescriptor() {
+    if (QuotaManager) {
+        QuotaManager->FreeQuota(WaitQueueBytes.load());
+    }
 }
 
 void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
@@ -594,6 +613,12 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
     }
 }
 
+TOutputItem::~TOutputItem() {
+    if (Descriptor->QuotaManager) {
+        Descriptor->QuotaManager->FreeQuota(Data.Bytes);
+    }
+}
+
 TOutputBuffer::~TOutputBuffer() {
     NodeState->TerminateOutputDescriptor(Descriptor);
 }
@@ -668,6 +693,10 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     *InputBufferBytes += data.Bytes;
     *InputBufferInflightBytes += data.Bytes;
 
+    if (QuotaManager) {
+        Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+    }
+
     std::lock_guard lock(QueueMutex);
 
     if (FinishPushed.load()) {
@@ -723,6 +752,9 @@ bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
         }
         InflightBytes -= data.Bytes;
         *InputBufferInflightBytes -= data.Bytes;
+        if (QuotaManager) {
+            QuotaManager->FreeQuota(data.Bytes);
+        }
         return true;
     }
 }
@@ -811,7 +843,7 @@ TLocalBufferRegistry::~TLocalBufferRegistry() {
     *LocalBufferCount -= LocalBuffers.size();
 }
 
-std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info) {
+std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     std::lock_guard lock(Mutex);
 
     auto it = LocalBuffers.find(info);
@@ -824,12 +856,15 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
             if (info.DstStageId) {
                 result->Info.DstStageId = info.DstStageId;
             }
+            if (!result->QuotaManager) {
+                result->QuotaManager = quotaManager;
+            }
             return result;
         } else {
             LocalBuffers.erase(it);
         }
     }
-    auto result = std::make_shared<TLocalBuffer>(registry, info, ActorSystem, MaxInflightBytes, MinInflightBytes);
+    auto result = std::make_shared<TLocalBuffer>(registry, info, quotaManager, ActorSystem, MaxInflightBytes, MinInflightBytes);
     LocalBuffers.emplace(info, result);
     (*LocalBufferCount)++;
 
@@ -859,6 +894,10 @@ TNodeState::~TNodeState() {
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
     auto bytes = data.Bytes;
     auto rows = data.Rows;
+
+    if (descriptor->QuotaManager) {
+        Y_ENSURE(descriptor->QuotaManager->AllocateQuota(data.Bytes));
+    }
 
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
@@ -1029,7 +1068,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
+    auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
         SendAckWithError(ev->Cookie,
@@ -1484,7 +1523,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateOutputDescriptor(info, false, popBytes == 0);
+    auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
         LOG_W("UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
         return;
@@ -1521,7 +1560,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evUpdate.Release(), flags));
 }
 
-std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, bool bound, bool leading) {
+std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
     auto it = OutputDescriptors.find(info);
     if (it != OutputDescriptors.end()) {
@@ -1530,6 +1569,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
@@ -1539,7 +1579,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
         return {};
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
+    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
     OutputDescriptors.emplace(info, result);
     (*OutputBufferCount)++;
     if (bound) {
@@ -1550,7 +1590,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     return result;
 }
 
-std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading) {
+std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
     auto it = InputDescriptors.find(info);
     if (it != InputDescriptors.end()) {
@@ -1559,6 +1599,13 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            if (result->QuotaManager) {
+                result->QuotaManager->FreeQuota(result->QueueBytes);
+            }
+            if (quotaManager) {
+                Y_ENSURE(quotaManager->AllocateQuota(result->QueueBytes));
+            }
+            result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
@@ -1568,7 +1615,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    auto result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {
@@ -1778,7 +1825,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
+    auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
         SendAckWithError(ev->Cookie, "[TDebugNodeState] Can't find peer for not leading message");
@@ -1902,41 +1949,41 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnbindedBuffer(const TChan
 
 // binded helpers
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
-    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, false, storage) : GetRemoteOutputBuffer(info, storage);
+    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, quotaManager, false, storage) : GetRemoteOutputBuffer(info, quotaManager, storage);
 }
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, true, nullptr) : GetRemoteInputBuffer(info);
+    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, quotaManager, true, nullptr) : GetRemoteInputBuffer(info, quotaManager);
 }
 
 // remote buffers
 
-std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.InputActorId.NodeId() != NodeId);
     auto nodeState = GetOrCreateNodeState(info.InputActorId.NodeId());
-    auto descriptor = nodeState->GetOrCreateOutputDescriptor(info, true, true);
+    auto descriptor = nodeState->GetOrCreateOutputDescriptor(info, quotaManager, true, true);
     if (storage) {
         descriptor->BindStorage(descriptor, nodeState, storage);
     }
     return std::make_shared<TOutputBuffer>(nodeState, descriptor);
 }
 
-std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     Y_ENSURE(info.OutputActorId.NodeId() != NodeId);
     auto nodeState = GetOrCreateNodeState(info.OutputActorId.NodeId());
-    return std::make_shared<TInputBuffer>(nodeState, nodeState->GetOrCreateInputDescriptor(info, true, true));
+    return std::make_shared<TInputBuffer>(nodeState, nodeState->GetOrCreateInputDescriptor(info, quotaManager, true, true));
 }
 
 // local buffer
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bindInput, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
 
-    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
+    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info, quotaManager);
     if (bindInput) {
         buffer->BindInput();
     } else {
@@ -2013,7 +2060,7 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     }
     Serializer->Buffer->Info.OutputActorId = outputActorId;
     Serializer->Buffer->Info.InputActorId = inputActorId;
-    auto buffer = service->GetOutputBuffer(Serializer->Buffer->Info, Storage);
+    auto buffer = service->GetOutputBuffer(Serializer->Buffer->Info, ChannelQuotaManager, Storage);
     if (Aggregator) {
         buffer->SetFillAggregator(Aggregator);
     }
@@ -2028,7 +2075,7 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
 
     Buffer->Info.OutputActorId = outputActorId;
     Buffer->Info.InputActorId = inputActorId;
-    auto buffer = service->GetInputBuffer(Buffer->Info);
+    auto buffer = service->GetInputBuffer(Buffer->Info, ChannelQuotaManager);
     Buffer = buffer;
     Service.reset();
 }

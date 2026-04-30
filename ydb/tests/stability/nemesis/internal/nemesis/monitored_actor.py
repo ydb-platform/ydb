@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import ClassVar
 
 from ydb.tests.tools.nemesis.library import base
 
@@ -26,7 +25,7 @@ class MonitoredAgentActor(base.AbstractMonitoredNemesis):
     # (e.g. ydb/tests/tools/local_cluster). Default is False — opt-in only,
     # because many runners rely on systemd, /Berkanavt paths, real disks,
     # multi-host networking, or destructive system-wide operations.
-    supports_local_mode: ClassVar[bool] = False
+    supports_local_mode = False
 
     def __init__(self, scope: str = "node") -> None:
         base.AbstractMonitoredNemesis.__init__(self, scope=scope)

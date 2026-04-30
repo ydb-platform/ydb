@@ -8,6 +8,8 @@ SS_COUNTER_PREFIX = 'COUNTER_IN_FLIGHT_OPS_Tx'
 
 
 class SchemeShardHasNoInFlightTransactions(LivenessWarden):
+    supports_local_mode = True
+
     def __init__(self, cluster):
         super(SchemeShardHasNoInFlightTransactions, self).__init__()
         self._cluster = cluster

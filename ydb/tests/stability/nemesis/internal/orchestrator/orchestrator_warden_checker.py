@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import sys
 import threading
 import time
 from datetime import datetime
@@ -275,5 +277,10 @@ class OrchestratorWardenChecker:
         return self._cluster
 
     def _nemesis_agent_binary(self) -> str:
+        # In local mode (no rsync/install) the orchestrator process IS the
+        # nemesis binary — sys.argv[0] is exactly what production deploys to
+        # {install_root}/bin/agent.
+        if get_orchestrator_settings().local_mode:
+            return os.path.realpath(sys.argv[0])
         root = get_orchestrator_settings().install_root.rstrip("/")
         return f"{root}/bin/agent"

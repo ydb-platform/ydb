@@ -29,6 +29,8 @@ def fetch_pdisk_state_info(node, timeout_seconds=60):
 
 
 class AllPDisksAreInValidStateSafetyWarden(SafetyWarden):
+    # SwaggerClient over mon_port — works against the local harness cluster.
+    supports_local_mode = True
 
     def __init__(self, kikimr_cluster, valid_states=(), timeout_seconds=60):
         super(AllPDisksAreInValidStateSafetyWarden, self).__init__('AllPDisksAreInValidStateSafetyWarden')

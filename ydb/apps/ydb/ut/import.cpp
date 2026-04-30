@@ -8,9 +8,16 @@ const ui32 DEFAULT_RETRIES = 10;
 
 class TImportImpl : public TMockGrpcServiceBase<Ydb::Import::V1::ImportService::Service> {
 public:
+    struct TExpectedItem {
+        TString SourcePrefix;
+        TString DestinationPath;
+        TString SourcePath;
+    };
+
     grpc::Status ImportFromS3(grpc::ServerContext* context, const Ydb::Import::ImportFromS3Request* request, Ydb::Import::ImportFromS3Response* response) override {
         Y_UNUSED(context);
         CheckS3Params(request);
+        CheckItems(request);
         return FillImportResponse(response);
     }
 
@@ -58,6 +65,22 @@ public:
         CheckExcludeRegexps(settings);
     }
 
+    void CheckItems(const Ydb::Import::ImportFromS3Request* request) {
+        const auto& settings = request->settings();
+        CHECK_EXP(settings.items_size() == static_cast<int>(Items.size()),
+            "Items size does not match. settings.items_size(): " << settings.items_size() << ". Items.size(): " << Items.size());
+        for (int i = 0; i < settings.items_size() && i < static_cast<int>(Items.size()); ++i) {
+            const auto& item = settings.items(i);
+            const auto& expected = Items[i];
+            CHECK_EXP(item.source_prefix() == expected.SourcePrefix,
+                "Incorrect item source prefix at " << i << ": \"" << item.source_prefix() << "\" instead of \"" << expected.SourcePrefix << "\"");
+            CHECK_EXP(item.destination_path() == expected.DestinationPath,
+                "Incorrect item destination path at " << i << ": \"" << item.destination_path() << "\" instead of \"" << expected.DestinationPath << "\"");
+            CHECK_EXP(item.source_path() == expected.SourcePath,
+                "Incorrect item source path at " << i << ": \"" << item.source_path() << "\" instead of \"" << expected.SourcePath << "\"");
+        }
+    }
+
     void CheckEncryptionSettings(const Ydb::Import::ImportFromS3Settings& settings) {
         const auto& encryptionSettings = settings.encryption_settings();
         CHECK_EXP(encryptionSettings.symmetric_key().key() == SymmetricKey,
@@ -74,6 +97,7 @@ public:
     }
 
     void ClearExpectations() override {
+        Items.clear();
         Bucket.clear();
         S3Endpoint.clear();
         Scheme = Ydb::Import::ImportFromS3Settings::HTTPS;
@@ -89,6 +113,15 @@ public:
         SkipChecksumValidation = false;
         IndexPopulationMode = Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
         ExcludeRegexps.clear();
+    }
+
+    TImportImpl& ExpectItem(TString sourcePrefix, TString destinationPath, TString sourcePath = {}) {
+        Items.push_back({
+            .SourcePrefix = std::move(sourcePrefix),
+            .DestinationPath = std::move(destinationPath),
+            .SourcePath = std::move(sourcePath),
+        });
+        return *this;
     }
 
     TImportImpl& ExpectBucket(TString bucket) {
@@ -166,6 +199,7 @@ public:
         return *this;
     }
 
+    std::vector<TExpectedItem> Items;
     TString Bucket;
     TString S3Endpoint;
     Ydb::Import::ImportFromS3Settings::Scheme Scheme = Ydb::Import::ImportFromS3Settings::HTTPS;
@@ -236,6 +270,33 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--index-population-mode", "Import",
                 "--exclude", "^logs/",
                 "--exclude", "^tmp/",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(PassIncludeItems, TImportFixture) {
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonSourcePrefix("source/prefix")
+            .ExpectItem("", "", "src/path")
+            .ExpectItem("", "", "another/path");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--source-prefix", "source/prefix",
+                "--include", "src/path",
+                "--include", "another/path",
             }
         );
     }

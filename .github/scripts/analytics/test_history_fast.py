@@ -85,7 +85,6 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     {join_clause}
     WHERE
         all_data.run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
-        and  all_data.run_timestamp < CurrentUtcDate() - 0*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
             WHEN String::Contains(all_data.test_name, 'sole chunk') 

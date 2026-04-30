@@ -3,6 +3,9 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "persistent_buffer.h"
+#include "persistent_buffer_header.h"
+#include "persistent_buffer_barriers_manager.h"
 #include "persistent_buffer_space_allocator.h"
 #include "segment_manager.h"
 #include "span_utils.h"
@@ -629,20 +632,6 @@ namespace NKikimr::NDDisk {
         // Persistent buffer services
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        struct TPersistentBuffer {
-            struct TRecord {
-                ui32 OffsetInBytes;
-                ui32 Size;
-                std::vector<TPersistentBufferSectorInfo> Sectors;
-                TRope Data;
-                ui64 VChunkIndex;
-                TInstant Timestamp;
-                std::unordered_set<ui64> ReadInflight;
-            };
-            std::map<ui64, TRecord> Records;
-            ui64 Size = 0;
-        };
-
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
         std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
@@ -654,7 +643,6 @@ namespace NKikimr::NDDisk {
         void SanitizePersistentBufferInMemoryCache();
         void SanitizePersistentBufferInMemoryCache(ui64 tabletId, ui32 generation, ui64 lsn, TPersistentBuffer::TRecord& record);
 
-        static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 
         ui32 SectorSize;
         ui32 SectorInChunk;
@@ -663,62 +651,7 @@ namespace NKikimr::NDDisk {
 
         double NormalizedOccupancy = -1;
 
-        struct TPersistentBufferHeader {
-            static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
-            static constexpr ui32 HeaderChecksumOffset = 24;
-            static constexpr ui32 HeaderChecksumSize = 8;
-            static constexpr ui32 MaxBarriersPerHeader = 240;
-
-            struct TRecord {
-                ui64 TabletId;
-                ui32 Generation;
-                ui64 VChunkIndex;
-                ui32 OffsetInBytes;
-                ui32 Size;
-                ui64 Lsn;
-                TPersistentBufferSectorInfo Locations[MaxSectorsPerBufferRecord];
-            };
-
-            struct TBarrier {
-                struct TBarrierRecord {
-                    ui64 TabletId;
-                    ui64 Lsn;
-                };
-                ui32 BarrierIdx;
-                ui64 BarrierLsn;
-                TBarrierRecord Barriers[MaxBarriersPerHeader];
-            };
-
-            enum EFlags : ui64 {
-                NONE = 0,
-                IS_BARRIER = 1,
-            };
-
-            ui8 Signature[16];
-            ui64 HeaderChecksum;
-            ui64 Flags;
-
-            union {
-                TRecord Record;
-                TBarrier Barrier;
-            };
-            
-            ui64 Reserved[26];
-        };
-
-        static_assert(sizeof(TPersistentBufferHeader) == 4096);
-
-        struct TEraseBarrier {
-            ui32 ChunkIdx;
-            ui32 SectorIdx;
-            TPersistentBufferHeader Header;
-        };
-
         bool IssuePersistentBufferChunkAllocationInflight = false;
-        std::vector<TEraseBarrier> PersistentBufferBarriers;
-        std::unordered_map<ui64, std::tuple<ui32, ui32>> PersistentBufferBarriersLocation;
-        std::vector<std::tuple<ui32, ui32>> PersistentBufferBarrierHoles;
-        ui32 FreeBarrierPosition = 0;
 
         struct TPersistentBufferDiskOperationInFlight {
             TActorId Sender;
@@ -751,6 +684,7 @@ namespace NKikimr::NDDisk {
         std::vector<ui32> PersistentBufferChunks;
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
+        TPersistentBufferBarriersManager PersistentBufferBarriersManager;
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
@@ -771,7 +705,7 @@ namespace NKikimr::NDDisk {
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void ReplyReadPersistentBuffer(ui64 operationCookie);
-        void ReplyReadPersistentBuffer(TDDiskActor::TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
+        void ReplyReadPersistentBuffer(TPersistentBuffer::TRecord& pr, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, std::optional<TString> errorMessage);
 
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
         double GetPersistentBufferFreeSpace();

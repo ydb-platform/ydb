@@ -1560,6 +1560,57 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     return true;
 }
 
+static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config) {
+    if (!config.GetSelfManagementConfig().GetEnabled() || !config.HasBlobStorageConfig() || !config.GetBlobStorageConfig().HasServiceSet()) {
+        return;
+    }
+
+    THashSet<ui32> nodeIds;
+    for (const auto& node : config.GetAllNodes()) {
+        nodeIds.insert(node.GetNodeId());
+    }
+
+    auto& bsConfig = *config.MutableBlobStorageConfig();
+    auto& ss = *bsConfig.MutableServiceSet();
+
+    for (int i = ss.VDisksSize() - 1; i >= 0; --i) {
+        const auto& vdisk = ss.GetVDisks(i);
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            if (!nodeIds.contains(loc.GetNodeID()) &&
+                    vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                ss.MutableVDisks()->DeleteSubrange(i, 1);
+            }
+        }
+    }
+
+    THashSet<std::pair<ui32, ui32>> referencedPDisks;
+    for (const auto& vdisk : ss.GetVDisks()) {
+        if (vdisk.HasVDiskLocation()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            referencedPDisks.emplace(loc.GetNodeID(), loc.GetPDiskID());
+        }
+    }
+
+    for (int i = ss.PDisksSize() - 1; i >= 0; --i) {
+        const auto& pdisk = ss.GetPDisks(i);
+        if (!nodeIds.contains(pdisk.GetNodeID()) &&
+                !referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()))) {
+            ss.MutablePDisks()->DeleteSubrange(i, 1);
+        }
+    }
+
+    if (bsConfig.HasDefineBox()) {
+        auto *hosts = bsConfig.MutableDefineBox()->MutableHost();
+        for (int i = hosts->size() - 1; i >= 0; --i) {
+            const auto& host = hosts->Get(i);
+            if (host.GetEnforcedNodeId() && !nodeIds.contains(host.GetEnforcedNodeId())) {
+                hosts->DeleteSubrange(i, 1);
+            }
+        }
+    }
+}
+
 bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig,
         NKikimrBlobStorage::TStorageConfig *config, TString *errorReason) {
     // copy blob storage config
@@ -1587,6 +1638,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
         return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
     };
+    const bool distconfManagedStaticGroupInfo = !hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled();
 
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
@@ -1605,7 +1657,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
 
         // update static group information unless distconf is enabled
-        if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
+        if (distconfManagedStaticGroupInfo) {
             // distconf enabled, keep it as is
         } else if (!hasStaticGroupInfo(*ssTo)) {
             ssTo->MutablePDisks()->CopyFrom(ssFrom.GetPDisks());
@@ -1807,6 +1859,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }
+    }
+
+    if (distconfManagedStaticGroupInfo) {
+        CleanupRemovedNodeEntries(*config);
     }
 
     // and copy ClusterUUID from there too

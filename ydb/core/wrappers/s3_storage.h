@@ -97,7 +97,7 @@ private:
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
-    bool Verbose = true;
+    bool Verbose = false;
     TS3CountersRoot Counters;
 
     mutable std::mutex RunningQueriesMutex;
@@ -172,12 +172,12 @@ public:
             NMonitoring::TDynamicCounterPtr counters,
             const Aws::S3::Model::StorageClass storageClass,
             bool verbose = false,
-            bool useVirtualAdressing = true)
+            bool useVirtualAddressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-            useVirtualAdressing))
+            useVirtualAddressing))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)

@@ -3691,7 +3691,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
     }
 
-    // The state row must persist via PersistTerminalState until FORGET, so post-reboot
+    // The state row must persist via PersistIncrementalRestoreTerminalState until FORGET, so post-reboot
     // Get returns SUCCESS+PROGRESS_DONE rather than NOT_FOUND.
     Y_UNIT_TEST(GetReturnsCompletedAfterFinalizeRowPersisted) {
         TTestBasicRuntime runtime;
@@ -3767,7 +3767,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
     }
 
     // While Get reports SUCCESS+PROGRESS_DONE the persisted row must read State=Completed;
-    // PersistTerminalState and the in-memory cleanup happen in the same finalize tx.
+    // PersistIncrementalRestoreTerminalState and the in-memory cleanup happen in the same finalize tx.
     Y_UNIT_TEST(FinalizePersistAndCleanupAreSameTx) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4060,7 +4060,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Get inner status not SUCCESS post-reboot for already-Completed restore");
     }
 
-    // A reboot after SyncIndexSchemaVersions but before PersistTerminalState must
+    // A reboot after SyncIndexSchemaVersions but before PersistIncrementalRestoreTerminalState must
     // converge to SUCCESS: the second finalize pass re-runs SyncIndexSchemaVersions
     // and ReleasePathState as no-ops, then writes Completed/SUCCESS.
     Y_UNIT_TEST(FinalizeReboundAfterSyncIndexSchemaVersions) {

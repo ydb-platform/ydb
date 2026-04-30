@@ -168,11 +168,11 @@ private:
                   << " cap=" << cap);
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
-            // Route through PersistTerminalState so FinalStatus is durable across reboots.
+            // Route through PersistIncrementalRestoreTerminalState so FinalStatus is durable across reboots.
             const TString failureIssues = state.NonRetriableFailure
                 ? TString("Non-retriable failure during incremental restore")
                 : TString("Retry budget exhausted during incremental restore");
-            TSchemeShard::PersistTerminalState(db, OperationId, state,
+            TSchemeShard::PersistIncrementalRestoreTerminalState(db, OperationId, state,
                 TIncrementalRestoreState::EState::Failed,
                 static_cast<ui32>(Ydb::StatusIds::GENERIC_ERROR),
                 failureIssues);
@@ -432,7 +432,7 @@ private:
     }
 };
 
-void TSchemeShard::PersistTerminalState(
+void TSchemeShard::PersistIncrementalRestoreTerminalState(
     NIceDb::TNiceDb& db,
     ui64 originalOpId,
     TIncrementalRestoreState& state,

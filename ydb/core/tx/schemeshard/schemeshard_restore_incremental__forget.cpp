@@ -102,7 +102,7 @@ public:
             }
         }
 
-        // PersistTerminalState and LongIncrementalRestoreOps.erase happen in the same
+        // PersistIncrementalRestoreTerminalState and LongIncrementalRestoreOps.erase happen in the same
         // finalize tx, so FORGET either sees State==Finalizing (and is blocked below)
         // or State==Completed/Failed with the long-op already released.
         bool canForget = !mainOperationActive && actualProgressMade

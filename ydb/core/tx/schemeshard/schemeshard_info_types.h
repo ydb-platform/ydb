@@ -3764,7 +3764,7 @@ struct TIncrementalRestoreState {
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
 
-    // Persisted via PersistTerminalState alongside State == Completed/Failed.
+    // Persisted via PersistIncrementalRestoreTerminalState alongside State == Completed/Failed.
     // Stored as ui32 to avoid pulling Ydb::StatusIds into this header; the values
     // map to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED).
     ui32 FinalStatus = 0;

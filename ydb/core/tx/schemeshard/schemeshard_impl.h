@@ -1275,7 +1275,7 @@ public:
     // Both sites that move state to a terminal value MUST go through this helper so
     // a SchemeShard reboot between memory mutation and DB commit cannot leave the
     // operation invisible to Get/List.
-    static void PersistTerminalState(
+    static void PersistIncrementalRestoreTerminalState(
         NIceDb::TNiceDb& db,
         ui64 originalOpId,
         TIncrementalRestoreState& state,

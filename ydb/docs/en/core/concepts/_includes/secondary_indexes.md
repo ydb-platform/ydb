@@ -27,7 +27,7 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
-### Creating a Secondary Index Online {#index-add}
+## Creating a Secondary Index Online {#index-add}
 
 {{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.
 
@@ -50,7 +50,11 @@ Possible impact on user transactions:
 * There may be an increase in delays because transactions are now distributed (when creating a synchronous index).
 * There may be an enhanced background of `OVERLOADED` errors because index table automatic shard splitting is actively running during data writes.
 
-The rate of data writes is selected to minimize their impact on user transactions. To quickly complete the operation, we recommend running the online creation of a secondary index when the user load is minimum.
+{% note info %}
+
+The data write rate is chosen to minimize the impact of the write process on user transactions. To control the rate, configure limits for the corresponding queue in the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+
+{% endnote %}
 
 Creating an index is an asynchronous operation. If the client-server connection is interrupted after the operation has started, index building continues. You can manage asynchronous operations using the {{ ydb-short-name }} CLI.
 

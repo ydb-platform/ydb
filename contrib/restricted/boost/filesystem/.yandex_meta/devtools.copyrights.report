@@ -70,7 +70,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/filesystem/path.hpp [3:5]
-        src/path.cpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 31dab43fa080cbb98017ca60b8536ab0
 BELONGS ya.make
@@ -232,7 +231,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 75ef7529f27f9a710eea2869f97333f1
 BELONGS ya.make
     License text:
         //  Copyright Beman Dawes 2008
-        //  Copyright Andrey Semashev 2021-2024
+        //  Copyright Andrey Semashev 2021-2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -456,6 +455,18 @@ BELONGS ya.make
         include/boost/filesystem/directory.hpp [3:7]
         include/boost/filesystem/file_status.hpp [3:7]
         include/boost/filesystem/operations.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e4d19bb46ad2edce3f75b90b46e33390
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2008
+        //  Copyright Andrey Semashev 2021-2025
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/path.cpp [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e6e42ce85ae6ae4da4c52a160cd6b31c
 BELONGS ya.make

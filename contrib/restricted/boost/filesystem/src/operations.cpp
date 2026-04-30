@@ -41,7 +41,7 @@
 #define BOOST_FILESYSTEM_USE_WASI
 #endif
 
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -145,7 +145,7 @@
 
 #include "posix_tools.hpp"
 
-#else // BOOST_WINDOWS_API
+#else // BOOST_FILESYSTEM_WINDOWS_API
 
 #include <boost/winapi/dll.hpp> // get_proc_address, GetModuleHandleW
 #include <cwchar>
@@ -163,7 +163,7 @@ using std::time_t;
 
 #include "windows_tools.hpp"
 
-#endif // BOOST_WINDOWS_API
+#endif // BOOST_FILESYSTEM_WINDOWS_API
 
 #include "atomic_tools.hpp"
 #include "error_handling.hpp"
@@ -178,7 +178,7 @@ using boost::filesystem::perms;
 using boost::system::error_code;
 using boost::system::system_category;
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 // At least Mac OS X 10.6 and older doesn't support O_CLOEXEC
 #ifndef O_CLOEXEC
@@ -186,11 +186,16 @@ using boost::system::system_category;
 #define BOOST_FILESYSTEM_NO_O_CLOEXEC
 #endif
 
+// At least Cygwin (cygwin1.dll 3.6.5, as of 2025-12-25) doesn't support AT_NO_AUTOMOUNT
+#ifndef AT_NO_AUTOMOUNT
+#define AT_NO_AUTOMOUNT 0
+#endif
+
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
 #define BOOST_FILESYSTEM_HAS_FDATASYNC
 #endif
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
 #ifndef MAXIMUM_REPARSE_DATA_BUFFER_SIZE
 #define MAXIMUM_REPARSE_DATA_BUFFER_SIZE (16 * 1024)
@@ -213,7 +218,7 @@ using boost::system::system_category;
 #define SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE 0x2
 #endif
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 
 //  POSIX/Windows macros  ----------------------------------------------------//
 
@@ -224,13 +229,13 @@ using boost::system::system_category;
 //  order of arguments, and meaning of return were followed initially, but
 //  found to be less clear and cause more coding errors.]
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #define BOOST_SET_CURRENT_DIRECTORY(P) (::chdir(P) == 0)
 #define BOOST_MOVE_FILE(OLD, NEW) (::rename(OLD, NEW) == 0)
 #define BOOST_RESIZE_FILE(P, SZ) (::truncate(P, SZ) == 0)
 
-#else // BOOST_WINDOWS_API
+#else // BOOST_FILESYSTEM_WINDOWS_API
 
 #define BOOST_SET_CURRENT_DIRECTORY(P) (::SetCurrentDirectoryW(P) != 0)
 #define BOOST_MOVE_FILE(OLD, NEW) (::MoveFileExW(OLD, NEW, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) != 0)
@@ -247,10 +252,10 @@ namespace detail {
 void init_fill_random_impl(unsigned int major_ver, unsigned int minor_ver, unsigned int patch_ver);
 #endif // defined(linux) || defined(__linux) || defined(__linux__)
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 //! Initializes directory iterator implementation. Implemented in directory.cpp.
 void init_directory_iterator_impl() noexcept;
-#endif // defined(BOOST_WINDOWS_API)
+#endif // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 namespace {
 
@@ -266,7 +271,7 @@ BOOST_CONSTEXPR_OR_CONST unsigned int remove_all_directory_replaced_retry_count 
 // Size of a small buffer for a path that can be placed on stack, in character code units
 BOOST_CONSTEXPR_OR_CONST std::size_t small_path_size = 1024u;
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 //--------------------------------------------------------------------------------------//
 //                                                                                      //
@@ -979,6 +984,10 @@ int check_fs_type(int infile, int outfile, uintmax_t size, std::size_t blksize)
 
         if (BOOST_UNLIKELY(sfs.f_type == PROC_SUPER_MAGIC ||
             sfs.f_type == SYSFS_MAGIC ||
+            sfs.f_type == 0x63677270 || // CGROUP2_SUPER_MAGIC
+            sfs.f_type == 0x0027e0eb || // CGROUP_SUPER_MAGIC
+            sfs.f_type == 0x73636673 || // SECURITYFS_MAGIC
+            sfs.f_type == 0x62656570 || // CONFIGFS_MAGIC
             sfs.f_type == TRACEFS_MAGIC ||
             sfs.f_type == DEBUGFS_MAGIC))
         {
@@ -1117,7 +1126,7 @@ uintmax_t remove_all_impl
 #if defined(BOOST_FILESYSTEM_HAS_FDOPENDIR_NOFOLLOW) && defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
     fs::path filename;
     const fs::path* remove_path = &p;
-    if (parentdir_fd != AT_FDCWD)
+    if (parentdir_fd != static_cast< int >(AT_FDCWD))
     {
         filename = path_algorithms::filename_v4(p);
         remove_path = &filename;
@@ -1236,7 +1245,7 @@ uintmax_t remove_all_impl
     return static_cast< uintmax_t >(-1);
 }
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
 //--------------------------------------------------------------------------------------//
 //                                                                                      //
@@ -1743,8 +1752,6 @@ fs::file_status status_by_handle(HANDLE h, path const& p, error_code* ec)
     return fs::file_status(ftype, make_permissions(p, attrs));
 }
 
-namespace {
-
 //! symlink_status() implementation
 fs::file_status symlink_status_impl(path const& p, error_code* ec)
 {
@@ -1812,6 +1819,8 @@ fs::file_status status_impl(path const& p, error_code* ec)
 
     return st;
 }
+
+namespace {
 
 //! remove() implementation for Windows XP and older
 bool remove_nt5_impl(path const& p, DWORD attrs, error_code* ec)
@@ -2419,7 +2428,7 @@ done:
     return win32_path;
 }
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 
 } // unnamed namespace
 
@@ -2435,7 +2444,7 @@ namespace detail {
 
 BOOST_FILESYSTEM_DECL bool possible_large_file_size_support()
 {
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
     typedef struct stat struct_stat;
     return sizeof(struct_stat().st_size) > 4;
 #else
@@ -2563,7 +2572,7 @@ namespace {
 
 inline path canonical_common(path& source, system::error_code* ec)
 {
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     system::error_code local_ec;
     file_status st(detail::status_impl(source, &local_ec));
@@ -2677,7 +2686,7 @@ inline path canonical_common(path& source, system::error_code* ec)
     BOOST_ASSERT_MSG(result.is_absolute(), "canonical() implementation error; please report");
     return result;
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     unique_handle h(create_file_handle(
         source.c_str(),
@@ -2779,7 +2788,7 @@ inline path canonical_common(path& source, system::error_code* ec)
     BOOST_ASSERT_MSG(result.is_absolute(), "canonical() implementation error; please report");
     return result;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 } // unnamed namespace
@@ -3006,7 +3015,7 @@ bool copy_file(path const& from, path const& to, copy_options options, error_cod
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     int err = 0;
 
@@ -3223,7 +3232,7 @@ bool copy_file(path const& from, path const& to, copy_options options, error_cod
 
     return true;
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     DWORD copy_flags = 0u;
     if ((options & copy_options::overwrite_existing) == copy_options::none ||
@@ -3348,7 +3357,7 @@ bool copy_file(path const& from, path const& to, copy_options options, error_cod
 
     return true;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -3436,7 +3445,7 @@ bool create_directory(path const& p, const path* existing, error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;
     if (existing)
@@ -3476,7 +3485,7 @@ bool create_directory(path const& p, const path* existing, error_code* ec)
     if (::mkdir(p.c_str(), mode) == 0)
         return true;
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     BOOL res;
     if (existing)
@@ -3487,7 +3496,7 @@ bool create_directory(path const& p, const path* existing, error_code* ec)
     if (res)
         return true;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 
     //  attempt to create directory failed
     err_t errval = BOOST_ERRNO; // save reason for failure
@@ -3507,7 +3516,7 @@ void create_directory_symlink(path const& to, path const& from, system::error_co
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
     int err = ::symlink(to.c_str(), from.c_str());
     if (BOOST_UNLIKELY(err < 0))
     {
@@ -3535,7 +3544,7 @@ void create_hard_link(path const& to, path const& from, error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
     int err = ::link(to.c_str(), from.c_str());
     if (BOOST_UNLIKELY(err < 0))
     {
@@ -3564,7 +3573,7 @@ void create_symlink(path const& to, path const& from, error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
     int err = ::symlink(to.c_str(), from.c_str());
     if (BOOST_UNLIKELY(err < 0))
     {
@@ -3595,7 +3604,7 @@ path current_path(error_code* ec)
     // WASI also does not support current path.
     emit_error(BOOST_ERROR_NOT_SUPPORTED, ec, "boost::filesystem::current_path");
     return path();
-#elif defined(BOOST_POSIX_API)
+#elif defined(BOOST_FILESYSTEM_POSIX_API)
     struct local
     {
         static bool getcwd_error(error_code* ec)
@@ -3673,7 +3682,7 @@ bool equivalent_v3(path const& p1, path const& p2, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     // p2 is done first, so any error reported is for p1
 #if defined(BOOST_FILESYSTEM_USE_STATX)
@@ -3785,7 +3794,7 @@ bool equivalent_v4(path const& p1, path const& p2, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_USE_STATX)
     struct ::statx s1;
@@ -3897,7 +3906,7 @@ uintmax_t file_size(path const& p, error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_USE_STATX)
     struct ::statx path_stat;
@@ -3935,7 +3944,7 @@ uintmax_t file_size(path const& p, error_code* ec)
 
     return get_size(path_stat);
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     // assume uintmax_t is 64-bits on all Windows compilers
 
@@ -3969,7 +3978,7 @@ uintmax_t file_size(path const& p, error_code* ec)
 
     return (static_cast< uintmax_t >(info.nFileSizeHigh) << 32u) | info.nFileSizeLow;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -3978,7 +3987,7 @@ uintmax_t hard_link_count(path const& p, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_USE_STATX)
     struct ::statx path_stat;
@@ -4006,7 +4015,7 @@ uintmax_t hard_link_count(path const& p, system::error_code* ec)
     return static_cast< uintmax_t >(path_stat.st_nlink);
 #endif
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     unique_handle h(create_file_handle(
         p.c_str(),
@@ -4030,7 +4039,7 @@ uintmax_t hard_link_count(path const& p, system::error_code* ec)
 
     return static_cast< uintmax_t >(info.nNumberOfLinks);
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -4047,7 +4056,7 @@ path initial_path(error_code* ec)
 //! Tests if the directory is empty. Implemented in directory.cpp.
 bool is_empty_directory
 (
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
     boost::scope::unique_fd&& fd,
 #else
     unique_handle&& h,
@@ -4062,7 +4071,7 @@ bool is_empty(path const& p, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     boost::scope::unique_fd file;
     int err = 0;
@@ -4125,7 +4134,7 @@ bool is_empty(path const& p, system::error_code* ec)
 
     return get_size(path_stat) == 0u;
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     unique_handle h(create_file_handle(
         p.c_str(),
@@ -4152,7 +4161,7 @@ bool is_empty(path const& p, system::error_code* ec)
 
     return (info.nFileSizeHigh | info.nFileSizeLow) == 0u;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -4161,7 +4170,7 @@ std::time_t creation_time(path const& p, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_USE_STATX)
     struct ::statx stx;
@@ -4189,7 +4198,7 @@ std::time_t creation_time(path const& p, system::error_code* ec)
     return (std::numeric_limits< std::time_t >::min)();
 #endif
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     // See the comment in last_write_time regarding access rights used here for GetFileTime.
     unique_handle hw(create_file_handle(
@@ -4221,7 +4230,7 @@ std::time_t creation_time(path const& p, system::error_code* ec)
 
     return t;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -4230,7 +4239,7 @@ std::time_t last_write_time(path const& p, system::error_code* ec)
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_USE_STATX)
     struct ::statx stx;
@@ -4255,7 +4264,7 @@ std::time_t last_write_time(path const& p, system::error_code* ec)
     return st.st_mtime;
 #endif
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     // GetFileTime is documented to require GENERIC_READ access right, but this causes problems if the file
     // is opened by another process without FILE_SHARE_READ. In practice, FILE_READ_ATTRIBUTES works, and
@@ -4289,7 +4298,7 @@ std::time_t last_write_time(path const& p, system::error_code* ec)
 
     return t;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
 BOOST_FILESYSTEM_DECL
@@ -4298,7 +4307,7 @@ void last_write_time(path const& p, const std::time_t new_time, system::error_co
     if (ec)
         ec->clear();
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 #if defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
 
@@ -4332,7 +4341,7 @@ void last_write_time(path const& p, const std::time_t new_time, system::error_co
 
 #endif // defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
 
-#else // defined(BOOST_POSIX_API)
+#else // defined(BOOST_FILESYSTEM_POSIX_API)
 
     unique_handle hw(create_file_handle(
         p.c_str(),
@@ -4360,10 +4369,10 @@ void last_write_time(path const& p, const std::time_t new_time, system::error_co
     if (BOOST_UNLIKELY(!::SetFileTime(hw.get(), nullptr, nullptr, &lwt)))
         goto fail_errno;
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 }
 
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
 const perms active_bits(all_all | set_uid_on_exe | set_gid_on_exe | sticky_bit);
 inline mode_t mode_cast(perms prms)
 {
@@ -4384,7 +4393,7 @@ void permissions(path const& p, perms prms, system::error_code* ec)
 
 #if defined(BOOST_FILESYSTEM_USE_WASI)
     emit_error(BOOST_ERROR_NOT_SUPPORTED, p, ec, "boost::filesystem::permissions");
-#elif defined(BOOST_POSIX_API)
+#elif defined(BOOST_FILESYSTEM_POSIX_API)
     error_code local_ec;
     file_status current_status((prms & symlink_perms) ? detail::symlink_status_impl(p, &local_ec) : detail::status_impl(p, &local_ec));
     if (local_ec)
@@ -4466,7 +4475,7 @@ path read_symlink(path const& p, system::error_code* ec)
 
     path symlink_path;
 
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
     const char* const path_str = p.c_str();
     char small_buf[small_path_size];
     ssize_t result = ::readlink(path_str, small_buf, sizeof(small_buf));
@@ -4621,7 +4630,7 @@ void rename(path const& old_p, path const& new_p, error_code* ec)
 BOOST_FILESYSTEM_DECL
 void resize_file(path const& p, uintmax_t size, system::error_code* ec)
 {
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
     if (BOOST_UNLIKELY(size > static_cast< uintmax_t >((std::numeric_limits< off_t >::max)())))
     {
         emit_error(system::errc::file_too_large, p, ec, "boost::filesystem::resize_file");
@@ -4647,7 +4656,7 @@ space_info space(path const& p, error_code* ec)
 
     emit_error(BOOST_ERROR_NOT_SUPPORTED, p, ec, "boost::filesystem::space");
 
-#elif defined(BOOST_POSIX_API)
+#elif defined(BOOST_FILESYSTEM_POSIX_API)
 
     struct BOOST_STATVFS vfs;
     if (!error(::BOOST_STATVFS(p.c_str(), &vfs) ? BOOST_ERRNO : 0, p, ec, "boost::filesystem::space"))
@@ -4741,7 +4750,7 @@ path temp_directory_path(system::error_code* ec)
     if (ec)
         ec->clear();
 
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
 
     const char* val = nullptr;
 
@@ -4821,7 +4830,7 @@ path temp_directory_path(system::error_code* ec)
 BOOST_FILESYSTEM_DECL
 path system_complete(path const& p, system::error_code* ec)
 {
-#ifdef BOOST_POSIX_API
+#ifdef BOOST_FILESYSTEM_POSIX_API
 
     if (p.empty() || p.is_absolute())
         return p;
@@ -4870,7 +4879,7 @@ path weakly_canonical_v3(path const& p, path const& base, system::error_code* ec
     system::error_code local_ec;
     const path::iterator source_end(source.end());
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     path::iterator itr(source_end);
     path head(source);
@@ -5035,7 +5044,7 @@ path weakly_canonical_v4(path const& p, path const& base, system::error_code* ec
     system::error_code local_ec;
     const path::iterator source_end(source.end());
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
     path::iterator itr(source_end);
     path head(source);

@@ -3691,10 +3691,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
     }
 
-    // T1.3 (Bug #1, RED on HEAD): the success row is Delete()'d in the same finalize tx
-    // that flips state.State=Completed in memory. After a SchemeShard reboot the row is
-    // gone and Get returns NOT_FOUND. With the fix the row persists via PersistTerminalState
-    // until FORGET.
+    // The state row must persist via PersistTerminalState until FORGET, so post-reboot
+    // Get returns SUCCESS+PROGRESS_DONE rather than NOT_FOUND.
     Y_UNIT_TEST(GetReturnsCompletedAfterFinalizeRowPersisted) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -3746,8 +3744,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Pre-reboot list empty");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
-        // Reboot SchemeShard. With Bug #1 unfixed, the IncrementalRestoreState row was
-        // Delete()'d at PerformFinalCleanup commit time, so post-reboot Get returns NOT_FOUND.
+        // Reboot SchemeShard; the row must survive and post-reboot Get must return SUCCESS.
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
@@ -3769,10 +3766,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             Ydb::StatusIds::NOT_FOUND);
     }
 
-    // T1.4 (Bug #1, RED on HEAD): on HEAD the in-memory state.State is set to Completed
-    // and the row is Delete()'d in the same tx, so post-finalize the persisted row is
-    // absent (state value -1) while in-memory state reads Completed. With PersistTerminalState
-    // the row must read State=Completed (4) at the moment Get reports SUCCESS+PROGRESS_DONE.
+    // While Get reports SUCCESS+PROGRESS_DONE the persisted row must read State=Completed;
+    // PersistTerminalState and the in-memory cleanup happen in the same finalize tx.
     Y_UNIT_TEST(FinalizePersistAndCleanupAreSameTx) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -3834,12 +3829,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Persisted state row missing or not Completed while API reports SUCCESS");
     }
 
-    // T1.5 (Bug #1, RED on HEAD): __forget.cpp:104 lets FORGET succeed as soon as
-    // state.State == Completed even though the orchestrator still owns the
-    // LongIncrementalRestoreOps entry. After Bug #1 lands, FORGET is allowed on Completed
-    // earlier (because the row persists), so we must additionally guard with
-    // !LongIncrementalRestoreOps.contains(...). Here we observe FORGET-after-Completed
-    // works once the orchestrator releases the entry.
+    // FORGET must succeed once the orchestrator has released the LongIncrementalRestoreOps
+    // entry, i.e., after finalize completes and cleanup runs.
     Y_UNIT_TEST(ForgetSucceedsAfterCompletedAndCleanup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -3892,8 +3883,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
         // After completion (PROGRESS_DONE) and a brief settle, FORGET must succeed.
-        // The new guard requires LongIncrementalRestoreOps.erase to have happened in
-        // the same finalize tx; PerformFinalCleanup at finalize.cpp:402 already does that.
         env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
         TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
 
@@ -3902,12 +3891,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             Ydb::StatusIds::NOT_FOUND);
     }
 
-    // T2.2 (Bug #2, RED on HEAD): a Finalizing row with no live finalize sub-op (e.g.
-    // a row written by an old binary that never persisted FinalizeTxId, or a row whose
-    // sub-op died mid-tx) must be reconciled by TTxInit. We simulate "no live sub-op"
-    // by rebooting before finalize is even submitted, by injecting failures so the
-    // restore lands in Finalizing-then-fails. After reboot the row must converge to a
-    // terminal state (PROGRESS_DONE) rather than getting stranded in Finalizing forever.
+    // A Finalizing row with no live finalize sub-op must be reconciled by TTxInit:
+    // reset to Running so the orchestrator re-triggers finalize and reaches PROGRESS_DONE.
     Y_UNIT_TEST(TTxInitReschedulesFinalizeWhenFinalizeTxIdMissing) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -3965,7 +3950,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_C(!listResp.GetEntries().empty(),
-            "List empty after reboot — Bug #1 row Delete or Bug #2 strand");
+            "List empty after reboot");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
         auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
@@ -3974,17 +3959,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Get status not SUCCESS after reboot");
         UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() ==
             Ydb::Backup::RestoreProgress::PROGRESS_DONE,
-            "Get progress not PROGRESS_DONE after reboot — Bug #2 strand");
+            "Get progress not PROGRESS_DONE after reboot");
     }
 
-    // T2.3 (Bug #2, RED only as a regression guard): once the orchestrator has driven
-    // the row to Completed (or Finalizing with a live FinalizeTxId), TTxInit must NOT
-    // re-issue a fresh ESchemeOpIncrementalRestoreFinalize sub-op after a reboot —
-    // doing so would double-submit finalize, race against the original sub-op, and
-    // potentially bypass the single-tx Persist+Cleanup invariant. With the fix the
-    // post-reboot row says Completed (FinalizeTxId == 0) and the TTxInit reset path
-    // skips the Running fallback. Counts ESchemeOpIncrementalRestoreFinalize proposals
-    // observed AFTER reboot — must be zero.
+    // TTxInit must not re-issue a fresh finalize sub-op for an already-Completed row;
+    // double-submitting finalize would race against the original sub-op. Counts
+    // ESchemeOpIncrementalRestoreFinalize proposals observed after reboot — must be zero.
     Y_UNIT_TEST(RestoreFinalizingDoesNotDoubleSubmitFinalize) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4080,15 +4060,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Get inner status not SUCCESS post-reboot for already-Completed restore");
     }
 
-    // T2.4 (Bug #2, RED on HEAD): a reboot landing AFTER SyncIndexSchemaVersions has
-    // released path states / committed alter data, but BEFORE PerformFinalCleanup
-    // PersistTerminalState'd the row, must converge to SUCCESS. The second finalize
-    // pass (driven by TTxInit Finalizing → Running reset + AllIncrementsProcessed
-    // re-trigger) re-runs SyncIndexSchemaVersions as a no-op (no AlterData remains),
-    // re-runs ReleasePathState as a no-op (path is already EPathStateNoChanges), then
-    // PersistTerminalState writes Completed/SUCCESS. Use a 1-table-with-index restore
-    // so SyncIndexSchemaVersions has actual work to do on the first pass and the
-    // idempotency guarantee actually matters.
+    // A reboot after SyncIndexSchemaVersions but before PersistTerminalState must
+    // converge to SUCCESS: the second finalize pass re-runs SyncIndexSchemaVersions
+    // and ReleasePathState as no-ops, then writes Completed/SUCCESS.
     Y_UNIT_TEST(FinalizeReboundAfterSyncIndexSchemaVersions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4177,9 +4151,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
         rebootHappened.store(true);
 
-        // Without the Bug #2 fix the restore wedges in Finalizing because either the
-        // finalize sub-op was lost (FinalizeTxId not in Operations) or never persisted.
-        // With the fix TTxInit resets to Running and re-runs finalize idempotently.
         Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot",
             TDuration::MilliSeconds(500), TDuration::Seconds(120));
         UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
@@ -4188,9 +4159,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(rebootHappened.load(), "Reboot did not happen — test plumbing broken");
     }
 
-    // T3.1 (Bug #3, RED on HEAD): a backup collection with NO incremental backups must
-    // still be visible via Get/List after a restore. Today CreateLongIncrementalRestoreOp
-    // is gated behind incrBackupNames so no IncrementalRestoreState row is ever created.
+    // A full-only restore (no incremental backups) must be visible via Get/List:
+    // a state row is always created regardless of whether incrementals are present.
     Y_UNIT_TEST(FullOnlyRestoreIsListable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -4233,7 +4203,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_C(!listResp.GetEntries().empty(),
-            "List returned no entries for full-only restore — Bug #3");
+            "List returned no entries for full-only restore");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
         auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
@@ -4245,9 +4215,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Full-only restore Get progress not PROGRESS_DONE");
     }
 
-    // T3.3 (Bug #3, RED on HEAD): FORGET on a full-only Completed restore must succeed
-    // and clear the persisted row. The new LongIncrementalRestoreOps guard from Bug #1
-    // must not block FORGET once finalize completed for the empty-incrementals case.
+    // FORGET on a full-only Completed restore must succeed and clear the persisted row;
+    // the LongIncrementalRestoreOps guard must not block FORGET after finalize completes.
     Y_UNIT_TEST(FullOnlyRestoreForgetCleansState) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

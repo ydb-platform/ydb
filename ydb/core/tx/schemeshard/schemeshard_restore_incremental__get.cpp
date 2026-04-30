@@ -89,7 +89,11 @@ public:
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        return Reply();
+
+        // Don't go through Reply() — it would clobber the per-entry Status that Fill just set.
+        LOG_D("Reply " << Response->Record.ShortDebugString());
+        SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {

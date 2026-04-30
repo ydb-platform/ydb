@@ -102,14 +102,9 @@ public:
             }
         }
 
-        // Note on the LongIncrementalRestoreOps presence after Bug #1: Persist of the
-        // terminal state row and the in-memory LongIncrementalRestoreOps.erase happen
-        // in the same finalize tx (PerformFinalCleanup), and TTabletFlatExecutor
-        // serializes TTxForget against TIncrementalRestoreFinalizeOp's TTransactionContext.
-        // So either FORGET observes State==Finalizing (and below blocks via the
-        // mainOperationActive / hasActiveIncrementalOperations checks) or it observes
-        // State==Completed/Failed with the long-op already released. No additional
-        // longOp-presence guard is needed here.
+        // PersistTerminalState and LongIncrementalRestoreOps.erase happen in the same
+        // finalize tx, so FORGET either sees State==Finalizing (and is blocked below)
+        // or State==Completed/Failed with the long-op already released.
         bool canForget = !mainOperationActive && actualProgressMade
                       && !hasActiveIncrementalOperations;
         

@@ -3755,9 +3755,6 @@ struct TIncrementalRestoreState {
 
     bool NonRetriableFailure = false;
 
-    // Advisory mirror of SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental.
-    static constexpr ui32 MaxRetriesPerIncremental = 5;
-
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 

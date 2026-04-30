@@ -691,11 +691,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // T1.1 (Bug #1, RED on HEAD): on the unfixed codebase finalize.cpp:243 Delete()s the
-    // IncrementalRestoreState row in the same tx that flips state.State=Completed in
-    // memory. Any reboot bucket that fires *after* finalize commit then loses the row —
-    // post-reboot Get returns NOT_FOUND. With PersistTerminalState the row stays until
-    // FORGET, so Get reports SUCCESS+PROGRESS_DONE regardless of where the reboot lands.
+    // The IncrementalRestoreState row must persist until FORGET, so Get reports
+    // SUCCESS+PROGRESS_DONE regardless of where a reboot lands after finalize.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RestoreCompletedStatusSurvivesReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -771,12 +768,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // T1.2 (Bug #1, RED on HEAD for the FinalStatus payload): the existing scan.cpp:163-168
-    // path persists State=Failed but never persists FinalStatus/FinalIssues. After a manual
-    // reboot, FinalStatus must surface as a non-SUCCESS, non-UNSPECIFIED code. The
-    // FillRestoreProgress mapping defaults Failed → GENERIC_ERROR even without a persisted
-    // FinalStatus, so this test passes once Step 0 lands; with the Bug #1 fix the persisted
-    // FinalStatus value also takes effect.
+    // After a Failed restore and a manual reboot, FinalStatus must surface as a
+    // non-SUCCESS, non-UNSPECIFIED code; FinalStatus and FinalIssues are persisted.
     Y_UNIT_TEST(RestoreFailedStatusSurvivesReboot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -841,10 +834,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         UNIT_ASSERT_C(!listBefore.GetEntries().empty(), "List empty before reboot");
         ui64 restoreId = listBefore.GetEntries().rbegin()->GetId();
 
-        // Force a reboot. With Bug #1 unfixed the persisted row says Failed (state.State
-        // was already updated at scan.cpp:166-168) and FillRestoreProgress maps it to
-        // GENERIC_ERROR by default. With the Bug #1 fix the persisted FinalStatus also
-        // matches what was reported pre-reboot.
+        // Force a reboot; the persisted FinalStatus must match what was reported pre-reboot.
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
@@ -1501,15 +1491,9 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         }
     }
 
-    // T2.1 (Bug #2, RED on HEAD): every reboot bucket — including the buckets that
-    // crash the executor between finalize-launch (state.State = Finalizing persisted)
-    // and finalize-complete (PerformFinalCleanup) — must end with the restore reaching
-    // SUCCESS. On HEAD without the TTxInit Finalizing → Running reset, the restore
-    // wedges in Finalizing forever and WaitForRestoreDone times out. With the fix,
-    // TTxInit resets Finalizing rows whose FinalizeTxId is missing from Self->Operations
-    // back to Running, the orchestrator re-runs AllIncrementsProcessed and re-launches
-    // finalize idempotently (SyncIndexSchemaVersions / ReleasePathState are no-ops on
-    // the second pass).
+    // A reboot landing between finalize-launch and finalize-complete must not strand
+    // the restore: TTxInit resets orphaned Finalizing rows to Running and the
+    // orchestrator re-launches finalize idempotently.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RestoreFinalizingResumesAfterReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -1561,8 +1545,6 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                // Without the Bug #2 fix this times out at any reboot bucket that lands
-                // between finalize-launch and finalize-complete.
                 Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(
                     runtime, t.TestEnv.Get(), "/MyRoot", true,
                     TDuration::Seconds(2), TDuration::Seconds(120));
@@ -1575,10 +1557,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // T3.2 (Bug #3, RED on HEAD): a full-only restore (no incremental backups in the
-    // collection) must reach SUCCESS even when a reboot lands during restore. Today
-    // CreateLongIncrementalRestoreOp is gated behind incrBackupNames so no state row
-    // is ever created — the restore is invisible to the API and a reboot strands it.
+    // A full-only restore (no incremental backups) must reach SUCCESS across reboots;
+    // a state row is always created so the restore is visible to Get/List.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(FullOnlyRestoreReachesCompletedAcrossReboots, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

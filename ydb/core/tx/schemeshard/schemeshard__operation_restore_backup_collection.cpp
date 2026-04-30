@@ -438,9 +438,8 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
     }
 
-    // Bug #3: always create the long-op so full-only restores have a state row that
-    // Get/List can surface. The handler for TEvRunIncrementalRestore (and TTxInit
-    // resume) drives empty-incrementals straight to Finalizing -> Completed.
+    // Always create the long-op so full-only restores have a state row that Get/List
+    // can surface; the handler drives empty-incrementals straight to Completed.
     CreateLongIncrementalRestoreOp(opId, bcPath, result);
 
     return result;

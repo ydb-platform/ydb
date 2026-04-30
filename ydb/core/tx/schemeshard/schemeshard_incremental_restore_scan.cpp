@@ -91,8 +91,8 @@ public:
         } else {
             if (state.AllIncrementsProcessed()) {
                 LOG_W("All increments processed but state is still Running, triggering finalization");
-                // Bug #2: allocate FinalizeTxId BEFORE the State Update so the persisted
-                // row tells TTxInit which Operations entry to look for after a reboot.
+                // Allocate FinalizeTxId before persisting State=Finalizing so TTxInit
+                // can identify the live finalize sub-op after a reboot.
                 const TTxId finalizeTxId = Self->GetCachedTxId(ctx);
                 state.State = TIncrementalRestoreState::EState::Finalizing;
                 state.FinalizeTxId = ui64(finalizeTxId);
@@ -198,6 +198,7 @@ private:
             state.InProgressOperations.clear();
             state.CompletedOperations.clear();
             state.PendingTables.clear();
+            state.TableOperations.clear();
             state.CurrentIncrementalStarted = false;
 
             TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
@@ -237,8 +238,8 @@ private:
 
         if (state.AllIncrementsProcessed()) {
             LOG_I("All incremental backups processed, performing finalization");
-            // Bug #2: allocate FinalizeTxId BEFORE the State Update so the persisted
-            // row tells TTxInit which Operations entry to look for after a reboot.
+            // Allocate FinalizeTxId before persisting State=Finalizing so TTxInit
+            // can identify the live finalize sub-op after a reboot.
             const TTxId finalizeTxId = Self->GetCachedTxId(ctx);
             state.State = TIncrementalRestoreState::EState::Finalizing;
             state.FinalizeTxId = ui64(finalizeTxId);
@@ -472,9 +473,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
         return;
     }
 
-    // Bug #3: register a state row even for full-only restores so Get/List have
-    // something to report. The orchestrator immediately drives the empty-increments
-    // case into Finalizing -> Completed.
+    // Register a state row even for full-only restores so Get/List have something
+    // to report. The orchestrator drives the empty-increments case straight to Completed.
     TIncrementalRestoreState state;
     state.BackupCollectionPathId = backupCollectionPathId;
     state.OriginalOperationId = ui64(operationId.GetTxId());

@@ -5532,7 +5532,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->LongIncrementalRestoreOps[opId] = op;
 
                 if (op.HasBackupCollectionPathId()) {
-                    RestoreIncrementalRestoreOpPathStates(op);
+                    // Skip path-state re-locking for terminal restores: leaving paths in
+                    // EPathStateIncoming/Outgoing would block DDL until manual FORGET.
+                    auto stateIt = Self->IncrementalRestoreStates.find(ui64(txId));
+                    const bool isTerminal = stateIt != Self->IncrementalRestoreStates.end()
+                        && (stateIt->second.State == TIncrementalRestoreState::EState::Completed
+                         || stateIt->second.State == TIncrementalRestoreState::EState::Failed);
+                    if (!isTerminal) {
+                        RestoreIncrementalRestoreOpPathStates(op);
+                    }
                 }
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -5582,13 +5590,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
-            // Bug #2: a Finalizing row whose FinalizeTxId has no matching entry in
-            // Self->Operations means the finalize sub-op did not survive the reboot
-            // (or was never persisted on the pre-Bug-#2 codebase, where FinalizeTxId
-            // defaults to 0). Reset to Running so TTxProgressIncrementalRestore re-
-            // triggers AllIncrementsProcessed -> Finalizing transition with a fresh
-            // FinalizeTxId. Idempotent for double-restore — finalize re-execution is
-            // safe (SyncIndexSchemaVersions/ReleasePathState are no-ops the second time).
+            // A Finalizing row whose FinalizeTxId has no matching entry in
+            // Self->Operations means the finalize sub-op did not survive the reboot.
+            // Reset to Running so TTxProgressIncrementalRestore re-triggers the
+            // Finalizing transition with a fresh FinalizeTxId. Re-execution is safe:
+            // SyncIndexSchemaVersions and ReleasePathState are no-ops the second time.
             if (state.State == TIncrementalRestoreState::EState::Finalizing) {
                 const bool finalizeStillInFlight =
                     state.FinalizeTxId != 0 && Self->Operations.contains(TTxId(state.FinalizeTxId));

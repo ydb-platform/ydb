@@ -49,9 +49,9 @@ inline bool IsScanSuccess(NTable::EStatus status) {
 }
 
 inline bool IsScanRetriable(NTable::EStatus status) {
-    // Operator/system actions (Term) and transient conditions (Aborted) are
-    // retriable. Lost/Exception/StorageError/anything else is treated as
-    // fatal — the next attempt would almost certainly hit the same condition.
+    // Operator/system terminations (Term) are retriable.
+    // Lost/Exception/StorageError/anything else is treated as fatal — the
+    // next attempt would almost certainly hit the same condition.
     return IsScanSuccess(status)
         || status == NTable::EStatus::Term;
 }

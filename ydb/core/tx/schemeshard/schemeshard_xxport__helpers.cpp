@@ -49,6 +49,7 @@ const TVector<XxportProperties>& GetXxportProperties() {
         {NYdb::NDump::NFiles::CreateExternalDataSource().FileName, NBackup::EBackupFileType::ExternalDataSourceCreate, NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource},
         {NYdb::NDump::NFiles::CreateExternalTable().FileName, NBackup::EBackupFileType::ExternalTableCreate, NKikimrSchemeOp::EPathType::EPathTypeExternalTable},
         {NYdb::NDump::NFiles::SystemView().FileName, NBackup::EBackupFileType::SysViewDescription, NKikimrSchemeOp::EPathType::EPathTypeSysView},
+        {NYdb::NDump::NFiles::CreateCoordinationNode().FileName, NBackup::EBackupFileType::CoordinationNodeCreate, NKikimrSchemeOp::EPathType::EPathTypeKesus},
     };
 
     return properties;

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -1544,6 +1545,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             });
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
+
         {
             auto descr = DescribePath(runtime, "/MyRoot");
             const auto& children = descr.GetPathDescription().GetChildren();
@@ -1628,6 +1632,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             });
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
+
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTableLifecycle"
             ColumnShardCount: 1
@@ -1669,6 +1675,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             });
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data");
+
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTableLifecycle"
             AlterSchema {
@@ -1706,6 +1714,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                 NLs::IndexKeys({"data"}),
             });
         }
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2");
 
         // Test dropping table with local index children - should succeed and drop indexes automatically
         TestDropColumnTable(runtime, ++txId, "/MyRoot", "TestTableLifecycle");
@@ -1875,6 +1885,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
+
         // Remove one index from the schema (this removes it from column table schema
         // but the scheme object child still exists, creating an orphan)
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -1938,6 +1951,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             });
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
+
         // Test case: Re-create an index with the same name as the dropped one
         // This verifies that RemoveChild was called during orphaned cleanup,
         // allowing a new index with the same name to be created
@@ -1964,6 +1979,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                 NLs::IndexKeys({"key"}),
             });
         }
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
     }
 
     Y_UNIT_TEST(MoveColumnTableLocalIndex) {
@@ -2018,6 +2036,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             });
         }
 
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
+
         // Move bloom_key -> bloom_key_renamed
         TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key", "bloom_key_renamed", false);
         env.TestWaitNotification(runtime, txId);
@@ -2040,6 +2061,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                 NLs::IndexKeys({"key"}),
             });
         }
+
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key_renamed");
+        NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
 
         // Move non-existent index -> error
         TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "non_existent", "something", false,

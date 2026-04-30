@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -37,6 +41,32 @@ inline TString OlapTableWithBloomAndNgramIndexes(const TString& tableName) {
                 }
             }
         )";
+}
+
+// Asserts the column-table local index's two versions agree, and the index
+// is present in the parent column table's schema.
+inline void CheckIndexVersionsConsistent(NActors::TTestActorRuntime& runtime,
+        const TString& tablePath, const TString& indexName) {
+    const auto indexPath = tablePath + "/" + indexName;
+    const auto indexDescr = DescribePrivatePath(runtime, indexPath, true, true);
+    const auto& self = indexDescr.GetPathDescription().GetSelf();
+    const auto& tableIndex = indexDescr.GetPathDescription().GetTableIndex();
+    UNIT_ASSERT_VALUES_EQUAL_C(tableIndex.GetSchemaVersion(), self.GetVersion().GetTableIndexVersion(),
+        TStringBuilder() << "Version mismatch on " << indexPath
+            << ": TableIndex.SchemaVersion=" << tableIndex.GetSchemaVersion()
+            << " vs Self.Version.TableIndexVersion=" << self.GetVersion().GetTableIndexVersion());
+
+    const auto tableDescr = DescribePrivatePath(runtime, tablePath, true, true);
+    const auto& schema = tableDescr.GetPathDescription().GetColumnTableDescription().GetSchema();
+    bool found = false;
+    for (const auto& idx : schema.GetIndexes()) {
+        if (idx.GetName() == indexName) {
+            found = true;
+            break;
+        }
+    }
+    UNIT_ASSERT_C(found, TStringBuilder() << "Index '" << indexName
+        << "' present in scheme tree but missing from column table '" << tablePath << "' schema");
 }
 
 }   // namespace NSchemeShardUT_Private::NLocalIndexes

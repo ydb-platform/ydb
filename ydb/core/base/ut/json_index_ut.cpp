@@ -9,72 +9,6 @@ using namespace NYql::NJsonPath;
 
 namespace {
 
-std::set<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists,
-    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
-{
-    NYql::TIssues issues;
-    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
-    UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
-
-    auto result = CollectJsonPath(path, callableType, {});
-    UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
-
-    if (tokensMode.has_value()) {
-        UNIT_ASSERT_C(result.GetTokensMode() == *tokensMode, "for path = " << jsonPath);
-    }
-
-    return result.GetTokens();
-}
-
-template <bool ParserError = false>
-void ValidateError(const TString& jsonPath, const TString& errorMessage, ECallableType callableType = ECallableType::JsonExists) {
-    NYql::TIssues issues;
-    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
-
-    if constexpr (ParserError) {
-        UNIT_ASSERT_STRING_CONTAINS_C(issues.ToOneLineString(), errorMessage, "for path = " << jsonPath);
-    } else {
-        UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
-
-        auto result = CollectJsonPath(path, callableType, {});
-        UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
-
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);
-    }
-}
-
-void ValidateQueries(const TString& jsonPath, TVector<TString> expectedQueries, ECallableType callableType = ECallableType::JsonExists,
-    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
-{
-    auto result = ParseAndCollect(jsonPath, callableType, tokensMode);
-
-    TVector<TString> resultVector;
-    std::copy(result.begin(), result.end(), std::back_inserter(resultVector));
-
-    std::sort(resultVector.begin(), resultVector.end());
-    std::sort(expectedQueries.begin(), expectedQueries.end());
-
-    UNIT_ASSERT_VALUES_EQUAL_C(resultVector, expectedQueries, "for path = " << jsonPath);
-}
-
-void ValidateJsonExists(const TString& jsonPath, const TVector<TString>& expectedQueries,
-    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
-{
-    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonExists, tokensMode);
-}
-
-void ValidateJsonValue(const TString& jsonPath, const TVector<TString>& expectedQueries,
-    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
-{
-    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonValue, tokensMode);
-}
-
-// void ValidateJsonQuery(const TString& jsonPath, const TVector<TString>& expectedQueries,
-// std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
-// {
-//     ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonQuery, tokensMode);
-// }
-
 TString strSuffix(const TStringBuf s) {
     return TString("\0\3", 2) + s;
 }
@@ -98,35 +32,17 @@ const TString emptyError = "Cannot collect tokens for the given JSON path";
 const TString varContextError = "Variables are not allowed in this context";
 
 using EMode = TCollectResult::ETokensMode;
-
-TCollectResult MakeTokens(std::initializer_list<TString> tokens, EMode mode = EMode::NotSet) {
-    TCollectResult::TTokens tokenSet(tokens);
-    TCollectResult result(std::move(tokenSet));
-    result.SetTokensMode(mode);
-    return result;
-}
-
-TCollectResult MakeError(const TString& message) {
-    return TCollectResult(NYql::TIssue(message));
-}
-
-void CheckMerge(const TCollectResult& result, std::initializer_list<TString> expectedTokens, EMode expectedMode) {
-    UNIT_ASSERT(!result.IsError());
-    const TCollectResult::TTokens expected(expectedTokens);
-    UNIT_ASSERT(result.GetTokens() == expected);
-    UNIT_ASSERT(result.GetTokensMode() == expectedMode);
-}
-
 using TVarMap = std::unordered_map<TString, TString>;
 
-std::set<TString> ParseAndCollectWithVars(const TString& jsonPath, ECallableType callableType,
-    const TVarMap& variables, std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+// Successful parsing and collection of JSON path with mode validation
+TTokens ParseAndCollect(const TString& jsonPath, ECallableType callableType, const TVarMap& variables = {},
+    const TVarMap& paramVariables = {}, std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
 {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    auto result = CollectJsonPath(path, callableType, variables);
+    auto result = CollectJsonPath(path, callableType, variables, paramVariables);
     UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
 
     if (tokensMode.has_value()) {
@@ -136,24 +52,36 @@ std::set<TString> ParseAndCollectWithVars(const TString& jsonPath, ECallableType
     return result.GetTokens();
 }
 
-void ValidateQueriesWithVars(const TString& jsonPath, TVector<TString> expectedQueries,
-    const TVarMap& variables, ECallableType callableType = ECallableType::JsonValue,
+// Compare expected tokens with collected tokens
+void ValidateTokens(const TString& jsonPath, const std::vector<TToken>& expected, const TVarMap& variables = {},
+    const TVarMap& paramVariables = {}, ECallableType callableType = ECallableType::JsonValue,
     std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
 {
-    auto result = ParseAndCollectWithVars(jsonPath, callableType, variables, tokensMode);
+    auto expectedTokens = TTokens{expected.begin(), expected.end()};
+    auto result = ParseAndCollect(jsonPath, callableType, variables, paramVariables, tokensMode);
 
-    TVector<TString> resultVector;
-    std::copy(result.begin(), result.end(), std::back_inserter(resultVector));
-
-    std::sort(resultVector.begin(), resultVector.end());
-    std::sort(expectedQueries.begin(), expectedQueries.end());
-
-    UNIT_ASSERT_VALUES_EQUAL_C(resultVector, expectedQueries, "for path = " << jsonPath);
+    for (const auto& token : result) {
+        UNIT_ASSERT_C(expectedTokens.contains(token), "for path = " << jsonPath);
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(result.size(), expectedTokens.size(), "for path = " << jsonPath);
 }
 
+void ValidateTokens(const TString& jsonPath, const std::vector<TString>& expected, const TVarMap& variables = {},
+    const TVarMap& paramVariables = {}, ECallableType callableType = ECallableType::JsonValue,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    std::vector<TToken> tokenList;
+    tokenList.reserve(expected.size());
+    for (const auto& token : expected) {
+        tokenList.emplace_back(token, "");
+    }
+    ValidateTokens(jsonPath, tokenList, variables, paramVariables, callableType, tokensMode);
+}
+
+// Validate error for the given JSON path
 template <bool ParserError = false>
-void ValidateErrorWithVars(const TString& jsonPath, const TString& errorMessage,
-    const TVarMap& variables, ECallableType callableType = ECallableType::JsonExists)
+void ValidateError(const TString& jsonPath, const TString& errorMessage, const TVarMap& variables = {},
+    const TVarMap& paramVariables = {}, ECallableType callableType = ECallableType::JsonValue)
 {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
@@ -163,11 +91,71 @@ void ValidateErrorWithVars(const TString& jsonPath, const TString& errorMessage,
     } else {
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-        auto result = CollectJsonPath(path, callableType, variables);
+        auto result = CollectJsonPath(path, callableType, variables, paramVariables);
         UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);
     }
+}
+
+// Simple JSON_EXISTS wrapper without variables
+void ValidateJsonExists(const TString& jsonPath, const std::vector<TString>& expected,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    ValidateTokens(jsonPath, expected, {}, {}, ECallableType::JsonExists, tokensMode);
+}
+
+// Simple JSON_VALUE wrapper without variables
+void ValidateJsonValue(const TString& jsonPath, const std::vector<TString>& expected,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    ValidateTokens(jsonPath, expected, {}, {}, ECallableType::JsonValue, tokensMode);
+}
+
+// Make a collect result with the given tokens and mode
+TCollectResult MakeParamTokens(const std::vector<TToken>& tokens, EMode mode = EMode::NotSet) {
+    TTokens tokenSet(tokens.begin(), tokens.end());
+    TCollectResult result(std::move(tokenSet));
+    result.SetTokensMode(mode);
+    return result;
+}
+
+// Make a collect result with the given strings (without params) and mode
+TCollectResult MakeTokens(const std::vector<TString>& tokens, EMode mode = EMode::NotSet) {
+    std::vector<TToken> tokenList;
+    tokenList.reserve(tokens.size());
+    for (const auto& token : tokens) {
+        tokenList.emplace_back(token, "");
+    }
+    return MakeParamTokens(tokenList, mode);
+}
+
+// Make a collect result with the given error message
+TCollectResult MakeError(const TString& message) {
+    return TCollectResult(NYql::TIssue(message));
+}
+
+// Check the merge result with the given expected tokens and mode
+void CheckMergeFull(const TCollectResult& result, const std::vector<TToken>& expectedTokens, EMode expectedMode, const TString& description) {
+    UNIT_ASSERT_C(!result.IsError(), description << ": got error: " << result.GetError().GetMessage());
+    UNIT_ASSERT_C(result.GetTokensMode() == expectedMode, description << ": modes differ");
+
+    TTokens expected(expectedTokens.begin(), expectedTokens.end());
+
+    for (const auto& token : result.GetTokens()) {
+        UNIT_ASSERT_C(expected.contains(token), description << ": token " << token.PathToken << " with param " << token.ParamName << " is not expected");
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetTokens().size(), expected.size(), description << ": token sets differ");
+}
+
+// Check the merge result with the given expected strings (without params) and mode
+void CheckMerge(const TCollectResult& result, std::vector<TString> expectedTokens, EMode expectedMode) {
+    std::vector<TToken> expectedTokenList;
+    expectedTokenList.reserve(expectedTokens.size());
+    for (const auto& token : expectedTokens) {
+        expectedTokenList.emplace_back(token, "");
+    }
+    CheckMergeFull(result, expectedTokenList, expectedMode, "CheckMerge");
 }
 
 }  // namespace
@@ -187,7 +175,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.a", {"\2a"});
         ValidateJsonExists("$.a.b.c", {"\2a\2b\2c"});
         ValidateJsonExists("$.aba.\"caba\"", {"\4aba\5caba"});
-        ValidateJsonExists("$.\"\".abc", {TString("\1\4abc", 5)});
+        ValidateJsonExists("$.\"\".abc", {"\1\4abc"});
         ValidateJsonExists("$.*", {""});
         ValidateJsonExists("$.a.*", {"\2a"});
         ValidateJsonExists("$.a.*.c", {"\2a"});
@@ -236,7 +224,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.a.*.c[1, 2, 3] starts with \"abc\"", {"\2a"});
 
         // For JSON_EXISTS, the result is always true even if the path does not exist
-        ValidateError("$.key starts with \"lol\"", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        ValidateError("$.key starts with \"lol\"", "Predicates are not allowed in this context", {}, {}, ECallableType::JsonExists);
     }
 
     // LikeRegex predicates stop further path extraction: operand path only
@@ -252,7 +240,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.key like_regex \".*\"", {"\4key"});
 
         // For JSON_EXISTS, the result is always true even if the path does not exist
-        ValidateError("$.key like_regex \"abc\"", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        ValidateError("$.key like_regex \"abc\"", "Predicates are not allowed in this context", {}, {}, ECallableType::JsonExists);
     }
 
     // Exists predicates stop further path extraction: operand path only
@@ -264,46 +252,46 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("exists($.key.keyvalue().name)", {"\4key"});
 
         // For JSON_EXISTS, the result is always true even if the path does not exist
-        ValidateError("exists($)", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        ValidateError("exists($)", "Predicates are not allowed in this context", {}, {}, ECallableType::JsonExists);
     }
 
     // IsUnknown predicates return error because their argument must be a predicate (-> nested predicates are not allowed)
     Y_UNIT_TEST(CollectPath_IsUnknownPredicate) {
-        ValidateError("($ starts with \"abc\") is unknown", predError, ECallableType::JsonValue);
-        ValidateError("($ like_regex \"abc\") is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(exists($.key)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("($.key != 10) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("($.key < 10) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($ starts with \"abc\") is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($ like_regex \"abc\") is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(exists($.key)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key == 10) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key != 10) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key < 10) is unknown", predError, {}, {}, ECallableType::JsonValue);
 
         // For JSON_EXISTS, predicate mode is denied even earlier (at context level)
-        ValidateError("($ starts with \"abc\") is unknown", predError, ECallableType::JsonExists);
-        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonExists);
+        ValidateError("($ starts with \"abc\") is unknown", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("($.key == 10) is unknown", predError, {}, {}, ECallableType::JsonExists);
 
         // IsUnknown wrapping && - inner AND evaluates its operands (==, starts with, etc.) in EMode::Predicate, blocked
-        ValidateError("(($.a == 10) && ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a starts with \"x\") && ($.b == 1)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(exists($.a) && ($.b like_regex \"y.*\")) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 10) && ($.b == 20) && ($.c == 30)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(exists($.a) && exists($.b)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) && ($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a starts with \"x\") && ($.b == 1)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(exists($.a) && ($.b like_regex \"y.*\")) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) && ($.b == 20) && ($.c == 30)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(exists($.a) && exists($.b)) is unknown", predError, {}, {}, ECallableType::JsonValue);
 
         // IsUnknown wrapping || - same: inner OR evaluates its predicate operands in EMode::Predicate, blocked
-        ValidateError("(($.a == 10) || ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a starts with \"x\") || ($.b == 1)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(exists($.a) || ($.b like_regex \"y.*\")) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 10) || ($.b == 20) || ($.c == 30)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(exists($.a) || exists($.b)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) || ($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a starts with \"x\") || ($.b == 1)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(exists($.a) || ($.b like_regex \"y.*\")) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) || ($.b == 20) || ($.c == 30)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(exists($.a) || exists($.b)) is unknown", predError, {}, {}, ECallableType::JsonValue);
 
         // IsUnknown wrapping ! - UnaryNot is in the predicate-type block list, blocked by predicate mode check
-        ValidateError("(!($.a == 10)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(!($.a starts with \"x\")) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(!(exists($.a))) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(!($.a starts with \"x\")) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(!(exists($.a))) is unknown", predError, {}, {}, ECallableType::JsonValue);
 
         // IsUnknown wrapping && / || that contain !
-        ValidateError("(!($.a == 10) && ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 10) && !($.b == 20)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(!($.a == 10) || ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 10) || !($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10) && ($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) && !($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10) || ($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) || !($.b == 20)) is unknown", predError, {}, {}, ECallableType::JsonValue);
     }
 
     // Unary NOT always returns predError.
@@ -311,61 +299,61 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     // For JsonValue: inner operand is collected in EMode::Predicate where predicate types are blocked.
     Y_UNIT_TEST(CollectPath_UnaryNot) {
         // Basic cases with JsonExists
-        ValidateError("!($.a == 10)", predError, ECallableType::JsonExists);
-        ValidateError("!($.key == \"hello\")", predError, ECallableType::JsonExists);
-        ValidateError("!($.a == true)", predError, ECallableType::JsonExists);
-        ValidateError("!($.a == null)", predError, ECallableType::JsonExists);
+        ValidateError("!($.a == 10)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("!($.key == \"hello\")", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("!($.a == true)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("!($.a == null)", predError, {}, {}, ECallableType::JsonExists);
 
         // Basic cases with JsonValue
-        ValidateError("!($.a == 10)", predError, ECallableType::JsonValue);
-        ValidateError("!($.key == \"hello\")", predError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!($.key == \"hello\")", predError, {}, {}, ECallableType::JsonValue);
 
         // Deeper paths
-        ValidateError("!($.a.b.c == 42)", predError, ECallableType::JsonExists);
-        ValidateError("!($.a.b == \"x\")", predError, ECallableType::JsonValue);
+        ValidateError("!($.a.b.c == 42)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("!($.a.b == \"x\")", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT applied to exists predicate
-        ValidateError("!(exists($.key))", predError, ECallableType::JsonValue);
+        ValidateError("!(exists($.key))", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT applied to starts with predicate
-        ValidateError("!($.key starts with \"abc\")", predError, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\")", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT applied to like_regex predicate
-        ValidateError("!($.key like_regex \"abc\")", predError, ECallableType::JsonValue);
+        ValidateError("!($.key like_regex \"abc\")", predError, {}, {}, ECallableType::JsonValue);
 
         // Double NOT
-        ValidateError("!(!($.a == 10))", predError, ECallableType::JsonExists);
-        ValidateError("!(!($.a == 10))", predError, ECallableType::JsonValue);
+        ValidateError("!(!($.a == 10))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("!(!($.a == 10))", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT as left operand of AND - error propagates immediately from left
-        ValidateError("!($.a == 10) && ($.b == 20)", predError, ECallableType::JsonValue);
-        ValidateError("!($.key starts with \"abc\") && ($.b == 1)", predError, ECallableType::JsonValue);
-        ValidateError("!(exists($.key)) && ($.b == 2)", predError, ECallableType::JsonValue);
-        ValidateError("!($.a like_regex \".*\") && ($.b == 3)", predError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10) && ($.b == 20)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\") && ($.b == 1)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!(exists($.key)) && ($.b == 2)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!($.a like_regex \".*\") && ($.b == 3)", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT as right operand of AND - left side succeeds, then error from right
-        ValidateError("($.a == 10) && !($.b == 20)", predError, ECallableType::JsonValue);
-        ValidateError("($.a starts with \"x\") && !($.b == 1)", predError, ECallableType::JsonValue);
-        ValidateError("exists($.a) && !($.b like_regex \"y.*\")", predError, ECallableType::JsonValue);
+        ValidateError("($.a == 10) && !($.b == 20)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a starts with \"x\") && !($.b == 1)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists($.a) && !($.b like_regex \"y.*\")", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT as left operand of OR - error propagates immediately from left
-        ValidateError("!($.a == 10) || ($.b == 20)", predError, ECallableType::JsonValue);
-        ValidateError("!($.key starts with \"abc\") || ($.b == 1)", predError, ECallableType::JsonValue);
-        ValidateError("!(exists($.key)) || ($.b == 2)", predError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10) || ($.b == 20)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\") || ($.b == 1)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("!(exists($.key)) || ($.b == 2)", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT as right operand of OR - left side succeeds, then error from right
-        ValidateError("($.a == 10) || !($.b == 20)", predError, ECallableType::JsonValue);
-        ValidateError("($.a starts with \"x\") || !($.b == 1)", predError, ECallableType::JsonValue);
-        ValidateError("exists($.a) || !($.b like_regex \"y.*\")", predError, ECallableType::JsonValue);
+        ValidateError("($.a == 10) || !($.b == 20)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a starts with \"x\") || !($.b == 1)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists($.a) || !($.b like_regex \"y.*\")", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT inside is unknown - is unknown receives error from its argument
-        ValidateError("(!($.a == 10)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(!($.key starts with \"abc\")) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(!(exists($.key))) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(!($.key starts with \"abc\")) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(!(exists($.key))) is unknown", predError, {}, {}, ECallableType::JsonValue);
 
         // NOT in chained AND/OR
-        ValidateError("($.a == 1) && !($.b == 2) && ($.c == 3)", predError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || !($.b == 2) || ($.c == 3)", predError, ECallableType::JsonValue);
+        ValidateError("($.a == 1) && !($.b == 2) && ($.c == 3)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a == 1) || !($.b == 2) || ($.c == 3)", predError, {}, {}, ECallableType::JsonValue);
     }
 
     // Unary +/- stop further path extraction (same as methods): operand path only
@@ -415,41 +403,41 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     // Binary arithmetic operators extract tokens from both operands and finish
     Y_UNIT_TEST(CollectPath_BinaryArithmetic) {
         // Path on the left, literal on the right - only left token
-        ValidateQueries("$.key + 1", {"\4key"});
-        ValidateQueries("$.key - 1", {"\4key"});
-        ValidateQueries("$.key - (-1)", {"\4key"});
-        ValidateQueries("$.key * 2", {"\4key"});
-        ValidateQueries("$.key / 2", {"\4key"});
-        ValidateQueries("$.key % 2", {"\4key"});
+        ValidateTokens("$.key + 1", {"\4key"});
+        ValidateTokens("$.key - 1", {"\4key"});
+        ValidateTokens("$.key - (-1)", {"\4key"});
+        ValidateTokens("$.key * 2", {"\4key"});
+        ValidateTokens("$.key / 2", {"\4key"});
+        ValidateTokens("$.key % 2", {"\4key"});
 
         // Literal on the left, path on the right - only right token
-        ValidateQueries("1 + $.key", {"\4key"});
-        ValidateQueries("-1 - $.key", {"\4key"});
-        ValidateQueries("1 * $.key", {"\4key"});
-        ValidateQueries("(+(-1)) / $.key", {"\4key"});
-        ValidateQueries("1 % $.key", {"\4key"});
+        ValidateTokens("1 + $.key", {"\4key"});
+        ValidateTokens("-1 - $.key", {"\4key"});
+        ValidateTokens("1 * $.key", {"\4key"});
+        ValidateTokens("(+(-1)) / $.key", {"\4key"});
+        ValidateTokens("1 % $.key", {"\4key"});
 
         // Context object on the left
-        ValidateQueries("$ + 1", {""});
-        ValidateQueries("$ * 2", {""});
+        ValidateTokens("$ + 1", {""});
+        ValidateTokens("$ * 2", {""});
 
         // Deeper paths as left operand
-        ValidateQueries("$.a.b.c + 1", {"\2a\2b\2c"});
-        ValidateQueries("$.a.b - 1", {"\2a\2b"});
+        ValidateTokens("$.a.b.c + 1", {"\2a\2b\2c"});
+        ValidateTokens("$.a.b - 1", {"\2a\2b"});
 
         // Array access on the left operand
-        ValidateQueries("$.key[0] + 1", {"\4key"});
-        ValidateQueries("$.arr[last] * 2", {"\4arr"});
+        ValidateTokens("$.key[0] + 1", {"\4key"});
+        ValidateTokens("$.arr[last] * 2", {"\4arr"});
 
         // Wildcard on the left - collection already finished by wildcard
-        ValidateQueries("$.* + 1", {""});
-        ValidateQueries("$.* + (-1)", {""});
-        ValidateQueries("$.a.* - 1", {"\2a"});
+        ValidateTokens("$.* + 1", {""});
+        ValidateTokens("$.* + (-1)", {""});
+        ValidateTokens("$.a.* - 1", {"\2a"});
 
         // Both operands are paths - tokens from both are collected (AND)
-        ValidateQueries("$.a + $.b", {"\2a", "\2b"});
-        ValidateQueries("$.a.b - $.c.d", {"\2a\2b", "\2c\2d"});
-        ValidateQueries("$.a.b - (-$.c.d)", {"\2a\2b", "\2c\2d"});
+        ValidateTokens("$.a + $.b", {"\2a", "\2b"});
+        ValidateTokens("$.a.b - $.c.d", {"\2a\2b", "\2c\2d"});
+        ValidateTokens("$.a.b - (-$.c.d)", {"\2a\2b", "\2c\2d"});
 
         // Both operands are literals - no path to collect
         ValidateError("1 + 2", emptyError);
@@ -489,44 +477,44 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     // Non-trivial combinations of unary and binary arithmetic operators
     Y_UNIT_TEST(CollectPath_ArithmeticCombinations) {
         // Unary applied to binary: tokens from both binary operands, then Finish
-        ValidateQueries("-($.a + 1)", {"\2a"});
-        ValidateQueries("+($.a - 1)", {"\2a"});
-        ValidateQueries("-($.a * $.b)", {"\2a", "\2b"});
-        ValidateQueries("-(1 + $.b)", {"\2b"});
+        ValidateTokens("-($.a + 1)", {"\2a"});
+        ValidateTokens("+($.a - 1)", {"\2a"});
+        ValidateTokens("-($.a * $.b)", {"\2a", "\2b"});
+        ValidateTokens("-(1 + $.b)", {"\2b"});
 
         // Binary with unary left operand
-        ValidateQueries("-$.a + $.b", {"\2a", "\2b"});
-        ValidateQueries("+$.a - $.b", {"\2a", "\2b"});
-        ValidateQueries("-$.key + 1", {"\4key"});
-        ValidateQueries("+$.key * 2", {"\4key"});
+        ValidateTokens("-$.a + $.b", {"\2a", "\2b"});
+        ValidateTokens("+$.a - $.b", {"\2a", "\2b"});
+        ValidateTokens("-$.key + 1", {"\4key"});
+        ValidateTokens("+$.key * 2", {"\4key"});
 
         // Binary with unary right operand - right token still collected
-        ValidateQueries("$.a + (-$.b)", {"\2a", "\2b"});
-        ValidateQueries("$.a * (+$.b)", {"\2a", "\2b"});
-        ValidateQueries("1 + (-$.b)", {"\2b"});
+        ValidateTokens("$.a + (-$.b)", {"\2a", "\2b"});
+        ValidateTokens("$.a * (+$.b)", {"\2a", "\2b"});
+        ValidateTokens("1 + (-$.b)", {"\2b"});
 
         // Chained binary (left-associative): all three path tokens collected
-        ValidateQueries("$.a + $.b + $.c", {"\2a", "\2b", "\2c"});
-        ValidateQueries("$.a - $.b - $.c", {"\2a", "\2b", "\2c"});
-        ValidateQueries("$.a * $.b * $.c", {"\2a", "\2b", "\2c"});
+        ValidateTokens("$.a + $.b + $.c", {"\2a", "\2b", "\2c"});
+        ValidateTokens("$.a - $.b - $.c", {"\2a", "\2b", "\2c"});
+        ValidateTokens("$.a * $.b * $.c", {"\2a", "\2b", "\2c"});
 
         // Mixed precedence: * binds tighter than +, but all paths still collected
-        ValidateQueries("$.a + $.b * $.c", {"\2a", "\2b", "\2c"});
-        ValidateQueries("$.a * $.b + $.c", {"\2a", "\2b", "\2c"});
+        ValidateTokens("$.a + $.b * $.c", {"\2a", "\2b", "\2c"});
+        ValidateTokens("$.a * $.b + $.c", {"\2a", "\2b", "\2c"});
 
         // Double unary combined with binary
-        ValidateQueries("-(-$.a) + $.b", {"\2a", "\2b"});
-        ValidateQueries("-(+$.a) * 2", {"\2a"});
+        ValidateTokens("-(-$.a) + $.b", {"\2a", "\2b"});
+        ValidateTokens("-(+$.a) * 2", {"\2a"});
 
         // Longer paths on both sides
-        ValidateQueries("$.a.b.c + $.x.y.z", {"\2a\2b\2c", "\2x\2y\2z"});
-        ValidateQueries("-($.a.*.c) + $.x.y.*", {"\2a", "\2x\2y"});
-        ValidateQueries("$.a.b.c * 3.14", {"\2a\2b\2c"});
+        ValidateTokens("$.a.b.c + $.x.y.z", {"\2a\2b\2c", "\2x\2y\2z"});
+        ValidateTokens("-($.a.*.c) + $.x.y.*", {"\2a", "\2x\2y"});
+        ValidateTokens("$.a.b.c * 3.14", {"\2a\2b\2c"});
 
         // Method result used as operand of binary - method finishes, but token still collected
-        ValidateQueries("$.key.size() + 1", {"\4key"});
-        ValidateQueries("$.key.abs() * 2", {"\4key"});
-        ValidateQueries("$.a.size() + $.b.floor()", {"\2a", "\2b"});
+        ValidateTokens("$.key.size() + 1", {"\4key"});
+        ValidateTokens("$.key.abs() * 2", {"\4key"});
+        ValidateTokens("$.a.size() + $.b.floor()", {"\2a", "\2b"});
     }
 
     // Arithmetic operators (two-path operands produce And mode) combined with && and ||
@@ -626,7 +614,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("\"x\" == $.a.b.c", {"\2a\2b\2c" + strSuffix("x")});
         ValidateJsonValue("$.aba.\"caba\" == true", {"\4aba\5caba" + boolTrueSuffix});
         ValidateJsonValue("$.a.b.c.d == 0", {"\2a\2b\2c\2d" + numSuffix(0)});
-        ValidateJsonValue("$.\"\".\"\" == 0", {TString("\1\1", 2) + numSuffix(0)});
+        ValidateJsonValue("$.\"\".\"\" == 0", {"\1\1" + numSuffix(0)});
 
         // Array subscript
         ValidateJsonValue("$.key[0] == \"x\"", {"\4key" + strSuffix("x")});
@@ -679,17 +667,17 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("(((((($).a).b))) == (\"x\"))", {"\2a\2b" + strSuffix("x")});
 
         // Predicates with equality operator -> nested predicates are not allowed
-        ValidateError("exists($.key) == true", predError, ECallableType::JsonValue);
-        ValidateError("($.key starts with \"a\") == true", predError, ECallableType::JsonValue);
-        ValidateError("($.key like_regex \"a.*\") == true", predError, ECallableType::JsonValue);
-        ValidateError("($.a.b starts with \"x\") == false", predError, ECallableType::JsonValue);
-        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("($.key == 10) == false", predError, ECallableType::JsonValue);
-        ValidateError("false == ($.key == 10)", predError, ECallableType::JsonValue);
+        ValidateError("exists($.key) == true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key starts with \"a\") == true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key like_regex \"a.*\") == true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a.b starts with \"x\") == false", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key == 10) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.key == 10) == false", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("false == ($.key == 10)", predError, {}, {}, ECallableType::JsonValue);
 
         // For JSON_EXISTS, the result is always true even if the path does not exist
-        ValidateError("$.key == 10", "Predicates are not allowed in this context", ECallableType::JsonExists);
-        ValidateError("false == ($.key == 10)", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        ValidateError("$.key == 10", "Predicates are not allowed in this context", {}, {}, ECallableType::JsonExists);
+        ValidateError("false == ($.key == 10)", "Predicates are not allowed in this context", {}, {}, ECallableType::JsonExists);
 
         // Both operands are paths: merge index tokens with AND (same as comparison ops)
         ValidateJsonValue("$.a == $.b", {"\2a", "\2b"});
@@ -698,20 +686,20 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.a.b == $.c.d", {"\2a\2b", "\2c\2d"});
 
         // Literals only
-        ValidateError("\"x\" == \"y\"", compError, ECallableType::JsonValue);
-        ValidateError("1 == 2", compError, ECallableType::JsonValue);
-        ValidateError("true == false", compError, ECallableType::JsonValue);
-        ValidateError("null == null", compError, ECallableType::JsonValue);
-        ValidateError("1 == \"x\"", compError, ECallableType::JsonValue);
+        ValidateError("\"x\" == \"y\"", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("1 == 2", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("true == false", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("null == null", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("1 == \"x\"", compError, {}, {}, ECallableType::JsonValue);
 
         // Without context object
-        ValidateError("1 == 1", compError, ECallableType::JsonValue);
+        ValidateError("1 == 1", compError, {}, {}, ECallableType::JsonValue);
 
         // Variables
-        ValidateError("$var == \"x\"", compError, ECallableType::JsonValue);
-        ValidateError("\"x\" == $var", compError, ECallableType::JsonValue);
-        ValidateError("$var == $var", compError, ECallableType::JsonValue);
-        ValidateQueries("$ == $var", {""}, ECallableType::JsonValue);
+        ValidateError("$var == \"x\"", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("\"x\" == $var", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("$var == $var", compError, {}, {}, ECallableType::JsonValue);
+        ValidateJsonValue("$ == $var", {""});
     }
 
     // Comparison operators <, <=, >, >=, != collect path tokens from both operands; literals are silently dropped.
@@ -784,9 +772,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.a >= $", {"\2a", ""});
 
         // Both sides are literals - error
-        ValidateError("1 < 2", emptyError, ECallableType::JsonValue);
-        ValidateError("1.5 >= -2.0", emptyError, ECallableType::JsonValue);
-        ValidateError("true != false", emptyError, ECallableType::JsonValue);
+        ValidateError("1 < 2", emptyError, {}, {}, ECallableType::JsonValue);
+        ValidateError("1.5 >= -2.0", emptyError, {}, {}, ECallableType::JsonValue);
+        ValidateError("true != false", emptyError, {}, {}, ECallableType::JsonValue);
 
         // Arithmetic expression as operand (same as BinaryArithmeticOp behavior)
         // $.a + $.b produces mode=And, comparison also sets And - compatible
@@ -796,27 +784,27 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.a.size() + $.b.abs() != 0", {"\2a", "\2b"});
 
         // Comparison predicate nested inside another comparison
-        ValidateError("($.a == -10) < -5", predError, ECallableType::JsonValue);
-        ValidateError("($.a < 5) > 0", predError, ECallableType::JsonValue);
-        ValidateError("($.a <= 5) != 0", predError, ECallableType::JsonValue);
-        ValidateError("5 > ($.a == 1)", predError, ECallableType::JsonValue);
-        ValidateError("5 != ($.a < 3)", predError, ECallableType::JsonValue);
+        ValidateError("($.a == -10) < -5", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a < 5) > 0", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a <= 5) != 0", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("5 > ($.a == 1)", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("5 != ($.a < 3)", predError, {}, {}, ECallableType::JsonValue);
 
         // Exists/StartsWith/LikeRegex as operand
-        ValidateError("exists($.a) < 5", predError, ECallableType::JsonValue);
-        ValidateError("($.a starts with \"x\") != true", predError, ECallableType::JsonValue);
-        ValidateError("($.a like_regex \".*\") < 1", predError, ECallableType::JsonValue);
+        ValidateError("exists($.a) < 5", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a starts with \"x\") != true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a like_regex \".*\") < 1", predError, {}, {}, ECallableType::JsonValue);
 
         // AND/OR as operand
-        ValidateError("($.a == 1 && $.b == 2) < 5", predError, ECallableType::JsonValue);
-        ValidateError("($.a == 1 || $.b == 2) != false", predError, ECallableType::JsonValue);
+        ValidateError("($.a == 1 && $.b == 2) < 5", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a == 1 || $.b == 2) != false", predError, {}, {}, ECallableType::JsonValue);
 
         // JsonExists: predicate not allowed at top level
-        ValidateError("$.key < 10", predError, ECallableType::JsonExists);
-        ValidateError("$.key <= -10", predError, ECallableType::JsonExists);
-        ValidateError("$.key > 10", predError, ECallableType::JsonExists);
-        ValidateError("$.key >= 10", predError, ECallableType::JsonExists);
-        ValidateError("$.key != -10", predError, ECallableType::JsonExists);
+        ValidateError("$.key < 10", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.key <= -10", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.key > 10", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.key >= 10", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.key != -10", predError, {}, {}, ECallableType::JsonExists);
 
         // Single-path comparison produces 1 token, NotSet mode, can appear in AND or OR
         ValidateJsonValue("($.a < 5) && ($.b > 1)", {"\2a", "\2b"});
@@ -838,9 +826,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a < -5) && ($.b > -1) || ($.c != 3)", {"\2a", "\2b", "\2c"});
 
         // Variables
-        ValidateError("$var < 5", emptyError, ECallableType::JsonValue);
-        ValidateError("5 > $var", emptyError, ECallableType::JsonValue);
-        ValidateError("$var != $var", emptyError, ECallableType::JsonValue);
+        ValidateError("$var < 5", emptyError, {}, {}, ECallableType::JsonValue);
+        ValidateError("5 > $var", emptyError, {}, {}, ECallableType::JsonValue);
+        ValidateError("$var != $var", emptyError, {}, {}, ECallableType::JsonValue);
     }
 
     // Comparison operators inside filter predicates (EMode::Filter allows predicates)
@@ -901,14 +889,14 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.a ? (((@.b < 5) || (@.c > 1)) && @.d > 2)", {"\2a\2b", "\2a\2c", "\2a\2d"});
 
         // Nested predicate in filter operand is blocked (EMode::Predicate on operand)
-        ValidateError("$.a ? (($.b == 1) < 5)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (exists(@.b) < 5)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b starts with \"x\") != true)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (($.b == 1) < 5)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (exists(@.b) < 5)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\") != true)", predError, {}, {}, ECallableType::JsonExists);
 
         // is unknown wrapping comparison inside filter - blocked
-        ValidateError("$.a ? ((@.b < 5) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b >= +0) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b != 1) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b < 5) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b >= +0) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b != 1) is unknown)", predError, {}, {}, ECallableType::JsonExists);
 
         // Arithmetic expression as comparison operand in filter
         ValidateJsonExists("$.key ? (@.a + @.b < +5)", {"\4key\2a", "\4key\2b"});
@@ -1053,14 +1041,14 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a == 1) && ($.a == 2)", {"\2a" + numSuffix(1), "\2a" + numSuffix(2)});
 
         // Variables with literals
-        ValidateError("($var == 1) && ($.b == 2)", compError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) && ($var == 2)", compError, ECallableType::JsonValue);
-        ValidateError("($var == 1) && ($var == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($var == 1) && ($.b == 2)", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a == 1) && ($var == 2)", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($var == 1) && ($var == 2)", compError, {}, {}, ECallableType::JsonValue);
 
         // Predicates are not allowed in JsonExists
-        ValidateError("($.a == 10) && ($.b == 20)", predError, ECallableType::JsonExists);
-        ValidateError("($.a starts with \"x\") && ($.b == 1)", predError, ECallableType::JsonExists);
-        ValidateError("exists($.a) && exists($.b)", predError, ECallableType::JsonExists);
+        ValidateError("($.a == 10) && ($.b == 20)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("($.a starts with \"x\") && ($.b == 1)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("exists($.a) && exists($.b)", predError, {}, {}, ECallableType::JsonExists);
 
         // Mixing AND and OR: OR wins, all tokens become OR
         ValidateJsonValue("(($.a == 1) && ($.b == 2)) || ($.c == 3)", {"\2a" + numSuffix(1), "\2b" + numSuffix(2), "\2c" + numSuffix(3)});
@@ -1070,12 +1058,12 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Nested predicates: AND appears in predicate position (inside exists / is unknown / == literal)
         // BinaryAnd inherits EMode::Predicate and its operands (==, starts with, like_regex, exists) are blocked
-        ValidateError("exists(($.a == 1) && ($.b == 2))", predError, ECallableType::JsonValue);
-        ValidateError("exists(($.a starts with \"x\") && ($.b like_regex \"y\"))", predError, ECallableType::JsonValue);
-        ValidateError("exists(exists($.a) && ($.b == 2))", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) && ($.b == 2)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) && ($.b == 2)) == true", predError, ECallableType::JsonValue);
-        ValidateError("false == (($.a == 1) && ($.b == 2))", predError, ECallableType::JsonValue);
+        ValidateError("exists(($.a == 1) && ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists(($.a starts with \"x\") && ($.b like_regex \"y\"))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists(exists($.a) && ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 1) && ($.b == 2)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 1) && ($.b == 2)) == true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("false == (($.a == 1) && ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
     }
 
     Y_UNIT_TEST(CollectPath_BinaryOr) {
@@ -1134,14 +1122,14 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a starts with \"x\") || ($.b == 1) || exists($.c.d)",{"\2a", "\2b" + numSuffix(1), "\2c\2d"});
 
         // Variable on left or right side
-        ValidateError("($var == 1) || ($.b == 2)", compError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || ($var == 2)", compError, ECallableType::JsonValue);
-        ValidateError("($var == 1) || ($var == 2)", compError, ECallableType::JsonValue);
+        ValidateError("($var == 1) || ($.b == 2)", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($.a == 1) || ($var == 2)", compError, {}, {}, ECallableType::JsonValue);
+        ValidateError("($var == 1) || ($var == 2)", compError, {}, {}, ECallableType::JsonValue);
 
         // Predicates not allowed in Context for JsonExists
-        ValidateError("($.a == 10) || ($.b == 20)", predError, ECallableType::JsonExists);
-        ValidateError("($.a starts with \"x\") || ($.b == 1)", predError, ECallableType::JsonExists);
-        ValidateError("exists($.a) || exists($.b)", predError, ECallableType::JsonExists);
+        ValidateError("($.a == 10) || ($.b == 20)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("($.a starts with \"x\") || ($.b == 1)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("exists($.a) || exists($.b)", predError, {}, {}, ECallableType::JsonExists);
 
         // Arithmetic with multiple paths (And mode) mixed with OR: OR wins
         ValidateJsonValue("($.a + $.b == \"x\") || ($.c == 1)", {"\2a", "\2b", "\2c" + numSuffix(1)});
@@ -1155,12 +1143,12 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("(($.a == 1) || ($.b == 2)) && ($.c == 3)", {"\2a" + numSuffix(1), "\2b" + numSuffix(2), "\2c" + numSuffix(3)});
 
         // Nested predicates: OR appears in predicate position (inside exists / is unknown / == literal)
-        ValidateError("exists(($.a == 1) || ($.b == 2))", predError, ECallableType::JsonValue);
-        ValidateError("exists(($.a starts with \"x\") || ($.b like_regex \"y\"))", predError, ECallableType::JsonValue);
-        ValidateError("exists(exists($.a) || ($.b == 2))", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) || ($.b == 2)) is unknown", predError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) || ($.b == 2)) == true", predError, ECallableType::JsonValue);
-        ValidateError("false == (($.a == 1) || ($.b == 2))", predError, ECallableType::JsonValue);
+        ValidateError("exists(($.a == 1) || ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists(($.a starts with \"x\") || ($.b like_regex \"y\"))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists(exists($.a) || ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 1) || ($.b == 2)) is unknown", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("(($.a == 1) || ($.b == 2)) == true", predError, {}, {}, ECallableType::JsonValue);
+        ValidateError("false == (($.a == 1) || ($.b == 2))", predError, {}, {}, ECallableType::JsonValue);
     }
 
     // Verifies that TokensMode (And/Or) propagates correctly through nesting,
@@ -1492,70 +1480,70 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // @ outside filter context is an error
         ValidateError("@", filterError);
         ValidateError("@.a", filterError);
-        ValidateError("@.a == 1", filterError, ECallableType::JsonValue);
-        ValidateError("exists(@.a)", filterError, ECallableType::JsonValue);
-        ValidateError("@ starts with \"x\"", filterError, ECallableType::JsonValue);
+        ValidateError("@.a == 1", filterError, {}, {}, ECallableType::JsonValue);
+        ValidateError("exists(@.a)", filterError, {}, {}, ECallableType::JsonValue);
+        ValidateError("@ starts with \"x\"", filterError, {}, {}, ECallableType::JsonValue);
 
         // Both sides of == are paths: AND-merge of filter-relative paths
         ValidateJsonExists("$.a ? (@.b == @.c)", {"\2a\2b", "\2a\2c"});
         ValidateJsonExists("$.a ? (@.b == $.c)", {"\2a\2b", "\2c"});
         ValidateJsonExists("$.a ? (@ == @.b)", {"\2a", "\2a\2b"});
         // Both sides are literals
-        ValidateError("$.a ? (1 == 2)", compError, ECallableType::JsonExists);
-        ValidateError("$.a ? (\"x\" == \"y\")", compError, ECallableType::JsonExists);
+        ValidateError("$.a ? (1 == 2)", compError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (\"x\" == \"y\")", compError, {}, {}, ECallableType::JsonExists);
 
         // IsUnknown inside filter: EMode::Filter allows predicates, but IsUnknown evaluates its
         // inner argument in EMode::Predicate, where predicate types (==, starts with, etc.) are blocked
-        ValidateError("$.a ? ((@.b == 10) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b starts with \"x\") is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b like_regex \".*\") is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((exists(@.b)) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b != 10) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b < 5) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\") is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b like_regex \".*\") is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b != 10) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b < 5) is unknown)", predError, {}, {}, ECallableType::JsonExists);
         // deeper paths
-        ValidateError("$.a ? ((@.b.c == 10) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a.b ? ((@.c.d starts with \"x\") is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b.c == 10) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a.b ? ((@.c.d starts with \"x\") is unknown)", predError, {}, {}, ECallableType::JsonExists);
 
         // IsUnknown wrapping && inside filter: && evaluates its operands (==, etc.) in EMode::Predicate, blocked
-        ValidateError("$.a ? ((@.b == 10 && @.c == 20) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b starts with \"x\" && @.c == 1) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((exists(@.b) && @.c like_regex \"y.*\") is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((exists(@.b) && exists(@.c)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 && @.c == 20) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\" && @.c == 1) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) && @.c like_regex \"y.*\") is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) && exists(@.c)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
 
         // IsUnknown wrapping || inside filter: same, || evaluates operands in EMode::Predicate
-        ValidateError("$.a ? ((@.b == 10 || @.c == 20) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b starts with \"x\" || @.c == 1) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((exists(@.b) || @.c like_regex \"y.*\") is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((exists(@.b) || exists(@.c)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 || @.c == 20) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\" || @.c == 1) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) || @.c like_regex \"y.*\") is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) || exists(@.c)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
 
         // Unary NOT inside filter - UnaryNot always returns predError regardless of mode
-        ValidateError("$.a ? (!(@.b == 10))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(@.b starts with \"x\"))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(exists(@.b)))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(@.b like_regex \".*\"))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b == 10))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\"))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(exists(@.b)))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b like_regex \".*\"))", predError, {}, {}, ECallableType::JsonExists);
         // deeper paths
-        ValidateError("$.a ? (!(@.b.c == 10))", predError, ECallableType::JsonExists);
-        ValidateError("$.key ? (!(@.sub != \"x\"))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b.c == 10))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.key ? (!(@.sub != \"x\"))", predError, {}, {}, ECallableType::JsonExists);
 
         // Unary NOT on left / right of && and || inside filter
-        ValidateError("$.a ? (!(@.b == 10) && @.c == 20)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (@.b == 10 && !(@.c == 20))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(@.b starts with \"x\") && @.c == 1)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (exists(@.b) && !(@.c like_regex \"y.*\"))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(@.b == 10) || @.c == 20)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (@.b == 10 || !(@.c == 20))", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? (!(@.b starts with \"x\") || exists(@.c))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b == 10) && @.c == 20)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (@.b == 10 && !(@.c == 20))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\") && @.c == 1)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (exists(@.b) && !(@.c like_regex \"y.*\"))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b == 10) || @.c == 20)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (@.b == 10 || !(@.c == 20))", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\") || exists(@.c))", predError, {}, {}, ECallableType::JsonExists);
 
         // Unary NOT inside is unknown inside filter
-        ValidateError("$.a ? ((!(@.b == 10)) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((!(@.b starts with \"x\")) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((!(exists(@.b))) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b == 10)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b starts with \"x\")) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(exists(@.b))) is unknown)", predError, {}, {}, ECallableType::JsonExists);
 
         // Unary NOT inside && / || which are wrapped by is unknown inside filter
-        ValidateError("$.a ? ((!(@.b == 10) && @.c == 20) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b == 10 && !(@.c == 20)) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((!(@.b == 10) || @.c == 20) is unknown)", predError, ECallableType::JsonExists);
-        ValidateError("$.a ? ((@.b == 10 || !(@.c == 20)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b == 10) && @.c == 20) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 && !(@.c == 20)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b == 10) || @.c == 20) is unknown)", predError, {}, {}, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 || !(@.c == 20)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
     }
 
     // Nested filter: (@ ? (predicate)).member == value
@@ -1625,187 +1613,332 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     }
 
     Y_UNIT_TEST(CollectPath_Variables) {
-        const TVarMap empty;
-
         // Equality: variable on the right side, all scalar types
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + strSuffix("")}, {{"var", strSuffix("")}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(42)}, {{"var", numSuffix(42)}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(0)}, {{"var", numSuffix(0)}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(3.14)}, {{"var", numSuffix(3.14)}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + numSuffix(-10)}, {{"var", numSuffix(-10)}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + boolFalseSuffix}, {{"var", boolFalseSuffix}});
-        ValidateQueriesWithVars("$.key == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+        ValidateTokens("$.key == $var", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
+        ValidateTokens("$.key == $var", {"\4key" + strSuffix("")}, {{"var", strSuffix("")}});
+        ValidateTokens("$.key == $var", {"\4key" + numSuffix(42)}, {{"var", numSuffix(42)}});
+        ValidateTokens("$.key == $var", {"\4key" + numSuffix(0)}, {{"var", numSuffix(0)}});
+        ValidateTokens("$.key == $var", {"\4key" + numSuffix(3.14)}, {{"var", numSuffix(3.14)}});
+        ValidateTokens("$.key == $var", {"\4key" + numSuffix(-10)}, {{"var", numSuffix(-10)}});
+        ValidateTokens("$.key == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateTokens("$.key == $var", {"\4key" + boolFalseSuffix}, {{"var", boolFalseSuffix}});
+        ValidateTokens("$.key == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
 
         // Equality: variable on the left side
-        ValidateQueriesWithVars("$var == $.key", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
-        ValidateQueriesWithVars("$var == $.key", {"\4key" + numSuffix(5)}, {{"var", numSuffix(5)}});
-        ValidateQueriesWithVars("$var == $.key", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
-        ValidateQueriesWithVars("$var == $.key", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+        ValidateTokens("$var == $.key", {"\4key" + strSuffix("hello")}, {{"var", strSuffix("hello")}});
+        ValidateTokens("$var == $.key", {"\4key" + numSuffix(5)}, {{"var", numSuffix(5)}});
+        ValidateTokens("$var == $.key", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateTokens("$var == $.key", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
 
         // Context object as path
-        ValidateQueriesWithVars("$ == $var", {strSuffix("root")}, {{"var", strSuffix("root")}});
-        ValidateQueriesWithVars("$var == $", {numSuffix(0)}, {{"var", numSuffix(0)}});
+        ValidateTokens("$ == $var", {strSuffix("root")}, {{"var", strSuffix("root")}});
+        ValidateTokens("$var == $", {numSuffix(0)}, {{"var", numSuffix(0)}});
 
         // Deeper member access paths
-        ValidateQueriesWithVars("$.a.b == $var", {"\2a\2b" + strSuffix("x")}, {{"var", strSuffix("x")}});
-        ValidateQueriesWithVars("$.a.b.c == $var", {"\2a\2b\2c" + numSuffix(1)}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$.aba.\"caba\" == $var", {"\4aba\5caba" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
-        ValidateQueriesWithVars("$var == $.a.b.c", {"\2a\2b\2c" + nullSuffix}, {{"var", nullSuffix}});
+        ValidateTokens("$.a.b == $var", {"\2a\2b" + strSuffix("x")}, {{"var", strSuffix("x")}});
+        ValidateTokens("$.a.b.c == $var", {"\2a\2b\2c" + numSuffix(1)}, {{"var", numSuffix(1)}});
+        ValidateTokens("$.aba.\"caba\" == $var", {"\4aba\5caba" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateTokens("$var == $.a.b.c", {"\2a\2b\2c" + nullSuffix}, {{"var", nullSuffix}});
 
         // Array access
-        ValidateQueriesWithVars("$.key[0] == $var", {"\4key" + strSuffix("x")}, {{"var", strSuffix("x")}});
-        ValidateQueriesWithVars("$.key[last] == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
-        ValidateQueriesWithVars("$.key[1, 2, 3] == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
-        ValidateQueriesWithVars("$.a.b[0].c == $var", {"\2a\2b\2c" + numSuffix(7)}, {{"var", numSuffix(7)}});
+        ValidateTokens("$.key[0] == $var", {"\4key" + strSuffix("x")}, {{"var", strSuffix("x")}});
+        ValidateTokens("$.key[last] == $var", {"\4key" + boolTrueSuffix}, {{"var", boolTrueSuffix}});
+        ValidateTokens("$.key[1, 2, 3] == $var", {"\4key" + nullSuffix}, {{"var", nullSuffix}});
+        ValidateTokens("$.a.b[0].c == $var", {"\2a\2b\2c" + numSuffix(7)}, {{"var", numSuffix(7)}});
 
         // Wildcard member access: path finishes, literal not appended
-        ValidateQueriesWithVars("$.* == $var", {""}, {{"var", strSuffix("x")}});
-        ValidateQueriesWithVars("$.a.* == $var", {"\2a"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$var == $.*", {""}, {{"var", strSuffix("x")}});
-        ValidateQueriesWithVars("$var == $.a.*", {"\2a"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$.* == $var", {""}, {{"var", strSuffix("x")}});
+        ValidateTokens("$.a.* == $var", {"\2a"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$var == $.*", {""}, {{"var", strSuffix("x")}});
+        ValidateTokens("$var == $.a.*", {"\2a"}, {{"var", numSuffix(1)}});
 
         // Methods: path finishes, literal not appended
-        ValidateQueriesWithVars("$.key.size() == $var", {"\4key"}, {{"var", numSuffix(3)}});
-        ValidateQueriesWithVars("$.key.abs() == $var", {"\4key"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$.key.type() == $var", {"\4key"}, {{"var", strSuffix("number")}});
-        ValidateQueriesWithVars("$.a.b.floor() == $var", {"\2a\2b"}, {{"var", numSuffix(0)}});
+        ValidateTokens("$.key.size() == $var", {"\4key"}, {{"var", numSuffix(3)}});
+        ValidateTokens("$.key.abs() == $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$.key.type() == $var", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateTokens("$.a.b.floor() == $var", {"\2a\2b"}, {{"var", numSuffix(0)}});
 
         // Unary arithmetic on path: path finishes, literal not appended
-        ValidateQueriesWithVars("-$.key == $var", {"\4key"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("+$.key == $var", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateTokens("-$.key == $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateTokens("+$.key == $var", {"\4key"}, {{"var", numSuffix(0)}});
 
         // Multiple variables: AND
-        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2)",
+        ValidateTokens("($.a == $v1) && ($.b == $v2)",
             {"\2a" + strSuffix("x"), "\2b" + numSuffix(1)},
-            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}},
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}}, {},
             ECallableType::JsonValue, EMode::And);
-        ValidateQueriesWithVars("($.a == $v) && ($.b == $v)",
+        ValidateTokens("($.a == $v) && ($.b == $v)",
             {"\2a" + nullSuffix, "\2b" + nullSuffix},
-            {{"v", nullSuffix}},
+            {{"v", nullSuffix}}, {},
             ECallableType::JsonValue, EMode::And);
-        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2) && ($.c == $v3)",
+        ValidateTokens("($.a == $v1) && ($.b == $v2) && ($.c == $v3)",
             {"\2a" + strSuffix("a"), "\2b" + numSuffix(2), "\2c" + boolTrueSuffix},
-            {{"v1", strSuffix("a")}, {"v2", numSuffix(2)}, {"v3", boolTrueSuffix}},
+            {{"v1", strSuffix("a")}, {"v2", numSuffix(2)}, {"v3", boolTrueSuffix}}, {},
             ECallableType::JsonValue, EMode::And);
 
         // Multiple variables: OR
-        ValidateQueriesWithVars("($.a == $v1) || ($.b == $v2)",
+        ValidateTokens("($.a == $v1) || ($.b == $v2)",
             {"\2a" + strSuffix("x"), "\2b" + numSuffix(1)},
-            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}},
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}}, {},
             ECallableType::JsonValue, EMode::Or);
-        ValidateQueriesWithVars("($.key == $v1) || ($.key == $v2)",
+        ValidateTokens("($.key == $v1) || ($.key == $v2)",
             {"\4key" + strSuffix("a"), "\4key" + strSuffix("b")},
-            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}},
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, {},
             ECallableType::JsonValue, EMode::Or);
-        ValidateQueriesWithVars("($.a == $v1) || ($.b == $v2) || ($.c == $v3)",
+        ValidateTokens("($.a == $v1) || ($.b == $v2) || ($.c == $v3)",
             {"\2a" + boolTrueSuffix, "\2b" + nullSuffix, "\2c" + numSuffix(0)},
-            {{"v1", boolTrueSuffix}, {"v2", nullSuffix}, {"v3", numSuffix(0)}},
+            {{"v1", boolTrueSuffix}, {"v2", nullSuffix}, {"v3", numSuffix(0)}}, {},
             ECallableType::JsonValue, EMode::Or);
 
         // Mixed: variable and literal
-        ValidateQueriesWithVars("($.a == $var) && ($.b == 42)",
+        ValidateTokens("($.a == $var) && ($.b == 42)",
             {"\2a" + strSuffix("x"), "\2b" + numSuffix(42)},
-            {{"var", strSuffix("x")}},
+            {{"var", strSuffix("x")}}, {},
             ECallableType::JsonValue, EMode::And);
-        ValidateQueriesWithVars("($.a == \"hello\") && ($.b == $var)",
+        ValidateTokens("($.a == \"hello\") && ($.b == $var)",
             {"\2a" + strSuffix("hello"), "\2b" + numSuffix(3.14)},
-            {{"var", numSuffix(3.14)}},
+            {{"var", numSuffix(3.14)}}, {},
             ECallableType::JsonValue, EMode::And);
-        ValidateQueriesWithVars("($.a == $var) || ($.b == true)",
+        ValidateTokens("($.a == $var) || ($.b == true)",
             {"\2a" + nullSuffix, "\2b" + boolTrueSuffix},
-            {{"var", nullSuffix}},
+            {{"var", nullSuffix}}, {},
             ECallableType::JsonValue, EMode::Or);
 
         // Variable not in map
-        ValidateQueriesWithVars("$.key == $var", {"\4key"}, empty, ECallableType::JsonValue);
-        ValidateQueriesWithVars("$var == $.key", {"\4key"}, empty, ECallableType::JsonValue);
+        ValidateTokens("$.key == $var", {"\4key"}, {}, {}, ECallableType::JsonValue);
+        ValidateTokens("$var == $.key", {"\4key"}, {}, {}, ECallableType::JsonValue);
 
         // Variable exists but queried variable is missing
-        ValidateQueriesWithVars("$.key == $missing", {"\4key"},
-            {{"other", strSuffix("x")}}, ECallableType::JsonValue);
+        ValidateTokens("$.key == $missing", {"\4key"},
+            {{"other", strSuffix("x")}}, {}, ECallableType::JsonValue);
 
         // One variable present, other missing in AND
-        ValidateQueriesWithVars("($.a == $v1) && ($.b == $v2)", {"\2a" + strSuffix("x"), "\2b"},
-            {{"v1", strSuffix("x")}}, ECallableType::JsonValue, EMode::And);
+        ValidateTokens("($.a == $v1) && ($.b == $v2)", {"\2a" + strSuffix("x"), "\2b"},
+            {{"v1", strSuffix("x")}}, {}, ECallableType::JsonValue, EMode::And);
 
         // Variable in non-literal context: standalone path
-        ValidateErrorWithVars("$var", varContextError, {{"var", strSuffix("x")}});
-        ValidateErrorWithVars("$var.key", varContextError, {{"var", strSuffix("x")}});
-        ValidateErrorWithVars("$var[0]", varContextError, {{"var", strSuffix("x")}});
-        ValidateErrorWithVars("$var.a.b.c", varContextError, {{"var", strSuffix("x")}});
+        ValidateError("$var", varContextError, {{"var", strSuffix("x")}});
+        ValidateError("$var.key", varContextError, {{"var", strSuffix("x")}});
+        ValidateError("$var[0]", varContextError, {{"var", strSuffix("x")}});
+        ValidateError("$var.a.b.c", varContextError, {{"var", strSuffix("x")}});
 
         // Variable in arithmetic: treated as empty literal, path only
-        ValidateQueriesWithVars("$.key + $var", {"\4key"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$var + $.key", {"\4key"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$.key - $var", {"\4key"}, {{"var", numSuffix(1)}});
-        ValidateQueriesWithVars("$.key * $var", {"\4key"}, {{"var", numSuffix(2)}});
-        ValidateQueriesWithVars("$.key / $var", {"\4key"}, {{"var", numSuffix(2)}});
-        ValidateQueriesWithVars("$.key % $var", {"\4key"}, {{"var", numSuffix(2)}});
-        ValidateQueriesWithVars("$.a.b + $var", {"\2a\2b"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$.key + $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$var + $.key", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$.key - $var", {"\4key"}, {{"var", numSuffix(1)}});
+        ValidateTokens("$.key * $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateTokens("$.key / $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateTokens("$.key % $var", {"\4key"}, {{"var", numSuffix(2)}});
+        ValidateTokens("$.a.b + $var", {"\2a\2b"}, {{"var", numSuffix(5)}});
 
         // Both sides are variables: treated as two empty literals -> emptyError
-        ValidateErrorWithVars("$v1 + $v2", emptyError, {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}});
-        ValidateErrorWithVars("$v1 * $v2", emptyError, {{"v1", numSuffix(3)}, {"v2", numSuffix(4)}});
+        ValidateError("$v1 + $v2", emptyError, {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}});
+        ValidateError("$v1 * $v2", emptyError, {{"v1", numSuffix(3)}, {"v2", numSuffix(4)}});
 
         // Variable in comparison operators: variable is treated as a dropped literal
-        ValidateQueriesWithVars("$.key < $var", {"\4key"}, {{"var", numSuffix(5)}});
-        ValidateQueriesWithVars("$.key <= $var", {"\4key"}, {{"var", numSuffix(5)}});
-        ValidateQueriesWithVars("$.key > $var", {"\4key"}, {{"var", numSuffix(0)}});
-        ValidateQueriesWithVars("$.key >= $var", {"\4key"}, {{"var", numSuffix(0)}});
-        ValidateQueriesWithVars("$.key != $var", {"\4key"}, {{"var", strSuffix("x")}});
+        ValidateTokens("$.key < $var", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$.key <= $var", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$.key > $var", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateTokens("$.key >= $var", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateTokens("$.key != $var", {"\4key"}, {{"var", strSuffix("x")}});
 
         // Variable on left side
-        ValidateQueriesWithVars("$var < $.key", {"\4key"}, {{"var", numSuffix(5)}});
-        ValidateQueriesWithVars("$var > $.key", {"\4key"}, {{"var", numSuffix(0)}});
-        ValidateQueriesWithVars("$var != $.key", {"\4key"}, {{"var", strSuffix("x")}});
-        ValidateQueriesWithVars("$var <= $.a.b", {"\2a\2b"}, {{"var", numSuffix(3)}});
+        ValidateTokens("$var < $.key", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$var > $.key", {"\4key"}, {{"var", numSuffix(0)}});
+        ValidateTokens("$var != $.key", {"\4key"}, {{"var", strSuffix("x")}});
+        ValidateTokens("$var <= $.a.b", {"\2a\2b"}, {{"var", numSuffix(3)}});
 
         // Both sides variables: emptyError
-        ValidateErrorWithVars("$v1 < $v2", emptyError,
-            {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}}, ECallableType::JsonValue);
-        ValidateErrorWithVars("$v1 != $v2", emptyError,
-            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, ECallableType::JsonValue);
+        ValidateError("$v1 < $v2", emptyError,
+            {{"v1", numSuffix(1)}, {"v2", numSuffix(2)}}, {}, ECallableType::JsonValue);
+        ValidateError("$v1 != $v2", emptyError,
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, {}, ECallableType::JsonValue);
 
         // Filter predicate with variable
-        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + strSuffix("x")},
-            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
-        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + numSuffix(42)},
-            {{"var", numSuffix(42)}}, ECallableType::JsonExists);
-        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + boolTrueSuffix},
-            {{"var", boolTrueSuffix}}, ECallableType::JsonExists);
-        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b" + nullSuffix},
-            {{"var", nullSuffix}}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b == $var)", {"\2a\2b" + strSuffix("x")},
+            {{"var", strSuffix("x")}}, {}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b == $var)", {"\2a\2b" + numSuffix(42)},
+            {{"var", numSuffix(42)}}, {}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b == $var)", {"\2a\2b" + boolTrueSuffix},
+            {{"var", boolTrueSuffix}}, {}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b == $var)", {"\2a\2b" + nullSuffix},
+            {{"var", nullSuffix}}, {}, ECallableType::JsonExists);
 
         // Variable on left side in filter equality
-        ValidateQueriesWithVars("$.a ? ($var == @.b)", {"\2a\2b" + strSuffix("x")},
-            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? ($var == @.b)", {"\2a\2b" + strSuffix("x")},
+            {{"var", strSuffix("x")}}, {}, ECallableType::JsonExists);
 
         // Deeper filter paths
-        ValidateQueriesWithVars("$.a.b ? (@.c == $var)", {"\2a\2b\2c" + numSuffix(1)},
-            {{"var", numSuffix(1)}}, ECallableType::JsonExists);
-        ValidateQueriesWithVars("$.key ? (@.sub == $var)", {"\4key\4sub" + strSuffix("val")},
-            {{"var", strSuffix("val")}}, ECallableType::JsonExists);
+        ValidateTokens("$.a.b ? (@.c == $var)", {"\2a\2b\2c" + numSuffix(1)},
+            {{"var", numSuffix(1)}}, {}, ECallableType::JsonExists);
+        ValidateTokens("$.key ? (@.sub == $var)", {"\4key\4sub" + strSuffix("val")},
+            {{"var", strSuffix("val")}}, {}, ECallableType::JsonExists);
 
         // Variable in filter comparison (dropped, path only)
-        ValidateQueriesWithVars("$.a ? (@.b < $var)", {"\2a\2b"},
-            {{"var", numSuffix(10)}}, ECallableType::JsonExists);
-        ValidateQueriesWithVars("$.a ? (@.b != $var)", {"\2a\2b"},
-            {{"var", strSuffix("x")}}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b < $var)", {"\2a\2b"},
+            {{"var", numSuffix(10)}}, {}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b != $var)", {"\2a\2b"},
+            {{"var", strSuffix("x")}}, {}, ECallableType::JsonExists);
 
         // Multiple variables in filter AND
-        ValidateQueriesWithVars("$.a ? (@.b == $v1 && @.c == $v2)",
+        ValidateTokens("$.a ? (@.b == $v1 && @.c == $v2)",
             {"\2a\2b" + strSuffix("x"), "\2a\2c" + numSuffix(1)},
-            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}}, ECallableType::JsonExists);
+            {{"v1", strSuffix("x")}, {"v2", numSuffix(1)}}, {}, ECallableType::JsonExists);
 
         // Multiple variables in filter OR
-        ValidateQueriesWithVars("$.a ? ((@.b == $v1) || (@.b == $v2))",
+        ValidateTokens("$.a ? ((@.b == $v1) || (@.b == $v2))",
             {"\2a\2b" + strSuffix("a"), "\2a\2b" + strSuffix("b")},
-            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, ECallableType::JsonExists);
+            {{"v1", strSuffix("a")}, {"v2", strSuffix("b")}}, {}, ECallableType::JsonExists);
 
         // Missing variable in filter -> skipped
-        ValidateQueriesWithVars("$.a ? (@.b == $var)", {"\2a\2b"}, empty, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b == $var)", {"\2a\2b"}, {}, {}, ECallableType::JsonExists);
+    }
+
+    // ParamVariables map: var name -> YQL param name (e.g. "$value")
+    Y_UNIT_TEST(CollectPath_ParamVariables) {
+        // Basic
+        ValidateTokens("$.key == $var", {TToken{"\4key", "$value"}}, {}, {{"var", "$value"}});
+        ValidateTokens("$.key == $var", {TToken{"\4key", "$p"}}, {}, {{"var", "$p"}});
+
+        // Reversed order
+        ValidateTokens("$var == $.key", {TToken{"\4key", "$value"}}, {}, {{"var", "$value"}});
+
+        // Context object as path
+        ValidateTokens("$ == $var", {TToken{"", "$p"}}, {}, {{"var", "$p"}});
+        ValidateTokens("$var == $", {TToken{"", "$p"}}, {}, {{"var", "$p"}});
+
+        // Deeper member access paths
+        ValidateTokens("$.a.b == $var", {TToken{"\2a\2b", "$p"}}, {}, {{"var", "$p"}});
+        ValidateTokens("$.a.b.c == $var", {TToken{"\2a\2b\2c", "$param"}}, {}, {{"var", "$param"}});
+        ValidateTokens("$.aba.\"caba\" == $var", {TToken{"\4aba\5caba", "$val"}}, {}, {{"var", "$val"}});
+        ValidateTokens("$var == $.a.b.c", {TToken{"\2a\2b\2c", "$p"}}, {}, {{"var", "$p"}});
+
+        // Array access
+        ValidateTokens("$.key[0] == $var", {TToken{"\4key", "$v"}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.key[last] == $var", {TToken{"\4key", "$v"}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.key[1, 2, 3] == $var", {TToken{"\4key", "$v"}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.a.b[0].c == $var", {TToken{"\2a\2b\2c", "$v"}}, {}, {{"var", "$v"}});
+
+        // Wildcard member access
+        ValidateTokens("$.* == $var", {TToken{"", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.a.* == $var", {TToken{"\2a", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$var == $.*", {TToken{"", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$var == $.a.*", {TToken{"\2a", ""}}, {}, {{"var", "$v"}});
+
+        // Methods finish the path
+        ValidateTokens("$.key.size() == $var", {TToken{"\4key", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.key.abs() == $var", {TToken{"\4key", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.key.type() == $var", {TToken{"\4key", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("$.a.b.floor() == $var", {TToken{"\2a\2b", ""}}, {}, {{"var", "$v"}});
+
+        // Unary arithmetic on path
+        ValidateTokens("-$.key == $var", {TToken{"\4key", ""}}, {}, {{"var", "$v"}});
+        ValidateTokens("+$.key == $var", {TToken{"\4key", ""}}, {}, {{"var", "$v"}});
+
+        // Multiple param variables: AND
+        ValidateTokens("($.a == $v1) && ($.b == $v2)",
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateTokens("($.a == $v) && ($.b == $v)",
+            {TToken{"\2a", "$p"}, TToken{"\2b", "$p"}}, {},
+            {{"v", "$p"}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateTokens("($.a == $v1) && ($.b == $v2) && ($.c == $v3)",
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}, TToken{"\2c", "$p3"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}, {"v3", "$p3"}},
+            ECallableType::JsonValue, EMode::And);
+
+        // Multiple param variables: OR
+        ValidateTokens("($.a == $v1) || ($.b == $v2)",
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}},
+            ECallableType::JsonValue, EMode::Or);
+        ValidateTokens("($.key == $v1) || ($.key == $v2)",
+            {TToken{"\4key", "$p1"}, TToken{"\4key", "$p2"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}},
+            ECallableType::JsonValue, EMode::Or);
+        ValidateTokens("($.a == $v1) || ($.b == $v2) || ($.c == $v3)",
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}, TToken{"\2c", "$p3"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}, {"v3", "$p3"}},
+            ECallableType::JsonValue, EMode::Or);
+
+        // Mixed: param variable and plain literal in AND
+        ValidateTokens("($.a == $var) && ($.b == 42)",
+            {TToken{"\2a", "$p"}, TToken{"\2b" + numSuffix(42), ""}}, {},
+            {{"var", "$p"}},
+            ECallableType::JsonValue, EMode::And);
+        ValidateTokens("($.a == \"hello\") && ($.b == $var)",
+            {TToken{"\2a" + strSuffix("hello"), ""}, TToken{"\2b", "$p"}}, {},
+            {{"var", "$p"}},
+            ECallableType::JsonValue, EMode::And);
+
+        // Mixed: param variable and plain literal in OR
+        ValidateTokens("($.a == $var) || ($.b == true)",
+            {TToken{"\2a", "$p"}, TToken{"\2b" + boolTrueSuffix, ""}}, {},
+            {{"var", "$p"}},
+            ECallableType::JsonValue, EMode::Or);
+
+        // Param variable in filter predicate
+        ValidateTokens("$.a ? (@.b == $var)", {TToken{"\2a\2b", "$p"}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? ($var == @.b)", {TToken{"\2a\2b", "$p"}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+
+        // Deeper filter paths
+        ValidateTokens("$.a.b ? (@.c == $var)", {TToken{"\2a\2b\2c", "$p"}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+        ValidateTokens("$.key ? (@.sub == $var)", {TToken{"\4key\4sub", "$p"}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+
+        // Param variable in filter comparison
+        ValidateTokens("$.a ? (@.b < $var)", {TToken{"\2a\2b", ""}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+        ValidateTokens("$.a ? (@.b != $var)", {TToken{"\2a\2b", ""}}, {},
+            {{"var", "$p"}}, ECallableType::JsonExists);
+
+        // Multiple param variables in filter AND
+        ValidateTokens("$.a ? (@.b == $v1 && @.c == $v2)",
+            {TToken{"\2a\2b", "$p1"}, TToken{"\2a\2c", "$p2"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}},
+            ECallableType::JsonExists, EMode::And);
+
+        // Multiple param variables in filter OR
+        ValidateTokens("$.a ? ((@.b == $v1) || (@.b == $v2))",
+            {TToken{"\2a\2b", "$p1"}, TToken{"\2a\2b", "$p2"}}, {},
+            {{"v1", "$p1"}, {"v2", "$p2"}},
+            ECallableType::JsonExists, EMode::Or);
+
+        // Param variable in arithmetic
+        ValidateTokens("$.key + $var", {TToken{"\4key", ""}}, {}, {{"var", "$p"}}, ECallableType::JsonExists);
+        ValidateTokens("$var + $.key", {TToken{"\4key", ""}}, {}, {{"var", "$p"}}, ECallableType::JsonExists);
+
+        // Param variable in comparison operators
+        ValidateTokens("$.key < $var", {TToken{"\4key", ""}}, {}, {{"var", "$p"}}, ECallableType::JsonValue);
+        ValidateTokens("$.key != $var", {TToken{"\4key", ""}}, {}, {{"var", "$p"}}, ECallableType::JsonValue);
+        ValidateTokens("$var < $.key", {TToken{"\4key", ""}}, {}, {{"var", "$p"}}, ECallableType::JsonValue);
+
+        // Param variable not in the map: variable is ignored
+        ValidateTokens("$.key == $var", {TToken{"\4key", ""}});
+        ValidateTokens("$var == $.key", {TToken{"\4key", ""}});
+
+        // Variable in non-literal context is still an error with paramVariables
+        ValidateError("$var", varContextError, {}, {{"var", "$p"}}, ECallableType::JsonValue);
+        ValidateError("$var.key", varContextError, {}, {{"var", "$p"}}, ECallableType::JsonValue);
+
+        // param variable on both sides of == is an error (two literals)
+        ValidateError("$v1 == $v2", compError, {}, {{"v1", "$p1"}, {"v2", "$p2"}}, ECallableType::JsonValue);
+
+        // Deduplication
+        ValidateTokens("($.a.b.c == $var) && ($.a.b.c == $var)",
+            {TToken{"\2a\2b\2c", "$p"}}, {}, {{"var", "$p"}});
+        ValidateTokens("($.a.b.c == $var) || ($.a.b.c == $var)",
+            {TToken{"\2a\2b\2c", "$p"}}, {}, {{"var", "$p"}});
+
+        ValidateTokens("($.key == $v1) && ($.key == $v2)",
+            {TToken{"\4key", "$p"}}, {}, {{"v1", "$p"}, {"v2", "$p"}});
+        ValidateTokens("($.key == $v1) || ($.key == $v2)",
+            {TToken{"\4key", "$p"}}, {}, {{"v1", "$p"}, {"v2", "$p"}});
     }
 
     // Tokens with no ancestor–descendant relation survive both AND and OR merge intact.
@@ -1952,6 +2085,117 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {abNum, abNum2}, EMode::And);
     }
 
+    // Pruning rules for tokens that carry a runtime parameter (Param != "")
+    Y_UNIT_TEST(MergeAndOr_ParamTokens) {
+        // Deduplication: two equal param tokens -> 1 entry
+        CheckMergeFull(
+            MergeAnd(MakeParamTokens({TToken{"\2a\2b", "$p"}}),
+                     MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}}, EMode::NotSet, "AND dedup: equal param tokens collapse to one");
+
+        CheckMergeFull(
+            MergeOr(MakeParamTokens({TToken{"\2a\2b", "$p"}}),
+                    MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}}, EMode::NotSet, "OR dedup: equal param tokens collapse to one");
+
+        // Same path, same Param, in a multi-token set: dedup still collapses them.
+        CheckMergeFull(
+            MergeAnd(MakeParamTokens({TToken{"\2a", "$p"}, TToken{"\2b", "$q"}}, EMode::And),
+                     MakeParamTokens({TToken{"\2a", "$p"}, TToken{"\2b", "$q"}}, EMode::And)),
+            {TToken{"\2a", "$p"}, TToken{"\2b", "$q"}}, EMode::And, "AND dedup: multi-token param set collapses duplicates");
+
+        // AND pruning with param as leaf
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a\2b"}),
+                     MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
+            {TToken{"\2a\2b\2c", "$p"}}, EMode::And, "AND pruning: non-param ancestor dropped, param leaf kept");
+
+        // Order does not matter for AND
+        CheckMergeFull(
+            MergeAnd(MakeParamTokens({TToken{"\2a\2b\2c", "$p"}}),
+                     MakeTokens({"\2a\2b"})),
+            {TToken{"\2a\2b\2c", "$p"}}, EMode::And, "AND pruning: order reversed, non-param ancestor still dropped");
+
+        // Two levels up
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a"}),
+                     MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
+            {TToken{"\2a\2b\2c", "$p"}}, EMode::And, "AND pruning: grandparent non-param dropped by param grandchild");
+
+        // OR pruning with non-param ancestor
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a\2b"}),
+                    MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
+            {TToken{"\2a\2b", ""}}, EMode::Or, "OR pruning: non-param ancestor kept, param descendant dropped");
+
+        // Order does not matter for OR
+        CheckMergeFull(
+            MergeOr(MakeParamTokens({TToken{"\2a\2b\2c", "$p"}}),
+                    MakeTokens({"\2a\2b"})),
+            {TToken{"\2a\2b", ""}}, EMode::Or, "OR pruning: order reversed, non-param ancestor still kept");
+
+        // Two levels down
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a"}),
+                    MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
+            {TToken{"\2a", ""}}, EMode::Or, "OR pruning: root non-param kept, two-level-deep param descendant dropped");
+
+        // Disjoint paths
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a\2b"}),
+                     MakeParamTokens({TToken{"\2c\2d", "$p"}})),
+            {TToken{"\2a\2b", ""}, TToken{"\2c\2d", "$p"}}, EMode::And, "AND disjoint: unrelated paths both kept");
+
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a\2b"}),
+                    MakeParamTokens({TToken{"\2c\2d", "$p"}})),
+            {TToken{"\2a\2b", ""}, TToken{"\2c\2d", "$p"}}, EMode::Or, "OR disjoint: unrelated paths both kept");
+
+        // Disjoint param tokens
+        CheckMergeFull(
+            MergeAnd(MakeParamTokens({TToken{"\2a", "$p1"}}),
+                     MakeParamTokens({TToken{"\2b", "$p2"}})),
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}}, EMode::And, "AND disjoint params: two unrelated param tokens both kept");
+
+        CheckMergeFull(
+            MergeOr(MakeParamTokens({TToken{"\2a", "$p1"}}),
+                    MakeParamTokens({TToken{"\2b", "$p2"}})),
+            {TToken{"\2a", "$p1"}, TToken{"\2b", "$p2"}}, EMode::Or, "OR disjoint params: two unrelated param tokens both kept");
+
+        // Same path, different Params
+        CheckMergeFull(
+            MergeOr(MakeParamTokens({TToken{"\4key", "$p1"}}),
+                    MakeParamTokens({TToken{"\4key", "$p2"}})),
+            {TToken{"\4key", "$p1"}, TToken{"\4key", "$p2"}}, EMode::Or, "OR same path different params: both kept as distinct constraints");
+
+        CheckMergeFull(
+            MergeAnd(MakeParamTokens({TToken{"\4key", "$p1"}}),
+                     MakeParamTokens({TToken{"\4key", "$p2"}})),
+            {TToken{"\4key", "$p1"}, TToken{"\4key", "$p2"}}, EMode::And, "AND same path different params: both kept as distinct constraints");
+
+        // Param token with literal-suffixed non-param sibling on the same path
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a\2b" + numSuffix(5.0)}),
+                     MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}, TToken{"\2a\2b" + numSuffix(5.0), ""}}, EMode::And, "AND literal-suffix sibling: param and literal-suffixed token both kept");
+
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a\2b" + numSuffix(5.0)}),
+                    MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}, TToken{"\2a\2b" + numSuffix(5.0), ""}}, EMode::Or, "OR literal-suffix sibling: param and literal-suffixed token both kept");
+
+        // Non-param path-only token is a prefix of the literal-suffixed token AND of the param token with the same base path
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a\2b", "\2a\2b" + numSuffix(5.0)}, EMode::And),
+                     MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}, TToken{"\2a\2b" + numSuffix(5.0), ""}}, EMode::And, "AND prefix+literal+param: path-only prefix dropped, leaf and param kept");
+
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a\2b"}),
+                    MakeParamTokens({TToken{"\2a\2b", "$p"}, TToken{"\2a\2b" + numSuffix(5.0), ""}})),
+            {TToken{"\2a\2b", ""}}, EMode::Or, "OR prefix+literal+param: root non-param kept, descendants dropped");
+    }
+
     // When one operand carries an incompatible mode, the merge falls back to OR mode,
     // so OR pruning (keep roots) is applied even inside MergeAnd.
     Y_UNIT_TEST(MergeAnd_ModeMixAppliesOrPruning) {
@@ -2078,7 +2322,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // \2a\2b  = path $.a.b  (keys "a" and "b", each 1 char, encoded as 2)
         // \3ab\2c = path $.ab.c (key "ab" is 2 chars, encoded as 3)
         const TString pathAB  = "\2a\2b";
-        const TString pathABC = TString("\3ab\2c", 5);  // $.ab.c — unrelated to $.a.b
+        const TString pathABC = "\3ab\2c";  // $.ab.c — unrelated to $.a.b
 
         CheckMerge(
             MergeAnd(MakeTokens({pathAB}), MakeTokens({pathABC})),
@@ -2090,7 +2334,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     }
 
     Y_UNIT_TEST(MergeAndOr_ZeroPath) {
-        const TString first  = TString("\1", 1); // $.""
+        const TString first  = "\1"; // $.""
         const TString second = boolTrueSuffix;
 
         CheckMerge(

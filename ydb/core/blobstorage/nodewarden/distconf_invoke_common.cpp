@@ -192,6 +192,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kDescendCommittedStorageConfig:
                         return DescendCommittedStorageConfig(op.Command.GetDescendCommittedStorageConfig());
 
+                    case TQuery::kDemandRetroTrace:
+                        return DemandRetroTrace(op.Command.GetDemandRetroTrace());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -254,6 +257,22 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
         StartProposition(request->MutableConfig());
+    }
+
+    void TInvokeRequestHandlerActor::DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd) {
+        for (const auto& proto : cmd.GetTraceId()) {
+            NWilson::TTraceId traceId(proto);
+            if (traceId) {
+                Self->PendingRetroTraceIds.push_back(std::move(traceId));
+            }
+        }
+
+        if (!std::exchange(Self->RetroTraceBatchFlushScheduled, true)) {
+            TActivationContext::Schedule(Self->RetroTraceBatchInterval,
+                new IEventHandle(TEvPrivate::EvFlushRetroTraceBatch, 0, Self->SelfId(), {}, nullptr, 0));
+        }
+
+        Finish(TResult::OK, std::nullopt);
     }
 
     void TInvokeRequestHandlerActor::DescendCommittedStorageConfig(const TQuery::TDescendCommittedStorageConfig& request) {

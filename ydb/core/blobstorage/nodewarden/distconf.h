@@ -85,6 +85,7 @@ namespace NKikimr::NStorage {
                EvConfigProposed,
                EvRetryCollectConfigsAndPropose,
                EvRetryPersistConfig,
+               EvFlushRetroTraceBatch,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -352,6 +353,14 @@ namespace NKikimr::NStorage {
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
+        // retro trace root-side batching
+        static constexpr TDuration RetroTraceBatchInterval = TDuration::Seconds(2);
+        std::vector<NWilson::TTraceId> PendingRetroTraceIds;
+        bool RetroTraceBatchFlushScheduled = false;
+
+        void HandleFlushRetroTraceBatch();
+        void FlushRetroTraceBatch();
+
         // cache subsystem
         struct TCacheItem {
             ui32 Generation; // item generation
@@ -479,6 +488,7 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
+        void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
 

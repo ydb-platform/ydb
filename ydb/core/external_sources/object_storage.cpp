@@ -212,11 +212,11 @@ struct TObjectStorageExternalSource : public IExternalSource {
             }
 
             if (key == "csv_delimiter"sv) {
-                if (format != "csv_with_names"sv) {
-                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should be used only with format csv_with_names"));
+                if (format != "csv_with_names"sv && format != "csv"sv) {
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter can only be used with csv_with_names or csv format"));
                 }
                 if (value.size() != 1) {
-                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter should contain only one character"));
+                    issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "csv_delimiter must be single character"));
                 }
                 continue;
             }
@@ -358,206 +358,108 @@ struct TObjectStorageExternalSource : public IExternalSource {
         std::shared_ptr<TMetadata> Metadata;
     };
 
+    // High-level orchestration of dynamic schema inference for an external table.
+    //
+    // Pipeline (each stage may run asynchronously):
+    //   1. Build credentials / structured token            -> BuildStructuredToken
+    //   2. Plan S3 listing requests                        -> BuildListingPlan
+    //   3. List S3 objects, pick a first non-empty file    -> SelectFirstNonEmptyFile
+    //   4. Infer schema from that file                     -> arrow inferencinator actor
+    //   5. Append static partition columns to schema       -> AppendPartitionColumns
+    //   6. (Optional) Re-infer types of partition columns  -> InferPartitionedColumnsTypes
     virtual NThreading::TFuture<std::shared_ptr<TMetadata>> LoadDynamicMetadata(std::shared_ptr<TMetadata> meta) override try {
         auto format = meta->Attributes.FindPtr("format");
         if (!format || !meta->Attributes.contains("withinfer")) {
             return NThreading::MakeFuture(std::move(meta));
         }
-
         if (!NObjectStorage::NInference::IsArrowInferredFormat(*format)) {
             return NThreading::MakeFuture(std::move(meta));
         }
 
-        NYql::TStructuredTokenBuilder structuredTokenBuilder;
-        if (std::holds_alternative<NAuth::TAws>(meta->Auth)) {
-            auto& awsAuth = std::get<NAuth::TAws>(meta->Auth);
-            NYql::NS3::TAwsParams params;
-            params.SetAwsAccessKey(awsAuth.AccessKey);
-            params.SetAwsRegion(awsAuth.Region);
-            structuredTokenBuilder.SetBasicAuth(params.SerializeAsString(), awsAuth.SecretAccessKey);
-        } else if (std::holds_alternative<NAuth::TServiceAccount>(meta->Auth)) {
-            if (!CredentialsFactory) {
-                throw yexception{} << "trying to authenticate with service account credentials, internal error";
-            }
-            auto& saAuth = std::get<NAuth::TServiceAccount>(meta->Auth);
-            structuredTokenBuilder.SetServiceAccountIdAuth(saAuth.ServiceAccountId, saAuth.ServiceAccountIdSignature);
-        } else {
-            structuredTokenBuilder.SetNoAuth();
-        }
-
-        const NYql::TS3Credentials credentials(CredentialsFactory, structuredTokenBuilder.ToJson());
+        // Stage 1: credentials.
+        const NYql::TS3Credentials credentials(CredentialsFactory, BuildStructuredToken(*meta, CredentialsFactory));
 
         const TString path = meta->TableLocation;
         const TString filePattern = meta->Attributes.Value("filepattern", TString{});
         const TString projection = meta->Attributes.Value("projection", TString{});
         const TVector<TString> partitionedBy = GetPartitionedByConfig(meta);
 
-        NYql::NPathGenerator::TPathGeneratorPtr pathGenerator;
-        
-        bool shouldInferPartitions = !partitionedBy.empty() && !projection;
-        bool ignoreEmptyListings = !projection.empty();
+        const bool shouldInferPartitions = !partitionedBy.empty() && projection.empty();
+        const bool ignoreEmptyListings = !projection.empty();
 
-        NYql::NS3Lister::TListingRequest request {
-            .Url = meta->DataSourceLocation,
-            .Credentials = credentials
-        };
-        TVector<NYql::NS3Lister::TListingRequest> requests;
+        // Stage 2: listing plan (multiple requests when projection rules expand to several prefixes).
+        auto plan = BuildListingPlan(*meta, path, filePattern, projection, partitionedBy, credentials);
+        const auto pathGenerator = plan.PathGenerator;
 
-        if (!projection) {
-            auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, request);
-            if (error) {
-                throw yexception() << *error;
-            }
-            requests.push_back(request);
-        } else {
-            if (NYql::NS3::HasWildcards(path)) {
-                throw yexception() << "Path prefix: '" << path << "' contains wildcards";
-            }
-
-            pathGenerator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy);
-            for (const auto& rule : pathGenerator->GetRules()) {
-                YQL_ENSURE(rule.ColumnValues.size() == partitionedBy.size());
-                
-                request.Pattern = NYql::NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
-                request.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
-                request.Prefix = request.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(request.Pattern));
-
-                requests.push_back(request);
-            }
-        }
-
+        // Accumulator for "<col1>,<col2>\n<glob1_v1>,<glob1_v2>\n..." used by stage 6.
         auto partByData = std::make_shared<TStringBuilder>();
         if (shouldInferPartitions) {
             *partByData << JoinSeq(",", partitionedBy);
         }
 
-        TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
+        // Stage 3: kick off all listings in parallel.
         auto httpGateway = NYql::IHTTPGateway::Make();
         auto httpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
-        for (const auto& req : requests) {
+        TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>> futures;
+        futures.reserve(plan.Requests.size());
+        for (const auto& req : plan.Requests) {
             auto s3Lister = NYql::NS3Lister::MakeS3Lister(httpGateway, httpRetryPolicy, req, Nothing(), AllowLocalFiles, ActorSystem);
             futures.push_back(s3Lister->Next());
         }
+        auto afterListing = NThreading::WaitExceptionOrAll(futures).Apply(
+            [partByData, shouldInferPartitions, ignoreEmptyListings,
+             futures = std::move(futures), requests = std::move(plan.Requests)]
+            (const NThreading::TFuture<void>& result) {
+                result.GetValue(); // rethrow exception, if any
+                return SelectFirstNonEmptyFile(partByData, shouldInferPartitions, ignoreEmptyListings, futures, requests);
+            });
 
-        auto allFuture = NThreading::WaitExceptionOrAll(futures);
-        auto afterListing = allFuture.Apply([partByData, shouldInferPartitions, ignoreEmptyListings, futures = std::move(futures), requests = std::move(requests)](const NThreading::TFuture<void>& result) {
-            result.GetValue();
-            for (size_t i = 0; i < futures.size(); ++i) {
-                auto& listRes = futures[i].GetValue();
-                if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
-                    auto& error = std::get<NYql::NS3Lister::TListError>(listRes);
-                    throw yexception() << error.Issues.ToString();
-                }
-                auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
-                if (entries.Objects.empty() && !ignoreEmptyListings) {
-                    throw yexception() << "couldn't find files at " << requests[i].Pattern;
-                }
-
-                if (shouldInferPartitions) {
-                    for (const auto& entry : entries.Objects) {
-                        *partByData << Endl << JoinSeq(",", entry.MatchedGlobs);
-                    }
-                }
-
-                for (const auto& entry : entries.Objects) {
-                    if (entry.Size > 0) {
-                        return entry;
-                    }
-                }
-
-                if (!ignoreEmptyListings) {
-                    throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
-                }
-            }
-
-            throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
-        });
-
+        // Set up actors that will fetch & infer from the chosen file.
         auto s3FetcherId = ActorSystem->Register(NObjectStorage::CreateS3FetcherActor(
             meta->DataSourceLocation,
             httpGateway,
             NYql::IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
-            credentials
-        ));
+            credentials));
 
         meta->Attributes.erase("withinfer");
 
         auto arrowFetcherId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowFetchingActor(s3FetcherId, meta->Attributes));
         auto arrowInferencinatorId = ActorSystem->Register(NObjectStorage::NInference::CreateArrowInferencinator(arrowFetcherId));
 
-        return afterListing.Apply([arrowInferencinatorId, meta, actorSystem = ActorSystem](const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
-            auto promise = NThreading::NewPromise<TMetadataResult>();
-            auto schemaToMetadata = [meta](NThreading::TPromise<TMetadataResult> metaPromise, NObjectStorage::TEvInferredFileSchema&& response) {
-                if (!response.Status.IsSuccess()) {
-                    metaPromise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(NYdb::NAdapters::ToYqlIssues(response.Status.GetIssues())));
-                    return;
-                }
-                meta->Changed = true;
-                meta->Schema.clear_column();
-                for (const auto& column : response.Fields) {
-                    auto& destColumn = *meta->Schema.add_column();
-                    destColumn = column;
-                }
-                TMetadataResult result;
-                result.SetSuccess();
-                result.Metadata = meta;
-                metaPromise.SetValue(std::move(result));
-            };
-            auto [path, size, _] = entryFut.GetValue();
-            actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
-                arrowInferencinatorId,
-                new NObjectStorage::TEvInferFileSchema(std::move(path), size),
-                promise,
-                std::move(schemaToMetadata)
-            ));
+        // Stage 4: file -> schema.
+        auto afterInference = afterListing.Apply(
+            [arrowInferencinatorId, meta, actorSystem = ActorSystem]
+            (const NThreading::TFuture<NYql::NS3Lister::TObjectListEntry>& entryFut) {
+                auto promise = NThreading::NewPromise<TMetadataResult>();
+                auto [path, size, _] = entryFut.GetValue();
+                actorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvInferFileSchema, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
+                    arrowInferencinatorId,
+                    new NObjectStorage::TEvInferFileSchema(std::move(path), size),
+                    promise,
+                    MakeSchemaToMetadataHandler(meta)));
+                return promise.GetFuture();
+            });
 
-            return promise.GetFuture();
-        }).Apply([arrowInferencinatorId, meta, partByData, partitionedBy, pathGenerator, this](const NThreading::TFuture<TMetadataResult>& result) {
-            auto& value = result.GetValue();
-            if (!value.Success()) {
+        // Stage 5 & 6: append partition columns; optionally infer their types.
+        return afterInference.Apply(
+            [arrowInferencinatorId, partByData, partitionedBy, pathGenerator, this]
+            (const NThreading::TFuture<TMetadataResult>& result) {
+                const auto& value = result.GetValue();
+                if (!value.Success()) {
+                    return result;
+                }
+                AppendPartitionColumns(value.Metadata, partitionedBy, pathGenerator);
+                if (!partitionedBy.empty() && !pathGenerator) {
+                    return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, result);
+                }
                 return result;
-            }
-
-            auto meta = value.Metadata;
-            if (pathGenerator) {
-                for (const auto& rule : pathGenerator->GetConfig().Rules) {
-                    auto& destColumn = *meta->Schema.add_column();
-                    destColumn.mutable_name()->assign(rule.Name);
-                    switch (rule.Type) {
-                    case NYql::NPathGenerator::IPathGenerator::EType::INTEGER:
-                        destColumn.mutable_type()->set_type_id(Ydb::Type::INT64);
-                        break;
-                    
-                    case NYql::NPathGenerator::IPathGenerator::EType::DATE:
-                        destColumn.mutable_type()->set_type_id(Ydb::Type::DATE);
-                        break;
-
-                    case NYql::NPathGenerator::IPathGenerator::EType::ENUM:
-                    default:
-                        destColumn.mutable_type()->set_type_id(Ydb::Type::STRING);
-                        break;
-                    }
+            }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
+                const auto& value = result.GetValue();
+                if (value.Success()) {
+                    return value.Metadata;
                 }
-            } else {
-                for (const auto& partitionName : partitionedBy) {
-                    auto& destColumn = *meta->Schema.add_column();
-                    destColumn.mutable_name()->assign(partitionName);
-                    destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
-                }
-            }
-
-            if (!partitionedBy.empty() && !pathGenerator) {
-                return InferPartitionedColumnsTypes(arrowInferencinatorId, partByData, result);
-            }
-
-            return result;
-        }).Apply([](const NThreading::TFuture<TMetadataResult>& result) {
-            auto& value = result.GetValue();
-            if (value.Success()) {
-                return value.Metadata;
-            }
-            throw TExternalSourceException{} << value.Issues().ToOneLineString();
-        });
+                throw TExternalSourceException{} << value.Issues().ToOneLineString();
+            });
     } catch (const std::exception&) {
         return NThreading::MakeErrorFuture<std::shared_ptr<TMetadata>>(std::current_exception());
     }
@@ -567,6 +469,173 @@ struct TObjectStorageExternalSource : public IExternalSource {
     }
 
 private:
+    // Format used to (re-)infer types of partition columns from collected glob values.
+    static constexpr std::string_view kPartitionInferenceCsvFormat = "csv_with_names";
+
+    struct TListingPlan {
+        TVector<NYql::NS3Lister::TListingRequest> Requests;
+        NYql::NPathGenerator::TPathGeneratorPtr PathGenerator; // null when there's no projection
+    };
+
+    // Build a structured token JSON for an external source's auth.
+    static TString BuildStructuredToken(
+        const TMetadata& meta,
+        const std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory>& credentialsFactory)
+    {
+        NYql::TStructuredTokenBuilder builder;
+        if (std::holds_alternative<NAuth::TAws>(meta.Auth)) {
+            const auto& aws = std::get<NAuth::TAws>(meta.Auth);
+            NYql::NS3::TAwsParams params;
+            params.SetAwsAccessKey(aws.AccessKey);
+            params.SetAwsRegion(aws.Region);
+            builder.SetBasicAuth(params.SerializeAsString(), aws.SecretAccessKey);
+        } else if (std::holds_alternative<NAuth::TServiceAccount>(meta.Auth)) {
+            if (!credentialsFactory) {
+                throw yexception{} << "trying to authenticate with service account credentials, internal error";
+            }
+            const auto& sa = std::get<NAuth::TServiceAccount>(meta.Auth);
+            builder.SetServiceAccountIdAuth(sa.ServiceAccountId, sa.ServiceAccountIdSignature);
+        } else {
+            builder.SetNoAuth();
+        }
+        return builder.ToJson();
+    }
+
+    // Plan one or more S3 listing requests:
+    //  - without `projection`: a single pattern derived from path/filepattern/partitionedBy.
+    //  - with `projection`: one request per path-generator rule (no wildcards in `path` allowed).
+    static TListingPlan BuildListingPlan(
+        const TMetadata& meta,
+        const TString& path,
+        const TString& filePattern,
+        const TString& projection,
+        const TVector<TString>& partitionedBy,
+        const NYql::TS3Credentials& credentials)
+    {
+        TListingPlan plan;
+        NYql::NS3Lister::TListingRequest base{
+            .Url = meta.DataSourceLocation,
+            .Credentials = credentials,
+        };
+
+        if (projection.empty()) {
+            if (auto error = NYql::NS3::BuildS3FilePattern(path, filePattern, partitionedBy, base)) {
+                throw yexception() << *error;
+            }
+            plan.Requests.push_back(std::move(base));
+            return plan;
+        }
+
+        if (NYql::NS3::HasWildcards(path)) {
+            throw yexception() << "Path prefix: '" << path << "' contains wildcards";
+        }
+
+        plan.PathGenerator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy);
+        for (const auto& rule : plan.PathGenerator->GetRules()) {
+            YQL_ENSURE(rule.ColumnValues.size() == partitionedBy.size());
+            auto req = base;
+            req.Pattern = NYql::NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
+            req.PatternType = NYql::NS3Lister::ES3PatternType::Wildcard;
+            req.Prefix = req.Pattern.substr(0, NYql::NS3::GetFirstWildcardPos(req.Pattern));
+            plan.Requests.push_back(std::move(req));
+        }
+        return plan;
+    }
+
+    // Validate listing results, accumulate partition glob data, and return the first
+    // non-empty file entry across all listings. Throws on errors / empty listings (subject
+    // to ignoreEmptyListings).
+    static NYql::NS3Lister::TObjectListEntry SelectFirstNonEmptyFile(
+        const std::shared_ptr<TStringBuilder>& partByData,
+        bool shouldInferPartitions,
+        bool ignoreEmptyListings,
+        const TVector<NThreading::TFuture<NYql::NS3Lister::TListResult>>& futures,
+        const TVector<NYql::NS3Lister::TListingRequest>& requests)
+    {
+        for (size_t i = 0; i < futures.size(); ++i) {
+            const auto& listRes = futures[i].GetValue();
+            if (std::holds_alternative<NYql::NS3Lister::TListError>(listRes)) {
+                throw yexception() << std::get<NYql::NS3Lister::TListError>(listRes).Issues.ToString();
+            }
+            const auto& entries = std::get<NYql::NS3Lister::TListEntries>(listRes);
+            if (entries.Objects.empty() && !ignoreEmptyListings) {
+                throw yexception() << "couldn't find files at " << requests[i].Pattern;
+            }
+
+            if (shouldInferPartitions) {
+                for (const auto& entry : entries.Objects) {
+                    *partByData << Endl << JoinSeq(",", entry.MatchedGlobs);
+                }
+            }
+            for (const auto& entry : entries.Objects) {
+                if (entry.Size > 0) {
+                    return entry;
+                }
+            }
+            if (!ignoreEmptyListings) {
+                throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
+            }
+        }
+        throw yexception() << "couldn't find any files for type inference, please check that the right path is provided";
+    }
+
+    // Build a callback that copies an inferred Arrow schema into the metadata.
+    // Returned callback signature matches the TActorRequestHandler convention.
+    static std::function<void(NThreading::TPromise<TMetadataResult>, NObjectStorage::TEvInferredFileSchema&&)>
+    MakeSchemaToMetadataHandler(std::shared_ptr<TMetadata> meta) {
+        return [meta = std::move(meta)](NThreading::TPromise<TMetadataResult> promise,
+                                        NObjectStorage::TEvInferredFileSchema&& response) {
+            if (!response.Status.IsSuccess()) {
+                promise.SetValue(NYql::NCommon::ResultFromError<TMetadataResult>(
+                    NYdb::NAdapters::ToYqlIssues(response.Status.GetIssues())));
+                return;
+            }
+            meta->Changed = true;
+            meta->Schema.clear_column();
+            for (const auto& column : response.Fields) {
+                *meta->Schema.add_column() = column;
+            }
+            TMetadataResult result;
+            result.SetSuccess();
+            result.Metadata = meta;
+            promise.SetValue(std::move(result));
+        };
+    }
+
+    // Append columns for the partition keys to the schema. Type comes from the
+    // path generator if there's a projection, otherwise defaults to UTF8 (and may
+    // be refined later by InferPartitionedColumnsTypes).
+    static void AppendPartitionColumns(
+        std::shared_ptr<TMetadata> meta,
+        const TVector<TString>& partitionedBy,
+        const NYql::NPathGenerator::TPathGeneratorPtr& pathGenerator)
+    {
+        if (pathGenerator) {
+            for (const auto& rule : pathGenerator->GetConfig().Rules) {
+                auto& destColumn = *meta->Schema.add_column();
+                destColumn.mutable_name()->assign(rule.Name);
+                switch (rule.Type) {
+                case NYql::NPathGenerator::IPathGenerator::EType::INTEGER:
+                    destColumn.mutable_type()->set_type_id(Ydb::Type::INT64);
+                    break;
+                case NYql::NPathGenerator::IPathGenerator::EType::DATE:
+                    destColumn.mutable_type()->set_type_id(Ydb::Type::DATE);
+                    break;
+                case NYql::NPathGenerator::IPathGenerator::EType::ENUM:
+                default:
+                    destColumn.mutable_type()->set_type_id(Ydb::Type::STRING);
+                    break;
+                }
+            }
+            return;
+        }
+        for (const auto& partitionName : partitionedBy) {
+            auto& destColumn = *meta->Schema.add_column();
+            destColumn.mutable_name()->assign(partitionName);
+            destColumn.mutable_type()->set_type_id(Ydb::Type::UTF8);
+        }
+    }
+
     NThreading::TFuture<TMetadataResult> InferPartitionedColumnsTypes(
         NActors::TActorId arrowInferencinatorId,
         std::shared_ptr<TStringBuilder> partByData,
@@ -581,6 +650,11 @@ private:
         auto finishStatus = builder.Finish(&partitionBuffer);
 
         if (!buildStatus.ok() || !finishStatus.ok()) {
+            // Couldn't build the in-memory CSV buffer for partition values: fall back
+            // to whatever types AppendPartitionColumns assigned (UTF8 by default).
+            LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_GATEWAY,
+                "couldn't build arrow buffer for partition column type inference: build="
+                << buildStatus.ToString() << " finish=" << finishStatus.ToString());
             return result;
         }
 
@@ -608,7 +682,7 @@ private:
 
         auto bufferReader = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
         auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(bufferReader);
-        auto config = NObjectStorage::NInference::MakeFormatConfig({{ "format", "csv_with_names" }});
+        auto config = NObjectStorage::NInference::MakeFormatConfig({{ "format", TString(kPartitionInferenceCsvFormat) }});
         config->ShouldMakeOptional = false;
         ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvArrowFile, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(
             arrowInferencinatorId,

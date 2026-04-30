@@ -3670,13 +3670,9 @@ struct TIncrementalRestoreState {
 
     EState State = EState::Running;
 
-    // The backup collection path this restore belongs to
-    TPathId BackupCollectionPathId; // used for DB scoping and finalization
-
-    // Global id of the original incremental restore operation
+    TPathId BackupCollectionPathId;
     ui64 OriginalOperationId = 0;
 
-    // Sequential incremental backup processing
     struct TIncrementalBackup {
         TPathId BackupPathId;
         TString BackupPath;
@@ -3764,17 +3760,13 @@ struct TIncrementalRestoreState {
     // In-memory only; rebuilt after reboot from backup-collection contents.
     TDeque<TPendingRestoreOp> PendingTables;
 
-    // Persisted via PersistIncrementalRestoreTerminalState alongside State == Completed/Failed.
-    // Stored as ui32 to avoid pulling Ydb::StatusIds into this header; the values
-    // map to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED).
+    // ui32 maps to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED);
+    // typed here to avoid pulling Ydb::StatusIds into the header.
     ui32 FinalStatus = 0;
     TString FinalIssues;
 
-    // Per-sub-op tracking, mirrors Export's ExportItems. Each enqueued sub-op
-    // gets a row in Schema::IncrementalRestoreItem (Table<133>) and a TItem in
-    // PendingItems. Once the TxAllocatorClient supplies a TxId, the item moves
-    // to InFlightItems and WaitTxIdToItemSeq is populated for reverse lookup
-    // when TEvModifySchemeTransactionResult arrives.
+    // Per-sub-op tracking. Items move from PendingItems to InFlightItems once
+    // TxAllocatorClient supplies a TxId.
     struct TItem {
         enum class EKind : ui32 {
             Table = 0,
@@ -3784,13 +3776,11 @@ struct TIncrementalRestoreState {
         ui32 ItemSeq = 0;
         EKind Kind = EKind::Table;
         TPathId TablePathId;
-        ui64 WaitTxId = 0;  // 0 == InvalidTxId == awaiting allocation
+        // 0 == awaiting allocation.
+        ui64 WaitTxId = 0;
 
-        // In-memory only: the prebuilt request whose TxId field we will fill in
-        // and Send() once TxAllocatorClient replies. THolder around an opaque
-        // event base keeps info_types.h decoupled from schemeshard.h. The
-        // orchestrator rebuilds these on reboot via the standard TEvProgress
-        // re-entry path, so durability is not required.
+        // Filled in and sent once TxAllocatorClient replies. In-memory only;
+        // rebuilt on reboot via the orchestrator's re-entry path.
         TAutoPtr<NActors::IEventBase> PendingRequest;
     };
 

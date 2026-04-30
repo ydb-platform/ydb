@@ -1185,17 +1185,7 @@ private:
             }
         }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent& event) {
-            const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " TPartitionSessionStatusEvent, WriteTimeHighWatermark " << event.GetWriteTimeHighWatermark());
-            auto& partitionInfo = Self.Partitions[partitionKey];
-            
-            if (Self.SourceParams.GetStopAtCurrentEndOffsets()
-                && partitionInfo.EndWriteTime
-                && event.GetWriteTimeHighWatermark() <= *partitionInfo.EndWriteTime) {
-                Self.FinishedPartitions.insert(partitionKey);
-            }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) {
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {

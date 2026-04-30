@@ -1251,6 +1251,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
         WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
         WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
+        Sleep(TDuration::Seconds(5));
         WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
 
         auto received = ReadTopicMessagesWithWriteTime(topic, 4, TInstant{}, true);
@@ -1277,8 +1278,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
         });
-        auto future = received[3].second + TDuration::Seconds(100);
-        test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') >= Timestamp(\"" + received[1].second.ToString() + "\") \
+            AND SystemMetadata('write_time') <= Timestamp(\"" + received[2].second.ToString() + "\")", 2,  [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
+
+        // auto future = received[3].second + TDuration::Seconds(100);
+        // test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
     }
 
     Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {

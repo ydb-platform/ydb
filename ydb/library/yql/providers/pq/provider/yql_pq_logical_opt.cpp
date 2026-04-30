@@ -1,5 +1,6 @@
 #include "yql_pq_provider_impl.h"
 
+#include <limits>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/intervals_converter.h>
@@ -337,6 +338,17 @@ public:
                 topicPartitionsCount = FromString(kv.Value().Ref().Content());
             }
         }
+        const auto* topicMeta = State_->FindTopicMeta(topic);
+        TInstant minWriteTime = TInstant::Max();
+        if (topicMeta) {
+            if (topicMeta->FederatedTopic) {
+                const auto& federatedTopics = *(topicMeta->FederatedTopic);
+              
+                for (auto [p, time] : federatedTopics[0].MaxWriteTime) {
+                    minWriteTime = std::min(minWriteTime, time);
+                }
+            }
+        }
 
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
@@ -494,7 +506,7 @@ public:
         }
 
         TString offsetPredicateSerializedProto = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
-        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx);
+        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime? 
 
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         
@@ -644,7 +656,9 @@ private:
     TString SerializePredicate(
         const TString& memberName,
         const NNodes::TCoLambda& lambda,
-         TExprContext& ctx) const {
+        TExprContext& ctx,
+        std::optional<ui64> min = std::nullopt
+    ) const {
         auto settings = TPushdownSettings();
         settings.EnableMember(memberName);
         settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor); // TODO
@@ -658,19 +672,21 @@ private:
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
             return {};
         }
-        if (tree.Empty()) {
+
+        if (tree.Empty() || (tree.Min() == std::numeric_limits<ui64>::min() && tree.Max() == std::numeric_limits<ui64>::max())) {
             NPq::NProto::TOffsetPredicate proto;
-            auto* item = proto.AddItem();
-            item->SetBegin(0);
-            item->SetEnd(0);
-            TString result; 
+            TString result;
             YQL_ENSURE(proto.SerializeToString(&result));
             return result;
         }
         NPq::NProto::TOffsetPredicate proto;
         auto* item = proto.AddItem();
-        item->SetBegin(tree.Min()); // Copy only one interval.
-        item->SetEnd(tree.Max());
+        if (tree.Min() != std::numeric_limits<ui64>::min()) {
+            item->SetBegin(!min ? tree.Min() : std::min(tree.Min(), *min)); 
+        }
+        if (tree.Max() != std::numeric_limits<ui64>::max()) {
+            item->SetEnd(tree.Max());
+        }
         TString result; 
         YQL_ENSURE(proto.SerializeToString(&result));
         return result;

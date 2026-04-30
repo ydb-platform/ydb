@@ -29,7 +29,7 @@ env:
 
 jobs:
   resolve-build-types:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}

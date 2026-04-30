@@ -7,6 +7,8 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
+#include <util/system/type_name.h>
+
 #include <exception>
 #include <memory>
 #include <typeinfo>
@@ -38,7 +40,7 @@ public:
                 try {
                     std::rethrow_exception(std::current_exception());
                 } catch (const std::exception& e) {
-                    parentSpan->RecordException(typeid(e).name(), e.what());
+                    parentSpan->RecordException(TypeName(e).c_str(), e.what());
                 } catch (...) {
                     parentSpan->RecordException("unknown", "unknown exception");
                 }

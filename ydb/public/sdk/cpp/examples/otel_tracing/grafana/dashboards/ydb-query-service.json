@@ -55,15 +55,15 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(db_client_operation_duration_seconds_bucket[1m]))",
+          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p50 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(db_client_operation_duration_seconds_bucket[1m]))",
+          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p95 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(db_client_operation_duration_seconds_bucket[1m]))",
+          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p99 {{db_operation_name}}"
         }
       ]

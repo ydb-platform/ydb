@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
 #include <util/generic/function.h>
+#include <util/system/type_name.h>
 
 #include <chrono>
 #include <cstdint>
@@ -48,7 +49,7 @@ public:
                         try {
                             std::rethrow_exception(std::current_exception());
                         } catch (const std::exception& e) {
-                            self->ParentSpan_->RecordException(typeid(e).name(), e.what());
+                            self->ParentSpan_->RecordException(TypeName(e).c_str(), e.what());
                         } catch (...) {
                             self->ParentSpan_->RecordException("unknown", "unknown exception");
                         }

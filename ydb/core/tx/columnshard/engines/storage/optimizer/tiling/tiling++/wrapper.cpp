@@ -47,6 +47,9 @@ struct TPlannerSettings {
         json["accumulator_overload_bytes"] = TilingSettings.AccumulatorSettings.Overload.Bytes;
         json["middle_level_trigger_height"] = TilingSettings.MiddleLevelSettings.TriggerHight;
         json["middle_level_overload_height"] = TilingSettings.MiddleLevelSettings.OverloadHight;
+        json["aging_enabled"] = TilingSettings.AgingSettings.Enabled;
+        json["aging_promote_time_seconds"] = TilingSettings.AgingSettings.PromoteTime.Seconds();
+        json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
     }
 
@@ -145,6 +148,21 @@ struct TPlannerSettings {
                     return TConclusionStatus::Fail("tiling-core: middle_level_overload_height must be an unsigned integer");
                 }
                 TilingSettings.MiddleLevelSettings.OverloadHight = value.GetUInteger();
+            } else if (name == "aging_enabled") {
+                if (!value.IsBoolean()) {
+                    return TConclusionStatus::Fail("tiling-core: aging_enabled must be boolean");
+                }
+                TilingSettings.AgingSettings.Enabled = value.GetBoolean();
+            } else if (name == "aging_promote_time_seconds") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling-core: aging_promote_time_seconds must be an unsigned integer");
+                }
+                TilingSettings.AgingSettings.PromoteTime = TDuration::Seconds(value.GetUInteger());
+            } else if (name == "aging_max_portion_promotion") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling-core: aging_max_portion_promotion must be an unsigned integer");
+                }
+                TilingSettings.AgingSettings.MaxPortionPromotion = value.GetUInteger();
             } else {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_core_unknown_setting_ignored")("setting", name);
@@ -204,7 +222,8 @@ protected:
         return Core.DoGetUsefulMetric().IsCritical();
     }
 
-    void DoActualize(const TInstant /*currentInstant*/) override {
+    void DoActualize(const TInstant currentInstant) override {
+        Core.PromoteExpiredPortions(currentInstant);
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {

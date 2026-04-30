@@ -429,27 +429,15 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
     }
 
     Y_UNIT_TEST(TilingCompactionOneShard) {
-        // Regression test for the tiling compaction pipeline: accumulator → LastLevel.
+        // Regression test for the tiling++ compaction pipeline.
         //
-        // MaxPortionSize=30000 bytes (30 KB) is set so each write produces small portions.
-        // Compaction output is also ~30 KB per portion (same MaxPortionSize cap applies globally).
+        // Phase 1 — aging disabled:
+        //   After load, portions must be distributed across the accumulator (level 0),
+        //   at least one middle level (level >= 2), and the last level (level 1).
         //
-        // Settings:
-        //   accumulator_portion_size_limit=40000 (40 KB):
-        //     Fresh write portions (~30 KB) are BELOW this → go to accumulator.
-        //     Compaction output portions (~30 KB) are also below this → go back to accumulator.
-        //     After a second compaction round, the accumulator has enough data to produce
-        //     portions that exceed the limit (multiple rounds merge into larger batches).
-        //
-        //   accumulator_trigger_bytes=200000 (200 KB):
-        //     Accumulator fires after ~7 portions (7 × 30 KB ≈ 210 KB > 200 KB).
-        //
-        //   portion_expected_size=500000 (500 KB):
-        //     Target output size — larger than MaxPortionSize so the splitter produces
-        //     the largest possible portions (~30 KB each, capped by MaxPortionSize).
-        //
-        // The test verifies that SPLIT_COMPACTED portions exist after writing enough data,
-        // proving the tiling pipeline routes portions through accumulator → LastLevel.
+        // Phase 2 — aging enabled (with a short promote time):
+        //   After waiting, all portions must end up at the last level (level 1) because
+        //   PromoteExpiredPortions repeatedly steps each portion one level closer to it.
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -462,83 +450,197 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         // One store shard, one table shard — all data in a single granule.
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
 
-        // Switch the table to the new tiling compaction planner.
-        // accumulator_portion_size_limit=40000: fresh write portions (~30 KB) go to accumulator.
-        // accumulator_trigger_bytes=200000: fires after ~7 portions.
-        // portion_expected_size=500000: target output size (actual output capped at ~30 KB by MaxPortionSize).
-        {
-            auto tableClient = kikimr.GetTableClient();
-            auto alterQuery = TString(
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
-                R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, )"
-                R"(`COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":40000, "accumulator_trigger_bytes":200000, "portion_expected_size":100000, "k":3}`))"
-            );
+        auto tableClient = kikimr.GetTableClient();
+
+        auto alterPlanner = [&](const TString& features) {
+            auto alterQuery = TStringBuilder()
+                << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
+                << R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, )"
+                << R"(`COMPACTION_PLANNER.FEATURES`=`)" << features << R"(`))";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        };
 
-        // Write enough data to trigger the accumulator multiple times.
-        // 50 writes × 1000 rows × ~30 KB/portion ≈ 1.5 MB >> 200 KB trigger.
-        for (ui32 i = 0; i < 5000; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i, 100, false, 10000);
-            Cout << i << Endl;
-        }
-
-        // Give the background compaction actor time to run (wakeup period = 1 s).
-        Sleep(TDuration::Seconds(10));
-
-        // Dump all portion kinds so we can see what the tiling optimizer produced.
-        {
-            auto tableClient = kikimr.GetTableClient();
+        auto countByLevel = [&]() -> THashMap<ui64, ui64> {
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT Kind, COUNT(*) AS cnt
+                SELECT CompactionLevel, COUNT(*) AS cnt
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
-                GROUP BY Kind
-                ORDER BY Kind
+                GROUP BY CompactionLevel
+                ORDER BY CompactionLevel
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto rows = CollectRows(it);
+            THashMap<ui64, ui64> result;
+            Cout << "=== CompactionLevel distribution ===" << Endl;
             for (auto& row : rows) {
-                Cout << "Kind=" << GetUtf8(row.at("Kind")) << " count=" << GetUint64(row.at("cnt")) << Endl;
+                const ui64 level = GetUint64(row.at("CompactionLevel"));
+                const ui64 cnt = GetUint64(row.at("cnt"));
+                result[level] = cnt;
+                Cout << "  level=" << level << " count=" << cnt << Endl;
+            }
+            return result;
+        };
+
+        // Phase 1: aging disabled.
+        //
+        // Implementation note: the `CompactionLevel` field reported by the
+        // .sys/primary_index_portion_stats view is the TargetLevel of the task
+        // that produced each portion. Mapping for tiling++:
+        //   - Fresh write / Accumulator-task output → 0
+        //   - LastLevel-task output                → 1
+        //   - MiddleLevel-task output (LevelIdx≥2) → that LevelIdx
+        //
+        // Strategy:
+        //   1. Write many DISJOINT key regions; each one's accumulator output
+        //      goes to LastLevel.Portions (measure==0 — disjoint), so we end
+        //      up with several disjoint LastLevel.Portions.
+        //   2. Then write WIDE batches whose ranges span the whole region set;
+        //      accumulator output for these has measure≈N (overlaps N disjoint
+        //      LastLevel.Portions). With K=2 and N≥2 → routed to a middle level.
+        //   3. After enough such middle-level portions stack on the same range,
+        //      MiddleLevel fires (trigger_height=2) → its output has level≥2.
+        //
+        // We disable LastLevel compaction (overload threshold huge) so the
+        // disjoint LastLevel.Portions are not merged into a single one.
+        // NOTE on Accumulator firing: Accumulator::DoGetOptimizationTasks emits
+        // a task only when the accumulated bytes exceed
+        // accumulator_compaction_bytes OR accumulator_compaction_portions.
+        // Defaults are huge (64 MB / 1000), so with the test's small writes the
+        // task is never produced. We override both to small values.
+        // CompactionLevel reflects the TargetLevel of the LAST task that
+        // produced the portion; it does NOT change when the portion is later
+        // re-routed by Place(). So to see portions at level 1 we need
+        // LastLevel compaction to actually run; for level ≥ 2 we need
+        // MiddleLevel compaction to run.
+        //
+        // Strategy: make accumulator_portion_size_limit so tiny that every
+        // incoming write bypasses the Accumulator entirely and is routed by
+        // overlap measurement (LastLevel.Measure):
+        //   - Step-A small writes overlap within a region → first lands in
+        //     LastLevel.Portions, subsequent overlapping writes land in
+        //     LastLevel.Candidates → LastLevel compaction fires → level=1.
+        //   - Step-B wide writes overlap N≈regionCount disjoint LastLevel
+        //     portions → with K=2, measuredLevel = ⌊log_2(N)⌋+1 ≥ 2 →
+        //     routed to a middle level → MiddleLevel compaction fires
+        //     once height ≥ middle_level_trigger_height → level≥2.
+        Cerr << "*** PHASE1: alterPlanner begin ***" << Endl;
+        alterPlanner(
+            R"({"accumulator_portion_size_limit":1, )"
+            R"("portion_expected_size":50000, )"
+            R"("last_level_compaction_portions":4, )"
+            R"("last_level_compaction_bytes":1000000, )"
+            R"("last_level_candidate_portions_overload":2, )"
+            R"("middle_level_trigger_height":2, )"
+            R"("middle_level_overload_height":2, )"
+            R"("k":2, )"
+            R"("aging_enabled":false})");
+        Cerr << "*** PHASE1: alterPlanner done ***" << Endl;
+
+        // Step A: write several disjoint regions. Each region's small writes
+        // fit inside the accumulator (under 40 KB each) and sum to enough to
+        // trigger by portion count; the accumulator output for that region is
+        // disjoint from all other regions, so it lands in LastLevel.Portions.
+        const ui64 regionStride = 1'000'000'000ULL; // 1e9 us between regions
+        const ui32 regionCount = 4;
+        for (ui32 region = 0; region < regionCount; ++region) {
+            const ui64 base = static_cast<ui64>(region) * regionStride;
+            for (ui32 j = 0; j < 3; ++j) {
+                Cerr << "*** PHASE1: StepA write region=" << region << " j=" << j << " ***" << Endl;
+                WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, base + j, 200, false, 100);
             }
         }
+        // NOTE: csController->WaitCompactions(d) waits for `d` seconds of quiet
+        // (resets its timer on every new compaction). With aggressive accumulator
+        // settings compactions fire continuously, so it loops forever — we use
+        // a bounded Sleep instead to give compactions time to drain a bit.
+        Cerr << "*** PHASE1: StepA Sleep(15s) begin ***" << Endl;
+        Sleep(TDuration::Seconds(15));
+        Cerr << "*** PHASE1: StepA Sleep done ***" << Endl;
 
-        // Verify that at least some portions were compacted (Kind == "SPLIT_COMPACTED"),
-        // proving that the accumulator fired and promoted portions to LastLevel.
-        {
-            auto tableClient = kikimr.GetTableClient();
-            auto it = tableClient.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-                SELECT count(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats` group by CompactionLevel
-            )").GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            // TString result = StreamResultToYson(it);
-            // Cout << result << Endl;
-            auto rows = CollectRows(it);
-            UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
-            const ui64 compactedCount = GetUint64(rows[0].at("column0"));
-            Cout << "SPLIT_COMPACTED portions: " << compactedCount << Endl;
-            UNIT_ASSERT_C(compactedCount > 0, "Expected at least one SPLIT_COMPACTED portion — accumulator did not fire or promote portions");
+        // Step B: write wide batches spanning all the regions.
+        const ui64 wideStep = (regionCount * regionStride) / 1000ULL;
+        for (ui32 i = 0; i < 12; ++i) {
+            Cerr << "*** PHASE1: StepB wide write i=" << i << " ***" << Endl;
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i, 1000, false, wideStep);
         }
 
+        Cerr << "*** PHASE1: StepB Sleep(20s) begin ***" << Endl;
+        Sleep(TDuration::Seconds(20));
+        Cerr << "*** PHASE1: StepB Sleep done ***" << Endl;
 
-        // {
-        //     auto tableClient = kikimr.GetTableClient();
-        //     auto it = tableClient.StreamExecuteScanQuery(R"(
-        //         --!syntax_v1
-        //         SELECT COUNT(*) as rows FROM `/Root/olapStore/olapTable/`
-        //     )").GetValueSync();
-        //     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        //     auto rows = CollectRows(it);
-        //     UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
-        //     const ui64 total_rows = GetUint64(rows[0].at("rows"));
-        //     Cout << "total rows: " << total_rows << Endl;
-        //     UNIT_ASSERT_C(total_rows == 500000, "Too few rows");
-        // }
+        // Step C: a final small write right before measurement.
+        // Fresh writes have CompactionLevel = 0 in primary_index_portion_stats,
+        // and we only sleep briefly so this portion is still uncompacted when
+        // we read the table. This guarantees the accumulator (level 0) bucket
+        // is non-empty without disturbing the level-1 / level≥2 portions.
+        Cerr << "*** PHASE1: StepC fresh write ***" << Endl;
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 999'999'999'999ULL, 100, false, 1);
+        Sleep(TDuration::Seconds(1));
 
-        AFL_VERIFY(false);
+        {
+            Cerr << "*** PHASE1: countByLevel begin ***" << Endl;
+            auto byLevel = countByLevel();
+            const ui64 accumulator = byLevel.Value(0, 0);
+            const ui64 lastLevel = byLevel.Value(1, 0);
+            ui64 middle = 0;
+            for (const auto& [level, cnt] : byLevel) {
+                if (level >= 2) {
+                    middle += cnt;
+                }
+            }
+            UNIT_ASSERT_C(accumulator > 0,
+                "Phase 1: expected portions at the accumulator (level 0), got 0");
+            UNIT_ASSERT_C(middle > 0,
+                "Phase 1: expected portions at a middle level (level >= 2), got 0");
+            UNIT_ASSERT_C(lastLevel > 0,
+                "Phase 1: expected portions at the last level (level 1), got 0");
+        }
+
+        // Phase 2: enable aging with a very short promote time. The optimizer's
+        // periodic actualization (driven by SetOverridePeriodicWakeupActivationPeriod
+        // = 1s) calls PromoteExpiredPortions on each tick, which steps every
+        // non-level-1 portion one level closer to the last level. Eventually all
+        // portions reach the last level and LastLevel compaction merges them.
+        // Just wait long enough for many ticks to fire.
+        Cerr << "*** PHASE2: alterPlanner begin ***" << Endl;
+        alterPlanner(
+            R"({"k":2, )"
+            R"("aging_enabled":true, )"
+            R"("aging_promote_time_seconds":1, )"
+            R"("aging_max_portion_promotion":100000})");
+        Cerr << "*** PHASE2: alterPlanner done ***" << Endl;
+
+        // Add a final portion that intersects every existing portion (from key 0
+        // up past the Step-C portion at ~1e12). After aging promotes all
+        // existing portions into LastLevel.Portions (disjoint), this overlapping
+        // wide portion lands as a Candidate against all of them, forcing
+        // LastLevel compaction to merge them all. The merged output gets
+        // CompactionLevel=1 persisted to the .sys view.
+        Cerr << "*** PHASE2: intersect-everything write ***" << Endl;
+        // 1000 rows with step 2e9 → spans [0, 2e12], covering Step-A regions
+        // ([0, 4e9)) and the Step-C portion at 999_999_999_999.
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 0, 1000, false, 2'000'000'000ULL);
+
+        // Wait long enough for repeated promotions and compactions to drain everything to
+        // the last level (level 1). MiddleLevel portions step down by one each cycle;
+        // we have at most ~8 portions to drain, so 30s of 1Hz ticks is plenty,
+        // followed by the LastLevel merge triggered by the wide overlapping portion.
+        Cerr << "*** PHASE2: Sleep(30s) begin ***" << Endl;
+        Sleep(TDuration::Seconds(30));
+        Cerr << "*** PHASE2: Sleep done ***" << Endl;
+
+        {
+            Cerr << "*** PHASE2: countByLevel begin ***" << Endl;
+            auto byLevel = countByLevel();
+            UNIT_ASSERT_C(!byLevel.empty(), "Phase 2: no portions remain");
+            for (const auto& [level, cnt] : byLevel) {
+                UNIT_ASSERT_C(level == 1,
+                    TStringBuilder() << "Phase 2: expected all portions at last level (1), found "
+                                     << cnt << " portion(s) at level " << level);
+            }
+        }
     }
 }
 

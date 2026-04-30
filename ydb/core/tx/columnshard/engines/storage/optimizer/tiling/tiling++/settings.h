@@ -4,6 +4,12 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
+struct TAgingSettings {
+    bool Enabled = true;
+    TDuration PromoteTime = TDuration::Minutes(3);
+    ui64 MaxPortionPromotion = 100;
+};
+
 struct TLastLevelSettings {
     struct TLimit {
         ui64 Portions;
@@ -34,6 +40,7 @@ struct TTilingSettings {
     TAccumulatorSettings AccumulatorSettings;
     TLastLevelSettings LastLevelSettings;
     TMiddleLevelSettings MiddleLevelSettings;
+    TAgingSettings AgingSettings;
     ui64 AccumulatorPortionSizeLimit = 512ULL * 1024;
     ui8 K = 10;
     /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).

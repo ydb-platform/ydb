@@ -8953,6 +8953,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "FinalizeTxId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -8971,16 +8976,29 @@
                 "ColumnId": 4,
                 "ColumnName": "SerializedData",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "FinalStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "FinalIssues",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

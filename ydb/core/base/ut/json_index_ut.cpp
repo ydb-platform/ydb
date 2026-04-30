@@ -2110,6 +2110,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
                      MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
             {TToken{"\2a\2b\2c", "$p"}}, EMode::And, "AND pruning: non-param ancestor dropped, param leaf kept");
 
+        CheckMergeFull(
+            MergeAnd(MakeTokens({"\2a\2b"}),
+                     MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b", "$p"}}, EMode::And, "AND pruning: path-only token dropped, param token kept");
+
         // Order does not matter for AND
         CheckMergeFull(
             MergeAnd(MakeParamTokens({TToken{"\2a\2b\2c", "$p"}}),
@@ -2127,6 +2132,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             MergeOr(MakeTokens({"\2a\2b"}),
                     MakeParamTokens({TToken{"\2a\2b\2c", "$p"}})),
             {TToken{"\2a\2b", ""}}, EMode::Or, "OR pruning: non-param ancestor kept, param descendant dropped");
+
+        CheckMergeFull(
+            MergeOr(MakeTokens({"\2a\2b"}),
+                    MakeParamTokens({TToken{"\2a\2b", "$p"}})),
+            {TToken{"\2a\2b"}}, EMode::Or, "OR pruning: path-only token kept, param token dropped");
 
         // Order does not matter for OR
         CheckMergeFull(

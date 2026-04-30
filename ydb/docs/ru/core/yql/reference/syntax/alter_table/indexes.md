@@ -32,7 +32,9 @@ ALTER TABLE `<table_name>`
 
 {% endif %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+### Ограничения
+
+Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` поддерживаются только локальные Bloom skip индексы, см. [Bloom skip индексы](#local-bloom).
 
 ### Примеры
 
@@ -69,6 +71,46 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+### Bloom skip индексы {#local-bloom}
+
+Bloom skip индексы позволяют пропускать фрагменты данных, которые не содержат искомых значений, и ускоряют селективные запросы. Обзор и сценарии использования см. в разделе [Bloom skip индексы](../../../../dev/bloom-skip-indexes.md).
+
+Для локальных Bloom skip индексов действуют дополнительные ограничения:
+
+* для колоночных таблиц выражение `ON (...)` должно содержать одну колонку;
+* секции `COVER (...)` и data columns для таких индексов не поддерживаются.
+
+Поддерживаются следующие типы индексов:
+
+* `bloom_filter` — фильтр Блума по значениям колонки. Параметры:
+  * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`). По умолчанию: `0.1` для колоночных таблиц и `0.0001` для строковых таблиц.
+* `bloom_ngram_filter` — n-граммный фильтр Блума для колонок строковых типов. Параметры:
+  * `ngram_size` — размер n-граммы от `3` до `8` (например, `3`). По умолчанию: `3`;
+  * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`). По умолчанию: `0.1`;
+  * `case_sensitive` — необязательный, `true` или `false` (по умолчанию `true`).
+
+#### Пример: добавление индекса Bloom filter
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+#### Пример: добавление индекса N-gram Bloom filter
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (resource_id)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
 ## Изменение параметров индекса {#alter-index}
 
 Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
@@ -86,18 +128,22 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 * `<table_name>` - имя таблицы, индекс которой нужно изменить.
 * `<index_name>` - имя индекса, который нужно изменить.
-* `<setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
+* `<setting_name>` - имя изменяемого параметра. Набор допустимых параметров зависит от типа индекса:
+  * для глобальных вторичных индексов:
 
-  * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-  * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-  * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-  * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-  * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
-  * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+  * для локальных Bloom skip индексов:
+    * `false_positive_probability`
+    * `ngram_size` и `case_sensitive` (только для `bloom_ngram_filter`)
 
 {% note info %}
 
-Эти настройки нельзя вернуть к исходным.
+Для параметров глобальных вторичных индексов операция `RESET` не поддерживается.
 
 {% endnote %}
 
@@ -106,6 +152,9 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
   * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
   * `"PER_AZ:<count>"` или `"ANY_AZ:<count>"` где `<count>` — число реплик для `READ_REPLICAS_SETTINGS`
   * для остальных параметров — целое число типа `Uint64`
+  * для `false_positive_probability` — число с плавающей точкой в диапазоне `(0, 1)`; меньшее значение обычно уменьшает число ложноположительных срабатываний, но увеличивает размер индекса
+  * для `ngram_size` — целое число в диапазоне от `3` до `8` (обычно рекомендуется начинать с `3`)
+  * для `case_sensitive` — `true` или `false`
 
 ### Пример
 
@@ -116,6 +165,16 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
     READ_REPLICAS_SETTINGS = "PER_AZ:1"
+);
+```
+
+Для локальных Bloom skip индексов можно изменять типовые параметры индекса, например:
+
+```yql
+ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
+    ngram_size = 4,
+    false_positive_probability = 0.005,
+    case_sensitive = false
 );
 ```
 

@@ -29,6 +29,12 @@ items:
   href: vector-indexes-kmeans-tree-type.md
 - name: Полнотекстовые индексы
   href: fulltext-indexes.md
+- name: Локальные индексы
+  href: bloom-skip-indexes.md
+- name: Оптимизация планов запросов
+  href: query-execution-optimization/query-plans-optimization.md
+- name: Подсказки оптимизатора
+  href: query-execution-optimization/query-hints.md
 - name: Оптимизация выполнения запросов
   href: query-execution-optimization/index.md
   include:

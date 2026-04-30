@@ -33,6 +33,12 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 
 Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
 
+## Bloom skip index
+
+A [Bloom skip index](../../dev/bloom-skip-indexes.md) is a special kind of local filter index.
+
+Unlike global secondary and fulltext indexes, it is not addressed with `VIEW` in a query: the optimizer uses it to skip data fragments that likely do not contain matching values. See also: [Bloom skip indexes and filtering](../query_execution/bloom_skip_indexes.md).
+
 ### Creating a Secondary Index Online {#index-add}
 
 {{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.

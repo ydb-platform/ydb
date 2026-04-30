@@ -10,6 +10,8 @@ In transactional systems, indexes are used to limit or avoid performance degrada
 
 This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/query_execution/secondary_indexes.md) in the Concepts section.
 
+Local Bloom skip indexes are also supported; see [Bloom skip indexes](bloom-skip-indexes.md) for details.
+
 ## Creating secondary indexes {#create}
 
 A secondary index is a data schema object that can be defined when creating a table with the [`CREATE TABLE` YQL command](../yql/reference/syntax/create_table/index.md) or added to it later with the [`ALTER TABLE` YQL command](../yql/reference/syntax/alter_table/index.md).

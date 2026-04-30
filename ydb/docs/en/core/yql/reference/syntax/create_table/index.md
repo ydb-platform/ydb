@@ -62,7 +62,7 @@ The data type of the column. The complete list of data types supported by {{ ydb
 
 ### INDEX
 
-Definition of an index on the table. [Secondary indexes](secondary_index.md) and [vector indexes](vector_index.md) are supported.
+Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), and [Bloom skip indexes](bloom_skip_index.md) are supported.
 
 ### PRIMARY KEY
 
@@ -304,12 +304,14 @@ When creating row-oriented tables, it is possible to specify:
 * [A secondary index](secondary_index.md).
 * [A vector index](vector_index.md).
 * [A fulltext index](fulltext_index.md).
+* [A Bloom skip index](bloom_skip_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).
 
 When creating column-oriented tables, it is possible to specify:
 
+* [A Bloom skip index](bloom_skip_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating a table filled with query results](as_select.md).

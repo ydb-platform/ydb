@@ -188,6 +188,9 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
+#### Local Bloom skip index {#local-bloom-skip-index}
+
+Local Bloom skip index is a local probabilistic value filter that speeds up selective queries by skipping irrelevant data fragments. {{ ydb-short-name }} supports the `bloom_filter` and `bloom_ngram_filter` types. For details, see [Bloom skip indexes](../dev/bloom-skip-indexes.md).
 
 #### Column family {#column-family}
 

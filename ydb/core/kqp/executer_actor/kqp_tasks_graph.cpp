@@ -2214,9 +2214,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 ++mapConnectionCount;
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kUnionAll: {
-                break;
-            }
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
                 break;

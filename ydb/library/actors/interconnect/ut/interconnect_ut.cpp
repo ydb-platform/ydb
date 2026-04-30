@@ -1,8 +1,13 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <atomic>
 #include <cstring>
+#include <memory>
 #include <util/random/fast.h>
 #include <util/string/cast.h>
 #include <util/string/vector.h>
@@ -113,6 +118,35 @@ private:
     const TActorId Recipient;
     const size_t Messages;
     const size_t PayloadSize;
+};
+
+struct THandshakeFailureLogCounters {
+    std::atomic<ui32> Notice = 0;
+    std::atomic<ui32> Debug = 0;
+};
+
+class TCountingLogBackend : public TLogBackend {
+public:
+    explicit TCountingLogBackend(std::shared_ptr<THandshakeFailureLogCounters> outgoingHandshakeFailures)
+        : OutgoingHandshakeFailures(std::move(outgoingHandshakeFailures))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        const TStringBuf line(rec.Data, rec.Len);
+        if (line.Contains("ICP25") && line.Contains("outgoing handshake failed")) {
+            if (rec.Priority == TLOG_NOTICE) {
+                OutgoingHandshakeFailures->Notice.fetch_add(1, std::memory_order_relaxed);
+            } else if (rec.Priority == TLOG_DEBUG) {
+                OutgoingHandshakeFailures->Debug.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
 };
 
 } // namespace
@@ -628,6 +662,55 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(KernelLivenessReconnectLocalFallbackNotAppliedRdma) {
         RunKernelLivenessReconnectLocalFallbackNotApplied(true);
+    }
+
+    Y_UNIT_TEST(UnavailableNodeOutgoingHandshakeLogCount) {
+        auto outgoingHandshakeFailures = std::make_shared<THandshakeFailureLogCounters>();
+        auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+            settings.Handshake = TDuration::Seconds(1);
+            settings.FirstErrorSleep = TDuration::MilliSeconds(10);
+            settings.MaxErrorSleep = TDuration::Seconds(1);
+            settings.ErrorSleepRetryMultiplier = 4.0;
+        };
+        auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+            TActorId(0, "logger"),
+            static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+            NLog::PRI_DEBUG,
+            NLog::PRI_DEBUG,
+            0U);
+        loggerSettings->Append(
+            NActorsServices::EServiceCommon_MIN,
+            NActorsServices::EServiceCommon_MAX,
+            NActorsServices::EServiceCommon_Name);
+        loggerSettings->SetAllowDrop(false);
+        loggerSettings->SetThrottleDelay(TDuration::Zero());
+        auto logBackendFactory = [outgoingHandshakeFailures] {
+            return TAutoPtr<TLogBackend>(new TCountingLogBackend(outgoingHandshakeFailures));
+        };
+
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings, TTestICCluster::DISABLE_RDMA,
+            {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
+
+        auto* recipientPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= 1;
+        }, "initial interconnect message delivery");
+
+        outgoingHandshakeFailures->Notice.store(0, std::memory_order_relaxed);
+        outgoingHandshakeFailures->Debug.store(0, std::memory_order_relaxed);
+        cluster.StopNode(1);
+        Sleep(TDuration::Seconds(10));
+
+        const ui32 noticeLogCount = outgoingHandshakeFailures->Notice.load(std::memory_order_relaxed);
+        const ui32 debugLogCount = outgoingHandshakeFailures->Debug.load(std::memory_order_relaxed);
+        UNIT_ASSERT_C(noticeLogCount == 1 || noticeLogCount == 2,
+            TStringBuilder() << "expected one or two notice-level ICP25 outgoing handshake failure log records in 10 seconds, got "
+                << noticeLogCount);
+        UNIT_ASSERT_C(debugLogCount > 0,
+            "expected repeated ICP25 outgoing handshake failure log records to be demoted to debug");
     }
 
     Y_UNIT_TEST(SetupRdmaSession) {

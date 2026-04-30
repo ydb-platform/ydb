@@ -59,6 +59,7 @@ void CollapsedPanel(IOutputStream& str, const TStringBuf title, const TStringBuf
 
 TPathId ParsePathId(TStringBuf str);
 void PathLink(IOutputStream& str, const TPathId& pathId);
-void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId = {});
+void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId = {},
+    TStringBuf tabletAppRelPath = TStringBuf("app"));
 
 }

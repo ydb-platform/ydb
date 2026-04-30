@@ -28,9 +28,11 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 class TMon {
 public:
     enum class EAuthMode {
-        Disabled,      // Don't check authorization
-        Enforce,       // Check authorization in monitoring layer
-        ExtractOnly    // Extract token only, check authorization in handler
+        Disabled,           // Don't check authorization
+        Enforce,            // Check authorization in monitoring layer
+        RelaxedMonitoring   // Skip monitoring AllowedSIDs.
+                            // Do not reject on failed auth RPC.
+                            // Keep token for further checks in handlers or downstream code.
     };
 
     using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;

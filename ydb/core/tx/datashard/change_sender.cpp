@@ -2,6 +2,7 @@
 #include "change_exchange_impl.h"
 #include "datashard_impl.h"
 
+#include <ydb/core/base/tablet_dev_ui_mon_access.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/library/actors/core/actor.h>
@@ -213,7 +214,7 @@ class TChangeSender: public TActor<TChangeSender> {
                                     TABLED() { PathLink(html, pathId); }
                                     TABLED() { html << sender.UserTableId; }
                                     TABLED() { html << sender.Type; }
-                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId); }
+                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId, {}, NKikimr::TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH); }
                                 }
                             }
                         }

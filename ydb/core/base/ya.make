@@ -1,95 +1,49 @@
 LIBRARY()
 
 SRCS(
-    auth.h
     auth.cpp
     actor_activity_names.cpp
-    appdata.h
     appdata.cpp
-    backtrace.h
     backtrace.cpp
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
-    bridge.h
     bridge.cpp
-    blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
     blobstorage_relevance.cpp
-    boot_type.h
     boot_type.cpp
-    channel_profiles.h
     counters.cpp
-    counters.h
-    defs.h
     domain.cpp
-    domain.h
     event_filter.cpp
-    event_filter.h
-    events.h
-    feature_flags.h
     feature_flags_service.cpp
-    feature_flags_service.h
     fulltext.cpp
-    fulltext.h
     group_stat.cpp
-    group_stat.h
-    hive.h
-    interconnect_channels.h
     kmeans_clusters.cpp
     local_user_token.cpp
-    local_user_token.h
     localdb.cpp
-    localdb.h
-    location.h
     logoblob.cpp
-    logoblob.h
-    memory_controller_iface.h
-    nameservice.h
-    nodestate.h
     path.cpp
     pool_stats_collector.cpp
-    pool_stats_collector.h
-    resource_profile.h
     row_version.cpp
-    row_version.h
-    runtime_feature_flags.h
     services_assert.cpp
-    shared_quota.h
     statestorage.cpp
-    statestorage.h
     statestorage_event_filter.cpp
     statestorage_guardian.cpp
-    statestorage_guardian_impl.h
-    statestorage_impl.h
     statestorage_monitoring.cpp
     statestorage_proxy.cpp
     statestorage_replica.cpp
-    statestorage_ringwalker.h
     storage_pools.cpp
-    storage_pools.h
-    subdomain.h
     subdomain.cpp
     table_index.cpp
     tablet.cpp
-    tablet.h
+    tablet_dev_ui_mon_access.cpp
     tablet_killer.cpp
-    tablet_pipe.h
-    tablet_pipecache.h
-    tablet_resolver.h
     tablet_status_checker.cpp
-    tabletid.h
-    tablet_types.h
     traceid.cpp
-    traceid.h
-    tracing.h
-    tx_processing.h
     tx_processing.cpp
-    user_registry.h
     wilson_tracing_control.cpp
     json_index.cpp
-    json_index.h
 )
 
 PEERDIR(

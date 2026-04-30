@@ -127,12 +127,13 @@ public:
                 .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
-            // For healthcheck, always extract token so access can be checked in handler.
+            // Healthcheck: extract user token for handler-side checks.
+            // Do not enforce monitoring AllowedSIDs here.
             mon->RegisterActorHandler({
                 .Path = "/healthcheck",
                 .Handler = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::ExtractOnly,
-                // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
+                .AuthMode = TMon::EAuthMode::RelaxedMonitoring,
+                // No AllowedSIDs: access is enforced in the handler when required.
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",

@@ -25,6 +25,8 @@ struct TCreateTopicOperationSettings {
     TString Database;
     TString PeerName;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IfNotExists = true;
+    bool PrepareOnly = false;
     std::unique_ptr<ICreateTopicStrategy> Strategy;
     ui64 Cookie = 0;
 };

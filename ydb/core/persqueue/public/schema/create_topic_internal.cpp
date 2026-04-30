@@ -8,15 +8,15 @@ namespace NKikimr::NPQ::NSchema {
 
 namespace {
 
-class TAlterTopicInternalActor: public NPQ::TBaseActor<TAlterTopicInternalActor>
-                              , public NPQ::TConstantLogPrefix {
+class TCreateTopicInternalActor: public NPQ::TBaseActor<TCreateTopicInternalActor>
+                               , public NPQ::TConstantLogPrefix {
 
 public:
-    TAlterTopicInternalActor(
-        NThreading::TPromise<TAlterTopicResponse>&& promise,
-        TAlterTopicSettings&& settings
+    TCreateTopicInternalActor(
+        NThreading::TPromise<TCreateTopicResponse>&& promise,
+        TCreateTopicSettings&& settings
     )
-        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
+        : NPQ::TBaseActor<TCreateTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
         , Promise(std::move(promise))
         , Settings(std::move(settings))
         , Path(Settings.Request.path())
@@ -24,15 +24,15 @@ public:
     }
 
     void Bootstrap() {
-        Become(&TAlterTopicInternalActor::StateWork);
+        Become(&TCreateTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(Settings)));
+        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {
         LOG_E("OnException: " << exc.what());
 
-        TEvAlterTopicResponse response;
+        TEvCreateTopicResponse response;
         response.Status = Ydb::StatusIds::INTERNAL_ERROR;
         response.ErrorMessage = exc.what();
 
@@ -44,8 +44,8 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_D("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+        LOG_D("Handle TEvCreateTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
             .Status = ev->Get()->Status,
@@ -58,23 +58,23 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
         }
     }
 
 private:
-    NThreading::TPromise<TAlterTopicResponse> Promise;
-    TAlterTopicSettings Settings;
+    NThreading::TPromise<TCreateTopicResponse> Promise;
+    TCreateTopicSettings Settings;
     const TString Path;
 };
 
 } // namespace
 
-NActors::IActor* CreateAlterTopicActor(
-    NThreading::TPromise<TAlterTopicResponse>&& promise,
-    TAlterTopicSettings&& settings
+NActors::IActor* CreateCreateTopicActor(
+    NThreading::TPromise<TCreateTopicResponse>&& promise,
+    TCreateTopicSettings&& settings
 ) {
-    return new TAlterTopicInternalActor(std::move(promise), std::move(settings));
+    return new TCreateTopicInternalActor(std::move(promise), std::move(settings));
 }
 
 } // namespace NKikimr::NPQ::NSchema

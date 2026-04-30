@@ -28,6 +28,7 @@ struct TAlterTopicOperationSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<IAlterTopicStrategy> Strategy;
     bool IfExists = false;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 

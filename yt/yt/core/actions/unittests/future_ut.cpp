@@ -1100,6 +1100,207 @@ TEST_F(TFutureTest, AnyCombiner1)
     EXPECT_EQ(future, AnySucceeded(futures));
 }
 
+TEST_F(TFutureTest, AnySetMatchingCombiner)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    auto p3 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+        p3.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK() && result.Value() % 2 == 0;
+        });
+
+    p1.Set(1);
+    EXPECT_FALSE(f.IsSet());
+    p2.Set(TError("oops"));
+    EXPECT_FALSE(f.IsSet());
+    p3.Set(4);
+
+    auto resultOrError = f.GetOrCrash();
+    EXPECT_TRUE(resultOrError.IsOK());
+    const auto& result = resultOrError.Value();
+    ASSERT_TRUE(result.MatchingIndex);
+    EXPECT_EQ(2, *result.MatchingIndex);
+    ASSERT_EQ(3, std::ssize(result.Results));
+    ASSERT_TRUE(result.Results[2]);
+    EXPECT_TRUE(result.Results[2]->IsOK());
+    EXPECT_EQ(4, result.Results[2]->Value());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerCopiesPredicate)
+{
+    struct TThresholdPredicate
+    {
+        int Threshold;
+
+        bool operator()(const TErrorOr<int>& result) const noexcept
+        {
+            return result.IsOK() && result.Value() >= Threshold;
+        }
+    };
+
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    TThresholdPredicate predicate{10};
+    auto f = AnySetMatching(futures, predicate);
+    predicate.Threshold = 0;
+
+    p1.Set(5);
+    EXPECT_FALSE(f.IsSet());
+    p2.Set(11);
+
+    auto resultOrError = f.GetOrCrash();
+    EXPECT_TRUE(resultOrError.IsOK());
+    const auto& result = resultOrError.Value();
+    ASSERT_TRUE(result.MatchingIndex);
+    EXPECT_EQ(1, *result.MatchingIndex);
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerAllRejected)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK() && result.Value() > 10;
+        });
+
+    p2.Set(TError("oops"));
+    EXPECT_FALSE(f.IsSet());
+    p1.Set(7);
+
+    auto resultOrError = f.GetOrCrash();
+    EXPECT_TRUE(resultOrError.IsOK());
+    const auto& result = resultOrError.Value();
+    EXPECT_FALSE(result.MatchingIndex);
+    ASSERT_EQ(2, std::ssize(result.Results));
+    ASSERT_TRUE(result.Results[0]);
+    EXPECT_TRUE(result.Results[0]->IsOK());
+    EXPECT_EQ(7, result.Results[0]->Value());
+    ASSERT_TRUE(result.Results[1]);
+    EXPECT_FALSE(result.Results[1]->IsOK());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerSuccessShortcut)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK();
+        });
+
+    p1.Set(1);
+    auto resultOrError = f.GetOrCrash();
+    EXPECT_TRUE(resultOrError.IsOK());
+    EXPECT_TRUE(resultOrError.Value().MatchingIndex);
+    EXPECT_TRUE(p2.IsCanceled());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerEmpty)
+{
+    std::vector<TFuture<int>> futures;
+    auto resultOrError = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>&) noexcept {
+            return true;
+        }).GetOrCrash();
+    EXPECT_FALSE(resultOrError.IsOK());
+    EXPECT_EQ(NYT::EErrorCode::FutureCombinerFailure, resultOrError.GetCode());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerAlreadySet)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    p1.Set(7);
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK() && result.Value() > 5;
+        });
+
+    auto resultOrError = f.GetOrCrash();
+    EXPECT_TRUE(resultOrError.IsOK());
+    const auto& result = resultOrError.Value();
+    ASSERT_TRUE(result.MatchingIndex);
+    EXPECT_EQ(0, *result.MatchingIndex);
+    EXPECT_TRUE(p2.IsCanceled());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerDontCancelOnShortcut)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK();
+        },
+        TFutureCombinerOptions{.CancelInputOnShortcut = false});
+
+    p1.Set(1);
+    EXPECT_TRUE(f.IsSet());
+    EXPECT_FALSE(p2.IsCanceled());
+}
+
+TEST_F(TFutureTest, AnySetMatchingCombinerDontPropagateCancelation)
+{
+    auto p1 = NewPromise<int>();
+    auto p2 = NewPromise<int>();
+    std::vector<TFuture<int>> futures{
+        p1.ToFuture(),
+        p2.ToFuture(),
+    };
+
+    auto f = AnySetMatching(
+        futures,
+        [] (const TErrorOr<int>& result) noexcept {
+            return result.IsOK();
+        },
+        TFutureCombinerOptions{.PropagateCancelationToInput = false});
+
+    EXPECT_FALSE(p1.IsCanceled());
+    EXPECT_FALSE(p2.IsCanceled());
+    f.Cancel(TError("oops"));
+    EXPECT_FALSE(p1.IsCanceled());
+    EXPECT_FALSE(p2.IsCanceled());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(TFutureTest, AllCombinerEmpty)

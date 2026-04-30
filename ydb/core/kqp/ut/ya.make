@@ -1,6 +1,7 @@
 RECURSE_FOR_TESTS(
     arrow
     batch_operations
+    channels
     close_with_load
     cost
     data

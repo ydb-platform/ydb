@@ -85,6 +85,5 @@ RECURSE_FOR_TESTS(
 IF (NOT OS_WINDOWS)
     RECURSE_FOR_TESTS(
         tools/combiner_perf/bin
-        tools/join_perf/bin
     )
 ENDIF()

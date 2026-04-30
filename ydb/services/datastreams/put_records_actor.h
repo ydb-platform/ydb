@@ -327,7 +327,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
-        if (AppData(this->ActorContext())->EnforceUserTokenRequirement || AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,

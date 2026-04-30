@@ -55,6 +55,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TFlatTest.SplitEmptyToMany
 ydb/core/client/ut TObjectStorageListingTest.TombstoneRestarts
+ydb/core/client/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
@@ -106,6 +107,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueExistin
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionExtended
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq0Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthCreateQueue
@@ -122,6 +124,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRedrivePolicy
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestCreateQueue
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
@@ -140,6 +143,7 @@ ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SchemaInclusionMode_Unspec
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ValueFormat_SmallChannelBufferSize
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.Large_3
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
+ydb/core/kqp/ut/batch_operations KqpBatchUpdate.Large_2
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.Large_3
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryUnderTimeout
@@ -147,6 +151,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
+ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextDeliveryProblem+LimitRowsPerRequest
 ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextReadResultStatusRetry+LimitRowsPerRequest
 ydb/core/kqp/ut/indexes/fulltext KqpFulltextIndexes.FullTextReadResultStatusRetryL2+LimitRowsPerRequest
@@ -156,6 +161,7 @@ ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/join/index_lookup KqpJoin.StreamLookupJoinOverloadDeadlock
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapTiering.ReconfigureTier
+ydb/core/kqp/ut/olap/types KqpOlapJson.QuotedFilterVariants[10,false,1,1000,1000000,0.5]
 ydb/core/kqp/ut/opt KqpKv.ReadRows_ExternalBlobs-UseExtBlobsPrecharge
 ydb/core/kqp/ut/opt KqpNewEngine.DqSourceCount
 ydb/core/kqp/ut/opt KqpNewEngine.DqSourceLimit
@@ -232,6 +238,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
+ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.CheckAccess
 ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/security/ut TTicketParserTest.TicketParserPeerNameValidationWithFeatureFlagDisabled
@@ -244,11 +251,14 @@ ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_ColumnTable
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable
+ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.EmptyCluster
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.SkipForeign
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
@@ -5773,6 +5783,7 @@ ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test

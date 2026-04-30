@@ -2307,11 +2307,6 @@ void TSchemeShard::PersistInitState(NIceDb::TNiceDb& db) {
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString((ui64)InitState)));
 }
 
-void TSchemeShard::PersistLocalIndexMigrationCompleted(NIceDb::TNiceDb& db) {
-    db.Table<Schema::SysParams>().Key(Schema::SysParam_IsLocalIndexMigrationCompleted).Update(
-        NIceDb::TUpdate<Schema::SysParams::Value>(ToString((ui64)IsLocalIndexMigrationCompleted)));
-}
-
 void TSchemeShard::PersistStorageBillingTime(NIceDb::TNiceDb &db) {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_ServerlessStorageLastBillTime).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(this->ServerlessStorageLastBillTime.Seconds())));

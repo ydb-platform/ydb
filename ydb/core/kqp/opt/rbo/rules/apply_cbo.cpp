@@ -157,7 +157,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
-    auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
+    auto useBlockHashJoin = Config->GetUseBlockHashJoin() || Config->GetUseScalarHashJoin();
 
     if (optLevel <= 1) {
         return input;

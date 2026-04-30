@@ -27,7 +27,7 @@ public:
         , CBOCtx(
               TKqpProviderContext(kqpCtx, 
                 kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()), 
-                kqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false)))
+                kqpCtx.Config->GetUseBlockHashJoin() || kqpCtx.Config->GetUseScalarHashJoin()))
         , ExecutionJson(std::nullopt)
         , ExplainJson(std::nullopt) {
     }

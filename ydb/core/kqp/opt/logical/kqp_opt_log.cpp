@@ -209,7 +209,7 @@ protected:
         };
 
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
-        bool useBlockJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
+        bool useBlockJoin = Config->GetUseBlockHashJoin() || Config->GetUseScalarHashJoin();
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination());
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin);
         auto stats = KqpCtx.KqpStats.GetStats(node.Raw());

@@ -173,7 +173,7 @@ public:
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
         , Pctx(TKqpProviderContext(*OptimizeCtx, 
             Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
-            Config->UseBlockHashJoin.Get().GetOrElse(false)))
+            Config->GetUseBlockHashJoin() || Config->GetUseScalarHashJoin()))
         , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);

@@ -1295,6 +1295,8 @@ private:
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
+        } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
+            operatorId = Visit(maybeScalarHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1850,6 +1852,18 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqScalarHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (ScalarHash)";
 
         TOperator op;
         op.Properties["Name"] = name;

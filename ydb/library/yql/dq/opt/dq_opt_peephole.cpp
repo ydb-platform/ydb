@@ -1079,6 +1079,155 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     return TExprBase(result);
 }
 
+TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyScalarHashJoin>()) {
+        return node;
+    }
+    const auto scalarHashJoin = node.Cast<TDqPhyScalarHashJoin>();
+    const auto pos = scalarHashJoin.Pos();
+
+    const TString leftTableLabel(GetTableLabel(scalarHashJoin.LeftLabel()));
+    const TString rightTableLabel(GetTableLabel(scalarHashJoin.RightLabel()));
+
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, scalarHashJoin, leftTableLabel, rightTableLabel);
+
+    const auto itemTypeLeft = GetSequenceItemType(scalarHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeRight = GetSequenceItemType(scalarHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
+
+    TExprNode::TListType leftRenames, rightRenames;
+    std::vector<TString> fullColNames;
+    ui32 outputIndex = 0;
+
+    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        TString name(itemTypeLeft->GetItems()[i]->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
+        fullColNames.push_back(name);
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+    }
+
+    if (scalarHashJoin.JoinType().Value() != "LeftOnly" && scalarHashJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+        }
+    }
+
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+
+    YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
+    for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+
+        auto leftName = leftKeyColumnNodes[i]->Content();
+        auto leftIndex = FindJoinKeyIndex(itemTypeLeft, leftName, leftTableLabel, true, i);
+        YQL_ENSURE(leftIndex, "Left join key column '" << leftName << "' not found in left input type (left label: '" << leftTableLabel << "')");
+        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+
+        auto rightName = rightKeyColumnNodes[i]->Content();
+        auto rightIndex = FindJoinKeyIndex(itemTypeRight, rightName, rightTableLabel, false, i);
+        YQL_ENSURE(rightIndex, "Right join key column '" << rightName << "' not found in right input type (right label: '" << rightTableLabel << "')");
+        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
+
+        bool hasOptional = false;
+        auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
+
+        if (keyTypeLeft->Equals(*dryType)) {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+        } else {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftConvertedItems.emplace_back(leftName, dryType);
+        }
+        if (keyTypeRight->Equals(*dryType)) {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+        } else {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightConvertedItems.emplace_back(rightName, dryType);
+        }
+    }
+
+    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
+        ctx.NewCallable(scalarHashJoin.LeftInput().Pos(), "ToFlow", {scalarHashJoin.LeftInput().Ptr()}),
+        ctx, leftConvertedItems, pos);
+    auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
+        ctx.NewCallable(scalarHashJoin.RightInput().Pos(), "ToFlow", {scalarHashJoin.RightInput().Ptr()}),
+        ctx, rightConvertedItems, pos);
+
+    auto leftInput = ctx.Builder(pos)
+        .Callable("FromFlow")
+            .Add(0, std::move(leftWideFlow))
+        .Seal()
+        .Build();
+
+    auto rightInput = ctx.Builder(pos)
+        .Callable("FromFlow")
+            .Add(0, std::move(rightWideFlow))
+        .Seal()
+        .Build();
+
+    auto scalarJoinCore = ctx.Builder(pos)
+        .Callable("ScalarHashJoinCore")
+            .Add(0, std::move(leftInput))
+            .Add(1, std::move(rightInput))
+            .Add(2, scalarHashJoin.JoinType().Ptr())
+            .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+            .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+            .Add(5, scalarHashJoin.LeftJoinKeyNames().Ptr())
+            .Add(6, scalarHashJoin.RightJoinKeyNames().Ptr())
+            .Add(7, scalarHashJoin.Settings().Ptr())
+        .Seal()
+        .Build();
+
+    auto wideResult = std::move(scalarJoinCore);
+
+    const ui32 leftBase = itemTypeLeft->GetSize();
+    const ui32 leftConv = leftConvertedItems.size();
+    const ui32 rightBase = (scalarHashJoin.JoinType().Value() != "LeftOnly" && scalarHashJoin.JoinType().Value() != "LeftSemi")
+        ? itemTypeRight->GetSize() : 0;
+    const ui32 rightConv = (scalarHashJoin.JoinType().Value() != "LeftOnly" && scalarHashJoin.JoinType().Value() != "LeftSemi")
+        ? rightConvertedItems.size() : 0;
+    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
+
+    TVector<ui32> keep;
+    keep.reserve(fullColNames.size());
+    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
+    const ui32 rightStart = leftBase + leftConv;
+    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
+
+    auto result = ctx.Builder(pos)
+        .Callable("NarrowMap")
+            .Callable(0, "ToFlow")
+                .Add(0, std::move(wideResult))
+            .Seal()
+            .Lambda(1)
+                .Params("output", totalColumns)
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", keep[i])
+                            .Seal();
+                            i++;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return TExprBase(result);
+}
+
 NNodes::TExprBase DqPeepholeRewriteWideCombiner(
     const NNodes::TExprBase& node,
     TExprContext& ctx,

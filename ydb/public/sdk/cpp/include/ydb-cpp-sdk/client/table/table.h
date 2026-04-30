@@ -418,6 +418,7 @@ public:
 };
 
 //! Represents index description
+// If FalsePositiveProbability is left unset, the server applies its built-in default of 0.1.
 struct TLocalBloomFilterSettings {
     std::optional<double> FalsePositiveProbability;
 
@@ -425,8 +426,10 @@ struct TLocalBloomFilterSettings {
     void SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const;
 };
 
+// All fields are optional. If a field is left unset, the server applies its built-in
+// default: NgramSize = 3, CaseSensitive = true, FalsePositiveProbability = 0.1.
 struct TLocalBloomNgramFilterSettings {
-    uint32_t NgramSize = 0;
+    std::optional<uint32_t> NgramSize;
     std::optional<bool> CaseSensitive;
     std::optional<double> FalsePositiveProbability;
 

@@ -237,7 +237,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
     }
 
-    // Touch comment to retrigger CI for TestYmqHttpProxy.TestCreateQueueWithBadQueueName.
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({

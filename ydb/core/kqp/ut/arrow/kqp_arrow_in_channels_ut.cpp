@@ -1,6 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-// Touch comment to retrigger CI for this branch.
 
 namespace NKikimr {
 namespace NKqp {

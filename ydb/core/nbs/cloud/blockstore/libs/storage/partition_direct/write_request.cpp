@@ -64,7 +64,7 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .CompletedWrites = CompletedWrites});
 }
 
-void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
+void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
 {
     if (Promise.IsReady()) {
         return;
@@ -73,28 +73,28 @@ void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
     auto span =
         DirectBlockGroup->CreateChildSpan(TraceId, "TBaseWriteRequestExecutor");
     if (span) {
-        span->Attribute("Location", ToString(location));
+        span->Attribute("HostIndex", ToString(host));
     }
 
-    RequestedWrites.Set(location);
+    RequestedWrites.Set(host);
 
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(location),
+        host,
         Lsn,
         VChunkRange,
         Request->Sglist,
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
-        [self = shared_from_this(), location, span = std::move(span)]       //
+        [self = shared_from_this(), host, span = std::move(span)]           //
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
-            self->OnWriteResponse(location, f.GetValue(), std::move(span));
+            self->OnWriteResponse(host, f.GetValue(), std::move(span));
         });
 }
 
 void TBaseWriteRequestExecutor::OnWriteResponse(
-    ELocation location,
+    THostIndex host,
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
@@ -103,29 +103,23 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     }
 
     if (!HasError(response.Error)) {
-        CompletedWrites.Set(location);
+        CompletedWrites.Set(host);
         if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
             Reply(MakeError(S_OK));
         }
         return;
     }
 
-    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
+    const auto candidates =
+        VChunkConfig.PBufferHosts.GetHandOff().Exclude(RequestedWrites);
+    if (auto next = candidates.First()) {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor. Try first hand-off. %s",
+            "TBaseWriteRequestExecutor. Try hand-off. %s",
             FormatError(response.Error).c_str());
 
-        SendWriteRequest(ELocation::HOPBuffer0);
-    } else if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor. Try second hand-off. %s",
-            FormatError(response.Error).c_str());
-
-        SendWriteRequest(ELocation::HOPBuffer1);
+        SendWriteRequest(*next);
     } else {
         LOG_ERROR(
             *ActorSystem,
@@ -167,19 +161,15 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
     Reply(MakeError(E_TIMEOUT, "Write request timeout"));
 }
 
-TVector<ELocation>
-TBaseWriteRequestExecutor::GetAvailableHandOffLocations() const
+TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const
 {
-    TVector<ELocation> locations;
-    locations.reserve(2);
-    if (!RequestedWrites.Get(ELocation::HOPBuffer0)) {
-        locations.push_back(ELocation::HOPBuffer0);
+    TVector<THostIndex> hosts;
+    const auto candidates =
+        VChunkConfig.PBufferHosts.GetHandOff().Exclude(RequestedWrites);
+    for (auto h: candidates) {
+        hosts.push_back(h);
     }
-    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
-        locations.push_back(ELocation::HOPBuffer1);
-    }
-
-    return locations;
+    return hosts;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

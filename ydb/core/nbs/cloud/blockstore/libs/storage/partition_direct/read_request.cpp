@@ -62,11 +62,18 @@ void TReadRequestExecutor::Run()
 
     const auto& hint = ReadHint.RangeHints[0];
 
-    std::optional<ELocation> location =
-        hint.LocationMask.GetLocation(TryNumber);
-    if (!location) {
+    std::optional<THostIndex> host;
+    size_t skipped = 0;
+    for (auto h: hint.HostMask) {
+        if (skipped++ < TryNumber) {
+            continue;
+        }
+        host = h;
+        break;
+    }
+    if (!host) {
         TString error = TStringBuilder()
-                        << "Can't read. Mask:" << hint.LocationMask.Print()
+                        << "Can't read. Mask:" << hint.HostMask.Print()
                         << " try:" << TryNumber;
         LOG_ERROR(
             *ActorSystem,
@@ -79,11 +86,14 @@ void TReadRequestExecutor::Run()
         return;
     }
 
+    const bool fromDDisk = hint.FromDDisk;
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadRequestExecutor. Reading from location %s",
-        ToString(*location).c_str());
+        "TReadRequestExecutor. Reading from host %u (%s)",
+        static_cast<unsigned>(*host),
+        fromDDisk ? "DDisk" : "PBuffer");
 
     auto onReadResponse = [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
@@ -91,19 +101,19 @@ void TReadRequestExecutor::Run()
         self->OnReadResponse(f.GetValue());
     };
 
-    auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
-                                           VChunkConfig.VChunkIndex,
-                                           VChunkConfig.GetHostIndex(*location),
-                                           hint.VChunkRange,
-                                           Request->Sglist,
-                                           TraceId)
-                                     : DirectBlockGroup->ReadBlocksFromPBuffer(
-                                           VChunkConfig.VChunkIndex,
-                                           VChunkConfig.GetHostIndex(*location),
-                                           hint.Lsn,
-                                           hint.VChunkRange,
-                                           Request->Sglist,
-                                           TraceId);
+    auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
+                                  VChunkConfig.VChunkIndex,
+                                  *host,
+                                  hint.VChunkRange,
+                                  Request->Sglist,
+                                  TraceId)
+                            : DirectBlockGroup->ReadBlocksFromPBuffer(
+                                  VChunkConfig.VChunkIndex,
+                                  *host,
+                                  hint.Lsn,
+                                  hint.VChunkRange,
+                                  Request->Sglist,
+                                  TraceId);
     future.Subscribe(std::move(onReadResponse));
 }
 

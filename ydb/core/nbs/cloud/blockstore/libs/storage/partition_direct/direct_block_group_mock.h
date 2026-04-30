@@ -15,14 +15,14 @@ public:
     using TReadBlocksFromDDiskHandler =
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
-            ui8 hostIndex,
+            THostIndex hostIndex,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TReadBlocksFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
-            ui8 hostIndex,
+            THostIndex hostIndex,
             ui64 lsn,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
@@ -30,14 +30,14 @@ public:
     using TWriteBlocksToDDiskHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
-            ui8 hostIndex,
+            THostIndex hostIndex,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToPBufferHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
-            ui8 hostIndex,
+            THostIndex hostIndex,
             ui64 lsn,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
@@ -45,7 +45,7 @@ public:
     using TWriteBlocksToManyPBuffersHandler = std::function<
         NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>(
             ui32 vChunkIndex,
-            std::vector<ui8> hostIndexes,
+            TVector<THostIndex> hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
             TDuration replyTimeout,
@@ -54,21 +54,22 @@ public:
     using TSyncWithPBufferHandler =
         std::function<NThreading::TFuture<TDBGFlushResponse>(
             ui32 vChunkIndex,
-            ui8 pbufferHostIndex,
-            ui8 ddiskHostIndex,
+            THostIndex pbufferHostIndex,
+            THostIndex ddiskHostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
     using TEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
             ui32 vChunkIndex,
-            ui8 hostIndex,
+            THostIndex hostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
             ui32 vChunkIndex)>;
     using TListPBuffersHandler =
-        std::function<NThreading::TFuture<TListPBufferResponse>(ui8 hostIndex)>;
+        std::function<NThreading::TFuture<TListPBufferResponse>(
+            THostIndex hostIndex)>;
 
     TExecutorPtr Executor;
     TScheduleHandler ScheduleHandler;
@@ -94,14 +95,14 @@ public:
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -109,14 +110,14 @@ public:
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         ui64 lsn,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
@@ -125,7 +126,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
-        std::vector<ui8> hostIndexes,
+        TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -134,14 +135,14 @@ public:
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 pbufferHostIndex,   // source host
-        ui8 ddiskHostIndex,     // destination host
+        THostIndex pbufferHostIndex,   // source host
+        THostIndex ddiskHostIndex,     // destination host
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
+        THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
@@ -149,7 +150,7 @@ public:
         ui32 vChunkIndex) override;
 
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
-        ui8 hostIndex) override;
+        THostIndex hostIndex) override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

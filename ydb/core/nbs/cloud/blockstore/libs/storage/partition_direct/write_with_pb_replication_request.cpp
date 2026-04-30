@@ -41,8 +41,12 @@ void TWriteWithPbReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    SendWriteRequestToManyPBuffers(
-        {ELocation::PBuffer0, ELocation::PBuffer1, ELocation::PBuffer2});
+
+    TVector<THostIndex> primaries;
+    for (auto h: VChunkConfig.PBufferHosts.GetPrimary()) {
+        primaries.push_back(h);
+    }
+    SendWriteRequestToManyPBuffers(std::move(primaries));
 }
 
 void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
@@ -59,32 +63,37 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
                     TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
             {
                 if (!self->CompletedWrites.Count()) {
-                    self->SendWriteRequestToManyPBuffers(
-                        {ELocation::PBuffer2,
-                         ELocation::HOPBuffer0,
-                         ELocation::HOPBuffer1});
+                    TVector<THostIndex> secondWave;
+                    std::optional<THostIndex> lastPrimary;
+                    for (auto h: self->VChunkConfig.PBufferHosts.GetPrimary()) {
+                        lastPrimary = h;
+                    }
+                    if (lastPrimary) {
+                        secondWave.push_back(*lastPrimary);
+                    }
+                    for (auto h: self->VChunkConfig.PBufferHosts.GetHandOff()) {
+                        secondWave.push_back(h);
+                    }
+                    self->SendWriteRequestToManyPBuffers(std::move(secondWave));
                 }
             }
         });
 }
 
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
-    TVector<ELocation> locations)
+    TVector<THostIndex> hosts)
 {
     if (Promise.IsReady()) {
         return;
     }
 
-    TVector<ui8> hostsIndexes;
-    hostsIndexes.reserve(3);
-    for (auto location: locations) {
-        hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
-        RequestedWrites.Set(location);
+    for (auto h: hosts) {
+        RequestedWrites.Set(h);
     }
 
     auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
-        std::move(hostsIndexes),
+        std::move(hosts),
         Lsn,
         VChunkRange,
         PbufferReplyTimeout,
@@ -111,16 +120,26 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         // The error will be set and replied below.
     } else {
         for (const auto& pbufferResponse: response.Responses) {
-            auto location =
-                VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
+            const auto h = pbufferResponse.HostIndex;
+            if (h >= VChunkConfig.PBufferHosts.HostCount() ||
+                VChunkConfig.PBufferHosts.Get(h) == EHostStatus::Disabled)
+            {
+                LOG_WARN(
+                    *ActorSystem,
+                    NKikimrServices::NBS_PARTITION,
+                    "OnWriteToManyPBuffersResponse: response for unknown or "
+                    "disabled host %u",
+                    static_cast<unsigned>(h));
+                continue;
+            }
             if (!HasError(pbufferResponse.Error)) {
-                CompletedWrites.Set(location);
+                CompletedWrites.Set(h);
             } else {
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse error on location %d: %s",
-                    location,
+                    "OnWriteToManyPBuffersResponse error on host %u: %s",
+                    static_cast<unsigned>(h),
                     FormatError(pbufferResponse.Error).c_str());
             }
         }
@@ -131,8 +150,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
-    if (CompletedWrites.Count() + availableHandOffLocations.size() <
+    const auto availableHandOffHosts = GetAvailableHandOffHosts();
+    if (CompletedWrites.Count() + availableHandOffHosts.size() <
         QuorumDirectBlockGroupHostCount)
     {
         auto resultError =
@@ -155,10 +174,10 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "trying to send fallback writeRequest to %d handoff",
+            "trying to send fallback writeRequest to %zu handoff",
             i);
 
-        SendWriteRequest(availableHandOffLocations[i]);
+        SendWriteRequest(availableHandOffHosts[i]);
     }
 }
 

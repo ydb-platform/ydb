@@ -46,12 +46,19 @@ TVChunk::TVChunk(
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
+    , DDiskReadable(VChunkConfig.DDiskHosts.GetActive())
+    , DDiskFlushTargets(VChunkConfig.DDiskHosts.GetPrimary())
+    , PBufferActive(VChunkConfig.PBufferHosts.GetActive())
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHedgingDelay(writeHedgingDelay)
     , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
+    , BlocksDirtyMap(
+          BlockSize,
+          BlocksCount,
+          VChunkConfig.PBufferHosts.HostCount())
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
@@ -220,12 +227,14 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto pbuffersMap = VChunkConfig.GetPBuffersMap();
     for (const auto& meta: response.Meta) {
-        BlocksDirtyMap.RestorePBuffer(
-            meta.Lsn,
-            meta.Range,
-            pbuffersMap[meta.HostIndex]);
+        if (meta.HostIndex >= MaxHostCount) {
+            continue;
+        }
+        if (!PBufferActive.Test(meta.HostIndex)) {
+            continue;
+        }
+        BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
     DirtyMapRestored = true;
 
@@ -272,7 +281,10 @@ void TVChunk::DoReadBlocksLocal(
             "TVChunk.DirtyMap.ReadHint",
             NWilson::EFlags::AUTO_END);
 
-        readHint = BlocksDirtyMap.MakeReadHint(vchunkRange);
+        readHint = BlocksDirtyMap.MakeReadHint(
+            vchunkRange,
+            DDiskReadable,
+            PBufferActive);
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -312,9 +324,10 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
+    const auto& cfg = VChunkConfig;
     auto requestExecutor = std::make_shared<TReadRequestExecutor>(
         ActorSystem,
-        VChunkConfig,
+        cfg,
         DirectBlockGroup,
         std::move(readHint),
         std::move(callContext),
@@ -358,13 +371,14 @@ void TVChunk::DoWriteBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    const auto& cfg = VChunkConfig;
     std::shared_ptr<TBaseWriteRequestExecutor> writeExecutor;
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
             writeExecutor =
                 std::make_shared<TWriteWithPbReplicationRequestExecutor>(
                     ActorSystem,
-                    VChunkConfig,
+                    cfg,
                     DirectBlockGroup,
                     vchunkRange,
                     std::move(callContext),
@@ -379,7 +393,7 @@ void TVChunk::DoWriteBlocksLocal(
             writeExecutor =
                 std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                     ActorSystem,
-                    VChunkConfig,
+                    cfg,
                     DirectBlockGroup,
                     vchunkRange,
                     std::move(callContext),
@@ -452,12 +466,14 @@ void TVChunk::DoFlush()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto flushBatch = BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize);
+    auto flushBatch =
+        BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize, DDiskFlushTargets);
 
+    const auto& cfg = VChunkConfig;
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {
         auto flushExecutor = std::make_shared<TFlushRequestExecutor>(
             ActorSystem,
-            VChunkConfig,
+            cfg,
             DirectBlockGroup,
             route,
             std::move(hint),
@@ -502,16 +518,16 @@ void TVChunk::DoErase()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto hints = BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize);
+    auto hints =
+        BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize, PBufferActive);
 
-    for (auto& [location, hint]: hints.TakeAllHints()) {
-        Y_ABORT_UNLESS(IsPBuffer(location));
-
+    const auto& cfg = VChunkConfig;
+    for (auto& [host, hint]: hints.TakeAllHints()) {
         auto eraseExecutor = std::make_shared<TEraseRequestExecutor>(
             ActorSystem,
-            VChunkConfig,
+            cfg,
             DirectBlockGroup,
-            location,
+            host,
             std::move(hint),
             PartitionDirectService->CreteRootSpan("Erase"));
 
@@ -535,7 +551,7 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     BlocksDirtyMap.EraseFinished(
-        response.Location,
+        response.Host,
         response.EraseOk,
         response.EraseFailed);
 

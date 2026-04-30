@@ -14,10 +14,8 @@ public:
         return TRangeLock(lockableRanges, lsn);
     }
 
-    static TRangeLock Make(
-        ILockableRanges* lockableRanges,
-        TBlockRange64 range,
-        TLocationMask mask)
+    static TRangeLock
+    Make(ILockableRanges* lockableRanges, TBlockRange64 range, THostMask mask)
     {
         return TRangeLock(lockableRanges, range, mask);
     }
@@ -43,7 +41,7 @@ public:
 
     TLockRangeHandle LockDDiskRange(
         TBlockRange64 range,
-        TLocationMask mask) override
+        THostMask mask) override
     {
         Y_UNUSED(range);
         Y_UNUSED(mask);
@@ -75,7 +73,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestNotArmed)
     {
         TMockLockableRanges mock;
-        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+        THostMask mask = THostMask::MakeAll(3);
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 123);
@@ -109,7 +107,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestRangeLockConstructor)
     {
         TMockLockableRanges mock;
-        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+        THostMask mask = THostMask::MakeAll(3);
 
         {
             TRangeLock lock = TRangeLockAccess::Make(
@@ -129,7 +127,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestMoveConstructor)
     {
         TMockLockableRanges mock;
-        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+        THostMask mask = THostMask::MakeAll(3);
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
@@ -156,7 +154,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestMoveAssignment)
     {
         TMockLockableRanges mock;
-        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+        THostMask mask = THostMask::MakeAll(3);
 
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
@@ -185,7 +183,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
     Y_UNIT_TEST(TestDoubleArm)
     {
         TMockLockableRanges mock;
-        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
+        THostMask mask = THostMask::MakeAll(3);
 
         TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
         TRangeLock lock2 = TRangeLockAccess::Make(

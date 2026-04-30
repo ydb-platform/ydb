@@ -104,7 +104,7 @@ void TInMemoryDirectBlockGroup::EstablishConnections()
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
@@ -173,8 +173,8 @@ TInMemoryDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGFlushResponse>
 TInMemoryDirectBlockGroup::SyncWithPBuffer(
     ui32 vChunkIndex,
-    ui8 pbufferHostIndex,
-    ui8 ddiskHostIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
@@ -195,7 +195,7 @@ TInMemoryDirectBlockGroup::SyncWithPBuffer(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& sglist,
@@ -221,7 +221,7 @@ TInMemoryDirectBlockGroup::ReadBlocksFromPBuffer(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TInMemoryDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& sglist,
     const NWilson::TTraceId& traceId)

@@ -29,7 +29,7 @@ public:
 private:
     const TDuration PbufferReplyTimeout;
 
-    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
+    void SendWriteRequestToManyPBuffers(TVector<THostIndex> hosts);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
 

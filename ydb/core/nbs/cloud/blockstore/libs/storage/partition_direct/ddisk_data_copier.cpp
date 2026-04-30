@@ -50,7 +50,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     IPartitionDirectServicePtr partitionDirectService,
     IDirectBlockGroupPtr directBlockGroup,
     TBlocksDirtyMap* dirtyMap,
-    ELocation destination)
+    THostIndex destination)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
@@ -59,7 +59,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     , Destination(destination)
     , DirtyMap(dirtyMap)
 {
-    Y_ASSERT(IsDDisk(Destination));
+    Y_ASSERT(Destination < VChunkConfig.DDiskHosts.HostCount());
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
@@ -141,12 +141,15 @@ void TDDiskDataCopier::StartCopyRange()
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         range,
-        TRangeLock(DirtyMap, range, TLocationMask::MakeOne(Destination)),
+        TRangeLock(DirtyMap, range, THostMask::MakeOne(Destination)),
         CreateSpan());
 
     DirtyMap->SetFlushWatermark(Destination, futureWatermark);
 
-    auto readHint = DirtyMap->MakeReadHint(range);
+    auto readHint = DirtyMap->MakeReadHint(
+        range,
+        VChunkConfig.DDiskHosts.GetActive(),
+        VChunkConfig.PBufferHosts.GetActive());
     Y_ABORT_UNLESS(!readHint.RangeHints.empty());
 
     const ui64 requestId = Random();
@@ -202,7 +205,7 @@ void TDDiskDataCopier::OnRangeRead(
 
     auto writeFuture = DirectBlockGroup->WriteBlocksToDDisk(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Destination),
+        Destination,
         copyRangeState->Range,
         copyRangeState->GetSgList(),
         NWilson::TTraceId());

@@ -1838,6 +1838,141 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
     }
 
+    // Verify migration: when EnableLocalIndexAsSchemeObject is turned on and SchemeShard
+    // restarts, existing column table local indexes get scheme objects created automatically
+    // by the LocalIndexMigrator actor running standard schema operations.
+    // Tests both CREATE TABLE inline indexes and ALTER TABLE added indexes.
+    Y_UNIT_TEST(LocalIndexMigration) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        // Start with flag=false: no scheme objects created
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+        ui64 txId = 100;
+
+        // Table 1: index created via inline schema in CREATE TABLE
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableCreate"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Table 2: indexes created via ALTER TABLE
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableAlter"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_data", "data", 0.05));
+        env.TestWaitNotification(runtime, txId);
+
+        // Before migration: no scheme object children on either table
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        // Enable flag and restart SchemeShard to trigger migrator actor
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // The migrator runs schema operations asynchronously; allow time for
+        // TEvAllocateTxId / TEvModifySchemeTransaction / TEvNotifyTxCompletion round-trips.
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // After migration: inline-created index appears as scheme object
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_key");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableCreate/bloom_key");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"key"}),
+            });
+        }
+
+        // After migration: ALTER-created index appears as scheme object
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            const auto& children = descr.GetPathDescription().GetChildren();
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
+            UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableAlter/bloom_data");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"data"}),
+            });
+        }
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects)
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+        }
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+        }
+
+        // Drop a migrated index via ALTER, verify scheme object is removed
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "MigrationTableCreate"
+            AlterSchema {
+                DropIndexes: ["bloom_key"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+    }
+
     // Test orphaned index scheme object cleanup: when scheme object children exist
     // but their corresponding indexes are removed from the column table schema,
     // they should be cleaned up during initialization.

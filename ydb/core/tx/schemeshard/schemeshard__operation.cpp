@@ -1385,7 +1385,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
         return CreateIndexedTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
-        Y_ABORT("is handled as part of ESchemeOpCreateIndexedTable");
+        return {CreateNewLocalIndex(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
         Y_ABORT("is handled as part of ESchemeOpDropTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:

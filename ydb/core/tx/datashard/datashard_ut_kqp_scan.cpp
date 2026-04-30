@@ -7,6 +7,8 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/blobstorage.h>
 
+#include <limits>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -890,6 +892,67 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(*status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(*result, 596400);
+    }
+
+    Y_UNIT_TEST(ScanInvalidSnapshot) {
+        NKikimrConfig::TAppConfig appCfg;
+
+        auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+        rm->SetChannelBufferSize(100);
+        rm->SetMinChannelBufferSize(100);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetAppConfig(appCfg)
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, FillTableQuery());
+
+        bool injected = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!injected && ev->GetTypeRewrite() == TEvDataShard::EvKqpScan) {
+                auto& request = ev->Get<TEvDataShard::TEvKqpScan>()->Record;
+                auto* snapshot = request.MutableSnapshot();
+                // set invalid snapshot
+                snapshot->SetStep(std::numeric_limits<ui64>::max());
+                snapshot->SetTxId(0);
+                injected = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto streamSender = runtime.AllocateEdgeActor();
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT value FROM `/Root/table-1`;", false));
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        auto& record = ev->Get()->Record;
+
+        UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+
+        bool hasIssue = false;
+        for (const auto& issueMsg : record.GetResponse().GetQueryIssues()) {
+            if (issueMsg.issue_code() == (ui32)NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
+                hasIssue = true;
+                break;
+            }
+            for (const auto& subIssue : issueMsg.issues()) {
+                if (subIssue.issue_code() == (ui32)NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED) {
+                    hasIssue = true;
+                    break;
+                }
+            }
+            if (hasIssue) {
+                break;
+            }
+        }
+        UNIT_ASSERT(hasIssue);
     }
 
     Y_UNIT_TEST(ScanPg) {

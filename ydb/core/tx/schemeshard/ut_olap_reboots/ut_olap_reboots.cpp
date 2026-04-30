@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -747,25 +748,10 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                     UNIT_ASSERT_C(foundNgramData, "ngram_data must be visible under column table after reboots");
                 }
 
-                {
-                    auto descr = DescribePrivatePath(runtime, "/MyRoot/BloomRebootTable/bloom_key");
-                    TestDescribeResult(descr, {
-                        NLs::PathExist,
-                        NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                        NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                        NLs::IndexKeys({"key"}),
-                    });
-                }
-
-                {
-                    auto descr = DescribePrivatePath(runtime, "/MyRoot/BloomRebootTable/ngram_data");
-                    TestDescribeResult(descr, {
-                        NLs::PathExist,
-                        NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-                        NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                        NLs::IndexKeys({"data"}),
-                    });
-                }
+                NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/BloomRebootTable", "bloom_key",
+                    NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+                NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/BloomRebootTable", "ngram_data",
+                    NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
             }
         });
     }

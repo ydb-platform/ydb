@@ -695,14 +695,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
                     {NLs::PathExist, NLs::ChildrenCount(2)});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableDst"),
-                    {NLs::PathExist, NLs::ChildrenCount(2)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableDst/idx_bloom"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableDst/idx_ngram"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableDst");
             }
         });
     }

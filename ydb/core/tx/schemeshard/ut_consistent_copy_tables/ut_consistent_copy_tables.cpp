@@ -292,23 +292,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // 3. Verify the copied table exists
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy"),
-                          {NLs::PathExist});
-
-        // 4. Verify both local bloom indexes exist as scheme objects
-        auto bloomIndexDesc = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy/idx_bloom", true, true);
-        UNIT_ASSERT(bloomIndexDesc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(bloomIndexDesc.GetPathDescription().GetTableIndex().GetType(),
-                                NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
-        UNIT_ASSERT_VALUES_EQUAL(bloomIndexDesc.GetPathDescription().GetTableIndex().GetState(),
-                                NKikimrSchemeOp::EIndexStateReady);
-
-        auto ngramIndexDesc = DescribePrivatePath(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy/idx_ngram", true, true);
-        UNIT_ASSERT(ngramIndexDesc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(ngramIndexDesc.GetPathDescription().GetTableIndex().GetType(),
-                                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
-        UNIT_ASSERT_VALUES_EQUAL(ngramIndexDesc.GetPathDescription().GetTableIndex().GetState(),
-                                NKikimrSchemeOp::EIndexStateReady);
+        // 3. Verify the copied table and both bloom indexes are ready scheme objects
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
     }
 }

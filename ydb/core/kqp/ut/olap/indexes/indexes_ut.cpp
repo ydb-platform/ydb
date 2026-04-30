@@ -160,7 +160,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         EXPECTED: [[["{\"min\":\"x\",\"max\":\"x\"}"]]]
     )";
     Y_UNIT_TEST(ChunkDetailsMinMax) {
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
     }
 
 

@@ -2673,7 +2673,14 @@ public:
         // No need to acquire SpinLock here.
         auto startImmediatelyCount = CurrentIndex_;
 
-        for (int index = 0; index < startImmediatelyCount; ++index) {
+        RunCallback(0);
+        for (int index = 1; index < startImmediatelyCount; ++index) {
+            {
+                auto guard = Guard(SpinLock_);
+                if (Error_) {
+                    break;
+                }
+            }
             RunCallback(index);
         }
 

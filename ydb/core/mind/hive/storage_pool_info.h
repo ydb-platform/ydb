@@ -19,6 +19,20 @@ struct TStoragePoolInfo {
         double Scatter = 0;
     };
 
+    struct THistoryEntry {
+        TTabletId Tablet;
+        ui32 Channel;
+        ui32 Generation;
+
+        std::strong_ordering operator<=>(const THistoryEntry& other) const = default;
+    };
+
+    struct THistoryHash {
+        size_t operator ()(const THistoryEntry& a) const {
+            return hash_combiner::hash_val(a.Tablet, a.Channel, a.Generation);
+        }
+    };
+
     THiveSharedSettings* Settings;
 
     NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy GetBalanceStrategy() const {
@@ -58,6 +72,8 @@ struct TStoragePoolInfo {
     ui32 RefreshRequestInFlight = 0;
     TVector<TStorageGroupId> InactiveGroups;
     ui64 ConsoleVersion = 0;
+    THashSet<THistoryEntry, THistoryHash> RemainingHistory;
+    bool NeedShrinkFromTenant = false;
 
     TStoragePoolInfo(const TString& name, THiveSharedSettings* hive);
     TStoragePoolInfo(const TStoragePoolInfo&) = delete;

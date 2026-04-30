@@ -660,6 +660,7 @@ namespace NFlatExecutorSetup {
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 
         virtual void StartVacuum(ui64 vacuumGeneration) = 0;
+        virtual void ForceCompaction(TEvTablet::TEvCompactTables::TPtr&) = 0;
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

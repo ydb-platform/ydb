@@ -3901,6 +3901,14 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     Owner->CompactionComplete(tableId, OwnerCtx());
+    for (auto it = CompactionWaiters.begin(); it != CompactionWaiters.end();) {
+        auto nextIt = std::next(it);
+        if (--it->second == 0) {
+            Send(it->first, new TEvTablet::TEvCompactTablesResponse(TabletId()));
+            CompactionWaiters.erase(it);
+        }
+        it = nextIt;
+    }
     MaybeRelaxRejectProbability();
 
     activeTransaction.Done();
@@ -5300,6 +5308,11 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
     Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_BYTES_WRITTEN].Increment(msg->BytesWritten);
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->FlushLatency.MicroSeconds());
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
+}
+
+void TExecutor::ForceCompaction(TEvTablet::TEvCompactTables::TPtr& ev) {
+    CompactTables();
+    CompactionWaiters[ev->Sender] = Database->GetScheme().Tables.size();
 }
 
 }

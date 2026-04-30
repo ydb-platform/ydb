@@ -512,6 +512,8 @@ class TExecutor
     TControlWrapper MaxCommitRedoMB;
     TControlWrapper MaxTxInFly;
 
+    THashMap<TActorId, ui64> CompactionWaiters; // actor -> waiting for x table compactions
+
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
@@ -705,6 +707,7 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
+    void ForceCompaction(TEvTablet::TEvCompactTables::TPtr &ev) override;
 
     void StartVacuum(ui64 vacuumGeneration) override;
 

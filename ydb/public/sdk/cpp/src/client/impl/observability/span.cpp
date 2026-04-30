@@ -248,7 +248,7 @@ void TRequestSpan::End(EStatus status) noexcept {
             if (status != EStatus::SUCCESS) {
                 const auto errorType = CategorizeErrorType(status);
                 Span_->SetAttribute("error.type", std::string(errorType));
-                EmitExceptionEvent(*Span_, statusName, statusName, /*stacktrace=*/"");
+                EmitExceptionEvent(*Span_, std::string(errorType), statusName, /*stacktrace=*/"");
                 Span_->SetStatus(NTrace::ESpanStatus::Error, statusName);
             }
             Span_->End();

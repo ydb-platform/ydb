@@ -47,6 +47,13 @@ public:
         return std::make_unique<TFakeScope>();
     }
 
+    void SetStatus(NTrace::ESpanStatus status, const std::string& description) override {
+        std::lock_guard lock(Mutex_);
+        StatusSet_ = true;
+        Status_ = status;
+        StatusDescription_ = description;
+    }
+
     bool IsEnded() const {
         std::lock_guard lock(Mutex_);
         return Ended_;
@@ -55,6 +62,21 @@ public:
     bool IsActivated() const {
         std::lock_guard lock(Mutex_);
         return Activated_;
+    }
+
+    bool IsStatusSet() const {
+        std::lock_guard lock(Mutex_);
+        return StatusSet_;
+    }
+
+    NTrace::ESpanStatus GetStatus() const {
+        std::lock_guard lock(Mutex_);
+        return Status_;
+    }
+
+    std::string GetStatusDescription() const {
+        std::lock_guard lock(Mutex_);
+        return StatusDescription_;
     }
 
     std::string GetStringAttribute(const std::string& key) const {
@@ -88,6 +110,9 @@ private:
     mutable std::mutex Mutex_;
     bool Ended_ = false;
     bool Activated_ = false;
+    bool StatusSet_ = false;
+    NTrace::ESpanStatus Status_ = NTrace::ESpanStatus::Unset;
+    std::string StatusDescription_;
     std::map<std::string, std::string> StringAttributes_;
     std::map<std::string, int64_t> IntAttributes_;
     std::vector<TFakeEvent> Events_;

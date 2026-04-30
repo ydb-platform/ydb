@@ -378,7 +378,7 @@ TEST_P(SpanTest, ErrorStatusAddsExceptionEvent) {
     for (const auto& event : events) {
         if (event.Name == "exception") {
             found = true;
-            EXPECT_EQ(event.Attributes.at("exception.type"), "UNAVAILABLE");
+            EXPECT_EQ(event.Attributes.at("exception.type"), "ydb_error");
             EXPECT_EQ(event.Attributes.at("exception.message"), "UNAVAILABLE");
         }
     }
@@ -395,6 +395,29 @@ TEST_P(SpanTest, SuccessStatusNoExceptionEvent) {
     for (const auto& event : fakeSpan->GetEvents()) {
         EXPECT_NE(event.Name, "exception");
     }
+}
+
+TEST_P(SpanTest, ErrorStatusSetsSpanStatusError) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "localhost:2135");
+    span->End(EStatus::UNAVAILABLE);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_TRUE(fakeSpan->IsStatusSet());
+    EXPECT_EQ(fakeSpan->GetStatus(), NTrace::ESpanStatus::Error);
+    EXPECT_EQ(fakeSpan->GetStatusDescription(), "UNAVAILABLE");
+}
+
+TEST_P(SpanTest, SuccessStatusDoesNotSetSpanStatus) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.CommitOp, "localhost:2135");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_FALSE(fakeSpan->IsStatusSet());
+    EXPECT_EQ(fakeSpan->GetStatus(), NTrace::ESpanStatus::Unset);
 }
 
 TEST_P(SpanTest, RecordExceptionEmitsEvent) {

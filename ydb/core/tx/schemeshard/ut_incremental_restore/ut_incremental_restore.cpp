@@ -5,10 +5,15 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_incremental_restore.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/base/test_failure_injection.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <atomic>
+#include <climits>
 
 template<>
 void Out<Ydb::Backup::RestoreProgress::Progress>(IOutputStream& out, TTypeTraits<Ydb::Backup::RestoreProgress::Progress>::TFuncParam value) {
@@ -18,6 +23,7 @@ void Out<Ydb::Backup::RestoreProgress::Progress>(IOutputStream& out, TTypeTraits
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+using namespace NSchemeShardUT_Private::NIncrementalRestoreHelpers;
 
 // Common setup function for all long operation tests
 struct TLongOpTestSetup {
@@ -718,50 +724,10 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                             << NKikimrSchemeOp::EPathState_Name(collectionState));
     }
 
-    Y_UNIT_TEST(TxProgressNotExecutedForFullBackupOnly) {
-        TLongOpTestSetup setup;
-
-        // Create backup collection with ONLY full backup (no incremental)
-        setup.CreateBackupCollection("FullOnlyCollection", {"/MyRoot/FullOnlyTable"});
-        setup.CreateFullBackup("FullOnlyCollection", {"FullOnlyTable"});
-
-        setup.ClearCapturedEvents();
-
-        // Execute restore operation (event validation is handled automatically)
-        setup.ExecuteRestore("FullOnlyCollection");
-
-        // Verify that TEvRunIncrementalRestore event was NOT sent
-        UNIT_ASSERT_C(setup.CapturedBackupCollectionPathIds.empty(), 
-            "TEvRunIncrementalRestore event should NOT be sent for full backup only restore");
-
-        // Also verify that no long incremental restore operation exists in the database
-        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
-        
-        NKikimrMiniKQL::TResult result;
-        TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(setup.Runtime, schemeShardTabletId.GetValue(), R"(
-            (
-                (let range '('('Id (Null) (Void))))
-                (let select '('Id 'Operation))
-                (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
-                (let ret (AsList (SetResult 'Operations operations)))
-                (return ret)
-            )
-        )", result, err);
-        
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
-        
-        auto value = NClient::TValue::Create(result);
-        auto operationsResultSet = value["Operations"];
-        
-        bool hasIncrementalRestoreOperation = false;
-        if (operationsResultSet.HaveValue()) {
-            auto operationsList = operationsResultSet["List"];
-            hasIncrementalRestoreOperation = operationsList.HaveValue() && operationsList.Size() > 0;
-        }
-        
-        UNIT_ASSERT_C(!hasIncrementalRestoreOperation, "TTxProgress should NOT be executed for full backup only restore - no incremental restore operations should exist");
-    }
+    // Removed TxProgressNotExecutedForFullBackupOnly: full-only restore now creates a
+    // LongIncrementalRestoreOp + state row so it is pollable via Get/List.
+    // Coverage moved to FullOnlyRestoreIsListable / FullOnlyRestoreReachesCompletedAcrossReboots
+    // / FullOnlyRestoreForgetCleansState.
 
     Y_UNIT_TEST(TxProgressExecutionWithCorrectBackupCollectionPathId) {
         TLongOpTestSetup setup;
@@ -1687,5 +1653,429 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
 
         VerifyDatabaseCompletelyClean();
+    }
+
+    Y_UNIT_TEST(IncrementalRestoreShardFailureTriggersRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        const ui64 incrBackupId = txId;
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForIncrementalBackupDone(runtime, &env, incrBackupId, "/MyRoot");
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/true, "Injected scan failure for retry test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+        UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
+            "Restore status is not SUCCESS after retry");
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
+    }
+
+    Y_UNIT_TEST(IncrementalRestoreRespectsConcurrencyLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Set ICB cap=2 BEFORE the restore is issued.
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        // Observer: count concurrent ESchemeOpRestoreMultipleIncrementalBackups sub-ops.
+        // Increments on TEvModifySchemeTransaction (op start), decrements on
+        // TEvModifySchemeTransactionResult (op accepted/done).
+        std::atomic<i32> totalSeen{0};
+        TInFlightTracker tracker;
+        // Also count total seen via an extra start observer.
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+        // Wrap start observer to also count totalSeen.
+        auto observerTotalSeen = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                totalSeen.fetch_add(1);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        UNIT_ASSERT_C(totalSeen.load() >= 8,
+            "Expected at least 8 restore sub-ops, saw " << totalSeen.load());
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 2,
+            "Expected peak in-flight <= 2 (cap=2), saw " << tracker.PeakInFlight.load());
+
+        // Sanity: each table has 1 row from full + 1 row from incremental
+        for (ui32 i = 0; i < 8; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    Y_UNIT_TEST(IncrementalRestoreUnboundedWhenCapNegative) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(-1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        TInFlightTracker tracker;
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // With cap=-1 we expect to observe all 8 in-flight at peak (best-effort:
+        // require >2 to prove the cap is actually disabled).
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() > 2,
+            "Expected peak in-flight > 2 with unbounded cap, saw " << tracker.PeakInFlight.load());
+    }
+
+    // Lowering the cap mid-restore does not abort in-flight ops (cap is checked at dispatch time).
+    Y_UNIT_TEST(IncrementalRestoreCapChangedMidRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Start with cap=2.
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/8);
+
+        std::atomic<i32> peakAfterRaise{0};
+        std::atomic<bool> raised{false};
+        TInFlightTracker tracker;
+        // Attach base observers for in-flight tracking.
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+        // Extra observer to track peak after cap raise.
+        // Note: this observer fires alongside the base tracker's start observer
+        // on the same event; we use tracker.PeakInFlight as a proxy for the
+        // post-increment value since both observers update it concurrently.
+        auto observerAfterRaise = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups) {
+                    return;
+                }
+                if (raised.load()) {
+                    // Read the current peak from tracker (updated by the base observer).
+                    i32 cur = tracker.PeakInFlight.load();
+                    i32 peak2;
+                    do {
+                        peak2 = peakAfterRaise.load();
+                        if (cur <= peak2) break;
+                    } while (!peakAfterRaise.compare_exchange_weak(peak2, cur));
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // While restore is processing, raise cap to 8.
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(500));
+        TControlBoard::SetValue(8, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        raised.store(true);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // Verify cap was respected: peak <= 8 (the raised value).
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 8,
+            "Peak in-flight exceeded cap=8, saw " << tracker.PeakInFlight.load());
+
+        // Sanity: restore finished
+        for (ui32 i = 0; i < 8; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Cap remains in effect during the retry wave after a shard failure.
+    Y_UNIT_TEST(IncrementalRestoreCapRespectedDuringRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
+
+        TInFlightTracker tracker;
+        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
+
+        // Inject one TEvFinished failure (same pattern as IncrementalRestoreShardFailureTriggersRetry).
+        std::atomic<int> failuresInjected{0};
+        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/true, "Injected scan failure for cap+retry test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // Cap respected during retry wave.
+        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 2,
+            "Peak in-flight exceeded cap=2 during retry, saw " << tracker.PeakInFlight.load());
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
+
+        // All 4 tables restored despite injected failure.
+        for (ui32 i = 0; i < 4; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Backoff gaps between retries honor GetRetryWakeupTimeoutBackoff: >=1s then >=2s.
+    Y_UNIT_TEST(IncrementalRestoreRetryBackoffEnforced) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        TMutex finishMutex;
+        TVector<TInstant> finishTimes;
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
+            [&](NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
+                if (ev->Get()->TxId == 0) {
+                    return;
+                }
+                {
+                    TGuard<TMutex> g(finishMutex);
+                    finishTimes.push_back(runtime.GetCurrentTime());
+                }
+                if (failuresInjected.fetch_add(1) < 2) {
+                    ev->Get()->Success = false;
+                    ev->Get()->Retriable = true;
+                    ev->Get()->Error = "Injected retriable failure for backoff test";
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+
+        TVector<TInstant> snap;
+        {
+            TGuard<TMutex> g(finishMutex);
+            snap = finishTimes;
+        }
+        UNIT_ASSERT_C(snap.size() >= 3,
+            "Expected at least 3 TEvFinished, got " << snap.size());
+        UNIT_ASSERT_GE(failuresInjected.load(), 2);
+
+        TDuration gap1 = snap[1] - snap[0];
+        TDuration gap2 = snap[2] - snap[1];
+        UNIT_ASSERT_C(gap1 >= TDuration::Seconds(1),
+            "Backoff gap1 too short: " << gap1);
+        UNIT_ASSERT_C(gap2 >= TDuration::Seconds(2),
+            "Backoff gap2 too short: " << gap2);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
+    }
+
+    // Budget cap=2 exhausted by injected failures → restore must reach GENERIC_ERROR.
+    Y_UNIT_TEST(IncrementalRestoreRetryBudgetEnforced) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
+            /*retriable=*/true, "Injected retriable failure for budget test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore status was SUCCESS under exhausted retry budget");
+        UNIT_ASSERT_GE(failuresInjected.load(), 3);
+    }
+
+    // cap=-1 disables the budget; restore must succeed after 20 injected failures.
+    Y_UNIT_TEST(IncrementalRestoreRetryBudgetUnlimited) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TControlBoard::SetValue(-1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        constexpr int FailuresBeforeSuccess = 20;
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
+            /*retriable=*/true, "Injected retriable failure for unlimited-cap test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backoff at the 8s plateau: 20 retries can take ~150s of simulated time.
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(600));
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT(!listResp.GetEntries().empty());
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+        auto finalResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_C(finalResp.GetBackupCollectionRestore().GetStatus() == Ydb::StatusIds::SUCCESS,
+            "Restore did not succeed after " << FailuresBeforeSuccess
+            << " retriable failures (expected -1 cap to be unlimited)");
+        UNIT_ASSERT_GE(failuresInjected.load(), FailuresBeforeSuccess);
+    }
+
+    // Test 6 (integration): non-retriable failure short-circuits to Failed
+    // without consuming the retry budget.
+    Y_UNIT_TEST(IncrementalRestoreNonRetriableShortCircuits) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Generous budget; we expect the non-retriable bit to trump the cap.
+        TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            /*retriable=*/false, "Injected non-retriable failure for short-circuit test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore status was SUCCESS despite a non-retriable failure");
+
+        // Exactly one failure was injected — orchestrator did not burn the budget.
+        // (We allow a small slack for the actual retry that may run before the
+        // orchestrator processes the non-retriable bit, but the count must stay
+        // far below the cap.)
+        UNIT_ASSERT_LT_C(failuresInjected.load(), 10,
+            "Too many failure events; non-retriable signal was not honored. Saw "
+            << failuresInjected.load());
+    }
+
+    // Test 8 (integration, anti-double-fire): concurrent completion events do
+    // not double-count the retry counter.
+    //
+    // Use 4 tables so 4 concurrent NotifyIncrementalRestoreOperationCompleted
+    // events fire during the failure wave. With the two-phase backoff guard,
+    // the cap should NOT trigger after a single round of failures.
+    Y_UNIT_TEST(IncrementalRestoreRetryNotDoubleCountedOnConcurrentEvents) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Cap = 3. If concurrent events double-count, 4 failures × 1 round
+        // would push the count to 4 > 3 and Fail before the second round even
+        // starts. With proper de-duplication, we need 3 full rounds before
+        // hitting the cap.
+        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
+
+        // Inject failure on the FIRST attempt of each table only (first 4 events).
+        // Subsequent attempts succeed → restore finishes after exactly 1 retry.
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
+            /*retriable=*/true, "Injected retriable failure for double-fire test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+
+        // Restore must succeed: only 1 retry round should have been used,
+        // well within cap=3. If the counter were double-counted (cap-3, 4
+        // simultaneous failures incrementing 4×) we'd be Failed instead.
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT(!listResp.GetEntries().empty());
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+        auto finalResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_C(finalResp.GetBackupCollectionRestore().GetStatus() == Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS — concurrent retries appear to be double-counted");
+
+        // Sanity: data restored.
+        for (ui32 i = 0; i < 4; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
     }
 }

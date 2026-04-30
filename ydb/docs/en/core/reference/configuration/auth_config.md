@@ -168,16 +168,15 @@ auth_config:
     bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
     bind_password: "serviceAccauntPassword"
     search_filter: "uid=$username"
+    scheme: "ldap"
+    requested_group_attribute: "memberOf"
+    extended_settings:
+      enable_nested_groups_search: true
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
   ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
   refresh_time: "1h"
   #...
 ```

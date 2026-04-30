@@ -1028,6 +1028,13 @@ namespace {
                         "INCREMENTAL_BACKUP_ENABLED must be true or false"));
                     return false;
                 }
+            } else if (name == "omit_indexes") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.OmitIndexes)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "OMIT_INDEXES must be true or false"));
+                    return false;
+                }
             } else if (name == "storage") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) != "cluster") {

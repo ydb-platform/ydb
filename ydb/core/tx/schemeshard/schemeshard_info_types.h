@@ -414,6 +414,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         bool IsBackup = false;
         bool IsRestore = false;
 
+        // Coordinated schema version for backup operations.
+        // Set once by first subop that touches this AlterData via InitAlterData(opId).
+        // All related operations use this pre-agreed version.
+        // When all users release (CoordinatedVersionUsers becomes empty), AlterData is cleaned up.
+        TMaybe<ui64> CoordinatedSchemaVersion;
+        THashSet<TOperationId> CoordinatedVersionUsers;
+
         NKikimrSchemeOp::TTableDescription TableDescriptionDiff;
         TMaybeFail<NKikimrSchemeOp::TTableDescription> TableDescriptionFull;
 
@@ -642,12 +649,50 @@ public:
     }
 
 
+    // InitAlterData without tracking - for loading persisted state (init.cpp)
     void InitAlterData() {
         if (!AlterData) {
             AlterData = new TTableInfo::TAlterTableInfo;
-            AlterData->AlterVersion = AlterVersion + 1; // calc next AlterVersion
+            AlterData->AlterVersion = AlterVersion + 1;
             AlterData->NextColumnId = NextColumnId;
         }
+    }
+
+    // InitAlterData with tracking - for coordinated versioning operations.
+    // Tracks which operations are using this AlterData. When all release, it's cleaned up.
+    // Also ensures CoordinatedSchemaVersion is set in TableDescriptionFull for persistence.
+    void InitAlterData(const TOperationId& opId) {
+        // If AlterData exists but has no users, it's stale from restart - reset it
+        if (AlterData && AlterData->CoordinatedVersionUsers.empty()) {
+            AlterData.Reset();
+        }
+        if (!AlterData) {
+            AlterData = new TTableInfo::TAlterTableInfo;
+            AlterData->AlterVersion = AlterVersion + 1;
+            AlterData->CoordinatedSchemaVersion = AlterVersion + 1;
+            AlterData->NextColumnId = NextColumnId;
+        }
+        // Ensure TableDescriptionFull exists and has CoordinatedSchemaVersion set for persistence
+        if (!AlterData->TableDescriptionFull) {
+            AlterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
+        }
+        AlterData->TableDescriptionFull->SetCoordinatedSchemaVersion(*AlterData->CoordinatedSchemaVersion);
+        AlterData->CoordinatedVersionUsers.insert(opId);
+    }
+
+    // Release AlterData after coordinated versioning operation completes.
+    // When all users release, AlterData is cleaned up.
+    // Returns true if AlterData was fully released (all users done).
+    bool ReleaseAlterData(const TOperationId& opId) {
+        if (!AlterData) {
+            return false;
+        }
+        AlterData->CoordinatedVersionUsers.erase(opId);
+        if (AlterData->CoordinatedVersionUsers.empty()) {
+            AlterData.Reset();
+            return true;  // Caller should clear AlterTableFull from DB
+        }
+        return false;
     }
 
     void PrepareAlter(TAlterDataPtr alterData) {

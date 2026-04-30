@@ -53,7 +53,7 @@ def is_not_launched_issue(source_error_type, status_name=None):
 
 def classify_error_type(status, status_description, source_error_type):
     status_norm = _normalize_text(status).strip().lower()
-    if status_norm not in ("failure", "mute"):
+    if status_norm not in ("failure", "mute", "error"):
         return ""
 
     if is_sanitizer_issue(status_description):

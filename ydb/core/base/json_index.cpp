@@ -1,5 +1,6 @@
 #include "json_index.h"
 
+#include <util/string/join.h>
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -809,6 +810,96 @@ TCollectResult MergeAnd(TCollectResult left, TCollectResult right) {
 TCollectResult MergeOr(TCollectResult left, TCollectResult right) {
     return MergeBooleanOperands(std::move(left), std::move(right),
         TCollectResult::ETokensMode::And, TCollectResult::ETokensMode::Or);
+}
+
+TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName) {
+    TStringBuilder sb;
+    sb << '{';
+    bool first = true;
+
+    size_t nullPos = pathToken.find('\0');
+    size_t pathEnd = (nullPos == TString::npos) ? pathToken.size() : nullPos;
+
+    // Decode LEB128-prefixed key segments from the path portion
+    if (pathEnd > 0) {
+        std::vector<TString> path;
+        size_t pos = 0;
+        while (pos < pathEnd) {
+            size_t encodedLength = 0;
+            int shift = 0;
+            while (pos < pathEnd) {
+                ui8 byte = static_cast<ui8>(pathToken[pos++]);
+                encodedLength |= static_cast<size_t>(byte & 0x7F) << shift;
+                shift += 7;
+                if (!(byte & 0x80)) {
+                    break;
+                }
+            }
+            if (encodedLength == 0) {
+                break;
+            }
+            size_t keyLength = encodedLength - 1;
+            if (pos + keyLength > pathEnd) {
+                break;
+            }
+            path.push_back(pathToken.substr(pos, keyLength));
+            pos += keyLength;
+        }
+
+        if (!path.empty()) {
+            sb << "\"path\": \"" << JoinSeq(".", path) << '"';
+            first = false;
+        }
+    }
+
+    // Decode literal suffix: \0 + EEntryType byte + optional payload
+    if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
+        auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
+        TMaybe<TString> literalValue;
+
+        switch (typeCode) {
+            case NBinaryJson::EEntryType::BoolFalse:
+                literalValue = "false";
+                break;
+            case NBinaryJson::EEntryType::BoolTrue:
+                literalValue = "true";
+                break;
+            case NBinaryJson::EEntryType::Null:
+                literalValue = "null";
+                break;
+            case NBinaryJson::EEntryType::String:
+                literalValue = TStringBuilder() << '"' << pathToken.substr(nullPos + 2) << '"';
+                break;
+            case NBinaryJson::EEntryType::Number:
+                if (nullPos + 2 + sizeof(double) <= pathToken.size()) {
+                    double d;
+                    memcpy(&d, pathToken.data() + nullPos + 2, sizeof(double));
+                    literalValue = TStringBuilder() << d;
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (literalValue) {
+            if (!first) {
+                sb << ", ";
+            }
+            sb << "\"literal\": " << *literalValue;
+            first = false;
+        }
+    }
+
+    // Param name
+    if (!paramName.empty()) {
+        if (!first) {
+            sb << ", ";
+        }
+        sb << "\"param\": \"" << paramName << '"';
+    }
+
+    sb << '}';
+    return TString(sb);
 }
 
 }  // namespace NJsonIndex

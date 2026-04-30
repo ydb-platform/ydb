@@ -2482,6 +2482,93 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
+
+    Y_UNIT_TEST(FormatJsonIndexToken) {
+        auto encodeKey = [](const TString& key) {
+            TString result;
+            size_t size = key.size() + 1;
+            do {
+                if (size < 0x80) {
+                    result.push_back(static_cast<char>(size));
+                } else {
+                    result.push_back(static_cast<char>(0x80 | (size & 0x7F)));
+                }
+                size >>= 7;
+            } while (size > 0);
+            result += key;
+            return result;
+        };
+
+        auto encodePath = [&](const std::vector<TString>& keys) {
+            TString result;
+            for (const auto& key : keys) {
+                result += encodeKey(key);
+            }
+            return result;
+        };
+
+        // path only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), ""), R"({"path": "k1.k2"})");
+
+        // path + bool true literal
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}) + boolTrueSuffix, ""), R"({"path": "k1.k2", "literal": true})");
+
+        // path + param
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), "$var"), R"({"path": "k1.k2", "param": "$var"})");
+
+        // bool false literal only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolFalseSuffix, ""), R"({"literal": false})");
+
+        // param only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken("", "$var"), R"({"param": "$var"})");
+
+        // empty
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken("", ""), "{}");
+
+        // bool true literal only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolTrueSuffix, ""), R"({"literal": true})");
+
+        // null literal only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(nullSuffix, ""), R"({"literal": null})");
+
+        // string literal only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(strSuffix("hello"), ""), R"({"literal": "hello"})");
+
+        // numeric literal only
+        {
+            double v = 42.0;
+            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(numSuffix(v), ""), TStringBuilder() << R"({"literal": )" << v << "}");
+        }
+
+        // path + string literal
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + strSuffix("x"), ""), R"({"path": "a", "literal": "x"})");
+
+        // path + numeric literal
+        {
+            double v = 3.14;
+            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"x"}) + numSuffix(v), ""), TStringBuilder() << R"({"path": "x", "literal": )" << v << "}");
+        }
+
+        // path + null literal
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + nullSuffix, ""), R"({"path": "a", "literal": null})");
+
+        // single-segment path
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"key"}), ""), R"({"path": "key"})");
+
+        // three-segment path
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a", "b", "c"}), ""), R"({"path": "a.b.c"})");
+
+        // empty key segment in path
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"", "b"}), ""), R"({"path": ".b"})");
+
+        // long key (forces multi-byte LEB128)
+        {
+            TString longKey(200, 'x');
+            UNIT_ASSERT_VALUES_EQUAL(
+                FormatJsonIndexToken(encodePath({longKey}), ""),
+                TStringBuilder() << R"({"path": ")" << longKey << R"("})");
+        }
+    }
 }
 
 }  // namespace NKikimr::NJsonIndex

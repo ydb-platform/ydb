@@ -136,6 +136,18 @@ TCollectResult MergeOr(TCollectResult left, TCollectResult right);
 void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
     const double* numberPayload = nullptr);
 
+// Formats an index token and optional parameter name as a JSON-like object string.
+// The path portion is decoded from length-prefixed key segments joined by '.'.
+// A literal suffix (after the \0 separator) is decoded by its EEntryType byte.
+// Examples:
+//   ("\3k1\3k2", "")     -> {"path": "k1.k2"}
+//   ("\3k1\3k2\0\1", "") -> {"path": "k1.k2", "literal": true}
+//   ("\3k1\3k2", "$p")   -> {"path": "k1.k2", "param": "$p"}
+//   ("\0\0", "")         -> {"literal": false}
+//   ("", "$p")           -> {"param": "$p"}
+//   ("", "")             -> {}
+TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName);
+
 }  // namespace NJsonIndex
 
 }  // namespace NKikimr

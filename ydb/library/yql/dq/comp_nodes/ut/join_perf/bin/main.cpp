@@ -1,19 +1,38 @@
-#include <ydb/core/kqp/tools/join_perf/benchmark_settings.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/join_perf/benchmark_settings.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/join_perf/joins.h>
 
 #include <library/cpp/getopt/small/last_getopt.h>
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 #include <library/cpp/getopt/small/last_getopt_parse_result.h>
 #include <library/cpp/getopt/small/last_getopt_parser.h>
-#include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json_value.h>
 
 #include <filesystem>
+#include <util/stream/file.h>
 #include <util/string/printf.h>
-#include <ydb/core/kqp/tools/join_perf/joins.h>
+
+namespace {
+
+int FilesIn(const std::filesystem::path& path) {
+    using std::filesystem::directory_iterator;
+    std::filesystem::create_directories(path);
+    return std::distance(directory_iterator(path), directory_iterator{});
+}
+
+void SaveJsonAt(const NJson::TJsonValue& value, TFixedBufferFileOutput* jsonlSaveFile) {
+    Cout << NJson::WriteJson(value, false, false, false) << Endl;
+    if (jsonlSaveFile != nullptr) {
+        *jsonlSaveFile << NJson::WriteJson(value, false, false, false) << Endl;
+    }
+}
+
+}
 
 std::filesystem::path MakeJoinPerfPath() {
     auto p = std::filesystem::path{std::getenv("HOME")} / ".join_perf" / "json";
     std::filesystem::create_directories(p);
-    p = p / Sprintf("%i.jsonl", NKikimr::NMiniKQL::FilesIn(p)).ConstRef();
+    p = p / Sprintf("%i.jsonl", FilesIn(p)).ConstRef();
     Cout << p.string() << Endl;
     return p;
 }
@@ -102,6 +121,6 @@ int main(int argc, char** argv) {
         NJson::TJsonValue out;
         out["testName"] = result.CaseName;
         out["resultTime"] = result.RunDuration.MilliSeconds();
-        NKikimr::NMiniKQL::SaveJsonAt(out, &file);
+        SaveJsonAt(out, &file);
     }
 }

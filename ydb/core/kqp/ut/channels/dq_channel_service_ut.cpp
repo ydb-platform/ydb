@@ -18,6 +18,11 @@ using namespace NYql::NDq;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+template<>
+void Out<NYql::NDq::EDqFillLevel>(IOutputStream& os, const NYql::NDq::EDqFillLevel l) {
+    os << static_cast<ui32>(l);
+}
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     bool ReadBlocked(std::shared_ptr<IChannelBuffer>& buffer, TDataChunk& data, TDuration timeout = TDuration::Seconds(10)) {

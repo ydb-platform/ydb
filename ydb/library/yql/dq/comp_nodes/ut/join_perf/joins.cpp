@@ -1,7 +1,7 @@
 #include "joins.h"
 #include "construct_join_graph.h"
 #include <util/system/datetime.h>
-#include <ydb/core/kqp/tools/combiner_perf/factories.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/dq_factories.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 using namespace NKikimr::NMiniKQL;
@@ -63,7 +63,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
     for (auto keyType : params.KeyTypes) {
         for (auto flavour : params.Flavours) {
             for (auto tableSizes : params.Preset.Sizes) {
-                NKikimr::NMiniKQL::TDqSetup<false, true> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
+                NKikimr::NMiniKQL::TDqSetup<false, true> setup{NKikimr::NMiniKQL::GetDqNodeFactory()};
                 Y_ABORT_IF(flavour == ETestedInputFlavour::kLittleRightTable && params.Scale < 128,
                            "little right table preset requires scale to be at least 128");
                 tableSizes.Left *= params.Scale;

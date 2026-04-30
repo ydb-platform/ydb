@@ -9,12 +9,8 @@ IF (MKQL_RUNTIME_VERSION)
 ENDIF()
 
 PEERDIR(
-    ydb/core/kqp/tools/combiner_perf
-    library/cpp/lfalloc/alloc_profiler
-    library/cpp/dwarf_backtrace
-    library/cpp/dwarf_backtrace/registry
-    library/cpp/getopt
-    library/cpp/getopt/small
+    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/comp_nodes/ut/utils
     library/cpp/json
 )
 
@@ -26,3 +22,8 @@ SRCS(
 
 END()
 
+IF (NOT OS_WINDOWS)
+    RECURSE_FOR_TESTS(
+        bin
+    )
+ENDIF()

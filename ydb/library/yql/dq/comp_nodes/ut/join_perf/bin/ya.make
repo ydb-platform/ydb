@@ -9,8 +9,7 @@ IF (MKQL_RUNTIME_VERSION)
 ENDIF()
 
 PEERDIR(
-    ydb/core/kqp/tools/combiner_perf
-    ydb/core/kqp/tools/join_perf    
+    ydb/library/yql/dq/comp_nodes/ut/join_perf
     library/cpp/lfalloc/alloc_profiler
     library/cpp/dwarf_backtrace
     library/cpp/dwarf_backtrace/registry
@@ -24,4 +23,3 @@ SRCS(
 )
 
 END()
-

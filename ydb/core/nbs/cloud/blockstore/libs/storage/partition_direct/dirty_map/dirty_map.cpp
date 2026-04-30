@@ -276,7 +276,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    bool shouldWaitQourum = false;
+    bool shouldWaitQuorum = false;
     TStackVec<TWeightedRange> ranges;
     Inflight.EnumerateOverlapping(
         range,
@@ -284,7 +284,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         {
             const auto readMask = item.Value.ReadMask();
             if (readMask.Empty()) {
-                shouldWaitQourum = true;
+                shouldWaitQuorum = true;
                 result.WaitReady = item.Value.GetQuorumReadyFuture();
                 result.RangeHints.clear();
                 return TInflightMap::EEnumerateContinuation::Stop;
@@ -295,7 +295,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
-    if (shouldWaitQourum) {
+    if (shouldWaitQuorum) {
         return result;
     }
 

@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint.DebugPrint());
     }
 
-    Y_UNIT_TEST(ShouldReadHintsReturnDDiskWhenNoQourum)
+    Y_UNIT_TEST(ShouldReadHintsReturnDDiskWhenNoQuorum)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,

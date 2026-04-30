@@ -20,8 +20,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint =
-            DirtyMap.MakeReadHint(range, DDiskReadable(), PBufferActive());
+        auto readHint = DirtyMap.MakeReadHint(
+            range,
+            DDiskReadable(),
+            PBufferActive(),
+            DDiskStates);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest = std::make_shared<TReadBlocksLocalRequest>(
             TRequestHeaders{.RequestId = 1, .Range = range});

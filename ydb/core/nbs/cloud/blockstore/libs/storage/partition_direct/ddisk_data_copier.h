@@ -13,6 +13,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBlocksDirtyMap;
+class TDDiskStateList;
 
 class TDDiskDataCopier: public std::enable_shared_from_this<TDDiskDataCopier>
 {
@@ -37,10 +38,11 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
+        TDDiskStateList* ddiskStates,
         THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
-    // dirtyMap.
+    // ddiskStates.
     NThreading::TFuture<EResult> Start();
     // Stops processing. After stopping, the processing can be started again.
     NThreading::TFuture<EResult> Stop();
@@ -65,6 +67,7 @@ private:
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;
+    TDDiskStateList* const DDiskStates;
 
     EState State = EState::Stopped;
     size_t FreshWatermark = 0;

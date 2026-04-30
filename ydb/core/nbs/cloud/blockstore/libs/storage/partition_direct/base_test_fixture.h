@@ -37,10 +37,11 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{
+    TDDiskStateList DDiskStates{
+        FixtureHostCount,
         BlockSize,
-        DefaultVChunkSize / BlockSize,
-        FixtureHostCount};
+        DefaultVChunkSize / BlockSize};
+    TBlocksDirtyMap DirtyMap{BlockSize, FixtureHostCount};
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
@@ -53,10 +54,12 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     {
         return VChunkConfig.DDiskHosts.GetActive();
     }
+
     [[nodiscard]] THostMask DDiskFlushTargets() const
     {
         return VChunkConfig.DDiskHosts.GetPrimary();
     }
+
     [[nodiscard]] THostMask PBufferActive() const
     {
         return VChunkConfig.PBufferHosts.GetActive();

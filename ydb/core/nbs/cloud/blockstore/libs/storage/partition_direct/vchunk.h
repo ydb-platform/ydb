@@ -108,6 +108,7 @@ private:
     const TDuration WriteRequestTimeout;
     const TDuration TraceSamplePeriod;
 
+    TDDiskStateList DDiskStates;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
 

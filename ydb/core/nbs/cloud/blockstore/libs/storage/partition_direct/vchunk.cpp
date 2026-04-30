@@ -55,10 +55,11 @@ TVChunk::TVChunk(
     , WriteHedgingDelay(writeHedgingDelay)
     , WriteRequestTimeout(writeRequestTimeout)
     , TraceSamplePeriod(traceSamplePeriod)
-    , BlocksDirtyMap(
+    , DDiskStates(
+          VChunkConfig.PBufferHosts.HostCount(),
           BlockSize,
-          BlocksCount,
-          VChunkConfig.PBufferHosts.HostCount())
+          BlocksCount)
+    , BlocksDirtyMap(BlockSize, VChunkConfig.PBufferHosts.HostCount())
     , Counters(counters)
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
@@ -284,7 +285,8 @@ void TVChunk::DoReadBlocksLocal(
         readHint = BlocksDirtyMap.MakeReadHint(
             vchunkRange,
             DDiskReadable,
-            PBufferActive);
+            PBufferActive,
+            DDiskStates);
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -466,8 +468,10 @@ void TVChunk::DoFlush()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto flushBatch =
-        BlocksDirtyMap.MakeFlushHint(SyncRequestsBatchSize, DDiskFlushTargets);
+    auto flushBatch = BlocksDirtyMap.MakeFlushHint(
+        SyncRequestsBatchSize,
+        DDiskFlushTargets,
+        DDiskStates);
 
     const auto& cfg = VChunkConfig;
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {

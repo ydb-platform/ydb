@@ -138,7 +138,7 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
-    TBlocksDirtyMap(ui32 blockSize, ui64 blockCount, size_t hostCount);
+    TBlocksDirtyMap(ui32 blockSize, size_t hostCount);
     ~TBlocksDirtyMap() override;
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
@@ -146,10 +146,12 @@ public:
     [[nodiscard]] TReadHint MakeReadHint(
         TBlockRange64 range,
         THostMask ddiskReadable,
-        THostMask pbufferReadable);
+        THostMask pbufferReadable,
+        const TDDiskStateList& ddiskStates);
     [[nodiscard]] TFlushHints MakeFlushHint(
         size_t batchSize,
-        THostMask ddiskFlushTargets);
+        THostMask ddiskFlushTargets,
+        const TDDiskStateList& ddiskStates);
     [[nodiscard]] TEraseHints MakeEraseHint(
         size_t batchSize,
         THostMask pbufferEraseTargets);
@@ -167,17 +169,6 @@ public:
         THostIndex host,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
-
-    // Sets a mark on the ddisk to which offset it contains data and can be read
-    // from it.
-    void MarkFresh(THostIndex host, ui64 bytesOffset);
-    // Returns the offset to which ddisk contains the data. nullopt means that
-    // the disk is completely full of data. And you can read it from anywhere.
-    [[nodiscard]] std::optional<ui64> GetFreshWatermark(THostIndex host) const;
-    // Sets the mark up to which the disk can be read.
-    void SetReadWatermark(THostIndex host, ui64 bytesOffset);
-    // Sets the mark to which writes should be flushed to the ddisk.
-    void SetFlushWatermark(THostIndex host, ui64 bytesOffset);
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
@@ -210,19 +201,13 @@ public:
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
-    [[nodiscard]] TString DebugPrintDDiskState() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
-    [[nodiscard]] THostMask FilterDDiskHosts(
-        THostMask mask,
-        TBlockRange64 range) const;
-
     const ui32 BlockSize;
-    const ui64 BlockCount;
 
     // Inflight write requests.
     TInflightMap Inflight;
@@ -242,9 +227,6 @@ private:
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;
     TInflightDDiskReadsMap InflightDDiskReads;
-
-    // DDisks freshness state. Indexed by host index.
-    TVector<TDDiskState> DDiskStates;
 
     // PBuffers space usage counters. Indexed by host index.
     TVector<TPBufferCounters> PBufferCounters;

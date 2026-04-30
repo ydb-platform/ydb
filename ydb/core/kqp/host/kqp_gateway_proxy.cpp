@@ -1455,7 +1455,12 @@ public:
         auto createPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            TCreateTopicSettings settings{std::move(request), pathPair.second, pathPair.first, existingOk};
+            TCreateTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .ExistingOk = existingOk
+            };
             auto getModifySchemeFuture = Gateway->CreateTopicPrepared(std::move(settings));
 
             auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1499,7 +1504,12 @@ public:
         auto alterPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            TAlterTopicSettings settings{std::move(request), pathPair.second, pathPair.first, missingOk};
+            TAlterTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .MissingOk = missingOk
+            };
             auto getModifySchemeFuture = Gateway->AlterTopicPrepared(std::move(settings));
 
             auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

@@ -70,6 +70,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestCounters
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestEmptyHttpBody
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumers
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithMaxResults
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithToken
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestNoAuthorization
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestWrongStream2
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.BillingRecordsForJsonApi
@@ -224,6 +225,7 @@ ydb/core/kqp/ut/stream_lookup KqpStreamLookup.StreamLookupManyPartitions
 ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
+ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CallDropViewOnTable
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewIfNotExists
@@ -273,6 +275,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPost
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.SkipForeign

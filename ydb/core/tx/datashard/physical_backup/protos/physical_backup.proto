@@ -176,6 +176,10 @@ message TPhysicalExportTask {
 
     // Number of retries for S3 operations
     uint32 number_of_retries = 5;
+
+    // If true, flush memtable to SST before export (complete data, costs 1 compaction).
+    // If false, export only existing SST parts on disk (fastest, may miss unflushed writes).
+    bool flush_memtable = 6;
 }
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,9 @@ The current S3 export has two major bottlenecks for large tables (e.g. 400TB, 20
 
 - **No global snapshot** -- each shard independently exports its own SST parts
 - **No CopyTables step** -- eliminates borrow mechanism and storage doubling
+- **Optional memtable flush** -- with `--snapshot=false`, export reads only existing
+  SST parts on disk with zero compaction cost (may miss unflushed memtable data).
+  With `--snapshot=true`, flush memtable first for complete data capture.
 - **Restore at near-download speed** -- load raw SST parts directly into the tablet
   executor via `LoanTable`/`Database->Merge()`, bypassing the row-level write pipeline
 - **Per-shard consistency** -- each shard's export is a point-in-time view; different
@@ -46,10 +49,13 @@ inter-tablet ReadSets.
 SchemeShard initiates export
   -> For each shard (independently, no CopyTables):
      1. DataShard receives ExportPhysical command
-     2. DataShard takes a LOCAL snapshot (TxSnapTable, advances epoch)
+     2. If snapshot=true: DataShard takes a LOCAL snapshot (TxSnapTable, advances epoch)
         - Single tablet, no cross-shard coordination
         - Resource broker: 1 compaction task in queue_compaction_gen0
         - No borrow mechanism, no storage doubling
+        If snapshot=false: Skip memtable flush entirely (zero compaction cost)
+        - Only existing SST parts on disk are exported
+        - Unflushed memtable data is not included
      3. DataShard enumerates parts via txc.DB.EnumerateTableParts(localTid)
      4. For each TPartView:
         a. Serialize TBundle proto (PageCollections + Opaque/Slices + Epoch)
@@ -183,8 +189,9 @@ Per-shard manifest includes:
 
 ## Open Questions
 
-1. **Memtable data** -- `EnumerateTableParts` only returns flushed SST parts. The
-   local snapshot flush handles this, but we must ensure full flush before enumeration.
+1. **Memtable data** -- `EnumerateTableParts` only returns flushed SST parts. With
+   `--snapshot=true`, the memtable is flushed first. With `--snapshot=false`, unflushed
+   data is skipped -- acceptable for DR of mostly-static or recently-compacted tables.
 2. **Active writes during export** -- snapshot epoch boundary ensures we only export
    pre-snapshot parts, but new parts may appear during upload.
 3. **Cold parts** -- `TColdPartStore` has metadata only; blob data must be fetched on

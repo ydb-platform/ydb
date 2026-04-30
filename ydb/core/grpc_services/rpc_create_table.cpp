@@ -5,7 +5,6 @@
 #include "rpc_common/rpc_common.h"
 #include "table_settings.h"
 
-#include <cmath>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -202,9 +201,11 @@ private:
                     olapIndex->SetClassName("BLOOM_FILTER");
                     auto* bloom = olapIndex->MutableBloomFilter();
                     if (index.local_bloom_filter_index().has_false_positive_probability()) {
-                        double fpp = index.local_bloom_filter_index().false_positive_probability();
-                        if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
-                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
+                        const double fpp = index.local_bloom_filter_index().false_positive_probability();
+                        if (auto c = NKikimr::NLocalIndex::NBloom::TConstants::ValidateFalsePositiveProbability(fpp);
+                            c.IsFail())
+                        {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid bloom filter index '" << index.name() << "' parameters: " << c.GetErrorMessage()));
                             code = StatusIds::BAD_REQUEST;
                             return false;
                         }

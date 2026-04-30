@@ -174,14 +174,21 @@ public:
         return TStringBuilder() << "[" << MinRecordsCount << ", " << MaxRecordsCount << "]";
     }
 
+    static TConclusionStatus ValidateFalsePositiveProbability(const double falsePositiveProbability) {
+        if (!std::isfinite(falsePositiveProbability) || falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
+            return TConclusionStatus::Fail("FalsePositiveProbability have to be a finite number in interval (0, 1)");
+        }
+        return TConclusionStatus::Success();
+    }
+
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize) {
         return ValidateParams(falsePositiveProbability, nGrammSize, std::nullopt, std::nullopt);
     }
 
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize,
         const std::optional<ui32>& hashesCount, const std::optional<ui32>& filterSizeBytes) {
-        if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
-            return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
+        if (auto c = ValidateFalsePositiveProbability(falsePositiveProbability); c.IsFail()) {
+            return c;
         }
 
         if (!CheckNGrammSize(nGrammSize)) {

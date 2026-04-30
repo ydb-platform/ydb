@@ -1647,8 +1647,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
-        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
-        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 

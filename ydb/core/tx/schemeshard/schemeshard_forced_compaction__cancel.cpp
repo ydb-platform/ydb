@@ -65,19 +65,21 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         Self->PersistForcedCompactionState(db, forcedCompactionInfo);
 
         // clean waiting shards
-        auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(forcedCompactionInfo.TablePathId);
-        if (shardsQueue) {
-            while (!shardsQueue->Empty()) {
-                auto shardId = shardsQueue->Front();
-                Self->InProgressForcedCompactionsByShard.erase(shardId);
-                Self->PersistForcedCompactionDoneShard(db, shardId);
-                shardsQueue->PopFront();
-                --Self->ForcedCompactionTotalInQueues;
+        for (const auto& tablePathId : forcedCompactionInfo.TablesToCompact) {
+            auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(tablePathId);
+            if (shardsQueue) {
+                while (!shardsQueue->Empty()) {
+                    auto shardId = shardsQueue->Front();
+                    Self->InProgressForcedCompactionsByShard.erase(shardId);
+                    Self->PersistForcedCompactionDoneShard(db, shardId);
+                    shardsQueue->PopFront();
+                    --Self->ForcedCompactionTotalInQueues;
+                }
             }
-            Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo.TablePathId);
-            Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo.TablePathId);
+            Self->ForcedCompactionShardsByTable.erase(tablePathId);
+            Self->ForcedCompactionTablesQueue.Remove(tablePathId);
+            Self->InProgressForcedCompactionsByTable.erase(tablePathId);
         }
-        Self->InProgressForcedCompactionsByTable.erase(forcedCompactionInfo.TablePathId);
 
         // clean waiting in flight shards
         for (auto shardId : forcedCompactionInfo.ShardsInFlight) {

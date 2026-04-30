@@ -3955,6 +3955,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
 
     TMaybe<TString> UserSID;
 
+    THashSet<TPathId> TablesToCompact;
     ui32 TotalShardCount = 0;
     ui32 DoneShardCount = 0; // updates only when persisting
 

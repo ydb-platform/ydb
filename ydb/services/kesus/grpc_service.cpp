@@ -184,13 +184,6 @@ private:
 
             return SecurityObject->CheckAccess(access, *UserToken);
         } else {
-            const auto& ctx = TActivationContext::AsActorContext();
-
-            // Anonymous users have all access unless token is enforced
-            if (AppData(ctx)->EnforceUserTokenRequirement) {
-                return false;
-            }
-
             return true;
         }
     }

@@ -9,7 +9,7 @@ enum class EAuthResult {
     TokenRequired
 };
 
-EAuthResult CheckAccess(const NKikimr::TAppData& appData, const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& describeEntry,
+EAuthResult CheckAccess(const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& describeEntry,
                         const TString& serializedToken, const TString& entityName, TString& error);
 
 } // namespace

@@ -81,6 +81,16 @@ inline TActorId MakeBlobStorageSyncBrokerID() {
     return TActorId(0, TStringBuf(x, 12));
 }
 
+inline TActorId MakeBlobStorageStartupCatchupBrokerID() {
+    char x[12] = {'b', 's', 's', 't', 'c', 't', 'c', 'h', 'b', 'r', 'k', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStorageLocalRecoveryBrokerID() {
+    char x[12] = {'b', 's', 'l', 'o', 'c', 'r', 'e', 'c', 'b', 'r', 'k', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
 inline TActorId MakeBlobStorageCompBrokerID() {
     char x[12] = {'b', 's', 'c', 'o', 'm', 'p', 'b', 'r', 'o', 'k', 'e', 'r'};
     return TActorId(0, TStringBuf(x, 12));

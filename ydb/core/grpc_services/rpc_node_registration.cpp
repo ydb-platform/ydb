@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
@@ -38,6 +39,8 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         auto req = dynamic_cast<TEvNodeRegistrationRequest*>(Request.get());
         Y_ABORT_UNLESS(req, "Unexpected request type for TNodeRegistrationRPC");
+
+        IsNodeAuthorizedByCertificate = !Request->FindClientCert().empty();
 
         if (!CheckAccess()) {
             Status = Ydb::StatusIds::UNAUTHORIZED;
@@ -175,7 +178,18 @@ public:
 
 private:
     bool CheckAccess() {
-        return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        const auto* appData = AppData();
+        const auto* token = Request->GetInternalToken().Get();
+
+        if (IsNodeAuthorizedByCertificate) {
+            return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
+        }
+
+        if (!appData->AuthConfig.GetEnableNodeRegistrationByToken()) {
+            return false;
+        }
+
+        return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
     }
 
     static void CopyNodeInfo(Ydb::Discovery::NodeInfo* dst, const NKikimrNodeBroker::TNodeInfo& src) {

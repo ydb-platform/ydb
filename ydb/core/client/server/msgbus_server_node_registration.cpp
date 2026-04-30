@@ -37,6 +37,7 @@ public:
     {
         const auto& clientCertificates = msg.FindClientCert();
         if (!clientCertificates.empty()) {
+            IsNodeAuthorizedByCertificate = true;
             TBase::SetSecurityToken(TString(clientCertificates.front()));
         } else {
             TBase::SetSecurityToken(request.GetSecurityToken());
@@ -174,7 +175,18 @@ public:
 
 private:
     bool CheckAccess() {
-        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        const auto* appData = AppData();
+        const auto* token = TBase::GetParsedToken().Get();
+
+        if (IsNodeAuthorizedByCertificate) {
+            return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
+        }
+
+        if (!appData->AuthConfig.GetEnableNodeRegistrationByToken()) {
+            return false;
+        }
+
+        return IsTokenAllowed(token, appData->RegisterDynamicNodeAllowedSIDs);
     }
 
     NKikimrClient::TNodeRegistrationRequest Request;

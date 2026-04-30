@@ -1,16 +1,28 @@
 # -*- coding: utf-8 -*-
+import copy
 import logging
 import json
+
+import pytest
 
 from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
 from ydb.topic import TopicClient, TopicAlterConsumer
 from ydb.issues import Unauthorized, SchemeError
 from ydb.draft import DynamicConfigClient
 from ydb.query import QuerySessionPool
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
 import http_helpers
-from helpers import cluster_endpoint, make_test_file_with_content, execute_ydbd, execute_dstool_grpc, execute_dstool_http, CanonicalCaptureAuditFileOutput
+from helpers import (
+    cluster_grpc_url,
+    driver_tls_kwargs,
+    make_test_file_with_content,
+    execute_ydbd,
+    execute_dstool_grpc,
+    execute_dstool_http,
+    CanonicalCaptureAuditFileOutput,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +32,20 @@ OTHER_TOKEN = 'other-user@builtin'
 
 DATABASE = '/Root'
 
+
+def audit_driver_config(cluster, auth_token=None):
+    return DriverConfig(
+        cluster_grpc_url(cluster),
+        DATABASE,
+        auth_token=auth_token,
+        **driver_tls_kwargs(cluster),
+    )
+
+
+# This audit test runs in protected_mode with mTLS so that dynamic slots
+# can register against the node broker via certificate auth (the
+# `EnableNodeRegistrationByToken` flag flow no longer sends a token from
+# the slot — slots authenticate by certificate as `clusteradmins@cert`).
 AUTH_CONFIG = f'staff_api_user_token: {TOKEN}'
 
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
@@ -62,6 +88,23 @@ CLUSTER_CONFIG = dict(
     auth_config_path=make_test_file_with_content('auth_config.yaml', AUTH_CONFIG),
     dynamic_pdisks=[{'user_kind': 0}],
 )
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_configuration():
+    return copy.deepcopy(CLUSTER_CONFIG)
+
+
+@pytest.fixture(scope='module')
+def ydb_configurator(ydb_cluster_configuration):
+    config_generator = KikimrConfigGenerator(
+        protected_mode=True,
+        **ydb_cluster_configuration,
+    )
+    security_config = config_generator.yaml_config['domains_config']['security_config']
+    security_config['register_dynamic_node_allowed_sids'] = ['clusteradmins@cert']
+    config_generator.full_config = config_generator.yaml_config
+    return config_generator
 
 
 DYN_CONFIG = '''
@@ -147,7 +190,7 @@ def test_replace_config(ydb_cluster):
         client.set_config(config, dry_run=False, allow_unknown_fields=False)
 
     def call_replace_config(token):
-        with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=token)) as driver:
+        with Driver(audit_driver_config(ydb_cluster, auth_token=token)) as driver:
             with SessionPool(driver) as pool:
                 try:
                     pool.retry_operation_sync(apply_config, config=DYN_CONFIG)
@@ -165,7 +208,7 @@ def test_create_drop_and_alter_table(ydb_cluster):
     capture_audit_create = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_alter = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
+    with Driver(audit_driver_config(ydb_cluster, auth_token=TOKEN)) as driver:
         table_client = TableClient(driver)
         description = TableDescription().with_columns(
             Column('key', OptionalType(PrimitiveType.Uint64)),
@@ -209,8 +252,8 @@ def test_dml(ydb_cluster):
                     pass
 
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
-         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
+    with Driver(audit_driver_config(ydb_cluster, auth_token=TOKEN)) as right_driver, \
+         Driver(audit_driver_config(ydb_cluster, auth_token=OTHER_TOKEN)) as wrong_driver:
 
         right_pool = QuerySessionPool(right_driver)
         wrong_pool = QuerySessionPool(wrong_driver)
@@ -303,8 +346,8 @@ def test_restart_pdisk(ydb_cluster):
 
 def test_topic(ydb_cluster):
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
-         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
+    with Driver(audit_driver_config(ydb_cluster, auth_token=TOKEN)) as right_driver, \
+         Driver(audit_driver_config(ydb_cluster, auth_token=OTHER_TOKEN)) as wrong_driver:
         right_topic_client = TopicClient(driver=right_driver, settings=None)
         wrong_topic_client = TopicClient(driver=wrong_driver, settings=None)
 

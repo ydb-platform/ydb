@@ -13,7 +13,50 @@ NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
 
 
 def cluster_endpoint(cluster):
-    return f'{cluster.nodes[1].host}:{cluster.nodes[1].grpc_port}'
+    """host:port for the primary gRPC listener (plain or TLS port depending on config)."""
+    n = cluster.nodes[1]
+    if cluster.config.grpc_ssl_enable:
+        return f'{n.host}:{n.grpc_ssl_port}'
+    return f'{n.host}:{n.grpc_port}'
+
+
+def cluster_grpc_url(cluster):
+    """Full gRPC URL for ydbd -s / Driver / dstool when the harness uses TLS."""
+    n = cluster.nodes[1]
+    if cluster.config.grpc_ssl_enable:
+        return f'grpcs://{n.host}:{n.grpc_ssl_port}'
+    return f'grpc://{n.host}:{n.grpc_port}'
+
+
+def driver_tls_kwargs(cluster):
+    """Keyword args for ydb.DriverConfig when grpc_ssl_enable is on (mTLS client)."""
+    cfg = cluster.config
+    if not cfg.grpc_ssl_enable:
+        return {}
+    with open(cfg.grpc_tls_ca_path, 'rb') as f:
+        root = f.read()
+    with open(cfg.grpc_tls_cert_path, 'rb') as f:
+        cert = f.read()
+    with open(cfg.grpc_tls_key_path, 'rb') as f:
+        key = f.read()
+    return {
+        'root_certificates': root,
+        'certificate_chain': cert,
+        'private_key': key,
+    }
+
+
+def cluster_ydbd_subprocess_env(cluster, token=None):
+    """Environment for ydbd / dstool subprocesses (optional token + mTLS files when enabled)."""
+    env = dict(os.environ)
+    if token is not None:
+        env['YDB_TOKEN'] = token
+    cfg = cluster.config
+    if cfg.grpc_ssl_enable:
+        env['YDB_CA_FILE'] = cfg.grpc_tls_ca_path
+        env['YDB_CLIENT_CERT_FILE'] = cfg.grpc_tls_cert_path
+        env['YDB_CLIENT_CERT_KEY_FILE'] = cfg.grpc_tls_key_path
+    return env
 
 
 def cluster_http_endpoint(cluster):
@@ -39,10 +82,22 @@ def make_test_file_with_content(human_readable_file_name, content):
 
 def execute_ydbd(cluster, token, cmd, check_exit_code=True):
     ydbd_binary_path = cluster.nodes[1].binary_path
-    full_cmd = [ydbd_binary_path, '-s', f'grpc://{cluster_endpoint(cluster)}']
+    full_cmd = [ydbd_binary_path, '-s', cluster_grpc_url(cluster)]
+    cfg = cluster.config
+    if cfg.grpc_ssl_enable:
+        full_cmd += [
+            '--ca-file',
+            cfg.grpc_tls_ca_path,
+            '--client-cert-file',
+            cfg.grpc_tls_cert_path,
+            '--client-cert-key-file',
+            cfg.grpc_tls_key_path,
+        ]
     full_cmd += cmd
 
-    proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
+    proc_result = yatest.common.process.execute(
+        full_cmd, check_exit_code=False, env=cluster_ydbd_subprocess_env(cluster, token)
+    )
     if check_exit_code and proc_result.exit_code != 0:
         assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
 
@@ -52,10 +107,27 @@ def get_dstool_binary_path():
 
 
 def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
-    full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
+    full_cmd = [get_dstool_binary_path(), '--endpoint', cluster_grpc_url(cluster)]
+    cfg = cluster.config
+    if cfg.grpc_ssl_enable:
+        # ydb-dstool supports only --ca-file (no --client-cert-file/-key-file).
+        # With enforce_user_token_requirement=True, the server still accepts a
+        # valid token (set via YDB_TOKEN in the env) over a TLS-validated channel.
+        full_cmd += [
+            '--ca-file',
+            cfg.grpc_tls_ca_path,
+        ]
     full_cmd += cmd
 
-    proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
+    # Drop client-cert env vars to avoid dstool attempting mTLS handshake it
+    # doesn't fully support; rely on YDB_TOKEN over a CA-validated TLS channel.
+    env = cluster_ydbd_subprocess_env(cluster, token)
+    env.pop('YDB_CLIENT_CERT_FILE', None)
+    env.pop('YDB_CLIENT_CERT_KEY_FILE', None)
+
+    proc_result = yatest.common.process.execute(
+        full_cmd, check_exit_code=False, env=env
+    )
     if check_exit_code and proc_result.exit_code != 0:
         assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
     return proc_result.std_out
@@ -65,7 +137,9 @@ def execute_dstool_http(cluster, token, cmd, check_exit_code=True):
     full_cmd = [get_dstool_binary_path(), '--endpoint', f'http://{cluster_http_endpoint(cluster)}']
     full_cmd += cmd
 
-    proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
+    proc_result = yatest.common.process.execute(
+        full_cmd, check_exit_code=False, env=cluster_ydbd_subprocess_env(cluster, token)
+    )
     if check_exit_code and proc_result.exit_code != 0:
         assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
     return proc_result.std_out

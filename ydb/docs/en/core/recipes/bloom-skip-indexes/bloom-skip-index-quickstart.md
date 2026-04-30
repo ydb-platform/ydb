@@ -7,6 +7,7 @@ CREATE TABLE `/Root/events` (
     id Uint64 NOT NULL,
     resource_id Utf8 NOT NULL,
     payload String,
+    message Utf8,
     PRIMARY KEY (id),
     INDEX idx_res LOCAL USING bloom_filter
         ON (resource_id)
@@ -17,10 +18,10 @@ WITH (
 );
 ```
 
-For substring-style filtering on string columns, use `bloom_ngram_filter`:
+For string columns, use `bloom_ngram_filter`:
 
 ```yql
-ALTER TABLE `/Root/logs`
+ALTER TABLE `/Root/events`
   ADD INDEX idx_msg LOCAL USING bloom_ngram_filter
   ON (message)
   WITH (
@@ -30,7 +31,7 @@ ALTER TABLE `/Root/logs`
   );
 ```
 
-Next steps:
+Further reading:
 
 * Details and limitations: [Bloom skip indexes](../../dev/bloom-skip-indexes.md)
 * Full syntax: [`ALTER TABLE ADD INDEX`](../../yql/reference/syntax/alter_table/indexes.md#local-bloom)

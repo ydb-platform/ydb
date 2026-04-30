@@ -1,6 +1,6 @@
 # Bloom skip индекс
 
-{% if backend_name == 'YDB' %}[Bloom skip индексы](../../../../dev/bloom-skip-indexes.md){% else %}Bloom skip индексы{% endif %} задаются только как локальные (`LOCAL`) и используют типы `bloom_filter` или `bloom_ngram_filter` в конструкции `INDEX` при создании таблицы (аналогично [вторичному индексу](secondary_index.md), но с `LOCAL` и соответствующим `USING`).
+{% if backend_name == 'YDB' %}[Bloom skip индексы](../../../../dev/bloom-skip-indexes.md){% else %}Bloom skip индексы{% endif %} можно задать только как локальные (`LOCAL`). При создании таблицы в секции `INDEX` для них используются типы `bloom_filter` или `bloom_ngram_filter` (по аналогии с [вторичным индексом](secondary_index.md), но с обязательным `LOCAL` и соответствующим `USING`).
 
 ```yql
 CREATE TABLE `<table_name>` (
@@ -17,9 +17,9 @@ CREATE TABLE `<table_name>` (
 Где:
 
 * `<index_name>` — имя индекса.
-* `LOCAL` — обязательный режим для Bloom skip индексов.
-* `<index_columns>` — одна или несколько колонок в `ON (...)` в зависимости от типа таблицы и типа индекса (см. [ограничения](../../../../dev/bloom-skip-indexes.md#limitations)).
-* Секции `COVER (...)` и data columns для Bloom skip индексов **не поддерживаются**.
+* `LOCAL` — обязательное ключевое слово для Bloom skip индексов.
+* `<index_columns>` — список колонок, по которым строится индекс; количество колонок зависит от типа таблицы и типа индекса.
+* Для Bloom skip индексов не поддерживаются колонки покрытия (`COVER (...)`).
 
 Параметры `WITH (...)`:
 
@@ -45,7 +45,7 @@ CREATE TABLE events (
 ### Индекс `bloom_ngram_filter`
 
 ```yql
-CREATE TABLE logs (
+CREATE TABLE events (
     id Uint64,
     message Utf8,
     PRIMARY KEY (id),

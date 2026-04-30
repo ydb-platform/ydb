@@ -29,7 +29,7 @@ items:
   href: vector-indexes-kmeans-tree-type.md
 - name: Полнотекстовые индексы
   href: fulltext-indexes.md
-- name: Bloom skip индексы
+- name: Локальные индексы
   href: bloom-skip-indexes.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md

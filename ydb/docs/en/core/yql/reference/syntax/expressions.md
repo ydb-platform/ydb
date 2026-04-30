@@ -49,10 +49,6 @@ WHERE body ILIKE "%learn%ing%"
 LIMIT 20;
 ```
 
-### `LIKE` / `ILIKE` with a `bloom_ngram_filter` index {#like-with-bloom-ngram}
-
-For string columns indexed with a local `bloom_ngram_filter` index, the optimizer may apply the filter for predicates such as `LIKE` / `ILIKE` on the indexed column (without `VIEW`, unlike a fulltext index). See [Bloom skip indexes](../../../dev/bloom-skip-indexes.md).
-
 ### Examples
 
 ```yql

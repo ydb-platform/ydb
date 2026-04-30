@@ -17,8 +17,8 @@ CREATE TABLE `<table_name>` (
 Where:
 
 * `<index_name>`: Index name.
-* `LOCAL`: Required for Bloom skip indexes.
-* `<index_columns>`: One or more columns in `ON (...)`, depending on the table type and index type (see [limitations](../../../../dev/bloom-skip-indexes.md#limitations)).
+* `LOCAL`: Required keyword for Bloom skip indexes.
+* `<index_columns>`: List of columns used to build the index; the number of columns depends on the table type and index type.
 * `COVER (...)` and data columns are **not supported** for Bloom skip indexes.
 
 `WITH (...)` parameters:
@@ -45,7 +45,7 @@ CREATE TABLE events (
 ### `bloom_ngram_filter` index
 
 ```yql
-CREATE TABLE logs (
+CREATE TABLE events (
     id Uint64,
     message Utf8,
     PRIMARY KEY (id),

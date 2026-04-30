@@ -190,7 +190,7 @@ The fulltext search capabilities and index parameters are described in [{#T}](..
 
 #### Local Bloom skip index {#local-bloom-skip-index}
 
-Local Bloom skip index is a compact value-based filter that speeds up selective queries by allowing the system to skip data fragments that do not contain the requested values. Unlike global [secondary indexes](#secondary-index), it is stored locally in each table shard and has its own limitations (for example, `COVER (...)` sections and data columns are not supported). {{ ydb-short-name }} supports the `bloom_filter` and `bloom_ngram_filter` types. For more information, see [Bloom skip indexes](../dev/bloom-skip-indexes.md); DDL syntax is in [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
+Local Bloom skip index is a local probabilistic value filter that speeds up selective queries by skipping irrelevant data fragments. {{ ydb-short-name }} supports the `bloom_filter` and `bloom_ngram_filter` types. For details, see [Bloom skip indexes](../dev/bloom-skip-indexes.md).
 
 #### Column family {#column-family}
 

@@ -34,9 +34,7 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary indexes (`GLOBAL`, `UNIQUE`, and so on) is supported only for row-oriented tables. For column-oriented tables, `ADD INDEX` supports only the special local Bloom skip indexes described below.
-
-For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), adding **global secondary** and **vector** indexes is not yet supported (see the note above). At the same time, adding **local Bloom skip indexes** is supported; see [Bloom skip indexes](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` supports only local Bloom skip indexes, see [Bloom skip indexes](#local-bloom).
 
 ### Examples
 
@@ -86,7 +84,7 @@ Supported index types:
 
 * `bloom_filter`: Bloom filter by column values. Parameters:
   * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1` for column-oriented tables and `0.0001` for row-oriented tables.
-* `bloom_ngram_filter`: N-gram Bloom filter for string columns. Parameters:
+* `bloom_ngram_filter`: N-gram Bloom filter for string-typed columns. Parameters:
   * `ngram_size`: N-gram size from `3` to `8` (for example, `3`). Default: `3`.
   * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1`.
   * `case_sensitive`: Optional, `true` or `false` (`true` by default).

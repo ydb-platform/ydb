@@ -1,3 +1,5 @@
 items:
 - name: Bloom skip index quickstart
   href: bloom-skip-index-quickstart.md
+- name: Bloom skip index tuning
+  href: bloom-skip-index-tuning.md

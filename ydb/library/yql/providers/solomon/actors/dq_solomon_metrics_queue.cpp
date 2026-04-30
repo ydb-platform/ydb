@@ -113,6 +113,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatch);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 hFunc(TEvPrivatePrivate::TEvNextLabelsListingChunkReceived, HandleNextLabelsListingChunkReceived);
                 hFunc(TEvPrivatePrivate::TEvNextMetricsListingChunkReceived, HandleNextMetricsListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
@@ -133,6 +134,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -151,6 +153,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -310,6 +313,17 @@ private:
         LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState sending issues");
         Send(ev->Sender, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
+    }
+
+    void HandleConsumerFinished(TEvSolomonProvider::TEvConsumerFinished::TPtr& ev) {
+        LOG_I("TDqSolomonMetricsQueueActor",
+            "HandleConsumerFinished from " << ev->Sender << ", " << FinishedConsumers.size() + 1
+            << "/" << ConsumersCount << " consumers finished");
+        ConnectedConsumers.insert(ev->Sender);
+        FinishedConsumers.insert(ev->Sender);
+        if (FinishedConsumers.size() == ConsumersCount) {
+            PassAway();
+        }
     }
 
     void PassAway() override {

@@ -225,6 +225,7 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
         UNIT_ASSERT_VALUES_EQUAL(cfg.EnablePostApi,               false);
         UNIT_ASSERT_VALUES_EQUAL(cfg.ComputeActorBatchSize,       100u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxDataInflightBytes,        50_MB);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxMetadataInflightBytes,    5_MB);
         UNIT_ASSERT_VALUES_EQUAL(cfg.TruePointsFindRangeSec,      301u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      10'000u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueueBatchCountLimit, 500u);
@@ -260,6 +261,7 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
             {"maxListingPageSize",        "1000"},
             {"computeActorBatchSize",     "50"},
             {"maxDataInflightBytes",      "10485760"},  // 10 MB
+            {"maxMetadataInflightBytes",  "2097152"},   //  2 MB
             {"truePointsFindRange",       "600"},
             {"metricsQueueBatchCountLimit", "200"},
             {"metricsQueuePrefetchSize",  "2000"},
@@ -273,6 +275,7 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxListingPageSize,          1000u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.ComputeActorBatchSize,       50u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxDataInflightBytes,        10485760u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxMetadataInflightBytes,    2097152u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.TruePointsFindRangeSec,      600u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueueBatchCountLimit, 200u);
         UNIT_ASSERT_VALUES_EQUAL(cfg.MetricsQueuePrefetchSize,    2000u);
@@ -284,16 +287,20 @@ Y_UNIT_TEST_SUITE(TestParseSolomonReadActorConfig) {
 
     Y_UNIT_TEST(ClampBelowMinimum) {
         auto cfg = ParseSolomonReadActorConfig(MakeSettings({
-            {"maxPointsPerOneRequest", "0"},
-            {"poisonTimeoutSec",       "0"},
+            {"maxPointsPerOneRequest",   "0"},
+            {"poisonTimeoutSec",         "0"},
             {"roundRobinStageTimeoutMs", "0"},
-            {"labelsListingLimit",     "0"},
+            {"labelsListingLimit",       "0"},
+            {"maxDataInflightBytes",     "0"},
+            {"maxMetadataInflightBytes", "0"},
         }));
 
         UNIT_ASSERT_VALUES_EQUAL(cfg.MaxPointsPerOneRequest,      1u);
         UNIT_ASSERT_EQUAL(cfg.PoisonTimeout,          TDuration::Seconds(60));
         UNIT_ASSERT_EQUAL(cfg.RoundRobinStageTimeout, TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(cfg.LabelsListingLimit,          1u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxDataInflightBytes,        1u);
+        UNIT_ASSERT_VALUES_EQUAL(cfg.MaxMetadataInflightBytes,    1u);
     }
 
     Y_UNIT_TEST(InvalidValueFallsBackToDefault) {

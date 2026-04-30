@@ -36,6 +36,12 @@ struct TSolomonReadActorConfig {
     ui64 ComputeActorBatchSize;
     // Maximum total bytes of in-flight data responses before backpressure. Must be >= 1.
     ui64 MaxDataInflightBytes;
+    // Maximum total bytes occupied by metadata buffers (ListedMetrics,
+    // MetricsWithTimeRange, PendingDataRequests_ keys) plus selectors
+    // captured by in-flight GetPointsCount lambdas. Acts as a separate
+    // backpressure budget so that metadata growth cannot starve out the
+    // data pipeline. Must be >= 1.
+    ui64 MaxMetadataInflightBytes;
     // Seconds added/subtracted around [from, to] when searching for true data points.
     ui64 TruePointsFindRangeSec;
     // Maximum number of data points fetched in a single GetData gRPC request.

@@ -20,6 +20,7 @@ struct TEvSolomonProvider {
         EvGetNextBatch,
         EvMetricsBatch,
         EvMetricsReadError,
+        EvConsumerFinished,
 
         // read actor events
         EvPointsCountBatch,
@@ -71,6 +72,15 @@ struct TEvSolomonProvider {
         TEvMetricsReadError() = default;
         TEvMetricsReadError(const TString& issues, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.SetIssues(issues);
+            *Record.MutableTransportMeta() = transportMeta;
+        }
+    };
+
+    struct TEvConsumerFinished :
+        public NActors::TEventPB<TEvConsumerFinished, NSo::MetricQueue::TEvConsumerFinished, EvConsumerFinished> {
+
+        TEvConsumerFinished() = default;
+        explicit TEvConsumerFinished(const NDqProto::TMessageTransportMeta& transportMeta) {
             *Record.MutableTransportMeta() = transportMeta;
         }
     };

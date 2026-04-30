@@ -95,7 +95,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
-        , StructJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -107,7 +107,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
-        , StructJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -119,7 +119,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
-        , StructJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -131,7 +131,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
-        , StructJsonWriter(BusyJsonKeyNames)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -534,7 +534,7 @@ namespace NActors {
             evLog->LineNumber,
             evLog->Line,
             evLog->Json,
-            evLog->StructMessage);
+            evLog->StructuredMessage);
     }
 
     bool TLoggerActor::OutputRecord(
@@ -545,14 +545,14 @@ namespace NActors {
         ui64 lineNumber,
         const TString& formatted,
         bool json,
-        const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structMessage) noexcept
+        const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
 
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         TLogRecord::TMetaFlags metaFlags;
-        if (structMessage.Defined()) {
-            StructMetaWriter.Write(metaFlags, structMessage.GetRef());
+        if (structuredMessage.Defined()) {
+            StructuredMetaWriter.Write(metaFlags, structuredMessage.GetRef());
         }
 
         char buf[TimeBufSize];
@@ -574,9 +574,9 @@ namespace NActors {
                 }
                 logRecord << ": " << formatted;
 
-                if (structMessage.Defined()) {
+                if (structuredMessage.Defined()) {
                     logRecord << " ";
-                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                    StructuredTextWriter.Write(logRecord, structuredMessage.GetRef());
                 }
 
                 LogBackend->WriteData(
@@ -589,9 +589,9 @@ namespace NActors {
                     << Settings->ComponentName(component)
                     << ": " << formatted;
 
-                if (structMessage.Defined()) {
+                if (structuredMessage.Defined()) {
                     logRecord << " ";
-                    StructTextWriter.Write(logRecord, structMessage.GetRef());
+                    StructuredTextWriter.Write(logRecord, structuredMessage.GetRef());
                 }
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
@@ -646,8 +646,8 @@ namespace NActors {
                     j.WriteKey("message").WriteString(formatted);
                 }
 
-                if (structMessage.Defined()) {
-                    StructJsonWriter.Write(j, structMessage.GetRef(), true);
+                if (structuredMessage.Defined()) {
+                    StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
                 }
                 j.EndObject();
                 auto logRecord = j.Str();

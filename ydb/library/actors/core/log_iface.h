@@ -145,7 +145,7 @@ namespace NActors {
                     const char* fileName,
                     ui64 lineNumber,
                     TString line,
-                    NKikimr::NStructuredLog::TStructuredMessage&& structMessage,
+                    NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage,
                     TInstant time = TInstant::Now())
                 : Stamp(time)
                 , Level(EPrio(prio))
@@ -154,7 +154,7 @@ namespace NActors {
                 , LineNumber(lineNumber)
                 , Line(std::move(line))
                 , Json(false)
-                , StructMessage(std::move(structMessage))
+                , StructuredMessage(std::move(structuredMessage))
             {
             }
 
@@ -165,7 +165,7 @@ namespace NActors {
             const ui64 LineNumber = 0;
             TString Line;
             const bool Json;
-            const TMaybe<NKikimr::NStructuredLog::TStructuredMessage> StructMessage;
+            const TMaybe<NKikimr::NStructuredLog::TStructuredMessage> StructuredMessage;
         };
 
     }

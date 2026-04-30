@@ -52,7 +52,7 @@ SELECT * FROM
 
 {% note info %}
 
-All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../concepts/query_execution/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
+All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../../concepts/query_execution/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
 
 {% endnote %}
 
@@ -73,7 +73,7 @@ If the join order is not fixed by a separate hint, the optimizer will build both
 {% endnote %}
 
 - ShuffleJoin is a type of join in which the data is divided (shuffled) by the join key so that records with the same key are processed on the same processing node. After such a redistribution of data, each node performs a local join of the tables. The results are combined into one common data set.
-- LookupJoin - for each row of one input, a query is made to the table or index of the other input, currently supported only for [row tables](../concepts/datamodel/table.md#row-oriented-table).
+- LookupJoin - for each row of one input, a query is made to the table or index of the other input, currently supported only for [row tables](../../concepts/datamodel/table.md#row-oriented-table).
 
 {% note info %}
 
@@ -97,7 +97,7 @@ JoinType(t1 t2 ... tn Broadcast | Shuffle | Lookup)
 
 #### How it works
 
-If the query plan contains a join operator that joins only those tables listed in the hint, the optimizer will choose the specified join algorithm if it is applicable (for example, you cannot apply the LookupJoin algorithm to [column-oriented tables](../concepts/datamodel/table.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
+If the query plan contains a join operator that joins only those tables listed in the hint, the optimizer will choose the specified join algorithm if it is applicable (for example, you cannot apply the LookupJoin algorithm to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-table)). If the algorithm cannot be applied, the user will be notified via a warning.
 
 #### Examples
 
@@ -129,7 +129,7 @@ INNER JOIN U on T.id = U.id
 INNER JOIN V on U.id = V.id;
 ```
 
-You can view the query plan using the [CLI](../reference/ydb-cli/commands/explain-plan.md) command:
+You can view the query plan using the [CLI](../../reference/ydb-cli/commands/explain-plan.md) command:
 
 ```bash
  ydb -p <profile_name> sql --explain -f query.sql

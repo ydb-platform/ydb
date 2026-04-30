@@ -758,14 +758,18 @@ public:
         }
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
-        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
+        for (ui32 i = 0; i < task.OutputsSize(); ++i) {            
             const auto& outputDesc = task.GetOutputs(i);
 
             if (outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kEffects) {
                 TaskHasEffects = true;
             }
 
-            TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
+            bool isBroadcast = outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kBroadcast && task.GetDqChannelVersion() >= 3u;
+            // used only for broadcast
+            TVector<TDqChannelSettings> broadcastSettings;
+
+            TVector<IDqOutput::TPtr> outputs{Reserve(isBroadcast ? 1 :std::max<ui64>(outputDesc.ChannelsSize(), 1))};
             TOutputTransformInfo* transform = nullptr;
             TType** taskOutputType = &entry->OutputItemTypes[i];
             if (outputDesc.HasTransform()) {
@@ -835,7 +839,10 @@ public:
                     };
 
                     IDqOutputChannel::TPtr outputChannel;
-                    if (task.GetDqChannelVersion() >= 2u) {
+                    if (isBroadcast) {
+                        broadcastSettings.push_back(settings);
+                        continue;
+                    } else if (task.GetDqChannelVersion() >= 2u) {
                         Y_ENSURE(Context.ChannelService);
                         outputChannel = Context.ChannelService->GetOutputChannel(settings);
                     } else {
@@ -845,11 +852,22 @@ public:
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
                         auto outputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId());
                         auto inputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId());
-                        outputChannel->Bind(outputActorId, inputActorId);
+                        outputChannel->Bind(outputActorId, inputActorId, channelId);
                     }
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
+                    outputs.emplace_back(outputChannel);
+                }
+                if (isBroadcast){
+                    auto outputChannel = Context.ChannelService->GetOutputBroadcastChannel(broadcastSettings);
+                    // no bind here for broadcast?
+                    for (const auto& settings: broadcastSettings) {
+                        // broadcast channel pushed multiple times
+                        auto ret = AllocatedHolder->OutputChannels.emplace(settings.ChannelId, outputChannel);
+                        YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << settings.ChannelId);
+                    }
+
                     outputs.emplace_back(outputChannel);
                 }
             }

@@ -35,4 +35,13 @@ struct TDqChannelSettings {
     TMaybe<size_t> BufferPageAllocSize;
 };
 
+struct TBroadcastChannelSettings
+{
+
+    TBroadcastChannelSettings(const TVector<TDqChannelSettings> &settings)
+        : settings(settings) {}
+
+    TVector<TDqChannelSettings> settings;
+};
+
 } // namespace NYql::NDq

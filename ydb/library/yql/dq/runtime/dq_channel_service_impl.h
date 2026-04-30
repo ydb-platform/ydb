@@ -98,6 +98,7 @@ public:
     TMaybe<size_t> BufferPageAllocSize;
 };
 
+
 class TInputDeserializer {
 public:
     TInputDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
@@ -372,6 +373,34 @@ public:
     std::shared_ptr<TOutputDescriptor> Descriptor;
 };
 
+class TBroadcastBuffer : public IChannelBuffer {
+public:
+    TBroadcastBuffer(std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers)
+        : IChannelBuffer(buffers.begin()->second->Info), Buffers(buffers) {
+    }
+
+    // TBroadcastBuffer(std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers, std::shared_ptr<TOutputDescriptor> descriptor)
+    //     : IChannelBuffer(descriptor->Info), Descriptor(descriptor) {
+    // }
+
+    ~TBroadcastBuffer() override;
+    EDqFillLevel GetFillLevel() const override;
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
+    void Push(TDataChunk&& data) override;
+    bool IsFinished() override;
+    bool IsEarlyFinished() override;
+    bool IsEmpty() override;
+    bool Pop(TDataChunk& data) override;
+    void EarlyFinish() override;
+    void ExportPushStats(TDqAsyncStats& stats) override;
+    void ExportPopStats(TDqAsyncStats& stats) override;
+
+    // std::shared_ptr<TNodeState> NodeState;
+    // std::shared_ptr<TOutputDescriptor> Descriptor;
+
+    std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> Buffers;
+};
+
 class TInputItem {
 public:
 
@@ -382,15 +411,81 @@ public:
     TDataChunk Data;
 };
 
-class TInputDescriptor {
+class IInputDescriptor {
+public:
+    IInputDescriptor(const TChannelFullInfo& info)
+        : Info(info)
+        , QueueSize(0)
+        , QueueBytes(0)
+        , NeedToNotifyInput(false)
+        , FinishPushed(false)
+        , Finished(false)
+        , EarlyFinished(false) {}
+
+
+    virtual ~IInputDescriptor() = default;
+
+
+    virtual bool IsEmpty() = 0;
+    virtual bool PushDataChunk(TDataChunk&& data) = 0;
+    virtual bool PopDataChunk(TDataChunk& data) = 0;
+    virtual ui32 GetQueueSize() = 0;
+
+    virtual bool IsFinished() = 0;
+    virtual bool IsEarlyFinished() = 0;
+    virtual bool EarlyFinish() = 0;
+    virtual void Terminate() = 0;
+
+    void AbortChannel(const TString& message);
+
+    virtual void ExportPushStats(TDqAsyncStats& stats) = 0;
+    virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
+
+    virtual ui64 GetPopBytes() = 0;
+
+    TChannelFullInfo Info;
+
+    ui64 PeerGenMajor = 0;
+    NActors::TActorId PeerActorId;
+    bool IsBound = false;
+
+
+    // probably remove
+    TDqThreadSafeStats PushStats;
+    TDqThreadSafeStats PopStats;
+
+
+    // almost certainly remove
+    mutable std::mutex QueueMutex;
+    std::atomic<ui64> QueueSize = 0;
+    std::atomic<ui64> QueueBytes = 0;
+    mutable std::queue<TInputItem> Queue;
+    std::atomic<ui64> InflightBytes = 0;
+
+    // probably remove
+    std::atomic<bool> NeedToNotifyInput;
+    std::atomic<bool> FinishPushed;
+    std::atomic<bool> Finished;
+    std::atomic<bool> EarlyFinished;
+};
+
+class TBroadcastInputDescriptor;
+
+class TInputDescriptor : public IInputDescriptor{
 public:
 
     TInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
-        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
-        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
-        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
-        : Info(info)
+      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, 
+      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
+      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
+        : IInputDescriptor(info)
         , ActorSystem(actorSystem)
+        // , QueueSize(0)
+        // , QueueBytes(0)
+        // , NeedToNotifyInput(false)
+        // , FinishPushed(false)
+        // , Finished(false)
+        // , EarlyFinished(false)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
         , InputBufferInflightBytes(inputBufferInflightBytes)
@@ -399,47 +494,104 @@ public:
         PopStats.Level = info.Level;
     }
 
-    ~TInputDescriptor();
+    bool IsEmpty() override;
+    bool PushDataChunk(TDataChunk&& data) override;
+    bool PopDataChunk(TDataChunk& data) override;
+    ui32 GetQueueSize() override;
 
-    bool IsEmpty();
-    bool PushDataChunk(TDataChunk&& data);
-    bool PopDataChunk(TDataChunk& data);
-    ui32 GetQueueSize();
+    bool IsFinished() override;
+    bool IsEarlyFinished() override;
+    bool EarlyFinish() override;
+    void Terminate() override;
 
-    bool IsFinished();
-    bool IsEarlyFinished();
-    bool EarlyFinish();
-    void Terminate();
-    void AbortChannel(const TString& message);
+    void ExportPushStats(TDqAsyncStats& stats) override {
+        PushStats.Export(stats);
+    }
 
-    TChannelFullInfo Info;
+    void ExportPopStats(TDqAsyncStats& stats) override {
+        PopStats.Export(stats);
+    }
+
+    ui64 GetPopBytes() override {
+        return PopStats.Bytes.load();
+    }
+
+    // only for broadcast channels
+    std::shared_ptr<TBroadcastInputDescriptor> parentDescriptor = nullptr; 
+
     NActors::TActorSystem* ActorSystem;
-    ui64 PeerGenMajor = 0;
-    NActors::TActorId PeerActorId;
-    bool IsBound = false;
-    TDqThreadSafeStats PushStats;
-    TDqThreadSafeStats PopStats;
+    // TDqThreadSafeStats PushStats;
+    // TDqThreadSafeStats PopStats;
 
-    mutable std::mutex QueueMutex;
-    std::atomic<ui64> QueueSize = 0;
-    std::atomic<ui64> QueueBytes = 0;
-    mutable std::queue<TInputItem> Queue;
-    std::atomic<ui64> InflightBytes = 0;
+    // mutable std::mutex QueueMutex;
+    // std::atomic<ui64> QueueSize;
+    // std::atomic<ui64> QueueBytes;
+    // mutable std::queue<TInputItem> Queue;
 
-    std::atomic<bool> NeedToNotifyInput = false;
-    std::atomic<bool> FinishPushed = false;
-    std::atomic<bool> Finished = false;
-    std::atomic<bool> EarlyFinished = false;
-    std::atomic<bool> Aborted = false;
+    // std::atomic<bool> NeedToNotifyInput;
+    // std::atomic<bool> FinishPushed;
+    // std::atomic<bool> Finished;
+    // std::atomic<bool> EarlyFinished;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
 };
 
+class TBroadcastInputDescriptor : public IInputDescriptor{
+public:
+
+    // TBroadcastInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
+    //   ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks)
+    // : IInputDescriptor(info, actorSystem, inputBufferBytes, inputBufferChunks) {
+    
+    TBroadcastInputDescriptor(const TChannelFullInfo& info) : IInputDescriptor(info) {}
+
+    bool IsEmpty() override;
+    bool PushDataChunk(TDataChunk&& data) override;
+    bool PopDataChunk(TDataChunk& data) override;
+    ui32 GetQueueSize() override;
+
+    bool IsFinished() override;
+    bool IsEarlyFinished() override;
+    bool EarlyFinish() override;
+    void Terminate() override;
+
+    void ExportPushStats(TDqAsyncStats& stats) override {
+        TDqAsyncStats tmp;
+        for(const auto& descriptor: InputDescriptors) {
+            descriptor->ExportPushStats(tmp);
+            stats.GetMinData(tmp);
+        }
+    }
+
+    void ExportPopStats(TDqAsyncStats& stats) override {
+        TDqAsyncStats tmp;
+        for(const auto& descriptor: InputDescriptors) {
+            descriptor->ExportPopStats(tmp);
+            stats.GetMinData(tmp);
+        }
+    }
+
+    ui64 GetPopBytes() override {
+        ui64 ans = InputDescriptors[0]->GetPopBytes();
+        for (auto& descriptor : InputDescriptors)
+            ans = std::min(ans, descriptor->GetPopBytes());
+        return ans;
+    }
+
+    ui64 GetLastSentPopBytes() {
+        return LastSentPopBytes.load();
+    }
+
+    TVector<std::shared_ptr<IInputDescriptor>> InputDescriptors;
+
+    std::atomic<ui64> LastSentPopBytes = 0;
+};
+
 class TInputBuffer : public IChannelBuffer {
 public:
-    TInputBuffer(const std::shared_ptr<TNodeState>& nodeState, const std::shared_ptr<TInputDescriptor>& descriptor)
+    TInputBuffer(const std::shared_ptr<TNodeState>& nodeState, const std::shared_ptr<IInputDescriptor>& descriptor)
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
     }
 
@@ -463,7 +615,7 @@ public:
     void ExportPopStats(TDqAsyncStats& stats) override;
 
     std::shared_ptr<TNodeState> NodeState;
-    std::shared_ptr<TInputDescriptor> Descriptor;
+    std::shared_ptr<IInputDescriptor> Descriptor;
 };
 
 class TDqChannelService;
@@ -541,9 +693,9 @@ public:
     void HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev);
     void HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr& ev);
     std::shared_ptr<TOutputDescriptor> GetOrCreateOutputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
-    std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
+    std::shared_ptr<IInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
-    void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
+    void TerminateInputDescriptor(const std::shared_ptr<IInputDescriptor>& descriptor);
     void CleanupUnbound();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
@@ -553,7 +705,7 @@ public:
     void SendFromWaiters(ui64 deltaBytes);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo);
     virtual TString GetDebugInfo();
-    void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    void UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major);
@@ -568,8 +720,9 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
+    // change to channelId
+    mutable std::unordered_map<ui64, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
+    mutable std::unordered_map<TChannelInfo, std::shared_ptr<IInputDescriptor>> InputDescriptors;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
     bool Connected = false;
@@ -703,6 +856,7 @@ public:
     std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage);
     // unbinded channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
+    IDqOutputChannel::TPtr GetOutputBroadcastChannel(const TBroadcastChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
     // extras
     void CleanupUnbound();
@@ -844,7 +998,8 @@ public:
         // ???
     }
 
-    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override;
+
 
     bool IsLocal() const override {
         return IsLocalChannel;
@@ -856,6 +1011,260 @@ public:
     IDqChannelStorage::TPtr Storage;
     bool IsLocalChannel = false;
 };
+
+class TBroadcastOutputChannel : public IDqOutputChannel
+    {
+
+    public:
+        TBroadcastOutputChannel(std::weak_ptr<TDqChannelService> service, const TBroadcastChannelSettings &broadcastSettings, std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers, bool localChannel)
+            : Service(service), Storage(broadcastSettings.settings[0].ChannelStorage), OutputSize(broadcastSettings.settings.size())
+        {
+            auto& settings = broadcastSettings.settings[0];
+            PushStats.Level = settings.Level;
+            PopStats.ChannelId = settings.ChannelId;
+            PopStats.DstStageId = settings.DstStageId;
+            PopStats.Level = settings.Level;
+
+            auto broadcastBuffer = std::make_shared<TBroadcastBuffer>(buffers);
+
+            Serializer = CreateSerializer(settings, broadcastBuffer, localChannel);
+
+            Serializer->Buffer = broadcastBuffer;
+        }
+
+        mutable TDqOutputStats PushStats;
+        mutable TDqOutputChannelStats PopStats;
+
+        // IDqOutput
+
+        const TDqOutputStats &GetPushStats() const override
+        {
+            Serializer->Buffer->ExportPushStats(PushStats);
+            return PushStats;
+        }
+
+        EDqFillLevel GetFillLevel() const override
+        {
+            return Serializer->Buffer->GetFillLevel();
+        }
+
+        EDqFillLevel UpdateFillLevel() override
+        {
+            return GetFillLevel();
+        }
+
+        void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override
+        {
+            Aggregator = aggregator;
+            Serializer->Buffer->SetFillAggregator(aggregator);
+        }
+
+        void Push(NUdf::TUnboxedValue &&value) override
+        {
+            if (!Serializer->Buffer->IsFinished())
+            {
+                Serializer->Push(std::move(value));
+            }
+        }
+
+        void WidePush(NUdf::TUnboxedValue *values, ui32 width) override
+        {
+            if (!Serializer->Buffer->IsFinished())
+            {
+                Serializer->WidePush(values, width);
+            }
+        }
+
+        void Push(NDqProto::TWatermark &&) override
+        {
+            Y_ENSURE(false);
+        }
+
+        void Push(NDqProto::TCheckpoint &&) override
+        {
+            Y_ENSURE(false);
+        }
+
+        void Finish() override
+        {
+            Serializer->Flush(true);
+        }
+
+        void Flush() override
+        {
+            Serializer->Flush(false);
+        }
+
+        bool IsFinished() const override
+        {
+            bool finishCheckResult = Serializer->Buffer->IsFinished();
+            PopStats.FinishCheckTime = TInstant::Now();
+            PopStats.FinishCheckResult = finishCheckResult;
+            return finishCheckResult;
+        }
+
+        bool IsEarlyFinished() const override
+        {
+            return Serializer->Buffer->IsEarlyFinished();
+        }
+
+        NKikimr::NMiniKQL::TType *GetOutputType() const override
+        {
+            return Serializer->RowType;
+        }
+
+        // IDqOutput // Deprecated
+
+        bool HasData() const override
+        {
+            Y_ENSURE(false);
+            return false;
+        }
+
+        // IDqOutputChannel
+
+        ui64 GetChannelId() const override
+        {
+            return PopStats.ChannelId;
+        }
+
+        ui64 GetValuesCount() const override
+        {
+            Y_ENSURE(false);
+            return 0;
+        }
+
+        const TDqOutputChannelStats &GetPopStats() const override
+        {
+            Serializer->Buffer->ExportPopStats(PopStats);
+            return PopStats;
+        }
+
+        bool Pop(TDqSerializedBatch &) override
+        {
+            return false;
+        }
+
+        bool Pop(NDqProto::TWatermark &) override
+        {
+            return false;
+        }
+
+        bool Pop(NDqProto::TCheckpoint &) override
+        {
+            return false;
+        }
+
+        bool PopAll(TDqSerializedBatch &) override
+        {
+            return false;
+        }
+
+        ui64 Drop() override
+        {
+            return 0;
+        }
+
+        void Terminate() override
+        {
+            // ???
+        }
+
+        void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override
+        {
+            // IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
+            // auto service = Service.lock();
+            // Y_ENSURE(service, "Channel has been binded or service is not available");
+            Y_ENSURE(!Binded[channelId]);
+
+            Binded[channelId] = true;
+            ++BindedCount;
+            // if (IsLocalChannel)
+            // {
+            //     Serializer = ConvertToLocalSerializer(std::move(Serializer));
+            // }
+
+
+            auto broadcastBuffer = std::static_pointer_cast<TBroadcastBuffer>(Serializer->Buffer);
+
+            auto nodeId = inputActorId.NodeId();
+
+            auto it = ChannelIdFromNodeId.find(nodeId);
+
+            if (it == ChannelIdFromNodeId.end()) {
+                ChannelIdFromNodeId.emplace(nodeId, channelId);
+                broadcastBuffer->Buffers[channelId]->Info.OutputActorId = outputActorId;
+                broadcastBuffer->Buffers[channelId]->Info.InputActorId = inputActorId;
+            } else {
+                // broadcastBuffer->Buffers[it->second]->Info.OutputActorId = outputActorId;
+                auto& broadcastInputs = broadcastBuffer->Buffers[it->second]->Info.BroadcastInputActorIds;
+                if (broadcastInputs.empty()){
+                    broadcastInputs.push_back(broadcastBuffer->Buffers[it->second]->Info.InputActorId);
+                    broadcastBuffer->Buffers[it->second]->Info.InputActorId = {};
+                }
+                broadcastInputs.push_back(inputActorId);
+
+                // what should we do here?
+                broadcastBuffer->Buffers.erase(channelId);
+            }
+            // auto buffer = service->GetOutputBuffer(broadcastBuffer->Buffers[channelId]->Info, Storage);
+            // //
+            // if (Aggregator)
+            // {
+            //     buffer->SetFillAggregator(Aggregator);
+            // }
+
+            // broadcastBuffer->Buffers[channelId] = buffer;
+
+
+            if (BindedCount == OutputSize) {
+                FinishBinding();
+            }
+        }
+
+        bool IsLocal() const override
+        {
+            return IsLocalChannel;
+        }
+
+        std::weak_ptr<TDqChannelService> Service;
+        std::unique_ptr<TOutputSerializer> Serializer;
+        std::shared_ptr<TDqFillAggregator> Aggregator;
+        IDqChannelStorage::TPtr Storage;
+        bool IsLocalChannel = false;
+
+        // binding info
+        std::unordered_map<ui64, bool> Binded;
+        ui64 BindedCount{0};
+
+        // mapping of nodeId and channelId
+        std::unordered_map<ui64, ui64> ChannelIdFromNodeId;
+
+        // number of channels
+        ui32 OutputSize{0};
+
+    private:
+        void FinishBinding() {
+            auto service = Service.lock();
+            Y_ENSURE(service, "Channel has been binded or service is not available");
+
+            auto broadcastBuffer = std::static_pointer_cast<TBroadcastBuffer>(Serializer->Buffer);
+
+            for(auto& [_, buf] : broadcastBuffer->Buffers) {
+
+                auto buffer = service->GetOutputBuffer(buf->Info, Storage);
+                
+                if (Aggregator)
+                {
+                    buffer->SetFillAggregator(Aggregator);
+                }
+
+                buf = buffer;
+            }
+            
+            Service.reset();
+        }
+    };
 
 class TFastDqInputChannel : public IDqInputChannel {
 

@@ -269,6 +269,9 @@ message TEvChannelDataV2 {
     optional bool Leading = 13;
     optional bool Finished = 14;
     optional uint64 ConfirmedPopBytes = 15;
+
+    // Multiple actor for broadcast messages
+    repeated NActorsProto.TActorId BroadcastDstActorIds = 16;
 };
 
 message TEvChannelAckV2 {

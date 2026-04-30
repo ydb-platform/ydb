@@ -11,6 +11,7 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -25,6 +26,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/json/json_writer.h>
+
+#include <type_traits>
 
 namespace NKikimr::NSchemeShard {
 
@@ -311,7 +314,11 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
 
     static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
         if (itemIdx < ui32(settings.items_size())) {
-            return NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+            const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
+            }
+            return itemDest;
         }
         return NBackup::NFieldsWrappers::GetCommonDestination(settings);
     }

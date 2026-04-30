@@ -27,6 +27,27 @@ inline TString GetItemSource(const TSettings& settings, size_t i) {
     return {};
 }
 
+template <typename TItem>
+TString GetItemSourcePathDb(const TItem& item);
+
+template <>
+inline TString GetItemSourcePathDb(const Ydb::Import::ImportFromS3Settings::Item& item) {
+    return item.source_path();
+}
+
+template <>
+inline TString GetItemSourcePathDb(const Ydb::Import::ImportFromFsSettings::Item& item) {
+    return item.source_path_db();
+}
+
+template <typename TSettings>
+inline TString GetItemSourcePathDb(const TSettings& settings, size_t i) {
+    if (i < ui32(settings.items_size())) {
+        return GetItemSourcePathDb(settings.items(i));
+    }
+    return {};
+}
+
 template <typename TVariant, typename TFunc>
 auto VisitSettings(const TVariant& settings, TFunc&& func) {
     return std::visit(std::forward<TFunc>(func), settings);

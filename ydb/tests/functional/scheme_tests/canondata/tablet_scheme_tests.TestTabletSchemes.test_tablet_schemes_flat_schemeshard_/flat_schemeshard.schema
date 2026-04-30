@@ -1190,6 +1190,11 @@
                 "ColumnId": 13,
                 "ColumnName": "ChangefeedUnderlyingTopics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "FSSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -1208,7 +1213,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4732,6 +4738,11 @@
                 "ColumnId": 14,
                 "ColumnName": "ChangefeedUnderlyingTopics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "FSSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4751,7 +4762,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

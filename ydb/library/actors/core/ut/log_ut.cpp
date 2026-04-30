@@ -118,9 +118,9 @@ namespace {
             auto logEvent = ev->StaticCastAsLocal<TEvLog>();
 
             auto ts  = Runtime.GetCurrentTime() - TDuration::Seconds(10);
-            TStructuredMessage structMessage;
-            if (logEvent->StructMessage.Defined()) {
-                structMessage = logEvent->StructMessage.GetRef();
+            TStructuredMessage structuredMessage;
+            if (logEvent->StructuredMessage.Defined()) {
+                structuredMessage = logEvent->StructuredMessage.GetRef();
             }
             Runtime.Send(new IEventHandle{LoggerActor, {},
                 new TEvLog(
@@ -129,7 +129,7 @@ namespace {
                     logEvent->FileName,
                     logEvent->LineNumber,
                     logEvent->Line,
-                    std::move(structMessage),
+                    std::move(structuredMessage),
                     ts)},
                 senderNodeIndex, viaActorSystem);
         }

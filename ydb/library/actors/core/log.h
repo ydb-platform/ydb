@@ -262,9 +262,9 @@ namespace NActors {
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
         TLogBuffer LogBuffer;
-        NKikimr::NStructuredLog::TJsonWriter StructJsonWriter;
-        NKikimr::NStructuredLog::TMetaWriter StructMetaWriter;
-        NKikimr::NStructuredLog::TTextWriter StructTextWriter;
+        NKikimr::NStructuredLog::TJsonWriter StructuredJsonWriter;
+        NKikimr::NStructuredLog::TMetaWriter StructuredMetaWriter;
+        NKikimr::NStructuredLog::TTextWriter StructuredTextWriter;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);
@@ -390,7 +390,7 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         TString&& str,
-        NKikimr::NStructuredLog::TStructuredMessage&& structMessage)
+        NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
@@ -403,7 +403,7 @@ namespace NActors {
                 fileName,
                 lineNumber,
                 std::move(str),
-                std::move(structMessage))));
+                std::move(structuredMessage))));
     }
 
     template <typename TCtx, typename... TArgs>
@@ -485,7 +485,7 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         const TString& str,
-        NKikimr::NStructuredLog::TStructuredMessage&& structMessage = {}) {
+        NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
 
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(
@@ -495,7 +495,7 @@ namespace NActors {
             fileName,
             lineNumber,
             TString(str),
-            std::move(structMessage));
+            std::move(structuredMessage));
     }
 
     class TRecordWriter: public TStringBuilder {

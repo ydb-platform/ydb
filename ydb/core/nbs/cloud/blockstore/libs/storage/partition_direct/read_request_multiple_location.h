@@ -1,5 +1,6 @@
 #pragma once
 
+#include "read_request_executor.h"
 #include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -16,12 +17,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 // Class works with a multiple readHints.
 // It incapsulates logic of splitting original request into N subrequests,
 // sending them to different sources and collecting responses.
+// ATTENTION: usually you should use fabric method CreateReadRequestExecutor
 class TReadMultipleLocationRequestExecutor
-    : public std::enable_shared_from_this<TReadMultipleLocationRequestExecutor>
+    : public IReadRequestExecutor
+    , public std::enable_shared_from_this<TReadMultipleLocationRequestExecutor>
 {
 public:
-    using TResponse = TReadSingleLocationRequestExecutor::TResponse;
-
     TReadMultipleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
         const TVChunkConfig& vChunkConfig,
@@ -31,14 +32,17 @@ public:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
-    ~TReadMultipleLocationRequestExecutor();
+    ~TReadMultipleLocationRequestExecutor() override;
 
-    void Run();
+    void Run() override;
 
-    NThreading::TFuture<TResponse> GetFuture() const;
+    [[nodiscard]] NThreading::TFuture<TReadRequestResponse>
+    GetFuture() const override;
 
 private:
-    void OnSubRequestComplete(const TResponse& response, size_t index);
+    void OnSubRequestComplete(
+        const TReadRequestResponse& response,
+        size_t index);
 
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
@@ -49,8 +53,8 @@ private:
 
     TVector<TReadSingleLocationRequestExecutorPtr> SubRequestExecutors;
     size_t CompletedCount{0};
-    NThreading::TPromise<TResponse> Promise =
-        NThreading::NewPromise<TResponse>();
+    NThreading::TPromise<TReadRequestResponse> Promise =
+        NThreading::NewPromise<TReadRequestResponse>();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

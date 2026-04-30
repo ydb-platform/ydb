@@ -24,7 +24,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , Promise(NThreading::NewPromise<TResponse>())
+    , Promise(NThreading::NewPromise<TReadRequestResponse>())
 {
     SubRequestExecutors.reserve(readHint.RangeHints.size());
 
@@ -61,7 +61,8 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
                     Request->Headers.Range.Print().c_str(),
                     FormatError(error).c_str());
 
-                Promise.TrySetValue(TResponse{.Error = std::move(error)});
+                Promise.TrySetValue(
+                    TReadRequestResponse{.Error = std::move(error)});
                 return;
             }
         }
@@ -100,7 +101,7 @@ void TReadMultipleLocationRequestExecutor::Run()
     for (size_t i = 0; i < SubRequestExecutors.size(); ++i) {
         auto future = SubRequestExecutors[i]->GetFuture();
         future.Subscribe([self = shared_from_this(),
-                          i](const NThreading::TFuture<TResponse>& f)
+                          i](const NThreading::TFuture<TReadRequestResponse>& f)
                          { self->OnSubRequestComplete(f.GetValue(), i); });
 
         SubRequestExecutors[i]->Run();
@@ -108,7 +109,7 @@ void TReadMultipleLocationRequestExecutor::Run()
 }
 
 void TReadMultipleLocationRequestExecutor::OnSubRequestComplete(
-    const TResponse& response,
+    const TReadRequestResponse& response,
     size_t index)
 {
     if (HasError(response.Error)) {
@@ -128,11 +129,11 @@ void TReadMultipleLocationRequestExecutor::OnSubRequestComplete(
     }
 
     if (++CompletedCount == SubRequestExecutors.size()) {
-        Promise.TrySetValue(TResponse{.Error = MakeError(S_OK)});
+        Promise.TrySetValue(TReadRequestResponse{.Error = MakeError(S_OK)});
     }
 }
 
-NThreading::TFuture<TReadMultipleLocationRequestExecutor::TResponse>
+NThreading::TFuture<TReadRequestResponse>
 TReadMultipleLocationRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();

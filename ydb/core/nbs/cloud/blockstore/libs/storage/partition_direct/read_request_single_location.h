@@ -1,5 +1,6 @@
 #pragma once
 
+#include "read_request_executor.h"
 #include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -14,17 +15,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Class works with a single readHint. It performs a request into a 1 source
-// location ATTENTION: if you are not sure, use
-// TReadMultipleLocationRequestExecutor
+// location
+// ATTENTION: usually you should use fabric method CreateReadRequestExecutor
 class TReadSingleLocationRequestExecutor
-    : public std::enable_shared_from_this<TReadSingleLocationRequestExecutor>
+    : public IReadRequestExecutor
+    , public std::enable_shared_from_this<TReadSingleLocationRequestExecutor>
 {
 public:
-    struct TResponse
-    {
-        NProto::TError Error;
-    };
-
     TReadSingleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
         const TVChunkConfig& vChunkConfig,
@@ -34,11 +31,12 @@ public:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
-    ~TReadSingleLocationRequestExecutor();
+    ~TReadSingleLocationRequestExecutor() override;
 
-    void Run();
+    void Run() override;
 
-    NThreading::TFuture<TResponse> GetFuture() const;
+    [[nodiscard]] NThreading::TFuture<TReadRequestResponse>
+    GetFuture() const override;
 
 private:
     void OnReadResponse(const TDBGReadBlocksResponse& response);
@@ -54,8 +52,8 @@ private:
 
     size_t TryNumber = 0;
 
-    NThreading::TPromise<TResponse> Promise =
-        NThreading::NewPromise<TResponse>();
+    NThreading::TPromise<TReadRequestResponse> Promise =
+        NThreading::NewPromise<TReadRequestResponse>();
 };
 
 using TReadSingleLocationRequestExecutorPtr =

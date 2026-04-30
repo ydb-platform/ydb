@@ -1,5 +1,7 @@
 #include "base_test_fixture.h"
+#include "read_request_executor.h"
 #include "read_request_multiple_location.h"
+#include "read_request_single_location.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -12,6 +14,83 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 Y_UNIT_TEST_SUITE(TReadRequestTest)
 {
+    Y_UNIT_TEST_F(ShouldCreateSingleLocationExecutor, TBaseFixture)
+    {
+        Init();
+
+        const TBlockRange64 range = TBlockRange64::WithLength(10, 1000);
+        ExpectedRange = range;
+
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto originalRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+
+        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readRequest = CreateReadRequestExecutor(
+            Runtime->GetActorSystem(0),
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(originalRequest),
+            NWilson::TTraceId());
+
+        UNIT_ASSERT(
+            std::dynamic_pointer_cast<TReadSingleLocationRequestExecutor>(
+                readRequest) != nullptr);
+        UNIT_ASSERT(
+            std::dynamic_pointer_cast<TReadMultipleLocationRequestExecutor>(
+                readRequest) == nullptr);
+
+        auto future = readRequest->GetFuture();
+        readRequest->Run();
+        SetReadResult({.Error = MakeError(S_OK)});
+    }
+
+    Y_UNIT_TEST_F(ShouldCreateMultipleLocationExecutor, TBaseFixture)
+    {
+        Init();
+
+        const TBlockRange64 range = TBlockRange64::WithLength(10, 1000);
+        ExpectedRange = range;
+
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto originalRequest =
+            std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+
+        DirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(20, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readRequest = CreateReadRequestExecutor(
+            Runtime->GetActorSystem(0),
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(originalRequest),
+            NWilson::TTraceId());
+
+        UNIT_ASSERT(
+            std::dynamic_pointer_cast<TReadMultipleLocationRequestExecutor>(
+                readRequest) != nullptr);
+        UNIT_ASSERT(
+            std::dynamic_pointer_cast<TReadSingleLocationRequestExecutor>(
+                readRequest) == nullptr);
+
+        auto future = readRequest->GetFuture();
+        readRequest->Run();
+        SetReadResult({.Error = MakeError(S_OK)});
+    }
+
     Y_UNIT_TEST_F(ShouldRead, TBaseFixture)
     {
         Init();
@@ -27,15 +106,14 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        auto readRequest =
-            std::make_shared<TReadMultipleLocationRequestExecutor>(
-                Runtime->GetActorSystem(0),
-                VChunkConfig,
-                DirectBlockGroup,
-                std::move(readHint),
-                std::move(callContext),
-                std::move(originalRequest),
-                NWilson::TTraceId());
+        auto readRequest = CreateReadRequestExecutor(
+            Runtime->GetActorSystem(0),
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(originalRequest),
+            NWilson::TTraceId());
         auto future = readRequest->GetFuture();
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -80,15 +158,14 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         sglist.push_back(TBlockDataRef{readBuffer.data(), readBuffer.size()});
         originalRequest->Sglist = TGuardedSgList(std::move(sglist));
 
-        auto readRequest =
-            std::make_shared<TReadMultipleLocationRequestExecutor>(
-                Runtime->GetActorSystem(0),
-                VChunkConfig,
-                DirectBlockGroup,
-                std::move(readHint),
-                std::move(callContext),
-                std::move(originalRequest),
-                NWilson::TTraceId());
+        auto readRequest = CreateReadRequestExecutor(
+            Runtime->GetActorSystem(0),
+            VChunkConfig,
+            DirectBlockGroup,
+            std::move(readHint),
+            std::move(callContext),
+            std::move(originalRequest),
+            NWilson::TTraceId());
         auto future = readRequest->GetFuture();
         readRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());

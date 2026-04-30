@@ -158,7 +158,7 @@ void TDDiskDataCopier::StartCopyRange()
     auto callContext = MakeIntrusive<TCallContext>(requestId);
     callContext->RootTraceId = copyRangeState->Span.GetTraceId();
 
-    auto readExecutor = std::make_shared<TReadMultipleLocationRequestExecutor>(
+    auto readExecutor = CreateReadRequestExecutor(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
@@ -171,8 +171,7 @@ void TDDiskDataCopier::StartCopyRange()
     future.Subscribe(
         [weakSelf = weak_from_this(),
          copyRangeState = std::move(copyRangeState)]   //
-        (const TFuture<TReadMultipleLocationRequestExecutor::TResponse>&
-             f) mutable
+        (const TFuture<TReadRequestResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
                 self->OnRangeRead(std::move(copyRangeState), f.GetValue());
@@ -183,7 +182,7 @@ void TDDiskDataCopier::StartCopyRange()
 
 void TDDiskDataCopier::OnRangeRead(
     TCopyRangeRequestStatePtr copyRangeState,
-    const TReadMultipleLocationRequestExecutor::TResponse& response)
+    const TReadRequestResponse& response)
 {
     copyRangeState->Span.Event("OnRangeRead");
 

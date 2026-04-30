@@ -112,7 +112,7 @@ void TReadSingleLocationRequestExecutor::Run()
     future.Subscribe(std::move(onReadResponse));
 }
 
-NThreading::TFuture<TReadSingleLocationRequestExecutor::TResponse>
+NThreading::TFuture<TReadRequestResponse>
 TReadSingleLocationRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
@@ -154,7 +154,7 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
 
 void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
 {
-    Promise.TrySetValue(TResponse{.Error = std::move(error)});
+    Promise.TrySetValue(TReadRequestResponse{.Error = std::move(error)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

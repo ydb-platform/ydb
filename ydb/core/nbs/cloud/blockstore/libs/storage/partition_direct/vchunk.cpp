@@ -2,7 +2,7 @@
 
 #include "flush_request.h"
 #include "range_translate.h"
-#include "read_request_multiple_location.h"
+#include "read_request_executor.h"
 #include "write_with_direct_replication_request.h"
 #include "write_with_pb_replication_request.h"
 
@@ -317,15 +317,14 @@ void TVChunk::DoReadBlocksLocal(
         "SourceCount",
         static_cast<i64>(readHint.RangeHints.size()));
 
-    auto requestExecutor =
-        std::make_shared<TReadMultipleLocationRequestExecutor>(
-            ActorSystem,
-            VChunkConfig,
-            DirectBlockGroup,
-            std::move(readHint),
-            std::move(callContext),
-            std::move(request),
-            span->GetTraceId());
+    auto requestExecutor = CreateReadRequestExecutor(
+        ActorSystem,
+        VChunkConfig,
+        DirectBlockGroup,
+        std::move(readHint),
+        std::move(callContext),
+        std::move(request),
+        span->GetTraceId());
 
     auto future = requestExecutor->GetFuture();
     future.Subscribe(
@@ -333,8 +332,7 @@ void TVChunk::DoReadBlocksLocal(
          promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
-        (const TFuture<TReadMultipleLocationRequestExecutor::TResponse>&
-             f) mutable
+        (const TFuture<TReadRequestResponse>& f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 

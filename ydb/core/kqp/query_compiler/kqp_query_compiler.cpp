@@ -181,8 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
             return NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
-        case EStreamLookupStrategyType::LookupAndLockRows:
-            return NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK;
+        case EStreamLookupStrategyType::LockAndLookupRows:
+            return NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP;
     }
 
     YQL_ENSURE(false, "Unspecified stream lookup strategy: " << strategy);
@@ -2327,7 +2327,7 @@ private:
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP:
                 case NKqpProto::EStreamLookupStrategy::UNIQUE:
-                case NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK: {
+                case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {
@@ -2346,7 +2346,7 @@ private:
                         streamLookupProto.AddColumns(TString(column->GetName()));
                     }
 
-                    if (streamLookupProto.GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+                    if (streamLookupProto.GetLookupStrategy() == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
                         for (const auto column : resultColumns) {
                             streamLookupProto.AddInputColumns(TString(column->GetName()));
                         }

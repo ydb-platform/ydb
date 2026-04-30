@@ -2190,7 +2190,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
     TCoNameValueTupleList settingsNode{node->ChildPtr(TKqpCnStreamLookup::idx_Settings)};
     auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
 
-    if (settings.Strategy == EStreamLookupStrategyType::LookupAndLockRows) {
+    if (settings.Strategy == EStreamLookupStrategyType::LockAndLookupRows) {
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }

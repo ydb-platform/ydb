@@ -35,6 +35,11 @@ namespace NKikimr {
         TInstant LastCutTime;
         TDeque<ui64> FreeUpToLsn;
         ui64 FirstLsnToKeepLastWritten = 0;
+        bool RescuePartialCutPending = false;
+        TInstant LastWriteResultTime;
+        TString LastWriteResultStatus = "None";
+        TString LastWriteResultError;
+        ui64 LastWriteResultLsn = 0;
 
         const TDuration FirstDuration;
         const TDuration RegularDuration;
@@ -51,6 +56,10 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
+            LastWriteResultTime = TAppData::TimeProvider->Now();
+            LastWriteResultStatus = NKikimrProto::EReplyStatus_Name(ev->Get()->Status);
+            LastWriteResultError = ev->Get()->ErrorReason;
+            LastWriteResultLsn = ev->Get()->Results.empty() ? 0 : ev->Get()->Results.front().Lsn;
             CHECK_PDISK_RESPONSE(LogCutterCtx.VCtx, ev, ctx);
 
             WriteInProgress = false;
@@ -59,6 +68,7 @@ namespace NKikimr {
 
         void Handle(TEvVDiskCutLog::TPtr &ev, const TActorContext &ctx) {
             TEvVDiskCutLog *msg = ev->Get();
+            const ui64 prevCurrentLsnToKeep = CurrentLsnToKeep();
 
             auto update = [&](ui64 &target, TInstant &time, const char *name) {
                 if (msg->LastKeepLsn < target) {
@@ -98,6 +108,13 @@ namespace NKikimr {
                     Y_ABORT("Unexpected case: %d", msg->Component);
             }
 
+            const ui64 currentLsnToKeep = CurrentLsnToKeep();
+            if (LogCutterCtx.VCtx->IsLogRescueMode() && FreeUpToLsn &&
+                    currentLsnToKeep > prevCurrentLsnToKeep &&
+                    currentLsnToKeep > FirstLsnToKeepLastWritten) {
+                RescuePartialCutPending = true;
+            }
+
             Process(ctx);
         }
 
@@ -111,11 +128,41 @@ namespace NKikimr {
             ScheduleActivity(ctx, RegularDuration);
         }
 
-        void Process(const TActorContext &ctx) {
-            if (WriteInProgress)
-                return;
+        ui64 CurrentLsnToKeep() const {
+            return Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
+        }
 
-            const ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep, ScrubLsnToKeep);
+        void IssueCutLog(const TActorContext &ctx, ui64 curLsn) {
+            LastCutTime = TAppData::TimeProvider->Now();
+
+            // generate clear log message
+            NPDisk::TCommitRecord commitRec;
+            commitRec.FirstLsnToKeep = curLsn;
+            commitRec.IsStartingPoint = false;
+            TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
+            ui8 signature = TLogSignature::SignatureHullCutLog;
+            ctx.Send(LogCutterCtx.LoggerId,
+                new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
+                    LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
+            WriteInProgress = true;
+            FirstLsnToKeepLastWritten = curLsn;
+
+            LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
+                    VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
+                        "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64
+                        " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
+                        curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+        }
+
+        void ProcessNormal(const TActorContext &ctx, ui64 curLsn) {
+            if (!FreeUpToLsn || FreeUpToLsn.front() >= curLsn) {
+                return;
+            }
+
+            const auto logRescueWriteAccess = LogCutterCtx.VCtx->TryAcquireLogRescueWriteAccess();
+            if (logRescueWriteAccess == TVDiskContext::ELogRescueWriteAccess::Blocked) {
+                return;
+            }
 
             // only issue command if there is a progress in FreeUpToLsn queue
             bool progress = false;
@@ -124,30 +171,52 @@ namespace NKikimr {
             }
 
             if (progress) {
-                LastCutTime = TAppData::TimeProvider->Now();
+                IssueCutLog(ctx, curLsn);
+            }
+        }
 
-                // generate clear log message
-                NPDisk::TCommitRecord commitRec;
-                commitRec.FirstLsnToKeep = curLsn;
-                commitRec.IsStartingPoint = false;
-                TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
-                ui8 signature = TLogSignature::SignatureHullCutLog;
-                ctx.Send(LogCutterCtx.LoggerId,
-                    new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
-                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
-                WriteInProgress = true;
-                FirstLsnToKeepLastWritten = curLsn;
+        void ProcessRescue(const TActorContext &ctx, ui64 curLsn) {
+            if (!FreeUpToLsn) {
+                RescuePartialCutPending = false;
+                return;
+            }
 
-                LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                        VDISKP(LogCutterCtx.VCtx->VDiskLogPrefix,
-                            "CUT: Lsn# %" PRIu64 " Hull# %" PRIu64 " SyncLog# %" PRIu64
-                            " Syncer# %" PRIu64 " Huge# %" PRIu64 " Db# LogoBlobs Db# Barriers Db# Blocks",
-                            curLsn, HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep, HugeKeeperLsnToKeep));
+            bool requestSatisfied = false;
+            for (; FreeUpToLsn && FreeUpToLsn.front() < curLsn; FreeUpToLsn.pop_front()) {
+                requestSatisfied = true;
+            }
+
+            const bool partialCut = RescuePartialCutPending && FreeUpToLsn;
+            if (curLsn <= FirstLsnToKeepLastWritten || (!requestSatisfied && !partialCut)) {
+                return;
+            }
+
+            // In rescue mode, HullCutLog is the reclamation half of a gated SyncLog checkpoint cycle. Do not
+            // spend another rescue write token here; otherwise a large SyncLog gap can never free log chunks
+            // incrementally.
+            RescuePartialCutPending = false;
+            IssueCutLog(ctx, curLsn);
+        }
+
+        void Process(const TActorContext &ctx) {
+            if (WriteInProgress) {
+                return;
+            }
+
+            const ui64 curLsn = CurrentLsnToKeep();
+            if (LogCutterCtx.VCtx->IsLogRescueMode()) {
+                ProcessRescue(ctx, curLsn);
+            } else {
+                ProcessNormal(ctx, curLsn);
             }
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::LogCutterId);
+            const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+            if (cgi.Get("action") == "kickLogCutter") {
+                Process(ctx);
+            }
 
             TStringStream str;
             str << "\n";
@@ -167,12 +236,52 @@ namespace NKikimr {
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(ScrubLastTime) << "]<br>";
 
                         str << "FreeUpToLsn: " << FormatList(FreeUpToLsn) << "<br>";
+                        const ui64 curLsn = CurrentLsnToKeep();
+                        str << "CurrentMin: " << curLsn << "<br>";
+                        str << "Blockers: ";
+                        bool first = true;
+                        auto blocker = [&] (const char *name, ui64 value) {
+                            if (value == curLsn) {
+                                if (!first) {
+                                    str << ", ";
+                                }
+                                first = false;
+                                str << name;
+                            }
+                        };
+                        blocker("Hull", HullLsnToKeep);
+                        blocker("SyncLog", SyncLogLsnToKeep);
+                        blocker("Syncer", SyncerLsnToKeep);
+                        blocker("HugeKeeper", HugeKeeperLsnToKeep);
+                        blocker("Scrub", ScrubLsnToKeep);
+                        str << "<br>";
+                        if (FreeUpToLsn) {
+                            str << "FrontFreeUpToLsn: " << FreeUpToLsn.front()
+                                << " CutPossibleNow: " << (FreeUpToLsn.front() < curLsn ? "true" : "false") << "<br>";
+                        }
+                        if (LogCutterCtx.VCtx->IsLogRescueMode()) {
+                            str << "RescuePartialCutPending: " << (RescuePartialCutPending ? "true" : "false") << "<br>";
+                            const bool nextRescueCut = FreeUpToLsn && curLsn > FirstLsnToKeepLastWritten &&
+                                (RescuePartialCutPending || FreeUpToLsn.front() < curLsn);
+                            str << "NextRescueCutLsn: " << (nextRescueCut ? ToString(curLsn) : TString("<none>"))
+                                << "<br>";
+                        }
 
                         str << "FirstLsnToKeepLastWritten: [Lsn=" << FirstLsnToKeepLastWritten
                             << ", LastUpdate=" << ToStringLocalTimeUpToSeconds(LastCutTime) << "]<br>";
+                        str << "LastWriteResult: [Status=" << LastWriteResultStatus
+                            << ", Time=" << ToStringLocalTimeUpToSeconds(LastWriteResultTime)
+                            << ", Lsn=" << LastWriteResultLsn
+                            << ", Error=" << LastWriteResultError << "]<br>";
 
                         str << "FirstDuration: " << FirstDuration << "<br>";
                         str << "RegularDuration: " << RegularDuration << "<br>";
+                        str << "EmergencyLogRescueWrites: "
+                            << (!LogCutterCtx.VCtx->IsLogRescueMode() ? "NormalMode"
+                                : LogCutterCtx.VCtx->AreLogRescueWritesAllowed() ? "AllowedContinuously"
+                                : LogCutterCtx.VCtx->GetLogRescueWriteTokens() ? "OneShotPending" : "Blocked")
+                            << " OneShotTokens# " << LogCutterCtx.VCtx->GetLogRescueWriteTokens() << "<br>";
+                        str << "<a class=\"btn btn-warning\" href=\"?action=kickLogCutter\">Kick LogCutter</a><br>";
                     }
                 }
             }
@@ -208,8 +317,13 @@ namespace NKikimr {
             , FirstDuration(LogCutterCtx.Config->RecoveryLogCutterFirstDuration)
             , RegularDuration(LogCutterCtx.Config->RecoveryLogCutterRegularDuration)
         {
-            if (!LogCutterCtx.Config->RunSyncer || LogCutterCtx.Config->BaseInfo.DonorMode) {
+            if (LogCutterCtx.HasInitialSyncerLsnToKeep) {
+                SyncerLsnToKeep = LogCutterCtx.InitialSyncerLsnToKeep;
+            } else if (!LogCutterCtx.Config->RunSyncer || LogCutterCtx.Config->BaseInfo.DonorMode) {
                 SyncerLsnToKeep = Max<ui64>();
+            }
+            if (LogCutterCtx.HasInitialScrubLsnToKeep) {
+                ScrubLsnToKeep = LogCutterCtx.InitialScrubLsnToKeep;
             }
         }
     };

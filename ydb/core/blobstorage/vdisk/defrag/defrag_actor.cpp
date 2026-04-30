@@ -123,6 +123,9 @@ namespace NKikimr {
             {}
 
             void StartFullCompaction() {
+                if (DCtx->VCtx->IsLogRescueMode()) {
+                    return;
+                }
                 if (CompInProgress) {
                     STLOG(PRI_DEBUG, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragCompactionManager can't start new compaction because previous compaction is still in progress"));
                     return;
@@ -334,6 +337,24 @@ namespace NKikimr {
             }
 
             auto &task = WaitQueue.front();
+            if (DCtx->VCtx->IsLogRescueMode()) {
+                std::visit(TOverloaded{
+                    [this] (TEvBlobStorage::TEvVDefrag::TPtr& ev) {
+                        Send(ev->Sender, new TEvBlobStorage::TEvVDefragResult(NKikimrProto::ERROR,
+                            ev->Get()->Record.GetVDiskID()), 0, ev->Cookie);
+                    },
+                    [this] (TEvDefragStartQuantum::TPtr& ev) {
+                        Send(ev->Sender, new TEvBlobStorage::TEvVDefragResult);
+                    },
+                    [this] (TEvHullShredDefrag::TPtr& ev) {
+                        Send(ev->Sender, new TEvHullShredDefragResult, 0, ev->Cookie);
+                    }
+                }, task.Request);
+                WaitQueue.pop_front();
+                RunDefragIfAny(ctx);
+                return;
+            }
+
             if (task.FirstQuantum) {
                 task.FirstQuantum = false;
                 Sublog.Log() << "=== Starting Defrag ===\n";

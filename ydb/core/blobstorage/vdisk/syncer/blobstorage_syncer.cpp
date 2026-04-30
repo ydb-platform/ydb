@@ -348,13 +348,13 @@ namespace NKikimr {
                      new TEvSyncGuidRecoveryDone(NKikimrProto::OK, LocalSyncerState.DbBirthLsn));
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
             Become(&TThis::StandardModeStateFunc);
-            if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
+            if (!SyncerCtx->Config->BaseInfo.ReadOnly && !SyncerCtx->VCtx->IsLogRescueMode()) {
                 LOG_DEBUG(ctx, BS_SYNCER,
                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
                 SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
                 ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            } else {
+            } else if (SyncerCtx->Config->BaseInfo.ReadOnly) {
                 LOG_WARN(ctx, BS_SYNCER,
                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));

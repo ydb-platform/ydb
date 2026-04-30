@@ -426,6 +426,7 @@ namespace NKikimr::NStorage {
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
             bool RestartAfterShutdown = false;
+            bool StartInLogRescueModeOnNextStart = false;
 
             // Last VDiskId reported to Node Whiteboard.
             std::optional<TVDiskID> WhiteboardVDiskId;
@@ -485,7 +486,7 @@ namespace NKikimr::NStorage {
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
         void PoisonLocalVDisk(TVDiskRecord& vdisk);
-        void StartLocalVDiskActor(TVDiskRecord& vdisk);
+        void StartLocalVDiskActor(TVDiskRecord& vdisk, bool startInLogRescueMode = false);
         void HandleGone(STATEFN_SIG);
         void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
 

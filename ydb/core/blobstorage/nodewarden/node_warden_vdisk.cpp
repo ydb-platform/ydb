@@ -56,7 +56,7 @@ namespace NKikimr::NStorage {
         VDiskStatusChanged = true;
     }
 
-    void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk) {
+    void TNodeWarden::StartLocalVDiskActor(TVDiskRecord& vdisk, bool startInLogRescueMode) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         const ui64 pdiskGuid = vdisk.Config.GetVDiskLocation().GetPDiskGuid();
         const bool donorMode = vdisk.Config.HasDonorMode();
@@ -66,10 +66,16 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (SlayInFlight, SlayInFlight.contains(vslotId)),
             (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode),
             (PDiskRestartInFlight, PDiskRestartInFlight.contains(vslotId.PDiskId)),
-            (PDisksWaitingToStart, PDisksWaitingToStart.contains(vslotId.PDiskId)));
+            (PDisksWaitingToStart, PDisksWaitingToStart.contains(vslotId.PDiskId)),
+            (StartInLogRescueMode, startInLogRescueMode),
+            (StartInLogRescueModeOnNextStart, vdisk.StartInLogRescueModeOnNextStart));
 
         if (SlayInFlight.contains(vslotId)) {
             return;
+        }
+
+        if (startInLogRescueMode) {
+            vdisk.StartInLogRescueModeOnNextStart = true;
         }
 
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
@@ -185,7 +191,10 @@ namespace NKikimr::NStorage {
         baseInfo.ReplNodeResponseQuoter = ReplNodeResponseQuoter;
         baseInfo.YardInitDelay = VDiskCooldownTimeout;
 
+        startInLogRescueMode = std::exchange(vdisk.StartInLogRescueModeOnNextStart, false);
+
         TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
+        vdiskConfig->ForceLogRescueMode = startInLogRescueMode;
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
         vdiskConfig->EnableVPatch = EnableVPatch;
@@ -269,7 +278,7 @@ namespace NKikimr::NStorage {
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid));
+            (PDiskGuid, pdiskGuid), (StartInLogRescueMode, startInLogRescueMode));
 
         // for dynamic groups -- start state aggregator
         if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
@@ -395,7 +404,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev) {
-        const auto& [pDiskId, vDiskId] = *ev->Get();
+        const auto& [pDiskId, vDiskId, startInLogRescueMode] = *ev->Get();
         const auto nodeId = SelfId().NodeId();  // Skeleton and NodeWarden are on the same node
         TVSlotId slotId(nodeId, pDiskId, 0);
 
@@ -403,7 +412,7 @@ namespace NKikimr::NStorage {
             auto& record = it->second;
             if (record.GetVDiskId() == vDiskId) {
                 PoisonLocalVDisk(record);
-                StartLocalVDiskActor(record);
+                StartLocalVDiskActor(record, startInLogRescueMode);
                 break;
             }
         }

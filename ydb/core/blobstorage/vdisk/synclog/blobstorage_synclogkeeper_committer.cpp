@@ -148,7 +148,11 @@ namespace NKikimr {
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
                 Y_ABORT_UNLESS(ev->Get()->Results.size() == 1);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
-                TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
+                // The SyncLogIdx entry point itself is now durable. Since RecoveryLogWriter preserves LSN order,
+                // receiving this result proves that all lower recovery-log records needed by this entry point are
+                // durable too, even if LsnMngr did not observe fresh SyncLog-confirmed user writes.
+                const ui64 recoveryLogConfirmedLsn = Max(entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
+                TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, recoveryLogConfirmedLsn);
                 ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,
                     EntryPointSerializer.GetEntryPointDbgInfo(), std::move(Delta)));
                 Die(ctx);

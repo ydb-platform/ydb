@@ -173,6 +173,10 @@ namespace NKikimr {
             DelayedActions.SetDeleteChunk();
         }
 
+        bool TSyncLogKeeperState::CutLogActionRequiresCommit() const {
+            return DelayedActions.HasCutLog() && CalculateFirstLsnToKeep() < FreeUpToLsn;
+        }
+
         bool TSyncLogKeeperState::PerformCutLogAction(std::function<void(ui64)> &&notCommitHandler) {
             if (DelayedActions.HasCutLog()) {
                 DelayedActions.ClearCutLog();
@@ -204,6 +208,28 @@ namespace NKikimr {
                         int(commit), CalculateFirstLsnToKeepDecomposed().data()));
 
             return commit;
+        }
+
+        bool TSyncLogKeeperState::PerformCutLogActionIfNoCommit(std::function<void(ui64)> &&notCommitHandler) {
+            if (!DelayedActions.HasCutLog()) {
+                return false;
+            }
+
+            const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
+            const bool commit = firstLsnToKeep < FreeUpToLsn;
+            if (commit) {
+                return false;
+            }
+
+            DelayedActions.ClearCutLog();
+            notCommitHandler(firstLsnToKeep);
+
+            LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
+                    VDISKP(VCtx->VDiskLogPrefix,
+                        "KEEPER: PerformCutLogActionIfNoCommit: decomposed# %s",
+                        CalculateFirstLsnToKeepDecomposed().data()));
+
+            return true;
         }
 
         bool TSyncLogKeeperState::PerformTrimTailAction() {
@@ -272,13 +298,40 @@ namespace NKikimr {
             return std::exchange(NeedsInitialCommit, false);
         }
 
+        TSyncLogKeeperDebugInfo TSyncLogKeeperState::GetDebugInfo(bool commitInProgress) const {
+            TSyncLogKeeperDebugInfo info;
+            info.FirstLsnToKeep = CalculateFirstLsnToKeep();
+            info.FreeUpToLsn = FreeUpToLsn;
+            info.LastCutLogRetryFirstLsnToKeep = LastCutLogRetryFirstLsnToKeep;
+            info.LastCommitEntryPointLsn = LastCommit.EntryPointLsn;
+            info.LastCommitRecoveryLogConfirmedLsn = LastCommit.RecoveryLogConfirmedLsn;
+            info.DiskLastLsn = SyncLogPtr->GetDiskLastLsn();
+            info.LastLsn = SyncLogPtr->GetLastLsn();
+            info.MemPages = SyncLogPtr->GetNumberOfPagesInMemory();
+            info.MaxMemPages = MaxMemPages;
+            info.DiskChunks = SyncLogPtr->GetSizeInChunks();
+            info.MaxDiskChunks = MaxDiskChunks;
+            info.CutLogRetries = CutLogRetries;
+            info.FreeUpToLsnSatisfied = FreeUpToLsnSatisfied();
+            info.HasDelayedActions = HasDelayedActions();
+            info.CommitInProgress = commitInProgress;
+            if (VCtx->IsLogRescueMode()) {
+                info.NextCommitPlan = BuildNextCommitPlan();
+            }
+            info.LastSwap = LastSwapDebugInfo;
+            info.LastCommitAttempt = LastCommitDebugInfo;
+            info.FirstLsnToKeepDecomposed = CalculateFirstLsnToKeepDecomposed();
+            return info;
+        }
+
         TSyncLogKeeperCommitData TSyncLogKeeperState::PrepareCommitData(ui64 recoveryLogConfirmedLsn) {
             // we _copy_ ChunksToDeleteDelayed and _move_ ChunksToDelete
 
-            // take snap
-            TSyncLogSnapshotPtr syncLogSnap = SyncLogPtr->GetSnapshot();
             // fix mem and disk overflow
             TMemRecLogSnapshotPtr swapSnap = FixMemoryAndDiskOverflow();
+            // take snap after trimming live DiskRecLog; otherwise the entry point can serialize chunks that were
+            // just moved to ChunksToDeleteDelayed by FixDiskOverflow().
+            TSyncLogSnapshotPtr syncLogSnap = SyncLogPtr->GetSnapshot();
             // copy from TSet to vector
             TVector<ui32> deleteDelayed = ChunksToDeleteDelayed.Copy();
 
@@ -301,11 +354,35 @@ namespace NKikimr {
             return result;
         }
 
+        void TSyncLogKeeperState::RecordCommitAttempt(const TSyncLogKeeperCommitData& commitData, TInstant now) {
+            const ui64 seqNo = LastCommitDebugInfo.AttemptSeqNo + 1;
+            LastCommitDebugInfo = {};
+            LastCommitDebugInfo.AttemptSeqNo = seqNo;
+            LastCommitDebugInfo.AttemptTime = now;
+            LastCommitDebugInfo.AttemptSwapSnapPages = commitData.SwapSnap ? commitData.SwapSnap->Size() : 0;
+            LastCommitDebugInfo.AttemptChunksToDeleteDelayed = commitData.ChunksToDeleteDelayed.size();
+            LastCommitDebugInfo.AttemptChunksToDelete = commitData.ChunksToDelete.size();
+            LastCommitDebugInfo.AttemptRecoveryLogConfirmedLsn = commitData.RecoveryLogConfirmedLsn;
+            LastCommitDebugInfo.AttemptSwapSnapBoundaries = commitData.SwapSnap ?
+                commitData.SwapSnap->BoundariesToString() : "<empty>";
+            LastCommitDebugInfo.Status = "InProgress";
+        }
+
         ui64 TSyncLogKeeperState::ApplyCommitResult(TEvSyncLogCommitDone *msg) {
             // apply all appends to DiskRecLog and update dbg info
             SyncLogPtr->UpdateDiskIndex(msg->Delta, msg->EntryPointDbgInfo);
             // save last commit info
             LastCommit = msg->CommitInfo;
+            LastCommitDebugInfo.Status = "OK";
+            LastCommitDebugInfo.ResultSeqNo = LastCommitDebugInfo.AttemptSeqNo;
+            LastCommitDebugInfo.ResultTime = msg->CommitInfo.Time;
+            LastCommitDebugInfo.ResultEntryPointLsn = msg->CommitInfo.EntryPointLsn;
+            LastCommitDebugInfo.ResultRecoveryLogConfirmedLsn = msg->CommitInfo.RecoveryLogConfirmedLsn;
+            LastCommitDebugInfo.ResultSwapAppends = msg->Delta.AllAppends.size();
+            for (const auto& append : msg->Delta.AllAppends) {
+                LastCommitDebugInfo.ResultSwapPages += append.Pages.size();
+            }
+            LastCommitDebugInfo.ResultEntryPointDbgInfo = msg->EntryPointDbgInfo.ToString();
 
             const TEntryPointDbgInfo &info = SyncLogPtr->GetLastEntryPointDbgInfo();
             if (info.ByteSize > SyncLogMaxEntryPointSize) {
@@ -339,11 +416,15 @@ namespace NKikimr {
             }
         }
 
-        TMemRecLogSnapshotPtr TSyncLogKeeperState::BuildSwapSnap() {
+        TMemRecLogSnapshotPtr TSyncLogKeeperState::BuildSwapSnapDebugInfo(TSyncLogKeeperSwapDebugInfo& info) const {
             // find mem pages to write to disk
             const bool stillMemOverflow = SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages;
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
             const bool wantToCutRecoveryLog = FreeUpToLsn > firstLsnToKeep;
+            info = {};
+            info.Attempted = stillMemOverflow || wantToCutRecoveryLog;
+            info.WantToCutRecoveryLog = wantToCutRecoveryLog;
+            info.StillMemOverflow = stillMemOverflow;
 
             TMemRecLogSnapshotPtr swapSnap;
             if (stillMemOverflow || wantToCutRecoveryLog) {
@@ -359,21 +440,56 @@ namespace NKikimr {
 
                 const ui32 pagesInChunk = SyncLogPtr->GetChunkSize() / SyncLogPtr->GetAppendBlockSize();
                 const ui32 maxSwapPages = Max<ui32>(1, Min(MaxMemPages, pagesInChunk));
+                info.DiskLastLsn = diskLastLsn;
+                info.FreeUpToLsn = freeUpToLsn;
+                info.FreeNPages = freeNPages;
+                info.MaxSwapPages = maxSwapPages;
 
                 // build swap snap
                 swapSnap = SyncLogPtr->BuildMemSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages, maxSwapPages);
+                info.SwapSnapPages = swapSnap ? swapSnap->Size() : 0;
+                info.SwapSnapBoundaries = swapSnap ? swapSnap->BoundariesToString() : "{Mem: empty}";
+            }
+
+            return swapSnap;
+        }
+
+        TSyncLogKeeperCommitPlanDebugInfo TSyncLogKeeperState::BuildNextCommitPlan() const {
+            TSyncLogKeeperCommitPlanDebugInfo info;
+            info.TrimTailPending = DelayedActions.HasTrimTail();
+            info.CutLogCommitRequired = CutLogActionRequiresCommit();
+            info.MemOverflowCommitRequired = SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages;
+            info.DeleteChunkCommitRequired = !ChunksToDelete.empty();
+            info.InitialCommitRequired = NeedsInitialCommit;
+            info.HasWork = info.TrimTailPending || info.CutLogCommitRequired || info.MemOverflowCommitRequired ||
+                info.DeleteChunkCommitRequired || info.InitialCommitRequired;
+            info.CurrentDiskChunks = SyncLogPtr->GetSizeInChunks();
+            info.ChunksToDeleteDelayed = ui32(ChunksToDeleteDelayed.Get().size());
+            info.ChunksToDeleteReady = ui32(ChunksToDelete.size());
+
+            const TMemRecLogSnapshotPtr swapSnap = BuildSwapSnapDebugInfo(info.Swap);
+            info.ChunksToAdd = SyncLogPtr->HowManyChunksAdds(swapSnap);
+            if (info.CurrentDiskChunks + info.ChunksToAdd > MaxDiskChunks) {
+                info.ChunksToTrimForQuota = info.CurrentDiskChunks + info.ChunksToAdd - MaxDiskChunks;
+            }
+            return info;
+        }
+
+        TMemRecLogSnapshotPtr TSyncLogKeeperState::BuildSwapSnap() {
+            TMemRecLogSnapshotPtr swapSnap = BuildSwapSnapDebugInfo(LastSwapDebugInfo);
+            if (LastSwapDebugInfo.Attempted) {
                 LOG_DEBUG(*LoggerCtx, BS_LOGCUTTER,
                         VDISKP(VCtx->VDiskLogPrefix,
                             "KEEPER: BuildSwapSnap: wantToCutRecoveryLog# %" PRIu32
                             " stillMemOverflow# %" PRIu32 " diskLastLsn# %" PRIu64
                             " freeUpToLsn# %" PRIu64 " freeNPages# %" PRIu32
                             " maxSwapPages# %" PRIu32 " swapSnap# %s",
-                            ui32(wantToCutRecoveryLog), ui32(stillMemOverflow),
-                            diskLastLsn, freeUpToLsn, freeNPages,
-                            maxSwapPages,
-                            (swapSnap ? swapSnap->BoundariesToString().data() : "{Mem: empty}")));
+                            ui32(LastSwapDebugInfo.WantToCutRecoveryLog),
+                            ui32(LastSwapDebugInfo.StillMemOverflow),
+                            LastSwapDebugInfo.DiskLastLsn, LastSwapDebugInfo.FreeUpToLsn,
+                            LastSwapDebugInfo.FreeNPages, LastSwapDebugInfo.MaxSwapPages,
+                            LastSwapDebugInfo.SwapSnapBoundaries.data()));
             }
-
             return swapSnap;
         }
 
@@ -431,4 +547,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

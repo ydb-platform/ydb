@@ -64,6 +64,11 @@ namespace NKikimr {
         BlobRecoveryActorId = Register(CreateBlobRecoveryActor(VCtx, Info, Counters));
         try {
             for (;;) {
+                if (VCtx->IsLogRescueMode()) {
+                    CurrentState = "emergency log rescue mode";
+                    ProcessUnexpectedEvent(WaitForEvent());
+                    continue;
+                }
                 RequestState();
                 const TInstant start = TActorCoroImpl::Now();
                 const TInstant end = start + TDuration::Seconds(30);
@@ -200,6 +205,10 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::IssueEntrypoint() {
+        if (VCtx->IsLogRescueMode()) {
+            return;
+        }
+
         // prepare entrypoint record
         ScrubEntrypoint.ClearUnreadableBlobs();
         for (const auto& [blobId, state] : UnreadableBlobs) {
@@ -230,7 +239,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::Handle(NPDisk::TEvCutLog::TPtr ev) {
-        if (ScrubEntrypointLsn < ev->Get()->FreeUpToLsn) {
+        if (!VCtx->IsLogRescueMode() && ScrubEntrypointLsn < ev->Get()->FreeUpToLsn) {
             IssueEntrypoint();
         }
     }

@@ -217,7 +217,7 @@ namespace NKikimr {
             TMemRecLogSnapshotPtr BuildMemSwapSnapshot(ui64 diskLastLsn,
                                                        ui64 freeUpToLsn, // excluding
                                                        ui32 freeNPages,
-                                                       ui32 maxPages = Max<ui32>());
+                                                       ui32 maxPages = Max<ui32>()) const;
 
 
             ////////////////////////////////////////////////////////////////////////

@@ -5,6 +5,7 @@
 #include "blobstorage_synclogdata.h"
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_synclogkeeper_committer.h"
+#include "blobstorage_synclog_private_events.h"
 
 namespace NKikimr {
     namespace NSyncLog {
@@ -73,10 +74,10 @@ namespace NKikimr {
             void SetMemOverflow()       { MemOverflowAction = true; }
             void SetDeleteChunk()       { DeleteChunkAction = true; }
             // Has methods
-            bool HasTrimTail()          { return TrimTailAction; }
-            bool HasCutLog()            { return CutLogAction; }
-            bool HasMemOverflow()       { return MemOverflowAction; }
-            bool HasDeleteChunk()       { return DeleteChunkAction; }
+            bool HasTrimTail() const    { return TrimTailAction; }
+            bool HasCutLog() const      { return CutLogAction; }
+            bool HasMemOverflow() const { return MemOverflowAction; }
+            bool HasDeleteChunk() const { return DeleteChunkAction; }
             // Clear methods
             void ClearTrimTail()        { TrimTailAction = false; }
             void ClearCutLog()          { CutLogAction = false; }
@@ -142,7 +143,9 @@ namespace NKikimr {
             void FreeChunkEvent(ui32 chunkIdx);
 
             // action performers
+            bool CutLogActionRequiresCommit() const;
             bool PerformCutLogAction(std::function<void(ui64)> &&notCommitHandler);
+            bool PerformCutLogActionIfNoCommit(std::function<void(ui64)> &&notCommitHandler);
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction();
             bool PerformMemOverflowAction();
@@ -150,7 +153,9 @@ namespace NKikimr {
             bool PerformInitialCommit();
 
             bool FreeUpToLsnSatisfied() const { return CalculateFirstLsnToKeep() >= FreeUpToLsn; }
+            TSyncLogKeeperDebugInfo GetDebugInfo(bool commitInProgress) const;
             TSyncLogKeeperCommitData PrepareCommitData(ui64 recoveryLogConfirmedLsn);
+            void RecordCommitAttempt(const TSyncLogKeeperCommitData& commitData, TInstant now);
             // applies commit result and returns first lsn to keep
             ui64 ApplyCommitResult(TEvSyncLogCommitDone *msg);
 
@@ -181,6 +186,8 @@ namespace NKikimr {
             ui32 CutLogRetries = 0;
             // last observed keep lsn while retrying the current cut-log request
             ui64 LastCutLogRetryFirstLsnToKeep = 0;
+            TSyncLogKeeperSwapDebugInfo LastSwapDebugInfo;
+            TSyncLogKeeperCommitDebugInfo LastCommitDebugInfo;
             // settings:
             const ui32 MaxMemPages;
             const ui32 MaxDiskChunks;
@@ -190,6 +197,8 @@ namespace NKikimr {
 
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
+            TMemRecLogSnapshotPtr BuildSwapSnapDebugInfo(TSyncLogKeeperSwapDebugInfo& info) const;
+            TSyncLogKeeperCommitPlanDebugInfo BuildNextCommitPlan() const;
             // Build Snapshot of memory pages for swapping to disk
             TMemRecLogSnapshotPtr BuildSwapSnap();
             // We have limits on
@@ -206,4 +215,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

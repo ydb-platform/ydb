@@ -386,7 +386,7 @@ namespace NKikimr {
                 return Pages[Size() - 1].GetLastLsn();
             }
 
-            TSyncLogPageSnap operator [](unsigned i) {
+            TSyncLogPageSnap operator [](unsigned i) const {
                 return Pages[i];
             }
 
@@ -560,7 +560,7 @@ namespace NKikimr {
                 ui64 diskLastLsn,
                 ui64 freeUpToLsn, // excluding
                 ui32 freeNPages,
-                ui32 maxPages = Max<ui32>());
+                ui32 maxPages = Max<ui32>()) const;
             TString BoundariesToString() const;
             void Output(IOutputStream &s) const;
             TString ToString() const;

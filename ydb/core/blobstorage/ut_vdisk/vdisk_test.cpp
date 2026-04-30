@@ -905,6 +905,64 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         Conf.Shutdown();
         UNIT_ASSERT(success1);
     }
+
+    Y_UNIT_TEST(SyncLogCutLogProgressTest) {
+        /*
+         * End-to-end actor regression for the production shape where local recovery leaves SyncLog with
+         * an old entry point, an empty DiskRecLog, and a large recovered MemRecLog tail. PDisk asks to cut
+         * the recovery log, but LogCutter can only write its HullCutLog commit after SyncLog publishes an
+         * advanced FirstLsnToKeep.
+         *
+         * The test uses the real SyncLogActor, SyncLogCommitter, RecoveryLogCutter, RecoveryLogWriter, and
+         * PDisk yard. A small log proxy observes outgoing log records and requires several SyncLogIdx
+         * checkpoint commits before the HullCutLog commit appears. The old single-SwapSnap behavior would
+         * produce only one SyncLogIdx cut checkpoint; the old fixed retry limit would stop before the
+         * boundary reaches the requested FreeUpToLsn.
+         */
+        TConfiguration Conf;
+        TNoVDiskSetup vdiskSetup;
+        Conf.Prepare(&vdiskSetup);
+        TSyncLogCutLogProgress test;
+        bool success1 = Conf.Run<TSyncLogCutLogProgress>(&test, TIMEOUT, 1, false);
+        Conf.Shutdown();
+        UNIT_ASSERT(success1);
+    }
+
+    Y_UNIT_TEST(SyncLogRescueWriteGateE2ETest) {
+        /*
+         * End-to-end rescue-mode regression for the emergency log-cut workflow.
+         *
+         * Scenario:
+         * 1. Start the regular VDisk stack first and write user data through the normal VDisk path.
+         *    This models the healthy pre-incident boot where the disk/group is not in rescue mode.
+         * 2. Stop that stack, restart the same PDisk files without regular VDisk actors, and then register one
+         *    real CreateVDisk actor manually with rescue mode forced before local recovery starts. This keeps
+         *    the same recovered VDisk identity while letting the test put a PDisk proxy under that one VDisk.
+         * 3. Publish a state where PDisk has a cut request above the recovered SyncLog barrier.
+         *    While rescue writes are blocked, the observed PDisk proxy must not see any mutation request:
+         *    TEvLog, TEvMultiLog, TEvChunkWrite, TEvChunkReserve, or TEvChunkForget.
+         * 4. Grant exactly one rescue checkpoint, as the Web UI button does, and kick SyncLog through LogCutter.
+         *    The allowed cycle is a bounded SignatureSyncLogIdx checkpoint followed by the immediately safe
+         *    SignatureHullCutLog cut; the SyncLog checkpoint may include chunk writes before the entry-point TEvLog.
+         * 5. Publish another cut request after the one-shot token is consumed. The PDisk proxy must remain silent,
+         *    proving that the VDisk cannot continue checkpointing without another operator-approved write.
+         */
+        TConfiguration Conf;
+
+        TFastVDiskSetup normalSetup;
+        Conf.Prepare(&normalSetup);
+        TSyncLogSeedNormalVDiskBeforeRescue normalWrites;
+        bool normalStarted = Conf.Run<TSyncLogSeedNormalVDiskBeforeRescue>(&normalWrites, TIMEOUT);
+        Conf.Shutdown();
+        UNIT_ASSERT(normalStarted);
+
+        TNoVDiskSetup rescueSetup;
+        Conf.Prepare(&rescueSetup, false, false);
+        TSyncLogRescueWriteGateE2E rescue;
+        bool rescuePassed = Conf.Run<TSyncLogRescueWriteGateE2E>(&rescue, TIMEOUT, 1, false);
+        Conf.Shutdown();
+        UNIT_ASSERT(rescuePassed);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

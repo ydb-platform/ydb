@@ -278,7 +278,7 @@ namespace NKikimr {
         TMemRecLogSnapshotPtr TMemRecLog::BuildSwapSnapshot(ui64 diskLastLsn,
                                                             ui64 freeUpToLsn, // excluding
                                                             ui32 freeNPages,
-                                                            ui32 maxPages) {
+                                                            ui32 maxPages) const {
             TSyncLogPages pages;
 
             // compare function

@@ -13,6 +13,8 @@
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
+#include <atomic>
+
 namespace NKikimr {
     namespace NPDisk {
         struct TEvChunkReadResult;
@@ -47,6 +49,9 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         // Self VDisk related info
         const TGroupId GroupId;
+        std::atomic<bool> LogRescueMode = false;
+        std::atomic<bool> LogRescueWritesAllowed = false;
+        std::atomic<ui32> LogRescueWriteTokens = 0;
         const TVDiskIdShort ShortSelfVDisk;
         const TString VDiskLogPrefix;
         const ui32 NodeId;
@@ -105,6 +110,67 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
                 TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+
+        bool IsLogRescueMode() const {
+            return LogRescueMode.load(std::memory_order_relaxed);
+        }
+
+        void SetLogRescueMode(bool enabled) {
+            LogRescueMode.store(enabled, std::memory_order_relaxed);
+            LogRescueWritesAllowed.store(false, std::memory_order_relaxed);
+            LogRescueWriteTokens.store(0, std::memory_order_relaxed);
+        }
+
+        bool AreLogRescueWritesAllowed() const {
+            return LogRescueWritesAllowed.load(std::memory_order_relaxed);
+        }
+
+        void SetLogRescueWritesAllowed(bool enabled) {
+            LogRescueWritesAllowed.store(enabled, std::memory_order_relaxed);
+            LogRescueWriteTokens.store(0, std::memory_order_relaxed);
+        }
+
+        void AllowOneLogRescueWrite() {
+            LogRescueWriteTokens.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        ui32 GetLogRescueWriteTokens() const {
+            return LogRescueWriteTokens.load(std::memory_order_relaxed);
+        }
+
+        bool ShouldAllowLogRescueWrites() const {
+            return !IsLogRescueMode() || AreLogRescueWritesAllowed() || GetLogRescueWriteTokens();
+        }
+
+        enum class ELogRescueWriteAccess : ui8 {
+            Blocked,
+            Allowed,
+            OneShot,
+        };
+
+        ELogRescueWriteAccess TryAcquireLogRescueWriteAccess() {
+            if (!IsLogRescueMode()) {
+                return ELogRescueWriteAccess::Allowed;
+            }
+            if (AreLogRescueWritesAllowed()) {
+                return ELogRescueWriteAccess::Allowed;
+            }
+
+            ui32 tokens = LogRescueWriteTokens.load(std::memory_order_relaxed);
+            while (tokens) {
+                if (LogRescueWriteTokens.compare_exchange_weak(tokens, tokens - 1,
+                        std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                    return ELogRescueWriteAccess::OneShot;
+                }
+            }
+            return ELogRescueWriteAccess::Blocked;
+        }
+
+        void ReturnLogRescueWriteAccess(ELogRescueWriteAccess access) {
+            if (access == ELogRescueWriteAccess::OneShot) {
+                LogRescueWriteTokens.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL

@@ -162,6 +162,9 @@ namespace NKikimr {
         }
 
         void ScanAndSend(const TActorContext& ctx) {
+            if (HullCtx->VCtx->IsLogRescueMode()) {
+                return;
+            }
             // send up to MaxInFly + epsilon
             while (Saviour.Valid() && InFly < MaxInFly) {
                 // find parts to resurrect
@@ -186,7 +189,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvAnubisOsirisPutResult::TPtr& ev, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK, "Status# %d", ev->Get()->Status);
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                Y_ABORT_UNLESS(HullCtx->VCtx->IsLogRescueMode(), "Status# %d", ev->Get()->Status);
+            }
             --InFly;
             // scan and send messages up to MaxInFly
             ScanAndSend(ctx);

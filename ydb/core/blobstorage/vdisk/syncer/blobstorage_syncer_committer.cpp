@@ -208,6 +208,10 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
             ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
+            if (SyncerCtx->VCtx->IsLogRescueMode()) {
+                Y_UNUSED(freeUpToLsn);
+                return;
+            }
             if (InFly.empty() && (CurEntryPointLsn < freeUpToLsn)) {
                 SelfCommit(ctx);
             }
@@ -218,7 +222,7 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
 
             // check that no writes going on at this moment and enouth time has passed
-            if (InFly.empty() && (now >= LastCommitTime + AdvanceEntryPointTimeout)) {
+            if (!SyncerCtx->VCtx->IsLogRescueMode() && InFly.empty() && (now >= LastCommitTime + AdvanceEntryPointTimeout)) {
                 SelfCommit(ctx);
             }
 

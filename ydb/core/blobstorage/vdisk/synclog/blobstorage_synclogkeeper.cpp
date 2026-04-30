@@ -51,6 +51,13 @@ namespace NKikimr {
                 return KeepState.PerformCutLogAction(std::move(notCommitHandler));
             }
 
+            bool PerformCutLogActionIfNoCommit(const TActorContext &ctx) {
+                auto notCommitHandler = [&ctx, this] (ui64 firstLsnToKeep) {
+                    FixateFirstLsnToKeep(ctx, firstLsnToKeep);
+                };
+                return KeepState.PerformCutLogActionIfNoCommit(std::move(notCommitHandler));
+            }
+
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction() {
                 const bool hasToCommit = KeepState.PerformTrimTailAction();
@@ -84,12 +91,33 @@ namespace NKikimr {
                     return;
                 }
 
+                if (SlCtx->VCtx->IsLogRescueMode()) {
+                    PerformCutLogActionIfNoCommit(ctx);
+                    if (!KeepState.HasDelayedActions()) {
+                        return;
+                    }
+                }
+
+                const auto logRescueWriteAccess = SlCtx->VCtx->TryAcquireLogRescueWriteAccess();
+                if (logRescueWriteAccess == TVDiskContext::ELogRescueWriteAccess::Blocked) {
+                    return;
+                }
+
                 bool generateCommit = false;
-                generateCommit |= PerformTrimTailAction();
-                generateCommit |= PerformCutLogAction(ctx);
-                generateCommit |= PerformMemOverflowAction();
-                generateCommit |= PerformDeleteChunkAction();
-                generateCommit |= PerformInitialCommit();
+                if (logRescueWriteAccess == TVDiskContext::ELogRescueWriteAccess::OneShot) {
+                    if (KeepState.CutLogActionRequiresCommit()) {
+                        generateCommit = PerformCutLogAction(ctx);
+                    } else {
+                        SlCtx->VCtx->ReturnLogRescueWriteAccess(logRescueWriteAccess);
+                        return;
+                    }
+                } else {
+                    generateCommit |= PerformTrimTailAction();
+                    generateCommit |= PerformCutLogAction(ctx);
+                    generateCommit |= PerformMemOverflowAction();
+                    generateCommit |= PerformDeleteChunkAction();
+                    generateCommit |= PerformInitialCommit();
+                }
 
                 if (generateCommit) {
                     Y_ABORT_UNLESS(!CommitterId);
@@ -97,12 +125,15 @@ namespace NKikimr {
                     const ui64 recoveryLogConfirmedLsn = SlCtx->LsnMngr->GetConfirmedLsnForSyncLog();
                     // create and run committer
                     TSyncLogKeeperCommitData commitData = KeepState.PrepareCommitData(recoveryLogConfirmedLsn);
+                    KeepState.RecordCommitAttempt(commitData, ctx.Now());
 
                     LOG_DEBUG(ctx, BS_SYNCLOG,
                             VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s",
                                 commitData.ToString().data()));
 
                     CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, ctx.SelfID, std::move(commitData)));
+                } else {
+                    SlCtx->VCtx->ReturnLogRescueWriteAccess(logRescueWriteAccess);
                 }
             }
 
@@ -217,7 +248,7 @@ namespace NKikimr {
                 TString sublogContent;
                 if (ev->Get()->IntrospectionInfo)
                     sublogContent = Sublog.Get();
-                ctx.Send(ev->Sender, new TEvSyncLogSnapshotResult(snap, sublogContent));
+                ctx.Send(ev->Sender, new TEvSyncLogSnapshotResult(snap, sublogContent, KeepState.GetDebugInfo(bool(CommitterId))));
             }
 
             void Handle(TEvSyncLogLocalStatus::TPtr &ev, const TActorContext &ctx) {

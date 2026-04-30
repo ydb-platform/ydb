@@ -47,6 +47,10 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TIntrusivePtr<TVDiskConfig> Config;
         TActorId LoggerId;
+        bool HasInitialSyncerLsnToKeep = false;
+        ui64 InitialSyncerLsnToKeep = 0;
+        bool HasInitialScrubLsnToKeep = false;
+        ui64 InitialScrubLsnToKeep = 0;
     };
 
     IActor* CreateRecoveryLogCutter(TLogCutterCtx &&logCutterCtx);

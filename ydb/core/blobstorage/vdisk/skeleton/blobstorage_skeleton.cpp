@@ -1565,6 +1565,11 @@ namespace NKikimr {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
+            if (VCtx->IsLogRescueMode()) {
+                ReplyError(NKikimrProto::ERROR, "emergency log rescue mode", ev, ctx, now);
+                return;
+            }
+
             if (!OutOfSpaceLogic->Allow(ctx, ev)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
                 return;
@@ -1616,6 +1621,11 @@ namespace NKikimr {
             // update basic counters
             TInstant now = TAppData::TimeProvider->Now();
             (msg->IsAnubis() ? IFaceMonGroup->AnubisPutMsgs() : IFaceMonGroup->OsirisPutMsgs())++;
+
+            if (VCtx->IsLogRescueMode()) {
+                ReplyError(NKikimrProto::ERROR, "emergency log rescue mode", ev, ctx, now);
+                return;
+            }
 
             if (!OutOfSpaceLogic->Allow(ctx, ev)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
@@ -1729,8 +1739,19 @@ namespace NKikimr {
             const ui64 bufSize = buf.GetSize();
             Y_ABORT_UNLESS(bufSize <= Config->MaxLogoBlobDataSize,
                     "TEvRecoveredHugeBlob: blob is huge bufSize# %zu", bufSize);
-            UpdatePDiskWriteBytes(bufSize);
 
+            if (VCtx->IsLogRescueMode()) {
+                auto oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
+                auto result = std::make_unique<TEvBlobStorage::TEvVPutResult>(NKikimrProto::ERROR, id, SelfVDiskId, nullptr,
+                    oosStatus, now, 0, nullptr, nullptr, IFaceMonGroup->RecoveredHugeBlobResMsgsPtr(), nullptr, bufSize,
+                    0, TString());
+                result->UpdateStatus(NKikimrProto::ERROR);
+                SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx,
+                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                return;
+            }
+
+            UpdatePDiskWriteBytes(bufSize);
             auto oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
             auto result = std::make_unique<TEvBlobStorage::TEvVPutResult>(NKikimrProto::OK, id, SelfVDiskId, nullptr,
                 oosStatus, now, 0, nullptr, nullptr, IFaceMonGroup->RecoveredHugeBlobResMsgsPtr(), nullptr, bufSize,
@@ -1821,14 +1842,19 @@ namespace NKikimr {
                 SelfId()
             ));
 
-            Hull->PermitGarbageCollection(ctx);
+            const bool logRescueMode = VCtx->IsLogRescueMode();
+            if (!logRescueMode) {
+                Hull->PermitGarbageCollection(ctx);
+            }
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
             }
             UpdateReplState();
-            RunBalancing(ctx);
-            ProcessShredQ();
+            if (!logRescueMode) {
+                RunBalancing(ctx);
+                ProcessShredQ();
+            }
         }
 
         void SkeletonErrorState(const TActorContext &ctx,
@@ -1850,7 +1876,7 @@ namespace NKikimr {
 
         void StartDefrag(const TActorContext &ctx) {
             auto defragCtx = std::make_shared<TDefragCtx>(VCtx, Config, HugeBlobCtx, PDiskCtx, ctx.SelfID,
-                Db->HugeKeeperID, true);
+                Db->HugeKeeperID, !VCtx->IsLogRescueMode());
             DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
             ActiveActors.Insert(DefragId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
         }
@@ -1935,6 +1961,19 @@ namespace NKikimr {
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
                         (TActorId)(Db->LoggerID)};
+                if (VCtx->IsLogRescueMode()) {
+                    // Syncer is not started in rescue mode, so it cannot report its recovered barrier itself.
+                    // If no Syncer/Scrub starting point was recovered, there is no persisted entrypoint for that
+                    // component to keep in the recovery log.
+                    ui64 syncerLsnToKeep = 0;
+                    logCutterCtx.HasInitialSyncerLsnToKeep = true;
+                    logCutterCtx.InitialSyncerLsnToKeep = ev->Get()->LocalRecoveryInfo->FindStartingPoint(
+                        TLogSignature::SignatureSyncerState, &syncerLsnToKeep) ? syncerLsnToKeep : Max<ui64>();
+
+                    logCutterCtx.HasInitialScrubLsnToKeep = true;
+                    logCutterCtx.InitialScrubLsnToKeep = ev->Get()->ScrubEntrypointLsn
+                        ? ev->Get()->ScrubEntrypointLsn : Max<ui64>();
+                }
                 Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
                 ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2025,7 +2064,7 @@ namespace NKikimr {
                 }
 
                 // create syncer actor
-                if (Config->RunSyncer && !Config->BaseInfo.DonorMode) {
+                if (Config->RunSyncer && !Config->BaseInfo.DonorMode && !VCtx->IsLogRescueMode()) {
                     // switch to syncronization step
                     Become(&TThis::StateSyncGuidRecovery);
                     VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
@@ -2063,13 +2102,15 @@ namespace NKikimr {
                 LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON SYNC GUID RECOVERY SUCCEEDED"
                         << " Marker# BSVS31");
                 DbBirthLsn = ev->Get()->DbBirthLsn;
-                SkeletonIsUpAndRunning(ctx, Config->RunRepl);
-                if (Config->RunRepl) {
+                const bool runRepl = Config->RunRepl;
+                const bool replControlsVDiskStatus = runRepl && !VCtx->IsLogRescueMode();
+                SkeletonIsUpAndRunning(ctx, replControlsVDiskStatus);
+                if (runRepl) {
                     auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
                         GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
                     ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
-                    if (CommenceRepl) {
+                    if (CommenceRepl && !VCtx->IsLogRescueMode()) {
                         TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
                             nullptr, 0));
                     }
@@ -2607,13 +2648,14 @@ namespace NKikimr {
             if (!balancingEnabled || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
+            const bool logRescueMode = VCtx->IsLogRescueMode();
             if (BalancingId) {
                 Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
             TBalancingCfg balancingCfg{
-                .EnableSend=Config->BalancingEnableSend,
-                .EnableDelete=Config->BalancingEnableDelete,
+                .EnableSend=Config->BalancingEnableSend && !logRescueMode,
+                .EnableDelete=Config->BalancingEnableDelete && !logRescueMode,
                 .BalanceOnlyHugeBlobs=Config->BalancingBalanceOnlyHugeBlobs,
                 .JobGranularity=Config->BalancingJobGranularity,
                 .BatchSize=Config->BalancingBatchSize,
@@ -2670,6 +2712,13 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV01, VCtx->VDiskLogPrefix << "processing TEvPreShredCompactVDisk",
                 (ShredGeneration, ev->Get()->ShredGeneration));
 
+            if (VCtx->IsLogRescueMode()) {
+                Send(ev->Sender, new NPDisk::TEvPreShredCompactVDiskResult(PDiskCtx->Dsk->Owner,
+                    PDiskCtx->Dsk->OwnerRound, ev->Get()->ShredGeneration, NKikimrProto::ERROR,
+                    "VDisk is in emergency log rescue mode"), 0, ev->Cookie);
+                return;
+            }
+
             VDiskCompactionState->Setup(TActivationContext::AsActorContext(), LoggedRecsVault.GetLastLsnInFlight(), {
                 .CompactLogoBlobs = true,
                 .CompactBlocks = false,
@@ -2685,6 +2734,13 @@ namespace NKikimr {
         void HandleShred(NPDisk::TEvShredVDisk::TPtr ev) {
             STLOG(PRI_DEBUG, BS_SHRED, BSSV02, VCtx->VDiskLogPrefix << "processing TEvShredVDisk",
                 (ShredGeneration, ev->Get()->ShredGeneration));
+
+            if (VCtx->IsLogRescueMode()) {
+                Send(ev->Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                    ev->Get()->ShredGeneration, NKikimrProto::ERROR, "VDisk is in emergency log rescue mode"), 0,
+                    ev->Cookie);
+                return;
+            }
 
             if (!DefragId) {
                 Send(ev->Sender, new NPDisk::TEvShredVDiskResult(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,

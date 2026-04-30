@@ -36,31 +36,35 @@ public:
 
     struct TResolvedPoolId {
         TString PoolId;
+        TString Resolver;
     };
 
-    struct TBypass {};
+    struct TBypass {
+        TString Resolver;
+    };
 
     struct TReject {
         Ydb::StatusIds::StatusCode Code;
         TString Message;
+        TString Resolver;
     };
 
     struct TPendingCompilation {
         i64 ResumeRank;
     };
 
-    using TPreClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
-    using TPostClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject>;
+    using TPreCompileClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject, TPendingCompilation>;
+    using TPostCompileClassifyResult = std::variant<TBypass, TResolvedPoolId, TReject>;
 
     virtual ~IWmQueryClassifier() = default;
 
     /// Pre compile classification
     [[nodiscard]]
-    virtual TPreClassifyResult PreCompileClassify() = 0;
+    virtual TPreCompileClassifyResult PreCompileClassify() = 0;
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
-    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) = 0;
+    virtual TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) = 0;
 
     /// Get the current classification state
     [[nodiscard]]

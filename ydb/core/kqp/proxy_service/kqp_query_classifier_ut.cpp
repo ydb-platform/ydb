@@ -128,16 +128,16 @@ struct TClassifyTestCase {
         return CreateWmQueryClassifier(poolSnap, classifierSnap, TEST_DB, std::move(ctx));
     }
 
-    IWmQueryClassifier::TPreClassifyResult RunPreClassify() const {
+    IWmQueryClassifier::TPreCompileClassifyResult RunPreClassify() const {
         auto classifier = BuildClassifier();
         return classifier->PreCompileClassify();
     }
 };
 
-TString GetPoolId(const IWmQueryClassifier::TPreClassifyResult& result) {
+TString GetPoolId(const IWmQueryClassifier::TPreCompileClassifyResult& result) {
     UNIT_ASSERT_C(std::holds_alternative<IWmQueryClassifier::TResolvedPoolId>(result),
         TStringBuilder()
-            << "Expected TResolvedPoolId, with index: " << ToString(std::variant_size_v<IWmQueryClassifier::TPreClassifyResult>)
+            << "Expected TResolvedPoolId, with index: " << ToString(std::variant_size_v<IWmQueryClassifier::TPreCompileClassifyResult>)
             << ", but got variant with index: " << result.index()
     );
     return std::get<IWmQueryClassifier::TResolvedPoolId>(result).PoolId;

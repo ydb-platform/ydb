@@ -38,12 +38,12 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
 
 [[nodiscard]] TYqlConclusionStatus ValidateObjectId(const TString& objectId) {
     if (objectId.find('/') != TString::npos) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Resource pool id should not contain '/' symbol");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Resource pool name should not contain '/' symbol");
     }
 
     if (to_lower(objectId) == NResourcePool::REJECT_POOL_ID) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            "Resource pool id 'reject' is reserved");
+            "Resource pool name: 'reject' is reserved");
     }
 
     return TYqlConclusionStatus::Success();

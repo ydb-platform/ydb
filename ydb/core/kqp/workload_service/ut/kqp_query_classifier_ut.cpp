@@ -12,7 +12,7 @@ namespace {
 
 class TestQueryClassifier : public IWmQueryClassifier {
 public:
-    TestQueryClassifier(TPreClassifyResult preClassifyResult, TPostClassifyResult postClassifyResult)
+    TestQueryClassifier(TPreCompileClassifyResult preClassifyResult, TPostCompileClassifyResult postClassifyResult)
         : PostCompileCalled(false)
         , PreClassifyResult(preClassifyResult)
         , PostClassifyResult(postClassifyResult)
@@ -20,7 +20,7 @@ public:
     
     virtual ~TestQueryClassifier() = default;
 
-    TPreClassifyResult PreCompileClassify() override {
+    TPreCompileClassifyResult PreCompileClassify() override {
         return PreClassifyResult;
     }
 
@@ -32,15 +32,15 @@ public:
         return EState::PreCompileDone;
     }
 
-    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
+    TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder&) override {
         PostCompileCalled = true;
         return PostClassifyResult;
     }
 
 private:
     bool PostCompileCalled;
-    TPreClassifyResult PreClassifyResult;
-    TPostClassifyResult PostClassifyResult;
+    TPreCompileClassifyResult PreClassifyResult;
+    TPostCompileClassifyResult PostClassifyResult;
 };
 
 template<typename TPreResult, typename TPostResult>

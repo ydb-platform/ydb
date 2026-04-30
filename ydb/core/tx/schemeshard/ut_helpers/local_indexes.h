@@ -43,6 +43,34 @@ inline TString OlapTableWithBloomAndNgramIndexes(const TString& tableName) {
         )";
 }
 
+// Asserts the index path exists, has the expected local-index type and key
+// columns, and is ready. Combines four otherwise-repeated NLs:: checks into
+// a single named call.
+inline void CheckLocalIndexReady(NActors::TTestActorRuntime& runtime,
+        const TString& tablePath, const TString& indexName,
+        NKikimrSchemeOp::EIndexType expectedType,
+        std::initializer_list<TString> expectedKeys) {
+    const auto descr = DescribePrivatePath(runtime, tablePath + "/" + indexName, true, true);
+    TestDescribeResult(descr, {
+        NLs::PathExist,
+        NLs::IndexType(expectedType),
+        NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        NLs::IndexKeys(expectedKeys),
+    });
+}
+
+// Asserts the table has the canonical {idx_bloom, idx_ngram} pair (as produced by
+// OlapTableWithBloomAndNgramIndexes above) as ready scheme-object children.
+inline void CheckOlapTableWithBloomAndNgramIndexesReady(NActors::TTestActorRuntime& runtime,
+        const TString& tablePath) {
+    TestDescribeResult(DescribePath(runtime, tablePath),
+        {NLs::PathExist, NLs::ChildrenCount(2)});
+    CheckLocalIndexReady(runtime, tablePath, "idx_bloom",
+        NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"resource_id"});
+    CheckLocalIndexReady(runtime, tablePath, "idx_ngram",
+        NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"resource_id"});
+}
+
 // Asserts the column-table local index's two versions agree, and the index
 // is present in the parent column table's schema.
 inline void CheckIndexVersionsConsistent(NActors::TTestActorRuntime& runtime,

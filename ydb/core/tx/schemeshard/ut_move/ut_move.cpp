@@ -1655,27 +1655,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Both local indexes are visible as scheme-object children before the move.
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
-            {NLs::PathExist, NLs::ChildrenCount(2)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_bloom"),
-            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_ngram"),
-            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTable");
 
         TestMoveTable(runtime, ++txId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMoved");
         env.TestWaitNotification(runtime, txId);
 
         // Source is gone; destination has both index children.
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMoved"),
-            {NLs::PathExist, NLs::ChildrenCount(2)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMoved/idx_bloom"),
-            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMoved/idx_ngram"),
-            {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableMoved");
     }
 }

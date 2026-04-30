@@ -1525,25 +1525,10 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_C(foundNgramData, "ngram_data must be visible in table children");
         }
 
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"key"}),
-            });
-        }
-
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/ngram_data");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
@@ -1622,15 +1607,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         // Verify that the remaining index scheme object still exists
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/ngram_data");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
 
@@ -1665,15 +1643,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data");
 
@@ -1705,15 +1676,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetPathDescription().GetChildren(0).GetName(), "bloom_data_v2");
         }
 
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2");
 
@@ -1916,15 +1880,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableCreate/bloom_key");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"key"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableCreate", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
 
         // After migration: ALTER-created index appears as scheme object
         {
@@ -1935,15 +1892,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/MigrationTableAlter/bloom_data");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableAlter", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
 
         // Restart again to verify migration is idempotent (no duplicate scheme objects)
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -2076,15 +2026,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         // Verify the remaining index still exists and is valid
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_data");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"data"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_data",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
 
@@ -2105,15 +2048,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         // Verify the new index is valid
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_key");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"key"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
@@ -2161,15 +2097,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             auto descr = DescribePath(runtime, "/MyRoot/TestTable");
             TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
         }
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"key"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
@@ -2187,15 +2116,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
             TestDescribeResult(descr, {NLs::PathNotExist});
         }
-        {
-            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key_renamed");
-            TestDescribeResult(descr, {
-                NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                NLs::IndexKeys({"key"}),
-            });
-        }
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key_renamed",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key_renamed");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");

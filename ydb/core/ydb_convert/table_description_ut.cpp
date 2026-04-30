@@ -346,9 +346,6 @@ indexes {
   status: STATUS_READY
   local_bloom_ngram_filter_index {
     ngram_size: 3
-    hashes_count: 2
-    filter_size_bytes: 512
-    records_count: 1024
     case_sensitive: true
   }
 })");

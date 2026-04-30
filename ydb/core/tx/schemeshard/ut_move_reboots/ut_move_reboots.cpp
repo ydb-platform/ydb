@@ -522,10 +522,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
                     {NLs::PathExist, NLs::ChildrenCount(2)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_bloom"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTable/idx_ngram"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTable");
             }
 
             t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMove", TTestTxConfig::SchemeShard, {pathVersion}),
@@ -536,14 +533,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"), {NLs::PathNotExist});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMove"),
-                    {NLs::PathExist, NLs::ChildrenCount(2)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMove/idx_bloom"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
-                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableMove/idx_ngram"),
-                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
-                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableMove");
             }
         });
     }

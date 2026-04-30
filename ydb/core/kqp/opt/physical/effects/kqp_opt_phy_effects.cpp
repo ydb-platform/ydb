@@ -279,7 +279,7 @@ NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node,
     }
 
     TKqpStreamLookupSettings streamLookupSettings;
-    streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupAndLockRows;
+    streamLookupSettings.Strategy = EStreamLookupStrategyType::LockAndLookupRows;
 
     auto lockStreamLookup = Build<TKqpCnStreamLookup>(ctx, lockAndCheck.Pos())
         .Output(lockAndCheck.Input().Cast<TDqCnUnionAll>().Output().Ptr())

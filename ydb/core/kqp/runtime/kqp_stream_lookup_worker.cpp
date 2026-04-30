@@ -134,7 +134,7 @@ public:
                 keyCells[lookupKeyColumn.KeyOrder] = MakeCell(lookupKeyColumn.PType,
                     inputRow.GetElement(colId), backend, /* copy */ false);
             } else {
-                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK);
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
             }
         }
 
@@ -152,7 +152,7 @@ public:
                 AFL_ENSURE(lookupKeyColumn.KeyOrder < static_cast<i64>(keyCells.size()));
                 keyCells[lookupKeyColumn.KeyOrder] = inputRow[colId];
             } else {
-                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK);
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
             }
         }
 
@@ -1274,7 +1274,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             itKey == std::end(preparedSettings.KeyColumns) ? -1 : itKey->second.KeyOrder
         });
 
-        AFL_ENSURE(preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK
+        AFL_ENSURE(preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP
             || preparedSettings.KeyColumns.contains(inputColumn.GetName()));
     }
 
@@ -1289,7 +1289,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         });
     }
 
-    if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+    if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
         std::vector<TString> inputColNames;
         inputColNames.reserve(preparedSettings.InputColumns.size());
         for (const auto& col : preparedSettings.InputColumns) {
@@ -1300,7 +1300,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         for (const auto& col : preparedSettings.Columns) {
             outputColNames.push_back(col.Name);
         }
-        YQL_ENSURE(inputColNames == outputColNames, "InputColumns must equal Columns for LOOKUP_AND_LOCK strategy");
+        YQL_ENSURE(inputColNames == outputColNames, "InputColumns must equal Columns for LOCK_AND_LOOKUP strategy");
     } else if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP ||
                preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
         for (const auto& inputCol : preparedSettings.InputColumns) {
@@ -1310,7 +1310,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         }
     }
 
-    if (preparedSettings.LookupStrategy != NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+    if (preparedSettings.LookupStrategy != NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
         AFL_ENSURE(preparedSettings.InputColumns.size() <= preparedSettings.KeyColumns.size());
     }
 
@@ -1321,7 +1321,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
         case NKqpProto::EStreamLookupStrategy::UNIQUE:
-        case NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK:
+        case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:

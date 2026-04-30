@@ -61,7 +61,7 @@ public:
     {
         IngressStats.Level = args.StatsLevel;
 
-        if (LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+        if (LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
             AFL_ENSURE(IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
             AFL_ENSURE(LockMode);
             AFL_ENSURE(*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE);
@@ -138,7 +138,7 @@ public:
                 switch(LookupStrategy) {
                     case NKqpProto::EStreamLookupStrategy::LOOKUP:
                     case NKqpProto::EStreamLookupStrategy::UNIQUE:
-                    case NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK: {
+                    case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP: {
                         // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
@@ -636,7 +636,7 @@ private:
         TotalBytesQuota -= MaxBytesDefaultQuota;
         Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Sub(MaxBytesDefaultQuota);
 
-        if (!Snapshot.IsValid() && LookupStrategy != NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+        if (!Snapshot.IsValid() && LookupStrategy != NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
             Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
         }
 
@@ -889,9 +889,9 @@ private:
         }
 
         if (StreamLockWorker) {
-            AFL_ENSURE(LockMode && (*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE
-                || (*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE // TODO: delete
-                    && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW)));
+            AFL_ENSURE(LockMode
+                && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
             auto lockRequests = StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
             for (auto& [shardId, request] : lockRequests) {
                 SendLockRequest(shardId, std::move(request));
@@ -1036,7 +1036,7 @@ private:
 
         TReadState read(record.GetReadId(), shardId);
 
-        if (Snapshot.IsValid() && LookupStrategy != NKqpProto::EStreamLookupStrategy::LOOKUP_AND_LOCK) {
+        if (Snapshot.IsValid() && LookupStrategy != NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
             record.MutableSnapshot()->SetStep(Snapshot.Step);
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
         } else {

@@ -2,7 +2,7 @@
 
 #include "flush_request.h"
 #include "range_translate.h"
-#include "read_request.h"
+#include "read_request_executor.h"
 #include "write_with_direct_replication_request.h"
 #include "write_with_pb_replication_request.h"
 
@@ -317,7 +317,12 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    auto requestExecutor = std::make_shared<TReadRequestExecutor>(
+    span->Event("ReadRequestExecutor");
+    span->Attribute(
+        "SourceCount",
+        static_cast<i64>(readHint.RangeHints.size()));
+
+    auto requestExecutor = CreateReadRequestExecutor(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
@@ -332,7 +337,7 @@ void TVChunk::DoReadBlocksLocal(
          promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
-        (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
+        (const TFuture<IReadRequestExecutor::TResponse>& f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 
@@ -347,7 +352,7 @@ void TVChunk::DoReadBlocksLocal(
                 TReadBlocksLocalResponse{.Error = std::move(value.Error)});
         });
 
-    span->Event("Run");
+    span->Event("Run ReadRequestExecutor");
     requestExecutor->Run();
 }
 

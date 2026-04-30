@@ -180,6 +180,8 @@ public:
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
 
+    // MakeReadHint can work with multiple locations and returns multiple
+    // RangeHints
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
@@ -242,6 +244,7 @@ public:
     // Debug purposes
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
+    [[nodiscard]] TString DebugPrintReadyToFlush() const;
 
 private:
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
@@ -251,6 +254,13 @@ private:
     [[nodiscard]] TLocationMask FilterLocations(
         TLocationMask mask,
         TBlockRange64 range) const;
+
+    // Create single readRangeHint for specified parameters
+    [[nodiscard]] TReadRangeHint MakeReadRangeHint(
+        TLocationMask locationMask,
+        ui64 lsn,
+        TBlockRange64 range,
+        ui64 offsetBlocks);
 
     const ui32 BlockSize;
     const ui64 BlockCount;

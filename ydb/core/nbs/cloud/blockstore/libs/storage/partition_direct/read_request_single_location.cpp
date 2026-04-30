@@ -1,5 +1,6 @@
-#include "read_request.h"
+#include "read_request_single_location.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -25,8 +26,8 @@ TReadHint ArmLocks(TReadHint readHint)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadRequestExecutor::TReadRequestExecutor(
-    NActors::TActorSystem* actorSystem,
+TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
+    NActors::TActorSystem const* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -42,13 +43,13 @@ TReadRequestExecutor::TReadRequestExecutor(
     , TraceId(std::move(traceId))
 {}
 
-TReadRequestExecutor::~TReadRequestExecutor()
+TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor. Reply not sent %s %s",
+            "TReadSingleLocationRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
@@ -56,7 +57,7 @@ TReadRequestExecutor::~TReadRequestExecutor()
     }
 }
 
-void TReadRequestExecutor::Run()
+void TReadSingleLocationRequestExecutor::Run()
 {
     Y_ABORT_UNLESS(ReadHint.RangeHints.size() == 1);
 
@@ -71,8 +72,10 @@ void TReadRequestExecutor::Run()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TReadRequestExecutor %s %s",
-            hint.VChunkRange.Print().c_str(),
+            "TReadSingleLocationRequestExecutor failed to find location %s %s "
+            "%s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str(),
             error.c_str());
 
         Reply(MakeError(E_REJECTED, error));
@@ -82,7 +85,9 @@ void TReadRequestExecutor::Run()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadRequestExecutor. Reading from location %s",
+        "TReadSingleLocationRequestExecutor %s %s. Reading from location %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str(),
         ToString(*location).c_str());
 
     auto onReadResponse = [self = shared_from_this()]   //
@@ -107,16 +112,28 @@ void TReadRequestExecutor::Run()
     future.Subscribe(std::move(onReadResponse));
 }
 
-NThreading::TFuture<TReadRequestExecutor::TResponse>
-TReadRequestExecutor::GetFuture() const
+NThreading::TFuture<IReadRequestExecutor::TResponse>
+TReadSingleLocationRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
 }
 
-void TReadRequestExecutor::OnReadResponse(
+void TReadSingleLocationRequestExecutor::OnReadResponse(
     const TDBGReadBlocksResponse& response)
 {
-    if (!HasError(response.Error)) {
+    bool retriesLimitReached = TryNumber == 3;
+    if (!HasError(response.Error) || retriesLimitReached) {
+        if (retriesLimitReached) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TReadSingleLocationRequestExecutor: read failed %s %s with "
+                "error '%s'",
+                Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+                Request->Headers.Range.Print().c_str(),
+                FormatError(response.Error).c_str());
+        }
+
         Reply(response.Error);
         return;
     }
@@ -124,7 +141,10 @@ void TReadRequestExecutor::OnReadResponse(
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        "TReadSingleLocationRequestExecutor: OnReadResponse %s %s failed %d "
+        "trying with error '%s'",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str(),
         TryNumber,
         FormatError(response.Error).c_str());
 
@@ -132,7 +152,7 @@ void TReadRequestExecutor::OnReadResponse(
     Run();
 }
 
-void TReadRequestExecutor::Reply(NProto::TError error)
+void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
 {
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }

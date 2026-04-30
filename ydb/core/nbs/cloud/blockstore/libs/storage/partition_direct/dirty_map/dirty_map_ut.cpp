@@ -848,7 +848,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto readHint =
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
         UNIT_ASSERT_VALUES_EQUAL(
-            "0{[D+++..P.....][0..99][0..99]};",
+            "0{[D+++..P.....][0..9][0..9]};"
+            "124{[D.....P+++..][10..19][10..19]};"
+            "0{[D+++..P.....][20..99][20..99]};",
             readHint.DebugPrint());
     }
 
@@ -889,8 +891,387 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(true, readHint1.WaitReady.IsReady());
         UNIT_ASSERT_VALUES_EQUAL(true, readHint2.WaitReady.IsReady());
     }
-}
 
-////////////////////////////////////////////////////////////////////////////////
+    Y_UNIT_TEST(ShouldReadHintsTwoSequentialNonOverlappingInflightRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(30, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 50));
+
+        UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "100{[D.....P+++..][10..19][10..19]};"
+            "0{[D+++..P.....][20..29][20..29]};"
+            "200{[D.....P+++..][30..39][30..39]};"
+            "0{[D+++..P.....][40..49][40..49]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsTwoFullyOverlappingInflightRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 11),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "200{[D.....P+++..][20..30][10..20]};"
+            "100{[D.....P+++..][31..50][21..40]};",
+            readHint.DebugPrint());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(0, 50),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(5, 40));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "300{[D.....P+++..][5..44][0..39]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsTwoPartiallyOverlappingInflightRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 36));
+
+        UNIT_ASSERT_VALUES_EQUAL(2, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..24][0..14]};"
+            "200{[D.....P+++..][25..45][15..35]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsThreeOverlappingInflightRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            150,
+            TBlockRange64::WithLength(20, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(30, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "150{[D.....P+++..][20..29][10..19]};"
+            "200{[D.....P+++..][30..35][20..25]};"
+            "150{[D.....P+++..][36..40][26..30]};"
+            "100{[D.....P+++..][41..50][31..40]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsRangeWithEdgesOfRequest)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsRangeWithSameStart)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 100),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 40),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 100));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "200{[D.....P+++..][10..49][10..49]};"
+            "100{[D.....P+++..][50..99][50..99]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsManyConsecutiveRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        const int lsnsCount = 100;
+        for (int i = 1; i <= lsnsCount; ++i) {
+            dirtyMap.WriteFinished(
+                i,
+                TBlockRange64::WithLength(i, 1),
+                TLocationMask::MakePrimaryPBuffers(),
+                TLocationMask::MakePrimaryPBuffers());
+        }
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, lsnsCount + 1));
+
+        UNIT_ASSERT_VALUES_EQUAL(lsnsCount + 1, readHint.RangeHints.size());
+
+        for (size_t i = 0; i < readHint.RangeHints.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(i, readHint.RangeHints[i].Lsn);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i == 0,
+                readHint.RangeHints[i].LocationMask.HasDDisk());
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].RequestRelativeRange.Start);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].RequestRelativeRange.End);
+            UNIT_ASSERT_VALUES_EQUAL(
+                i,
+                readHint.RangeHints[i].VChunkRange.Start);
+            UNIT_ASSERT_VALUES_EQUAL(i, readHint.RangeHints[i].VChunkRange.End);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsStaircaseWithOverlappedRanges)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(40, 21),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 51));
+
+        UNIT_ASSERT_VALUES_EQUAL(3, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..24][0..14]};"
+            "200{[D.....P+++..][25..39][15..29]};"
+            "300{[D.....P+++..][40..60][30..50]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsFewRangesInsideOfDDiskData)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(25, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(45, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(0, 61));
+
+        UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][0..9][0..9]};"
+            "100{[D.....P+++..][10..15][10..15]};"
+            "0{[D+++..P.....][16..24][16..24]};"
+            "200{[D.....P+++..][25..30][25..30]};"
+            "0{[D+++..P.....][31..44][31..44]};"
+            "300{[D.....P+++..][45..50][45..50]};"
+            "0{[D+++..P.....][51..60][51..60]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsFewBiggerLsnsInsideOfOneSmaller)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 91),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(20, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(40, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        dirtyMap.WriteFinished(
+            400,
+            TBlockRange64::WithLength(70, 6),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 91));
+
+        UNIT_ASSERT_VALUES_EQUAL(7, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "100{[D.....P+++..][10..19][0..9]};"
+            "200{[D.....P+++..][20..25][10..15]};"
+            "100{[D.....P+++..][26..39][16..29]};"
+            "300{[D.....P+++..][40..45][30..35]};"
+            "100{[D.....P+++..][46..69][36..59]};"
+            "400{[D.....P+++..][70..75][60..65]};"
+            "100{[D.....P+++..][76..100][66..90]};",
+            readHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldReadHintsReturnDDiskWhenNoQuorum)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        auto inflightCounterBeforeWrite = dirtyMap.GetInflightCount();
+        dirtyMap.WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePBuffer(true, true, false, false, false));
+
+        // write result with no quorum is skipped
+        UNIT_ASSERT_VALUES_EQUAL(
+            inflightCounterBeforeWrite,
+            dirtyMap.GetInflightCount());
+
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][10..50][0..40]};",
+            readHint.DebugPrint());
+
+        dirtyMap.WriteFinished(
+            200,
+            TBlockRange64::WithLength(10, 41),
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePBuffer(true, true, true, false, false));
+        auto readHint1 =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 41));
+        UNIT_ASSERT_VALUES_EQUAL(1, readHint1.RangeHints.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "200{[D.....P+++..][10..50][0..40]};",
+            readHint1.DebugPrint());
+    }
+}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

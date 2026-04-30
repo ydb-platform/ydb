@@ -42,8 +42,12 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
-    NThreading::TPromise<TDBGReadBlocksResponse> ReadPromise =
-        NThreading::NewPromise<TDBGReadBlocksResponse>();
+    TMutex ReadMutex;
+    void SetReadResult(TDBGReadBlocksResponse response);
+    void ClearReadPromises();
+    void AddReadPromise(NThreading::TPromise<TDBGReadBlocksResponse> promise);
+    TVector<NThreading::TPromise<TDBGReadBlocksResponse>> ReadPromises;
+
     NThreading::TPromise<TDBGWriteBlocksResponse> WritePromise =
         NThreading::NewPromise<TDBGWriteBlocksResponse>();
 

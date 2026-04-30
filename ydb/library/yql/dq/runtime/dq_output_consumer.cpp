@@ -1218,12 +1218,11 @@ public:
 
     void Finish() override {
         const ui64 total = PicksByLevel[0] + PicksByLevel[1] + PicksByLevel[2];
-        // Per-stage summary. TRACE in the common case to keep prod logs quiet;
+        // Per-stage summary. DEBUG in the common case to keep prod logs quiet;
         // WARN when >10% of picks hit HardLimit — that means scatter was
         // consistently back-pressured and upstream/downstream capacity is
         // likely under-provisioned.
         const bool backpressured = total > 0 && PicksByLevel[2] * 10 > total;
-        // TODO(anely-d): switch quiet case back to TRACE once ProviderDq log level is raised to 8 on cluster
         const auto level = backpressured ? NLog::ELevel::WARN : NLog::ELevel::DEBUG;
         YQL_CVLOG(level, NLog::EComponent::ProviderDq) << "[Scatter] outputs=" << Outputs.size()
             << " active=" << Router_.ActiveCount()

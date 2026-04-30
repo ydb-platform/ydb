@@ -37,6 +37,8 @@ ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_sequence_reboots TSequenceReboots.ConsistentCopyThenDropTableWithSequenceAndReboots[PipeResets]
+ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
@@ -62,6 +64,7 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board

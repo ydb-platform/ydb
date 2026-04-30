@@ -22,6 +22,11 @@ def _normalize_text(value):
     return str(value)
 
 
+def normalize_fetch_url(url):
+    """Utf8 cells from YDB may be bytes; urlopen requires str."""
+    return _normalize_text(url).strip()
+
+
 def is_sanitizer_issue(error_text):
     """
     Detect if a test failure is caused by a sanitizer.
@@ -78,6 +83,7 @@ def fetch_text_by_url(
     max_attempts=DEFAULT_FETCH_MAX_ATTEMPTS,
     retry_delay_sec=DEFAULT_FETCH_RETRY_DELAY_SEC,
 ):
+    url = normalize_fetch_url(url)
     if not url:
         return ""
 
@@ -96,7 +102,14 @@ def fetch_text_by_url(
 
 def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_FETCH_MAX_WORKERS):
     cache = existing_cache if existing_cache is not None else {}
-    unique_urls = [url for url in set(urls) if url and url not in cache]
+    seen = set()
+    unique_urls = []
+    for raw in urls:
+        url = normalize_fetch_url(raw)
+        if not url or url in cache or url in seen:
+            continue
+        seen.add(url)
+        unique_urls.append(url)
     if not unique_urls:
         return cache
 

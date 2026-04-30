@@ -8,7 +8,7 @@ from ydb_wrapper import YDBWrapper
 TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
 if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
-from error_type_utils import classify_error_type, prefetch_texts_by_urls  # noqa: E402
+from error_type_utils import classify_error_type, normalize_fetch_url, prefetch_texts_by_urls  # noqa: E402
 
 
 def create_test_history_fast_table(ydb_wrapper, table_path):
@@ -102,15 +102,16 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     stderr_urls = [row.get("stderr") for row in results]
     stderr_fetch_cache = prefetch_texts_by_urls(stderr_urls)
     if stderr_urls:
-        total_urls = len({url for url in stderr_urls if url})
-        failed_count = sum(1 for url in {url for url in stderr_urls if url} if not stderr_fetch_cache.get(url))
+        norm_urls = {normalize_fetch_url(u) for u in stderr_urls if normalize_fetch_url(u)}
+        total_urls = len(norm_urls)
+        failed_count = sum(1 for url in norm_urls if not stderr_fetch_cache.get(url))
         print(f"stderr prefetch: done, total={total_urls}, success={total_urls - failed_count}, failed={failed_count}")
     else:
         print("stderr prefetch: no urls to download")
     verify_count = 0
     for row in results:
         stderr_url = row.get("stderr")
-        stderr_text = stderr_fetch_cache.get(stderr_url, "")
+        stderr_text = stderr_fetch_cache.get(normalize_fetch_url(stderr_url), "")
         error_type = classify_error_type(
             row.get("status"),
             row.get("status_description"),

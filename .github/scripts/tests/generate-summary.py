@@ -16,6 +16,7 @@ from error_type_utils import (
     is_timeout_issue,
     is_not_launched_issue,
     is_verify_classification,
+    normalize_fetch_url,
     prefetch_texts_by_urls,
 )
 
@@ -589,7 +590,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             existing_cache=stderr_fetch_cache,
         )
         for test in summary_line.tests:
-            stderr_text = stderr_fetch_cache.get(test.stderr_url, "")
+            stderr_text = stderr_fetch_cache.get(normalize_fetch_url(test.stderr_url), "")
             test.is_verify_issue = is_verify_classification(
                 test.error_type,
                 test.status_description,

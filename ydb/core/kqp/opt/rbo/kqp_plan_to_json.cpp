@@ -249,14 +249,22 @@ TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TD
     std::vector<NJson::TJsonValue> stageNodes;
     FindPlanNodes(root, "StageGuid", stageNodes);
 
+    auto physStageGuids = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    auto logStageGuids = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+
+    for (auto& stageGuid : stageGuids) {
+        physStageGuids.AppendValue(NJson::TJsonValue(stageGuid));
+    }
     for (auto& stageGuid : stageNodes) {
-        if (!stageGuids.contains(stageGuid.GetStringSafe())) {
-            YQL_CVLOG(NYql::NLog::ELevel::WARN, NYql::NLog::EComponent::Core) << "JSON_PLAN: Stage not found: " << stageGuid.GetStringSafe();
-            return "{}";
-        }
+        logStageGuids.AppendValue(NJson::TJsonValue(stageGuid.GetStringSafe()));
     }
 
-    return txPlan;
+    root["PhysStages"] = physStageGuids;
+    root["LogStages"] = logStageGuids;
+
+    NJsonWriter::TBuf writer;
+    writer.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
+    return writer.Str();
 }
 
 TString AddExecStatsToNewRboPlans(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {

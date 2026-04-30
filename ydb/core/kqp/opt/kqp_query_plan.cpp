@@ -3140,11 +3140,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
     YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: AddExecStatsToTxPlan";
 
-
-    if (newRboEnabled) {
-        return AddExecStatsToNewRboPlan(txPlanJson, stats);
-    }
-
     THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
     THashMap<ui32, TString> stageIdToGuid;
     for (const auto& stage : stats.GetStages()) {
@@ -3604,7 +3599,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();
-    return AddSimplifiedPlan(resultPlan, true);
+    if (newRboEnabled) {
+        return AddExecStatsToNewRboPlan(resultPlan, stats);
+    }
+    else {
+        return AddSimplifiedPlan(resultPlan, true);
+    }
 }
 
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId) {

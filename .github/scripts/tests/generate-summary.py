@@ -14,10 +14,12 @@ from get_test_history import get_test_history
 from error_type_utils import (
     is_sanitizer_issue,
     is_timeout_issue,
+    is_xfailed_issue,
     is_not_launched_issue,
     is_verify_classification,
     normalize_fetch_url,
     prefetch_texts_by_urls,
+    should_prefetch_stderr_for_verify,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -67,6 +69,7 @@ class TestResult:
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_xfailed_issue: bool = False
     is_verify_issue: bool = False
     is_not_launched: bool = False
 
@@ -186,6 +189,7 @@ class TestResult:
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
             is_timeout_issue=is_timeout_issue(error_type),
+            is_xfailed_issue=is_xfailed_issue(error_type),
             is_verify_issue=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
             is_not_launched=is_not_launched_issue(error_type, status.name)
@@ -574,15 +578,33 @@ def iter_build_results_files(path):
             continue
 
 
+def _status_string_for_error_utils(st: TestStatus) -> str:
+    """Same status tokens as test_results / classify_error_type (failure|error|mute)."""
+    return {
+        TestStatus.FAIL: "failure",
+        TestStatus.ERROR: "error",
+        TestStatus.MUTE: "mute",
+    }.get(st, "")
+
+
 def _collect_stderr_urls_for_verify_badges(tests):
-    """HTML summary: stderr URLs for failing tests (VERIFY badge vs logs, independent of other badges)."""
+    """stderr URLs only when VERIFY might depend on log text (aligned with test_history_fast)."""
     urls = []
     for test in tests:
         st = getattr(test, "status", None)
         if st is None or not getattr(st, "is_error", False):
             continue
         raw = getattr(test, "stderr_url", None) or ""
-        if normalize_fetch_url(raw):
+        if not normalize_fetch_url(raw):
+            continue
+        status_str = _status_string_for_error_utils(st)
+        if not status_str:
+            continue
+        if should_prefetch_stderr_for_verify(
+            status_str,
+            getattr(test, "status_description", None),
+            getattr(test, "error_type", None),
+        ):
             urls.append(raw)
     return urls
 
@@ -594,7 +616,13 @@ def _apply_verify_badges(tests, stderr_fetch_cache):
             test.is_verify_issue = False
             continue
         su = normalize_fetch_url(getattr(test, "stderr_url", None) or "")
-        stderr_text = stderr_fetch_cache.get(su, "") if su else None
+        status_str = _status_string_for_error_utils(st)
+        use_stderr = bool(su) and bool(status_str) and should_prefetch_stderr_for_verify(
+            status_str,
+            getattr(test, "status_description", None),
+            getattr(test, "error_type", None),
+        )
+        stderr_text = stderr_fetch_cache.get(su, "") if use_stderr else None
         test.is_verify_issue = is_verify_classification(
             getattr(test, "error_type", None),
             getattr(test, "status_description", None),

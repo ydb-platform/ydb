@@ -38,13 +38,6 @@ public:
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
-    struct TSubRequest
-    {
-        std::shared_ptr<TReadSingleLocationRequestExecutor> Executor;
-        size_t
-            SglistOffset;   // Byte's offset relatively to requested range start
-    };
-
     void OnSubRequestComplete(const TResponse& response, size_t index);
 
     NActors::TActorSystem const* ActorSystem;
@@ -54,7 +47,7 @@ private:
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
 
-    TVector<TSubRequest> SubRequests;
+    TVector<TReadSingleLocationRequestExecutorPtr> SubRequestExecutors;
     size_t CompletedCount{0};
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

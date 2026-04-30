@@ -25,6 +25,6 @@ struct TWeightedRange
 //   fullfilled with ranges with a key == 0.
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     TBlockRange64 fullRange,
-    const std::span<TWeightedRange> overlappingRanges);
+    std::span<const TWeightedRange> overlappingRanges);
 
 }   // namespace NYdb::NBS::NBlockStore

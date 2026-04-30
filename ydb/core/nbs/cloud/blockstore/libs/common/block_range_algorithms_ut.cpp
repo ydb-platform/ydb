@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TSplitOnNonOverlappingContinuousRanges)
             TBlockRange64::MakeClosedInterval(0, 100),
             ranges);
 
-        UNIT_ASSERT_VALUES_EQUAL(result.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL("0[0..100];", DebugPrintResult(result));
     }
 
     Y_UNIT_TEST(RangeWithEdgesOfRequest)

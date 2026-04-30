@@ -26,7 +26,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     , TraceId(std::move(traceId))
     , Promise(NThreading::NewPromise<TResponse>())
 {
-    SubRequests.reserve(readHint.RangeHints.size());
+    SubRequestExecutors.reserve(readHint.RangeHints.size());
 
     Y_ASSERT(Request->Headers.VolumeConfig);
     Y_ASSERT(Request->Headers.VolumeConfig->BlockSize != 0);
@@ -77,9 +77,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
             subRequest,
             NWilson::TTraceId(TraceId));
 
-        SubRequests.push_back(TSubRequest{
-            .Executor = std::move(executor),
-            .SglistOffset = offsetBytes});
+        SubRequestExecutors.push_back(std::move(executor));
     }
 }
 
@@ -99,13 +97,13 @@ TReadMultipleLocationRequestExecutor::~TReadMultipleLocationRequestExecutor()
 
 void TReadMultipleLocationRequestExecutor::Run()
 {
-    for (size_t i = 0; i < SubRequests.size(); ++i) {
-        auto future = SubRequests[i].Executor->GetFuture();
+    for (size_t i = 0; i < SubRequestExecutors.size(); ++i) {
+        auto future = SubRequestExecutors[i]->GetFuture();
         future.Subscribe([self = shared_from_this(),
                           i](const NThreading::TFuture<TResponse>& f)
                          { self->OnSubRequestComplete(f.GetValue(), i); });
 
-        SubRequests[i].Executor->Run();
+        SubRequestExecutors[i]->Run();
     }
 }
 
@@ -129,7 +127,7 @@ void TReadMultipleLocationRequestExecutor::OnSubRequestComplete(
         return;
     }
 
-    if (++CompletedCount == SubRequests.size()) {
+    if (++CompletedCount == SubRequestExecutors.size()) {
         Promise.TrySetValue(TResponse{.Error = MakeError(S_OK)});
     }
 }

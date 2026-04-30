@@ -37,10 +37,11 @@ bool TBoundary::operator<(const TBoundary& rhs) const
 
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     TBlockRange64 fullRange,
-    const std::span<TWeightedRange> overlappingRanges)
+    std::span<const TWeightedRange> overlappingRanges)
 {
     TVector<TWeightedRange> result;
     if (overlappingRanges.empty()) {
+        result.push_back({.Key = 0, .Range = fullRange});
         return result;
     }
 

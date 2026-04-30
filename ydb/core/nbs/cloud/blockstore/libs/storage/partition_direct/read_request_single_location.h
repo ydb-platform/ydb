@@ -58,6 +58,9 @@ private:
         NThreading::NewPromise<TResponse>();
 };
 
+using TReadSingleLocationRequestExecutorPtr =
+    std::shared_ptr<TReadSingleLocationRequestExecutor>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

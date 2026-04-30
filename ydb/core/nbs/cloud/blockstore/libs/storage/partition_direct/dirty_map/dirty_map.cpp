@@ -3,34 +3,13 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-namespace {
-
-void AddReadHint(TReadHint& result, TReadRangeHint&& hint)
-{
-    if (result.RangeHints.empty()) {
-        result.RangeHints.push_back(std::move(hint));
-        return;
-    }
-
-    auto& prevHint = result.RangeHints.back();
-    if (prevHint.Lsn == hint.Lsn &&
-        prevHint.LocationMask == hint.LocationMask &&
-        prevHint.VChunkRange.End + 1 == hint.VChunkRange.Start)
-    {
-        prevHint.VChunkRange.End = hint.VChunkRange.End;
-        prevHint.RequestRelativeRange.End = hint.RequestRelativeRange.End;
-    } else {
-        result.RangeHints.push_back(std::move(hint));
-    }
-}
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -297,46 +276,60 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    TVector<TWeightedRange> ranges;
+    bool shouldWaitQourum = false;
+    TStackVec<TWeightedRange> ranges;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
-            ranges.push_back({.Key = item.Key, .Range = item.Range});
+            const auto readMask = item.Value.ReadMask();
+            if (readMask.Empty()) {
+                shouldWaitQourum = true;
+                result.WaitReady = item.Value.GetQuorumReadyFuture();
+                result.RangeHints.clear();
+                return TInflightMap::EEnumerateContinuation::Stop;
+            }
+
+            if (!readMask.OnlyDDisk()) {
+                ranges.push_back({.Key = item.Key, .Range = item.Range});
+            }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
+    if (shouldWaitQourum) {
+        return result;
+    }
 
-    result.RangeHints.reserve(ranges.size());
     auto nonOverlappingRanges = SplitOnNonOverlappingContinuousRanges(
         TBlockRange64::MakeClosedInterval(range.Start, range.End),
         ranges);
+    result.RangeHints.reserve(nonOverlappingRanges.size());
 
     ui64 offsetBlocks{};
     for (auto& nonOverlappingRange: nonOverlappingRanges) {
         auto lsn = nonOverlappingRange.Key;
-        auto& range = nonOverlappingRange.Range;
 
         if (lsn == 0) {
-            auto hint = MakeReadRangeHint({}, 0, range, offsetBlocks);
-            AddReadHint(result, std::move(hint));
+            auto hint = MakeReadRangeHint(
+                {},
+                0,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
         } else {
             auto item = Inflight.GetValue(lsn);
             Y_ABORT_UNLESS(item);
-            auto& inflightInfo = item->Value;
-            const auto readMask = inflightInfo.ReadMask();
-            if (readMask.Empty()) {
-                result.WaitReady = inflightInfo.GetQuorumReadyFuture();
-                result.RangeHints.clear();
-                return result;
-            }
+            const auto readMask = item->Value.ReadMask();
+            Y_DEBUG_ABORT_UNLESS(!readMask.Empty());
 
-            const ui64 resultLsn = readMask.OnlyDDisk() ? 0 : lsn;
-            auto hint =
-                MakeReadRangeHint(readMask, resultLsn, range, offsetBlocks);
-            AddReadHint(result, std::move(hint));
+            auto hint = MakeReadRangeHint(
+                readMask,
+                lsn,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
         }
 
-        offsetBlocks += range.Size();
+        offsetBlocks += nonOverlappingRange.Range.Size();
     }
 
     return result;

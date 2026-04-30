@@ -331,7 +331,7 @@ runs:
         # Scripts to checkout from main
         MAIN_SCRIPTS=(
           ".github/scripts/config/ydb_qa_config.json"
-          ".github/scripts/analytics/ydb_wrapper.py",
+          ".github/scripts/analytics/ydb_wrapper.py"
           ".github/scripts/check_ydb_qa_config.py"
           ".github/scripts/tests/fail-checker.py"
         )

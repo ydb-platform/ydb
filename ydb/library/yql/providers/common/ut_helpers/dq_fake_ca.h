@@ -265,5 +265,5 @@ public:
     std::shared_ptr<TAsyncOutputPromises> AsyncOutputPromises = std::make_shared<TAsyncOutputPromises>();
 };
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq
 

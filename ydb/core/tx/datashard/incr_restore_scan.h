@@ -38,20 +38,15 @@ struct TEvIncrementalRestoreScan {
         ui64 TxId = 0;
         bool Success = true;
         TString Error;
-        bool Retriable = true;  // meaningful only when !Success
+        bool Retriable = true;
     };
 };
 
-// Header-only classification helpers; usable from production code AND tests
-// without pulling additional schemeshard headers.
 inline bool IsScanSuccess(NTable::EStatus status) {
     return status == NTable::EStatus::Done;
 }
 
 inline bool IsScanRetriable(NTable::EStatus status) {
-    // Operator/system terminations (Term) are retriable.
-    // Lost/Exception/StorageError/anything else is treated as fatal — the
-    // next attempt would almost certainly hit the same condition.
     return IsScanSuccess(status)
         || status == NTable::EStatus::Term;
 }

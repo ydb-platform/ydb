@@ -17,7 +17,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 // Class works with a multiple readHints.
 // It incapsulates logic of splitting original request into N subrequests,
 // sending them to different sources and collecting responses.
-// ATTENTION: usually you should use fabric method CreateReadRequestExecutor
+// ATTENTION: you should use fabric method CreateReadRequestExecutor
 class TReadMultipleLocationRequestExecutor
     : public IReadRequestExecutor
     , public std::enable_shared_from_this<TReadMultipleLocationRequestExecutor>

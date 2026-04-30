@@ -16,7 +16,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 // Class works with a single readHint. It performs a request into a 1 source
 // location
-// ATTENTION: usually you should use fabric method CreateReadRequestExecutor
+// ATTENTION: you should use fabric method CreateReadRequestExecutor
 class TReadSingleLocationRequestExecutor
     : public IReadRequestExecutor
     , public std::enable_shared_from_this<TReadSingleLocationRequestExecutor>

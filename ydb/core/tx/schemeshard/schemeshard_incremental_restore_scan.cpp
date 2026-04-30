@@ -92,9 +92,6 @@ public:
         } else {
             if (state.AllIncrementsProcessed()) {
                 LOG_W("All increments processed but state is still Running, triggering finalization");
-                // Per-item finalize is allocated asynchronously via TxAllocatorClient.
-                // FinalizeTxId column is gone; the IncrementalRestoreItem row carries
-                // the binding. The orchestrator only flips State=Finalizing.
                 state.State = TIncrementalRestoreState::EState::Finalizing;
                 db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                     NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
@@ -200,10 +197,7 @@ private:
             state.TableOperations.clear();
             state.CurrentIncrementalStarted = false;
 
-            // Tier-A retry path: drop any stale per-item rows so the next
-            // dispatch starts clean. The new ProcessNextIncrementalBackup
-            // will rebuild PendingTables and re-enqueue items (each with a
-            // fresh ItemSeq and a fresh TxAllocate request).
+            // Drop stale per-item rows so the retry dispatch starts clean.
             Self->CleanupIncrementalRestoreItems(OperationId, db, &state);
 
             TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
@@ -243,10 +237,8 @@ private:
 
         if (state.AllIncrementsProcessed()) {
             LOG_I("All incremental backups processed, performing finalization");
-            // Per-item finalize: TxAllocatorClient asynchronously supplies a
-            // TxId. The orchestrator transitions the state and the new
-            // TTxProgressIncrementalRestoreAllocateResult dispatches the actual
-            // finalize ModifyScheme once the TxId arrives.
+            // The actual finalize ModifyScheme is dispatched once
+            // TxAllocatorClient supplies a TxId.
             state.State = TIncrementalRestoreState::EState::Finalizing;
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
                 NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
@@ -282,10 +274,7 @@ private:
                     state.CompletedOperations.insert(opId);
                     operationsCompleted = true;
 
-                    // Per-item cleanup: drop the IncrementalRestoreItem row and
-                    // mappings tied to this TxId. The orchestrator-side
-                    // bookkeeping (CompletedOperations, TableOperations) is
-                    // unchanged.
+                    // Drop the IncrementalRestoreItem row + mappings for this TxId.
                     auto seqIt = state.WaitTxIdToItemSeq.find(ui64(txId));
                     if (seqIt != state.WaitTxIdToItemSeq.end()) {
                         const ui32 itemSeq = seqIt->second;
@@ -351,10 +340,7 @@ private:
     void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
         LOG_I("Enqueuing finalization of incremental restore operation: " << OperationId);
 
-        // Build the finalize request now (paths derived from current state)
-        // and stash on the item; TxId is filled in once TxAllocatorClient
-        // replies. CleanupIncrementalRestoreItems on terminal/forget removes
-        // the row to keep the persistent set bounded.
+        // Stash the request on the item; TxId is filled in once the allocator replies.
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
 
@@ -598,11 +584,8 @@ void TSchemeShard::DispatchPendingIncrementalRestoreTables(
     NIceDb::TNiceDb& db,
     const TActorContext& ctx) {
 
-    // The cap now bounds (in-flight schema ops + items waiting for a TxId from
-    // the allocator); both consume a slot so we don't overshoot the rate limit
-    // when many allocator replies are pending. PendingItems holds items
-    // awaiting allocator replies; InProgressOperations holds the modify-scheme
-    // sub-ops the orchestrator is awaiting completion on.
+    // The cap counts in-flight ops plus items awaiting a TxId from the
+    // allocator, so pending allocator replies don't overshoot the limit.
     const i64 cap = IncrementalRestoreSettings.MaxIncrementalRestoreTablesInFlight;
     auto bcPath = TPath::Init(state.BackupCollectionPathId, this);
 
@@ -1007,9 +990,6 @@ void TSchemeShard::CleanupIncrementalRestoreItems(
     NIceDb::TNiceDb& db,
     TIncrementalRestoreState* state)
 {
-    // Walk through ItemSeq values we know about (in-memory) and DELETE rows.
-    // For full DB-row coverage even after reboot loss of in-memory state, we
-    // fall back to a Range scan for the originalOpId prefix.
     THashSet<ui32> knownSeqs;
     if (state) {
         for (const auto& item : state->PendingItems) {
@@ -1025,8 +1005,7 @@ void TSchemeShard::CleanupIncrementalRestoreItems(
             .Delete();
     }
 
-    // Sweep the global TxId map for entries pointing here. THashMap::erase
-    // returns void, so we collect keys and delete in a second pass.
+    // Sweep the global TxId map for entries pointing here.
     TVector<TTxId> toErase;
     for (const auto& [txId, opId] : TxIdToIncrementalRestore) {
         if (opId == originalOpId) {
@@ -1045,10 +1024,8 @@ void TSchemeShard::CleanupIncrementalRestoreItems(
     }
 }
 
-// Consumes TEvAllocateResult, binds the allocated TxId to the exact item
-// identified by the packed cookie, and sends the prebuilt ModifyScheme
-// request. Empty TxIds (allocator transient failure) leave the item in
-// PendingItems and schedule a re-allocate via TEvProgressIncrementalRestore.
+// Empty TxIds (allocator transient failure) leave the item in PendingItems
+// and schedule a re-allocate.
 class TSchemeShard::TTxProgressIncrementalRestoreAllocateResult : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
@@ -1071,10 +1048,8 @@ public:
 
         auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == Self->IncrementalRestoreStates.end()) {
-            // Restore was forgotten between Send and Recv; allocator TxId
-            // simply leaks (allocator pool refills naturally). No SS-side
-            // state mutation; TxIdToIncrementalRestore stays clean because it
-            // is populated only AFTER state-found check passes.
+            // Restore forgotten between Send and Recv: drop the allocator
+            // result. The TxId leaks; the allocator pool refills naturally.
             LOG_W("TTxProgressIncrementalRestoreAllocateResult: state for "
                   << originalOpId << " not found; dropping allocator result");
             return true;

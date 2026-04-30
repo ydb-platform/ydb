@@ -9,7 +9,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NYql::NDq {

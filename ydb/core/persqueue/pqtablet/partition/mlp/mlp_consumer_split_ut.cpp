@@ -1583,11 +1583,11 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
         std::vector<TMessageId> toCommit;
         for (const auto& msg : readResult->Messages) {
             ACerr << ">>>>> ReadAllDedupAndCommit: data=" << msg.Data
-                 << " dedupId=" << msg.MessageDeduplicationId
+                 << " dedupId=" << msg.MessageMetaAttributes.Value(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID, "")
                  << " group=" << msg.MessageGroupId
                  << " partition=" << msg.MessageId.PartitionId
                  << " offset=" << msg.MessageId.Offset << Endl;
-            readMessages[msg.Data] =  msg.MessageDeduplicationId;
+            readMessages[msg.Data] =  msg.MessageMetaAttributes.Value(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID, "");
             toCommit.push_back(msg.MessageId);
         }
 

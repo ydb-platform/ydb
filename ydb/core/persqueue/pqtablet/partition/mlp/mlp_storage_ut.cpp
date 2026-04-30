@@ -183,7 +183,7 @@ struct TUtils {
     ui64 Next(TDuration timeout = TDuration::Seconds(8), TStringBuf descr = {}) {
         TStorage::TPosition position;
         auto result = Storage.Next(TimeProvider->Now() + timeout, position);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result, descr);
         return result.value();
     }
 
@@ -2819,7 +2819,7 @@ Y_UNIT_TEST(NextFromBlacklistedStorage) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + deadline, position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 4);
+        UNIT_ASSERT_VALUES_EQUAL(*result, 4);
 
         result = storage.Next(TInstant::Now() + deadline, position);
         UNIT_ASSERT(!result.has_value());
@@ -2829,7 +2829,7 @@ Y_UNIT_TEST(NextFromBlacklistedStorage) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + deadline, position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 5);
+        UNIT_ASSERT_VALUES_EQUAL(*result, 5);
 
         result = storage.Next(TInstant::Now() + deadline, position);
         UNIT_ASSERT(!result.has_value());
@@ -2842,8 +2842,8 @@ Y_UNIT_TEST(NextFromBlacklistedStorage) {
             const TString caseDesc = TStringBuilder() << "Expected=[" << JoinSeq(",", expected) << "]";
             auto result = storage.Next(TInstant::Now() + deadline, position);
             UNIT_ASSERT_C(result.has_value(), caseDesc);
-            UNIT_ASSERT_C(expected.contains(result->Offset), LabeledOutput(result->Offset) << " " << caseDesc);
-            expected.erase(result->Offset);
+            UNIT_ASSERT_C(expected.contains(*result), LabeledOutput(*result) << " " << caseDesc);
+            expected.erase(*result);
         }
         auto result = storage.Next(TInstant::Now() + deadline, position);
         UNIT_ASSERT(!result.has_value());

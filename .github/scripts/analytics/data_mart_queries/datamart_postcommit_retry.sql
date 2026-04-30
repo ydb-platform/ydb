@@ -12,7 +12,7 @@ $test_data = (
         a.run_timestamp >= CurrentUtcDate() - 1 * Interval("P1D")
         AND a.branch = 'main'
         AND a.build_type = 'relwithdebinfo'
-        AND a.job_name LIKE 'Postcommit%'
+        AND (a.job_name = 'Postmerge' OR a.job_name LIKE 'Postcommit%')
 );
 
 -- Count test runs for each test by commit

@@ -25,6 +25,17 @@ namespace {
             }
             return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
         }
+
+        TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const override {
+            TSet<TRowVersion> result;
+            AddSnapshotsImpl(tableId, result);
+            AddSnapshotsImpl(NKikimr::TTableId{}, result);
+            return result;
+        }
+
+        TRowVersion GetBorder() const override {
+            return SnapshotBorder;
+        }
         
     private:        
         bool HasSnapshotImpl(const NKikimr::TTableId& tableId, const TRowVersion& version) const {
@@ -37,6 +48,15 @@ namespace {
 
             auto versionsIter = std::lower_bound(versions.begin(), versions.end(), version);
             return versionsIter != versions.end() && *versionsIter == version;
+        }
+
+        void AddSnapshotsImpl(const NKikimr::TTableId& tableId, TSet<TRowVersion>& result) const {
+            auto snapshotsIter = Snapshots.find(tableId);
+            if (snapshotsIter == Snapshots.end()) {
+                return;
+            }
+
+            result.insert(snapshotsIter->second.begin(), snapshotsIter->second.end());
         }
 
         const TSnapshotMap Snapshots;

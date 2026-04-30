@@ -270,6 +270,7 @@ namespace NKikimr {
         void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
         void SetStartingPoint(TLogSignature signature, ui64 lsn);
+        bool FindStartingPoint(TLogSignature signature, ui64 *lsn) const;
         void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
         void SetRecoveredLogStartLsn(ui64 lsn);
         void CheckConsistency();

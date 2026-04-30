@@ -767,6 +767,9 @@ namespace NKikimr {
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter);
+            if (Config->ForceLogRescueMode) {
+                VCtx->SetLogRescueMode(true);
+            }
 
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
@@ -927,6 +930,29 @@ namespace NKikimr {
                                     TABLED() {str << "Read only";}
                                     TABLED() {str << (Config->BaseInfo.ReadOnly ? "True" : "False");}
                                 }
+                                TABLER() {
+                                    TABLED() {str << "Emergency log rescue";}
+                                    TABLED() {
+                                        const bool enabled = VCtx->IsLogRescueMode();
+                                        THtmlLightSignalRenderer(enabled ? NKikimrWhiteboard::Yellow : NKikimrWhiteboard::Green,
+                                            enabled ? "Enabled" : "Disabled").Output(str);
+                                        str << " group# " << VCtx->GroupId.GetRawId();
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "Emergency log rescue writes";}
+                                    TABLED() {
+                                        const bool enabled = VCtx->IsLogRescueMode();
+                                        const bool allowed = VCtx->AreLogRescueWritesAllowed();
+                                        const ui32 tokens = VCtx->GetLogRescueWriteTokens();
+                                        THtmlLightSignalRenderer(!enabled ? NKikimrWhiteboard::Green :
+                                                allowed || tokens ? NKikimrWhiteboard::Yellow : NKikimrWhiteboard::Green,
+                                            !enabled ? "Normal mode" : allowed ? "Allowed" : tokens ? "One-shot pending" : "Blocked").Output(str);
+                                        if (enabled) {
+                                            str << " OneShotTokens# " << tokens;
+                                        }
+                                    }
+                                }
                                 std::vector<std::pair<TString, TString>> rows;
                                 TABLER() {
                                     TABLED() { str << "Replication"; };
@@ -1005,6 +1031,25 @@ namespace NKikimr {
                                     : "disabled style='background:LightGray' "
                                 )
                                 << ">Restart</a>";
+                            str << " ";
+                            if (VCtx->IsLogRescueMode()) {
+                                str << "<a class=\"btn btn-warning\" href=\"?type=logrescue&enable=0\">"
+                                    << "Disable rescue flag</a>";
+                                str << " ";
+                                if (VCtx->AreLogRescueWritesAllowed()) {
+                                    str << "<a class=\"btn btn-warning\" href=\"?type=logrescuewrites&enable=0\">"
+                                        << "Pause rescue writes</a>";
+                                } else {
+                                    str << "<a class=\"btn btn-danger\" href=\"?type=logrescuewriteonce\">"
+                                        << "Allow one rescue write</a>";
+                                    str << " ";
+                                    str << "<a class=\"btn btn-danger\" href=\"?type=logrescuewrites&enable=1\">"
+                                        << "Allow rescue writes continuously</a>";
+                                }
+                            } else {
+                                str << "<a class=\"btn btn-danger\" href=\"?type=restartrescue\">"
+                                    << "Restart in rescue mode</a>";
+                            }
                         }
                     }
                 }
@@ -1653,6 +1698,54 @@ namespace NKikimr {
             // we process mon requests out of order
             const TCgiParameters& cgi = ev->Get()->Request.GetParams();
             const TString& type = cgi.Get("type");
+            if (type == "logrescue") {
+                const bool enable = cgi.Get("enable") != "0";
+                if (enable) {
+                    TStringStream str;
+                    HTML(str) {
+                        str << "Emergency log rescue mode must be enabled by restarting the VDisk in rescue mode<br>\n"
+                            << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+                    }
+                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                    return;
+                }
+                VCtx->SetLogRescueMode(enable);
+
+                TStringStream str;
+                HTML(str) {
+                    str << "Emergency log rescue mode is now " << (enable ? "enabled" : "disabled") << "<br>\n"
+                        << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+                }
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                return;
+            }
+            if (type == "logrescuewrites") {
+                const bool enable = cgi.Get("enable") != "0";
+                VCtx->SetLogRescueWritesAllowed(VCtx->IsLogRescueMode() && enable);
+
+                TStringStream str;
+                HTML(str) {
+                    str << "Emergency log rescue writes are now "
+                        << (VCtx->AreLogRescueWritesAllowed() ? "allowed" : "blocked") << "<br>\n"
+                        << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+                }
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                return;
+            }
+            if (type == "logrescuewriteonce") {
+                if (VCtx->IsLogRescueMode()) {
+                    VCtx->AllowOneLogRescueWrite();
+                }
+
+                TStringStream str;
+                HTML(str) {
+                    str << "Emergency log rescue one-shot write tokens# "
+                        << VCtx->GetLogRescueWriteTokens() << "<br>\n"
+                        << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+                }
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+                return;
+            }
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
 
             if (cgi.Has("repl")) {
@@ -2073,6 +2166,9 @@ namespace NKikimr {
             } else if (Config->BaseInfo.ReadOnly && !IsReadOnlyCompatible<TEventType>) {
                 LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "Blocking request incompatible with read-only: " << TypeName<TEventType>());
                 DatabaseReadOnlyHandle(ev, ctx);
+            } else if (VCtx->IsLogRescueMode() && !IsReadOnlyCompatible<TEventType>) {
+                const TString errorReason = "VDisk is in emergency log rescue mode; write requests are blocked";
+                Reply(ev, ctx, NKikimrProto::ERROR, errorReason, TAppData::TimeProvider->Now());
             } else {
                 SetReceivedTime(ev);
                 CheckExecute(ev, ctx);

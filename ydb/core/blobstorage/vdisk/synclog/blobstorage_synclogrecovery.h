@@ -18,6 +18,7 @@ namespace NKikimr {
             TSyncLogPtr SyncLogPtr;
             TVector<ui32> ChunksToDelete;
             TCommitHistory CommitHistory;
+            TString VDiskLogPrefix;
             bool NeedsInitialCommit;
 
             ~TSyncLogRepaired() = default;
@@ -27,20 +28,23 @@ namespace NKikimr {
                 TSyncLogParams &&params,
                 const TString &data,
                 ui64 entryPointLsn,
-                TString &explanation);
+                TString &explanation,
+                const TString &vdiskLogPrefix = {});
 
             static std::unique_ptr<TSyncLogRepaired> Construct(
                 TSyncLogParams &&params,
                 const char *data,
                 size_t size,
                 ui64 entryPointLsn,
-                TString &explanation);
+                TString &explanation,
+                const TString &vdiskLogPrefix = {});
 
         private:
             TSyncLogRepaired(
                 TSyncLogPtr &&syncLog,
                 TVector<ui32> &&chunksToDelete,
                 TCommitHistory &&commitHistory,
+                TString vdiskLogPrefix,
                 bool needsInitialCommit);
         };
 

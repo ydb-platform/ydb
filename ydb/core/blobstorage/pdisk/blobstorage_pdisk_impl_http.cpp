@@ -163,6 +163,56 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                             success: reloadPage
                         });
                     }
+
+                    function setOwnerCutLogRequestsBlocked(blocked) {
+                        if (blocked && !confirm("Block all VDisk cut-log requests from this PDisk? This is a testing fault injection knob.")) {
+                            return;
+                        }
+                        $.ajax({
+                            url: "",
+                            data: "blockOwnerCutLogRequests=" + (blocked ? "true" : "false"),
+                            method: "POST",
+                            success: function() {
+                                window.location.replace(window.location.href);
+                            }
+                        });
+                    }
+
+                    function setUnusedLogChunkReleaseBlocked(blocked) {
+                        if (blocked && !confirm("Block actual release of unused log chunks on this PDisk? This is a testing fault injection knob.")) {
+                            return;
+                        }
+                        $.ajax({
+                            url: "",
+                            data: "blockUnusedLogChunkRelease=" + (blocked ? "true" : "false"),
+                            method: "POST",
+                            success: function() {
+                                window.location.replace(window.location.href);
+                            }
+                        });
+                    }
+
+                    function releaseUnusedLogChunks() {
+                        $.ajax({
+                            url: "",
+                            data: "releaseUnusedLogChunks=",
+                            method: "POST",
+                            success: function() {
+                                window.location.replace(window.location.href);
+                            }
+                        });
+                    }
+
+                    function askOwnerCutLogRequests() {
+                        $.ajax({
+                            url: "",
+                            data: "askOwnerCutLogRequests=",
+                            method: "POST",
+                            success: function() {
+                                window.location.replace(window.location.href);
+                            }
+                        });
+                    }
                 </script>
             )___";
 
@@ -204,6 +254,53 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                 str << "Stop";
                 str << "</button>";
             }
+        }
+        TAG(TH4) {str << "Testing fault injection"; }
+        DIV() {
+            str << "VDisk cut-log requests: ";
+            if (BlockOwnerCutLogRequests) {
+                RED_TEXT(str, "Blocked");
+            } else {
+                GREEN_TEXT(str, "Allowed");
+            }
+            str << "<br>";
+            str << "Blocked attempts: " << BlockedOwnerCutLogRequests;
+            if (LastBlockedOwnerCutLogRequest != TInstant::Zero()) {
+                str << " Last blocked: " << LastBlockedOwnerCutLogRequest;
+            }
+            str << "<br>";
+            if (BlockOwnerCutLogRequests) {
+                str << "<button onclick='setOwnerCutLogRequestsBlocked(false)' class='btn btn-success' style='margin:5px'>"
+                    << "Allow VDisk cut-log requests</button>";
+            } else {
+                str << "<button onclick='setOwnerCutLogRequestsBlocked(true)' class='btn btn-danger' style='margin:5px'>"
+                    << "Block VDisk cut-log requests</button>";
+            }
+            str << "<button onclick='askOwnerCutLogRequests()' class='btn btn-warning' style='margin:5px'>"
+                << "Ask VDisks to cut log now</button>";
+            str << "<br>";
+
+            str << "Unused log chunk release: ";
+            if (BlockUnusedLogChunkRelease) {
+                RED_TEXT(str, "Blocked");
+            } else {
+                GREEN_TEXT(str, "Allowed");
+            }
+            str << "<br>";
+            str << "Blocked release attempts: " << BlockedUnusedLogChunkReleaseAttempts;
+            if (LastBlockedUnusedLogChunkRelease != TInstant::Zero()) {
+                str << " Last blocked: " << LastBlockedUnusedLogChunkRelease;
+            }
+            str << "<br>";
+            if (BlockUnusedLogChunkRelease) {
+                str << "<button onclick='setUnusedLogChunkReleaseBlocked(false)' class='btn btn-success' style='margin:5px'>"
+                    << "Allow unused log chunk release</button>";
+            } else {
+                str << "<button onclick='setUnusedLogChunkReleaseBlocked(true)' class='btn btn-danger' style='margin:5px'>"
+                    << "Block unused log chunk release</button>";
+            }
+            str << "<button onclick='releaseUnusedLogChunks()' class='btn btn-warning' style='margin:5px'>"
+                << "Release unused log chunks now</button>";
         }
         if (Cfg->SectorMap) {
             TAG(TH4) {str << "SectorMap"; }

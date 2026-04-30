@@ -157,6 +157,11 @@ namespace NKikimr {
 
         void RemoveBlobs(const TActorContext &ctx, TVector<TLogoBlobID> &&forRemoval) {
             Y_ABORT_UNLESS(!forRemoval.empty());
+            if (HullCtx->VCtx->IsLogRescueMode()) {
+                Result.Issues.LocalWriteErrors = true;
+                Finish(ctx);
+                return;
+            }
 
             Become(&TThis::WaitWriteCompletion);
             BlobsToRemove = TBlobsToRemove(std::move(forRemoval));

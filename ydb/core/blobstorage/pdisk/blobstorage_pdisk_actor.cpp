@@ -1368,6 +1368,39 @@ public:
             }
             Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
             return;
+        } else if (cgi.Has("blockOwnerCutLogRequests")) {
+            const bool blocked = cgi.Get("blockOwnerCutLogRequests") != "false";
+            {
+                TGuard<TMutex> guard(PDisk->StateMutex);
+                PDisk->BlockOwnerCutLogRequests = blocked;
+                if (!blocked) {
+                    PDisk->LastBlockedOwnerCutLogRequest = TInstant::Zero();
+                }
+            }
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
+        } else if (cgi.Has("blockUnusedLogChunkRelease")) {
+            const bool blocked = cgi.Get("blockUnusedLogChunkRelease") != "false";
+            {
+                TGuard<TMutex> guard(PDisk->StateMutex);
+                PDisk->BlockUnusedLogChunkRelease = blocked;
+                if (!blocked) {
+                    PDisk->LastBlockedUnusedLogChunkRelease = TInstant::Zero();
+                }
+            }
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
+        } else if (cgi.Has("releaseUnusedLogChunks")) {
+            THolder<TCompletionEventSender> completion(new TCompletionEventSender(PDisk.Get()));
+            if (PDisk->ReleaseUnusedLogChunks(completion.Get())) {
+                PDisk->WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::HttpInfo, 0), {});
+            }
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
+        } else if (cgi.Has("askOwnerCutLogRequests")) {
+            PDisk->AskVDisksToCutLogs(OwnerSystem, true);
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(""));
+            return;
         }
 
         bool doGetSchedule = false;

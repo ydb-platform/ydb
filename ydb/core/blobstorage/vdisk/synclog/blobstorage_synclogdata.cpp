@@ -357,8 +357,9 @@ namespace NKikimr {
 
         TMemRecLogSnapshotPtr TSyncLog::BuildMemSwapSnapshot(ui64 diskLastLsn,
                                                              ui64 freeUpToLsn, // excluding
-                                                             ui32 freeNPages) {
-            return MemRecLog.BuildSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages);
+                                                             ui32 freeNPages,
+                                                             ui32 maxPages) const {
+            return MemRecLog.BuildSwapSnapshot(diskLastLsn, freeUpToLsn, freeNPages, maxPages);
         }
 
 
@@ -462,6 +463,81 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TEntryPointParser - a class for parsing SyncLog entry point
         ////////////////////////////////////////////////////////////////////////////
+        namespace {
+            bool RemoveDelayedChunksFromDiskRecLogSerialized(
+                    NKikimrVDiskData::TSyncLogEntryPoint &pb,
+                    const TString &vdiskLogPrefix,
+                    TString &explanation)
+            {
+                if (pb.GetDiskRecLogSerialized().empty() || !pb.ChunksToDeleteDelayedSize()) {
+                    return true;
+                }
+
+                TSet<TChunkIdx> chunksToDeleteDelayed;
+                for (ui32 i = 0; i < static_cast<ui32>(pb.ChunksToDeleteDelayedSize()); ++i) {
+                    chunksToDeleteDelayed.insert(pb.GetChunksToDeleteDelayed(i));
+                }
+
+                const TString& serialized = pb.GetDiskRecLogSerialized();
+                const char *pos = serialized.data();
+                const char *end = pos + serialized.size();
+                if (!TDiskRecLog::CheckEntryPoint(pos, end)) {
+                    explanation = "error in TDiskRecLog serialized data";
+                    return false;
+                }
+
+                const ui32 chunksNum = ReadUnaligned<ui32>(pos);
+                pos += sizeof(ui32);
+
+                TVector<TIndexedChunkPtr> chunksToKeep;
+                TVector<TChunkIdx> chunksRemovedFromDiskRecLog;
+
+                for (ui32 i = 0; i < chunksNum; ++i) {
+                    const auto [chunk, next] = TIndexedChunk::Construct(pos);
+                    const TChunkIdx chunkIdx = chunk->GetChunkIdx();
+                    if (chunksToDeleteDelayed.find(chunkIdx) == chunksToDeleteDelayed.end()) {
+                        chunksToKeep.push_back(chunk);
+                    } else {
+                        chunksRemovedFromDiskRecLog.push_back(chunkIdx);
+                    }
+                    pos = next;
+                }
+
+                if (pos != end) {
+                    TStringStream str;
+                    str << "incorrect DiskRecLogSerialized: " << size_t(end - pos) << " trailing bytes";
+                    explanation = str.Str();
+                    return false;
+                }
+
+                if (chunksRemovedFromDiskRecLog.empty()) {
+                    return true;
+                }
+
+                TStringStream filtered;
+                const ui32 keptChunksNum = static_cast<ui32>(chunksToKeep.size());
+                filtered.Write(&keptChunksNum, sizeof(keptChunksNum));
+                for (const TIndexedChunkPtr& chunk : chunksToKeep) {
+                    chunk->Serialize(filtered);
+                }
+                pb.SetDiskRecLogSerialized(filtered.Str());
+
+                if (NActors::TlsActivationContext) {
+                    LOG_ERROR_S(*NActors::TlsActivationContext, BS_LOCALRECOVERY,
+                        vdiskLogPrefix
+                        << "SyncLog entry point contains chunks both in DiskRecLogSerialized and "
+                        "ChunksToDeleteDelayed; removing them from DiskRecLogSerialized in favor of "
+                        "delayed delete"
+                        << " RemovedChunks# " << FormatList(chunksRemovedFromDiskRecLog)
+                        << " ChunksToDeleteDelayed# " << FormatList(chunksToDeleteDelayed)
+                        << " LogStartLsn# " << pb.GetLogStartLsn()
+                        << " RecoveryLogConfirmedLsn# " << pb.GetRecoveryLogConfirmedLsn());
+                }
+
+                return true;
+            }
+        }
+
         bool TEntryPointParser::Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation) {
             return ParseArray(serializedData.data(), serializedData.size(), needsInitialCommit, explanation);
         }
@@ -469,6 +545,11 @@ namespace NKikimr {
         bool TEntryPointParser::ParseArray(const char* serializedData, size_t size, bool &needsInitialCommit, TString &explanation) {
             NKikimrVDiskData::TSyncLogEntryPoint pb;
             bool success = ParseArrayToProto(pb, serializedData, size, needsInitialCommit, explanation);
+            if (!success) {
+                return false;
+            }
+
+            success = RemoveDelayedChunksFromDiskRecLogSerialized(pb, VDiskLogPrefix, explanation);
             if (!success) {
                 return false;
             }

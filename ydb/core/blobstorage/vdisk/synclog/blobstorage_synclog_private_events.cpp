@@ -6,13 +6,14 @@ namespace NKikimr {
 
         TEvSyncLogSnapshotResult::TEvSyncLogSnapshotResult(
                 const TIntrusivePtr<TSyncLogSnapshot> &ptr,
-                const TString &sublogContent)
+                const TString &sublogContent,
+                TSyncLogKeeperDebugInfo debugInfo)
             : SnapshotPtr(ptr)
             , SublogContent(sublogContent)
+            , DebugInfo(std::move(debugInfo))
         {}
 
         TEvSyncLogSnapshotResult::~TEvSyncLogSnapshotResult() = default;
 
     } // NSyncLog
 } // NKikimr
-

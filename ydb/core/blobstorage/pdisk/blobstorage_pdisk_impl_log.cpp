@@ -968,11 +968,18 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
 
     ui64 headedRecordSize = payloadSize + sizeof(TFirstLogPageHeader);
     *Mon.BandwidthPLogRecordHeader += sizeof(TFirstLogPageHeader);
-    bool isAllowedForSpaceRed = isCommitRecord && (evLog.CommitRecord.DeleteChunks.size() > 0);
+    const ui32 unmaskedSignature = evLog.Signature.GetUnmasked();
+    bool isAllowedForSpaceRed = isCommitRecord && evLog.CommitRecord.DeleteChunks.size() > 0;
     if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed)) {
         // TODO: make sure that commit records that delete chunks are applied atomically even if this error occurs.
         TStringStream str;
         str << PCtx->PDiskLogPrefix << "Can't preallocate log chunks!"
+            << " Owner# " << ui32(evLog.Owner)
+            << " Lsn# " << evLog.Lsn
+            << " Signature# " << unmaskedSignature
+            << " PayloadSize# " << payloadSize
+            << " CommitRecord# " << evLog.CommitRecord.ToString()
+            << " IsAllowedForSpaceRed# " << isAllowedForSpaceRed
             << " Marker# BPD70";
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,

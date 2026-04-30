@@ -999,11 +999,12 @@ namespace NKikimr {
         const TActorId WardenId;
         const TActorId NotifyId;
         const TActorId Sender;
+        const bool StartInLogRescueMode;
 
         friend class TActorBootstrapped<TRestartVDiskActor>;
 
         void Bootstrap(const TActorContext &ctx) {
-            ctx.Send(WardenId, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId));
+            ctx.Send(WardenId, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId, StartInLogRescueMode));
             ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Sender, new NMon::TEvHttpInfoRes(MakeReply()));
             Die(ctx);
@@ -1012,7 +1013,9 @@ namespace NKikimr {
         TString MakeReply() const {
             TStringStream str;
             HTML(str) {
-                str << "VDisk restart request has been sent <br>\n"
+                str << "VDisk restart"
+                    << (StartInLogRescueMode ? " in emergency log rescue mode" : "")
+                    << " request has been sent <br>\n"
                     << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
             }
             return str.Str();
@@ -1024,7 +1027,8 @@ namespace NKikimr {
             const TVDiskID &vDiskId,
             const TActorId &wardenId,
             const TActorId &notifyId,
-            const TActorId &sender
+            const TActorId &sender,
+            bool startInLogRescueMode = false
         )
             : TActorBootstrapped<TRestartVDiskActor>()
             , PDiskId(pDiskId)
@@ -1032,6 +1036,7 @@ namespace NKikimr {
             , WardenId(wardenId)
             , NotifyId(notifyId)
             , Sender(sender)
+            , StartInLogRescueMode(startInLogRescueMode)
         {
         }
     };
@@ -1173,6 +1178,11 @@ namespace NKikimr {
                     "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
                 );
             }
+        } else if (type == "restartrescue") {
+            return new TRestartVDiskActor(
+                cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender,
+                true
+            );
         } else {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);

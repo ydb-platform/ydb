@@ -155,6 +155,9 @@ namespace NKikimr {
         bool RunAnubis;
         bool RunDefrag;
         bool RunScrubber;
+        // Start this VDisk actor in emergency recovery-log rescue mode while preserving its
+        // recovered group identity.
+        bool ForceLogRescueMode = false;
 
         ///////////// SYNCLOG SETTINGS //////////////////////
         ui64 SyncLogMaxDiskAmount;

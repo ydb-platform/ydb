@@ -224,6 +224,17 @@ namespace NKikimr {
         Y_ABORT_UNLESS(success);
     }
 
+    bool TLocalRecoveryInfo::FindStartingPoint(TLogSignature signature, ui64 *lsn) const {
+        const auto it = StartingPoints.find(signature);
+        if (it == StartingPoints.end()) {
+            return false;
+        }
+        if (lsn) {
+            *lsn = it->second;
+        }
+        return true;
+    }
+
     void TLocalRecoveryInfo::HandleReadLogResult(
             const NPDisk::TEvReadLogResult::TResults &results)
     {

@@ -243,7 +243,7 @@ namespace NKikimr {
             }
             DonorQueue.emplace_back(std::nullopt); // disks from group
 
-            if (ReplCtx->PausedAtStart) {
+            if (ReplCtx->PausedAtStart || ReplCtx->VCtx->IsLogRescueMode()) {
                 Become(&TThis::StateRelax);
                 State = Relaxation;
             } else {
@@ -624,6 +624,12 @@ namespace NKikimr {
         void Ignore()
         {}
 
+        void HandleCommenceRepl() {
+            if (!ReplCtx->VCtx->IsLogRescueMode()) {
+                StartReplication();
+            }
+        }
+
         void Handle(TEvReplInvoke::TPtr ev) {
             if (ReplJobActorId) {
                 const TActorId selfId = SelfId();
@@ -643,7 +649,7 @@ namespace NKikimr {
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
             hFunc(TEvents::TEvGone, Handle)
-            cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
+            cFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)

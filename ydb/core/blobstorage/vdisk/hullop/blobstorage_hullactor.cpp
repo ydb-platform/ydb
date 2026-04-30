@@ -263,6 +263,9 @@ namespace NKikimr {
         }
 
         void ScheduleCompactionWakeup(const TActorContext& ctx) {
+            if (HullDs->HullCtx->VCtx->IsLogRescueMode()) {
+                return;
+            }
             NextCompactionWakeup = ctx.Monotonic() + Config->HullCompSchedulingInterval;
             if (!CompactionScheduled) {
                 ctx.Schedule(NextCompactionWakeup, new TEvents::TEvWakeup);
@@ -283,6 +286,9 @@ namespace NKikimr {
         }
 
         bool ScheduleCompaction(const TActorContext &ctx, bool level = true) {
+            if (HullDs->HullCtx->VCtx->IsLogRescueMode()) {
+                return false;
+            }
             // schedule fresh if required
             const bool res = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
                 ctx, !RTCtx->LevelIndex->IsWrittenToSstBeforeLsn(ForceFreshCompactLsn), AllowGarbageCollection);
@@ -747,6 +753,11 @@ namespace NKikimr {
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
             const ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
             RTCtx->SetFreeUpToLsn(freeUpToLsn);
+            if (HullDs->HullCtx->VCtx->IsLogRescueMode()) {
+                // Report the current Hull barrier without starting compaction or entry point writes.
+                ctx.Send(RTCtx->GetLogNotifierActorId(), new TEvents::TEvCompleted());
+                return;
+            }
             // we check if we need to start fresh compaction, FreeUpToLsn influence our decision
             const bool freshCompStarted = ScheduleCompaction(ctx, false);
             // just for valid info output to the log

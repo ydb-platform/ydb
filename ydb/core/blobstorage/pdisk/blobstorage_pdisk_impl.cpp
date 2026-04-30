@@ -454,6 +454,18 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
     if (IsLogChunksReleaseInflight) {
         return false;
     }
+    if (BlockUnusedLogChunkRelease) {
+        ++BlockedUnusedLogChunkReleaseAttempts;
+        LastBlockedUnusedLogChunkRelease = TInstant::Now();
+        const bool shouldLog = BlockedUnusedLogChunkReleaseAttempts == 1 ||
+            (BlockedUnusedLogChunkReleaseAttempts & (BlockedUnusedLogChunkReleaseAttempts - 1)) == 0;
+        if (shouldLog) {
+            P_LOG(PRI_WARN, BPD95, "Unused log chunk release is blocked",
+                (LogChunkCount, LogChunks.size()),
+                (BlockedUnusedLogChunkReleaseAttempts, BlockedUnusedLogChunkReleaseAttempts));
+        }
+        return false;
+    }
 
     // Both gapStart end gapEnd point to non-empty log chunks around empty chunk region
     TMaybe<TLogChunkInfo> gapStart;
@@ -635,6 +647,22 @@ ui32 TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
         *Mon.TooMuchLogChunks = 0;
     }
     if (logChunkCount > cutThreshold || doForce) {
+        if (BlockOwnerCutLogRequests) {
+            ++BlockedOwnerCutLogRequests;
+            LastBlockedOwnerCutLogRequest = TInstant::Now();
+            const bool shouldLog = BlockedOwnerCutLogRequests == 1 ||
+                (BlockedOwnerCutLogRequests & (BlockedOwnerCutLogRequests - 1)) == 0;
+            if (shouldLog) {
+                P_LOG(PRI_WARN, BPD94, "TEvCutLog requests to owners are blocked",
+                    (OwnerFilter, ownerFilter),
+                    (DoForce, doForce),
+                    (LogChunkCount, logChunkCount),
+                    (CutThreshold, cutThreshold),
+                    (BlockedOwnerCutLogRequests, BlockedOwnerCutLogRequests));
+            }
+            return requestsSent;
+        }
+
         struct TChunkCutInfoPerOwner {
             size_t ChunksToCut = 0;
             size_t FirstLogChunkNumber = 0;

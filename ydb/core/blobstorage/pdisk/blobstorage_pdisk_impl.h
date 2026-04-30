@@ -151,6 +151,12 @@ public:
     bool IsLogChunksReleaseInflight = false;
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
+    bool BlockOwnerCutLogRequests = false; // Testing knob: block sending NPDisk::TEvCutLog to owners.
+    ui64 BlockedOwnerCutLogRequests = 0;
+    TInstant LastBlockedOwnerCutLogRequest;
+    bool BlockUnusedLogChunkRelease = false; // Testing knob: block actual release of unused log chunks.
+    ui64 BlockedUnusedLogChunkReleaseAttempts = 0;
+    TInstant LastBlockedUnusedLogChunkRelease;
 
     // DO NOT CHANGE STATE NUMBERS, NUMBERS ARE USED TO ENCODE THE STATE IN A FUTURE-PROOF WAY
     enum EShredState {

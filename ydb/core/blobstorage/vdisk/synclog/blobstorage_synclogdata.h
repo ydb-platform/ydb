@@ -216,7 +216,8 @@ namespace NKikimr {
             // some memory
             TMemRecLogSnapshotPtr BuildMemSwapSnapshot(ui64 diskLastLsn,
                                                        ui64 freeUpToLsn, // excluding
-                                                       ui32 freeNPages);
+                                                       ui32 freeNPages,
+                                                       ui32 maxPages = Max<ui32>()) const;
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -299,8 +300,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TEntryPointParser {
         public:
-            TEntryPointParser(TSyncLogParams &&params)
+            TEntryPointParser(TSyncLogParams &&params, TString vdiskLogPrefix = {})
                 : Params(std::move(params))
+                , VDiskLogPrefix(std::move(vdiskLogPrefix))
             {}
 
             bool Parse(const TString &serializedData, bool &needsInitialCommit, TString &explanation);
@@ -311,6 +313,7 @@ namespace NKikimr {
 
         private:
             const TSyncLogParams Params;
+            const TString VDiskLogPrefix;
             TSyncLogPtr SyncLogPtr;
             TVector<ui32> ChunksToDelete;
             ui64 RecoveryLogConfirmedLsn = 0;

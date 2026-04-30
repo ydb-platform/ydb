@@ -774,6 +774,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         firstLsnToKeep));
             }
 
+            if (HugeKeeperCtx->VCtx->IsLogRescueMode()) {
+                return;
+            }
+
             // do nothing if commit is in progress
             if (State.Committing) {
                 LOG_DEBUG(ctx, BS_LOGCUTTER,

@@ -50,62 +50,20 @@ public:
         const TString srcName = TPath::Init(srcPathId, context.SS).LeafName();
         const TString dstName = TPath::Init(dstPathId, context.SS).LeafName();
 
-        // Rename the index in the column table's schema (both proto and in-memory)
-        // This must be done BEFORE irreversible mutations to allow graceful failure
         TPath parentPath = TPath::Init(dstPathId, context.SS).Parent();
         TPathId tablePathId = parentPath->PathId;
 
-        // Validate schema state BEFORE making any irreversible DB mutations
-        if (context.SS->ColumnTables.contains(tablePathId)) {
-            auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(tablePathId);
-            const auto& schema = tableInfo->Description.GetSchema();
-
-            bool renamed = false;
-            for (const auto& indexProto : schema.GetIndexes()) {
-                if (indexProto.GetName() == srcName) {
-                    renamed = true;
-                    break;
-                }
-            }
-            if (!renamed) {
-                // Check if the index already exists with the destination name
-                // This can happen if the schema was already updated by another operation
-                bool foundWithDstName = false;
-                for (const auto& indexProto : schema.GetIndexes()) {
-                    if (indexProto.GetName() == dstName) {
-                        foundWithDstName = true;
-                        renamed = true;
-                        break;
-                    }
-                }
-
-                if (!foundWithDstName) {
-                    LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Index not found in schema during rename"
-                        << ", srcPathId: " << srcPathId
-                        << ", dstPathId: " << dstPathId
-                        << ", srcName: " << srcName
-                        << ", dstName: " << dstName
-                        << ", tablePathId: " << tablePathId
-                        << ", schema indexes count: " << schema.GetIndexes().size()
-                        << ". This may indicate a concurrent operation or partial failure.");
-                    // Schema inconsistency: the scheme tree has the index under the new name
-                    // but the column table's schema still references the old name.
-                    // This could cause downstream queries to fail or produce incorrect results.
-                    // Abort the operation to maintain consistency.
-                    return false;
-                }
-            }
-        }
-
-        // Now that validation has passed, we can safely make irreversible DB mutations
         NIceDb::TNiceDb db(context.GetDB());
 
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        // Apply the schema changes
-        if (context.SS->ColumnTables.contains(tablePathId)) {
+        // Rename srcName -> dstName in the column table's schema proto. Idempotent: a replay
+        // after restart may find the schema already renamed (dstName present, srcName absent).
+        // Propose() guaranteed srcName was in schema at the time; either name being present
+        // here is therefore an invariant.
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(tablePathId));
+        {
             auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(tablePathId);
             auto* schema = tableInfo->Description.MutableSchema();
 
@@ -116,18 +74,12 @@ public:
                     renamed = true;
                     break;
                 }
-            }
-            // If not found with srcName, it must have been found with dstName during validation
-            // In that case, no rename is needed - the schema is already in the correct state
-            if (!renamed) {
-                for (auto& indexProto : *schema->MutableIndexes()) {
-                    if (indexProto.GetName() == dstName) {
-                        renamed = true;
-                        break;
-                    }
+                if (indexProto.GetName() == dstName) {
+                    renamed = true;
+                    break;
                 }
             }
-            Y_ABORT_UNLESS(renamed, "Index must be found in schema after validation");
+            Y_ABORT_UNLESS(renamed, "Neither srcName nor dstName found in column table schema during rename");
             context.SS->PersistColumnTable(db, tablePathId, *tableInfo);
         }
 
@@ -283,6 +235,28 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(srcPath.Base()->PathId));
         TTableIndexInfo::TPtr srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
+
+        // Verify the column table's schema proto and the scheme tree agree that srcName exists.
+        // The TPropose state operation relies on this invariant when renaming the index in schema,
+        // and a state operation must not refuse the operation.
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(mainTablePath.Base()->PathId));
+        {
+            const auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(mainTablePath.Base()->PathId);
+            const auto& schema = tableInfo->Description.GetSchema();
+            bool foundInSchema = false;
+            for (const auto& indexProto : schema.GetIndexes()) {
+                if (indexProto.GetName() == srcName) {
+                    foundInSchema = true;
+                    break;
+                }
+            }
+            if (!foundInSchema) {
+                result->SetError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Index '" << srcName << "' is not present in column table schema "
+                    << "(scheme tree and column table schema are out of sync)");
+                return result;
+            }
+        }
 
         TPath dstPath = mainTablePath.Child(dstName);
         {

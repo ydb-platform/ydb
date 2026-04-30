@@ -48,9 +48,6 @@ public:
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
 
-        path->PathState = TPathElement::EPathState::EPathStateNoChanges;
-        context.SS->PersistPath(db, path->PathId);
-
         auto parentPath = TPath::Init(path->PathId, context.SS).Parent();
         ++parentPath->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
@@ -99,7 +96,7 @@ class TAlterLocalIndex: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -195,41 +192,39 @@ public:
             return result;
         }
 
-        // Validate index type before mutating state
-        switch (indexIt->second->Type) {
-            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
-            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
-                break;
-            default:
-                result->SetError(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Unexpected index type " << static_cast<int>(indexIt->second->Type)
-                    << " in TAlterLocalIndex::Propose. Only local bloom filter types are supported.");
-                return result;
-        }
+        // Single source of truth for which local-index types are supported and
+        // which variant alternative each one requires. Adding a new type means
+        // adding one case here. Used to validate both the existing index and the
+        // requested alter; the variant copy below relies on this invariant.
+        auto checkLocalIndex = [](const TTableIndexInfo& info, TStringBuf what) -> std::optional<TString> {
+            switch (info.Type) {
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    if (!std::holds_alternative<NKikimrSchemeOp::TBloomFilter>(info.SpecializedIndexDescription)) {
+                        return TStringBuilder() << what << " SpecializedIndexDescription does not hold TBloomFilter for index type LocalBloomFilter";
+                    }
+                    return std::nullopt;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    if (!std::holds_alternative<NKikimrSchemeOp::TBloomNGrammFilter>(info.SpecializedIndexDescription)) {
+                        return TStringBuilder() << what << " SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter";
+                    }
+                    return std::nullopt;
+                default:
+                    return TStringBuilder() << "Unexpected index type " << static_cast<int>(info.Type)
+                        << " in TAlterLocalIndex::Propose. Only local bloom filter types are supported.";
+            }
+        };
 
-        // Validate variant types before mutating in-memory state
-        // This prevents partial state corruption if validation fails
-        switch (indexIt->second->Type) {
-            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
-                if (!std::holds_alternative<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription)) {
-                    result->SetError(NKikimrScheme::StatusSchemeError,
-                        TStringBuilder() << "SpecializedIndexDescription does not hold TBloomFilter for index type LocalBloomFilter");
-                    return result;
-                }
-                break;
-            }
-            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
-                if (!std::holds_alternative<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription)) {
-                    result->SetError(NKikimrScheme::StatusSchemeError,
-                        TStringBuilder() << "SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter");
-                    return result;
-                }
-                break;
-            }
-            default:
-                // These cases should have been caught by the validation switch above
-                Y_ABORT("Unexpected index type in variant validation");
-                break;
+        // Existing index and requested alter must both be supported types whose
+        // variant alternatives match the declared Type. CreateNextVersion()
+        // preserves the alternative from indexIt->second, so this also covers
+        // alterData's variant after DbGuard.
+        if (auto err = checkLocalIndex(*indexIt->second, "existing")) {
+            result->SetError(NKikimrScheme::StatusSchemeError, *err);
+            return result;
+        }
+        if (auto err = checkLocalIndex(*newIndexData->AlterData, "requested")) {
+            result->SetError(NKikimrScheme::StatusSchemeError, *err);
+            return result;
         }
 
         auto guard = context.DbGuard();
@@ -246,35 +241,7 @@ public:
             alterData->IndexKeys = newIndexData->AlterData->IndexKeys;
         }
         alterData->State = NKikimrSchemeOp::EIndexStateReady;
-
-        // Now that alterData is created, validate it holds the correct variant type
-        // and copy the specialized description
-        switch (indexIt->second->Type) {
-            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
-                if (!std::holds_alternative<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription)) {
-                    result->SetError(NKikimrScheme::StatusSchemeError,
-                        TStringBuilder() << "alterData SpecializedIndexDescription does not hold TBloomFilter for index type LocalBloomFilter");
-                    return result;
-                }
-                std::get<NKikimrSchemeOp::TBloomFilter>(alterData->SpecializedIndexDescription) =
-                    std::get<NKikimrSchemeOp::TBloomFilter>(newIndexData->AlterData->SpecializedIndexDescription);
-                break;
-            }
-            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
-                if (!std::holds_alternative<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription)) {
-                    result->SetError(NKikimrScheme::StatusSchemeError,
-                        TStringBuilder() << "alterData SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter");
-                    return result;
-                }
-                std::get<NKikimrSchemeOp::TBloomNGrammFilter>(alterData->SpecializedIndexDescription) =
-                    std::get<NKikimrSchemeOp::TBloomNGrammFilter>(newIndexData->AlterData->SpecializedIndexDescription);
-                break;
-            }
-            default:
-                // These cases should have been caught by the validation switch above
-                Y_ABORT("Unexpected index type in data copy switch");
-                break;
-        }
+        alterData->SpecializedIndexDescription = newIndexData->AlterData->SpecializedIndexDescription;
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLocalIndex, indexPath.Base()->PathId);

@@ -1387,3 +1387,9 @@ def on_escape_spaces(unit: NotsUnitType, var_name: str) -> None:
 def on_ts_conf_error(unit: NotsUnitType, *messages: str) -> None:
     msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
     ymake.report_configure_error(msg)
+
+
+@_with_report_configure_error
+def on_ts_check_prepare_deps_configure(unit: NotsUnitType) -> None:
+    test_mod = unit.get("TS_TEST_FOR_PATH")
+    unit.onpeerdir([test_mod])

@@ -229,8 +229,6 @@ class TsConfig(object):
         """
         opts = self.get_or_create_compiler_options()
         errors = []
-        declaration = opts.get(CompilerOptionsFields.declaration)
-        declaration_dir = opts.get(CompilerOptionsFields.declarationDir)
         out_dir = opts.get(CompilerOptionsFields.outDir)
         root_dir = opts.get(CompilerOptionsFields.rootDir)
 
@@ -257,10 +255,6 @@ class TsConfig(object):
         else:
             if out_dir:
                 errors.append("'outDir' should be removed - it is not in use")
-            # Checking only when outDir shouldn't be used, as when we allow outDir,
-            # it routes all the results including declarations.
-            if declaration is True and declaration_dir is None:
-                errors.append("'declarationDir' option is required when 'declaration' is set")
 
         if opts.get("outFile") is not None:
             errors.append("'outFile' option is not supported")

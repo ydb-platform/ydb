@@ -192,7 +192,7 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 * `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
 * `eventSource`: Includes the `ydb:document-table` string.
 * `eventVersion`: Includes the `1.0` string.
-* `userIdentity`: Includes user information. Contains `type` (`"User"` or `"Service"`) and `principalId` (user's [SID](glossary.md#sid-access-sid)). If record is deleted by the [TTL](ttl.md) process, `type` is `"Service"` and `principalId` is `"dynamodb.amazonaws.com"`.
+* `userIdentity`: Includes user information. Present if the `USER_SIDS` setting is enabled. Contains `type` (`"User"` or `"Service"`) and `principalId` (user's [SID](glossary.md#sid-access-sid)). If record is deleted by the [TTL](ttl.md) process, `type` is `"Service"` and `principalId` is `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 

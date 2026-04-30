@@ -192,7 +192,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * `eventName` — `INSERT`, `MODIFY` или `REMOVE`. Значение `INSERT` допустимо только в режиме `NEW_AND_OLD_IMAGES`.
 * `eventSource` — содержит строку `ydb:document-table`.
 * `eventVersion` — содержит строку `1.0`.
-* `userIdentity` — информация о пользователе (вложенное значение `principalId` содержит [SID](glossary.md#sid-access-sid) пользователя, если происходит удаление записей по [TTL](ttl.md), то указывается значение `dynamodb.amazonaws.com`.).
+* `userIdentity` — информация о пользователе. Имеет вложенные поля `type` (содержит `"User"` или `"Service"`) и `principalId` (содержит [SID](glossary.md#sid-access-sid) пользователя). Если происходит удаление записей по [TTL](ttl.md), то поле `type` содержит `"Service"`, а поле `principalId` содержит `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 

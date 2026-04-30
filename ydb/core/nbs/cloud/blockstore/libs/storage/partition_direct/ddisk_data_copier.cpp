@@ -171,7 +171,7 @@ void TDDiskDataCopier::StartCopyRange()
     future.Subscribe(
         [weakSelf = weak_from_this(),
          copyRangeState = std::move(copyRangeState)]   //
-        (const TFuture<TReadRequestResponse>& f) mutable
+        (const TFuture<IReadRequestExecutor::TResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
                 self->OnRangeRead(std::move(copyRangeState), f.GetValue());
@@ -182,7 +182,7 @@ void TDDiskDataCopier::StartCopyRange()
 
 void TDDiskDataCopier::OnRangeRead(
     TCopyRangeRequestStatePtr copyRangeState,
-    const TReadRequestResponse& response)
+    const IReadRequestExecutor::TResponse& response)
 {
     copyRangeState->Span.Event("OnRangeRead");
 

@@ -36,13 +36,10 @@ public:
 
     void Run() override;
 
-    [[nodiscard]] NThreading::TFuture<TReadRequestResponse>
-    GetFuture() const override;
+    [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:
-    void OnSubRequestComplete(
-        const TReadRequestResponse& response,
-        size_t index);
+    void OnSubRequestComplete(const TResponse& response, size_t index);
 
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
@@ -53,8 +50,8 @@ private:
 
     TVector<TReadSingleLocationRequestExecutorPtr> SubRequestExecutors;
     size_t CompletedCount{0};
-    NThreading::TPromise<TReadRequestResponse> Promise =
-        NThreading::NewPromise<TReadRequestResponse>();
+    NThreading::TPromise<TResponse> Promise =
+        NThreading::NewPromise<TResponse>();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

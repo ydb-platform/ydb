@@ -13,26 +13,21 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TReadRequestResponse
-{
-    NProto::TError Error;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class IReadRequestExecutor
 {
 public:
+    struct TResponse
+    {
+        NProto::TError Error;
+    };
+
     virtual ~IReadRequestExecutor() = default;
 
     virtual void Run() = 0;
-    [[nodiscard]] virtual NThreading::TFuture<TReadRequestResponse>
-    GetFuture() const = 0;
+    [[nodiscard]] virtual NThreading::TFuture<TResponse> GetFuture() const = 0;
 };
 
 using IReadRequestExecutorPtr = std::shared_ptr<IReadRequestExecutor>;
-
-////////////////////////////////////////////////////////////////////////////////
 
 // Fabric method for creation appropriate executor based on readHints size
 IReadRequestExecutorPtr CreateReadRequestExecutor(

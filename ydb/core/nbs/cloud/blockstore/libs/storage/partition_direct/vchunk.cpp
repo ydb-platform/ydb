@@ -332,7 +332,7 @@ void TVChunk::DoReadBlocksLocal(
          promise = std::move(promise),
          span,
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
-        (const TFuture<TReadRequestResponse>& f) mutable
+        (const TFuture<IReadRequestExecutor::TResponse>& f) mutable
         {
             Y_ABORT_UNLESS(threadChecker.Check());
 

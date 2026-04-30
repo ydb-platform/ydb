@@ -35,8 +35,7 @@ public:
 
     void Run() override;
 
-    [[nodiscard]] NThreading::TFuture<TReadRequestResponse>
-    GetFuture() const override;
+    [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:
     void OnReadResponse(const TDBGReadBlocksResponse& response);
@@ -52,8 +51,8 @@ private:
 
     size_t TryNumber = 0;
 
-    NThreading::TPromise<TReadRequestResponse> Promise =
-        NThreading::NewPromise<TReadRequestResponse>();
+    NThreading::TPromise<TResponse> Promise =
+        NThreading::NewPromise<TResponse>();
 };
 
 using TReadSingleLocationRequestExecutorPtr =

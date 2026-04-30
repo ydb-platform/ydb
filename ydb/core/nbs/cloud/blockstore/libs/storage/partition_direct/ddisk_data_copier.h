@@ -53,7 +53,7 @@ private:
     void StartCopyRange();
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
-        const TReadRequestResponse& response);
+        const IReadRequestExecutor::TResponse& response);
     void OnRangeWritten(
         TCopyRangeRequestStatePtr copyRangeState,
         const TDBGWriteBlocksResponse& response);

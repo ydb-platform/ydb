@@ -42,6 +42,19 @@ def extract_sort_key(line: str) -> tuple[int, int, int, int, int, int, int]:
     return (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
 
 
+def sort_log_file_inplace(path: Path) -> None:
+    with path.open("r", encoding="utf-8", errors="replace") as inp:
+        lines = inp.readlines()
+
+    # Python sort is stable, so lines with equal timestamps preserve original order.
+    lines.sort(key=extract_sort_key)
+
+    tmp_path = path.with_name(path.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as out:
+        out.writelines(lines)
+    tmp_path.replace(path)
+
+
 def build_remote_command(pattern: str, log_history_length: str) -> str:
     script = f"""
 set -euo pipefail
@@ -246,6 +259,10 @@ def main() -> None:
     files = sorted(tmp_dir.rglob("filtered.kikimr*.log"))
     if not files:
         raise SystemExit(f"No filtered files copied into {tmp_dir}")
+
+    print("Sort per-node logs before merge")
+    for f in files:
+        sort_log_file_inplace(f)
 
     merged = tmp_dir / "filtered.log"
     streams = [f.open("r", encoding="utf-8", errors="replace") for f in files]

@@ -91,7 +91,7 @@ public:
 struct TMockPqGatewaySettings {
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
-    NActors::TTestActorRuntime* Runtime = nullptr;
+    NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
 };
 

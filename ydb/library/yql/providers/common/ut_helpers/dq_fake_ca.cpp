@@ -4,7 +4,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/system/env.h>
 
@@ -83,7 +83,7 @@ NKikimr::NMiniKQL::THolderFactory& TFakeActor::GetHolderFactory() {
 }
 
 TFakeCASetup::TFakeCASetup()
-    : Runtime(new NActors::TTestBasicRuntime(1, true))
+    : Runtime(new NActors::TTestActorRuntimeBase(1, true))
     , FakeActorId(0, "FakeActor")
 {
     Runtime->AddLocalService(
@@ -95,8 +95,12 @@ TFakeCASetup::TFakeCASetup()
 
     Runtime->SetLogBackend(CreateStderrBackend());
 
-    TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
-    Runtime->Initialize(app->Unwrap());
+    Runtime->Initialize();
+
+    Runtime->GetLogSettings(0)->Append(
+        NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        NKikimrServices::EServiceKikimr_Name);
 
     Runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
 }

@@ -78,6 +78,16 @@ public:
     inline static constexpr TDuration TEST_OPERATION_TIMEOUT = TDuration::Seconds(10);
 
 public:
+
+    ~TStreamingTestFixture () {
+        if (InternalDriver) {
+            InternalDriver->Stop(true);
+        }
+        if (ExternalDriver) {
+            ExternalDriver->Stop(true);
+        }
+    }
+
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig() {
@@ -87,6 +97,24 @@ public:
         auto& result = AppConfig.emplace();
         result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
         return result;
+    }
+
+    void UpdateConfig(NKikimrConfig::TAppConfig& appConfig) {
+        auto& runtime = GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *evProxy->Record.MutableConfig() = appConfig;
+
+        runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(response);
+
+        auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *evStorage->Record.MutableConfig() = appConfig;
+
+        runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+        response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(response);
     }
 
     TIntrusivePtr<IMockPqGateway> SetupMockPqGateway() {
@@ -136,12 +164,14 @@ public:
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .NodeCount = NodeCount,
+                .DynamicNodeCount = DynamicNodeCount,
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
                 .UseLocalCheckpointsInStreamingQueries = true,
                 .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+                .StoragePoolTypes = StoragePoolTypes,
             });
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -854,9 +884,11 @@ private:
 
 protected:
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
+    TVector<TString> StoragePoolTypes;
     TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NTopic::TTopicClientSettings TopicClientSettings = NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
@@ -3738,22 +3770,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
+            UpdateConfig(appConfig);
 
             Sleep(TDuration::Seconds(1));
 

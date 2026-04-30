@@ -142,6 +142,12 @@ std::string TProducer::TSplittedPartitionWorker::GetStateName() const {
 }
 
 void TProducer::TSplittedPartitionWorker::DoWork() {
+    std::optional<WrappedWriteSessionPtr> writeSessionToCloseOnError;
+    std::vector<std::uint32_t> writeSessionPartitionsToDestroy;
+    bool handleGotMaxSeqNo = false;
+    std::uint64_t maxSeqNo = 0;
+    std::unordered_map<std::uint32_t, std::uint64_t> cachedMaxSeqNos;
+
     std::unique_lock lock(Lock);
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     switch (State) {
@@ -183,33 +189,42 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
             break;
         case EState::Failed:
             if (WriteSessionToCloseOnError) {
-                TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
-                Producer->GetSessionClosedEventAndDie(WriteSessionToCloseOnError, std::move(sessionClosedEvent));
+                writeSessionToCloseOnError = WriteSessionToCloseOnError;
                 WriteSessionToCloseOnError.reset();
             }
-            for (const auto& partitionId : WriteSessionPartitionsToDestroy) {
-                Producer->SessionsWorker->DestroyWriteSession(partitionId);
-            }
-            WriteSessionPartitionsToDestroy.clear();
+            writeSessionPartitionsToDestroy.swap(WriteSessionPartitionsToDestroy);
             MoveTo(EState::Done);
             break;
         case EState::GotMaxSeqNo:
-            Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
-            Producer->MessagesWorker->ScheduleResendMessages(PartitionId, MaxSeqNo);
-            for (const auto& child : Producer->Partitions[PartitionId].Children_) {
-                Producer->Partitions[child].Locked(false);
-            }
-            Producer->Partitions[PartitionId].Locked_ = false;
-
-            for (const auto& [partitionId, maxSeqNo] : CachedMaxSeqNos) {
-                Producer->Partitions[partitionId].CachedMaxSeqNo = maxSeqNo;
-            }
-            for (const auto& partitionId : WriteSessionPartitionsToDestroy) {
-                Producer->SessionsWorker->DestroyWriteSession(partitionId);
-            }
-            WriteSessionPartitionsToDestroy.clear();
+            handleGotMaxSeqNo = true;
+            maxSeqNo = MaxSeqNo;
+            cachedMaxSeqNos = CachedMaxSeqNos;
+            writeSessionPartitionsToDestroy.swap(WriteSessionPartitionsToDestroy);
             MoveTo(EState::Done);
             break;
+    }
+    lock.unlock();
+
+    if (writeSessionToCloseOnError && *writeSessionToCloseOnError) {
+        TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
+        Producer->GetSessionClosedEventAndDie(*writeSessionToCloseOnError, std::move(sessionClosedEvent));
+    }
+
+    if (handleGotMaxSeqNo) {
+        Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
+        Producer->MessagesWorker->ScheduleResendMessages(PartitionId, maxSeqNo);
+        for (const auto& child : Producer->Partitions[PartitionId].Children_) {
+            Producer->Partitions[child].Locked(false);
+        }
+        Producer->Partitions[PartitionId].Locked_ = false;
+
+        for (const auto& [partitionId, cachedMaxSeqNo] : cachedMaxSeqNos) {
+            Producer->Partitions[partitionId].CachedMaxSeqNo = cachedMaxSeqNo;
+        }
+    }
+
+    for (const auto& partitionId : writeSessionPartitionsToDestroy) {
+        Producer->SessionsWorker->DestroyWriteSession(partitionId);
     }
 }
 
@@ -226,7 +241,7 @@ void TProducer::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint32_t partition
 bool TProducer::TSplittedPartitionWorker::IsDone() {
     std::lock_guard lock(Lock);
     DoneAt = TInstant::Now();
-    return State == EState::Done;
+    return State == EState::Done || State == EState::Failed;
 }
 
 bool TProducer::TSplittedPartitionWorker::IsInit() {

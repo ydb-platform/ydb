@@ -13,7 +13,7 @@ from helpers.tiering_helper import (
     ObjectStorageParams,
     CreateExternalDataSource,
     DropExternalDataSource,
-    UpsertSecret,
+    CreateSecret,
     DropSecret,
 )
 import helpers.data_generators as dg
@@ -158,15 +158,15 @@ class TieringTestBase(BaseTestSet):
 
         self.access_key_secret = self._get_test_prefix() + '_access_key'
         self.secret_key_secret = self._get_test_prefix() + '_secret_key'
-        sth.execute_scheme_query(UpsertSecret(self.access_key_secret, self.s3_access_key))
-        sth.execute_scheme_query(UpsertSecret(self.secret_key_secret, self.s3_secret_key))
+        sth.execute_scheme_query(CreateSecret(self.access_key_secret, self.s3_access_key))
+        sth.execute_scheme_query(CreateSecret(self.secret_key_secret, self.s3_secret_key))
 
         self.s3_configs = [
             ObjectStorageParams(
                 endpoint=self.s3_endpoint,
                 bucket=bucket,
-                access_key_secret=self.access_key_secret,
-                secret_key_secret=self.secret_key_secret,
+                access_key_secret=sth.get_full_path(self.access_key_secret),
+                secret_key_secret=sth.get_full_path(self.secret_key_secret),
                 access_key=self.s3_access_key,
                 secret_key=self.s3_secret_key,
             )

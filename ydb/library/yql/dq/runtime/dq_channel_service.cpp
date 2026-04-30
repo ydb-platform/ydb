@@ -72,6 +72,16 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     return result;
 }
 
+THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+    return NYql::NDq::TEvDq::TEvAbortExecution::Build(
+            NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            TStringBuilder() << "Channel: " << info.ChannelId
+            << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
+            << ", Channel memory limit exceeded, allocated: " << quotaManager->GetCurrentQuota()
+            << " bytes, Needed: " << bytes << " bytes"
+        );
+}
+
 bool IChannelBuffer::GetLeading() {
     auto result = Leading;
     Leading = false;
@@ -132,8 +142,9 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         } else {
             InflightBytes += data.Bytes;
             *Registry->LocalBufferInflightBytes += data.Bytes;
-            if (QuotaManager) {
-                Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+            if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+                AbortChannelByMemoryLimit(data.Bytes);
+                return;
             }
             Queue.push(std::move(data));
             fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
@@ -141,8 +152,9 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     } else {
         InflightBytes += data.Bytes;
         *Registry->LocalBufferInflightBytes += data.Bytes;
-        if (QuotaManager) {
-            Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+            AbortChannelByMemoryLimit(data.Bytes);
+            return;
         }
         Queue.push(std::move(data));
         fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
@@ -306,8 +318,9 @@ void TLocalBuffer::StorageWakeupHandler() {
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
-        if (QuotaManager) {
-            Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+            AbortChannelByMemoryLimit(data.Bytes);
+            return;
         }
         Queue.emplace(std::move(data));
         SpilledBytes -= info.Bytes;
@@ -372,6 +385,12 @@ void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
 
 void TLocalBuffer::ExportPopStats(TDqAsyncStats& stats) {
     PopStats.Export(stats);
+}
+
+void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
+    if (!Aborted.exchange(true)) {
+        ActorSystem->Send(Info.InputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+    }
 }
 
 TOutputDescriptor::~TOutputDescriptor() {
@@ -558,6 +577,12 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
+void TOutputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
+    if (!Aborted.exchange(true)) {
+        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+    }
+}
+
 void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     if (!IsTerminatedOrAborted()) {
         if (earlyFinish) {
@@ -693,8 +718,9 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     *InputBufferBytes += data.Bytes;
     *InputBufferInflightBytes += data.Bytes;
 
-    if (QuotaManager) {
-        Y_ENSURE(QuotaManager->AllocateQuota(data.Bytes));
+    if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+        AbortChannelByMemoryLimit(data.Bytes);
+        return false;
     }
 
     std::lock_guard lock(QueueMutex);
@@ -788,6 +814,12 @@ void TInputDescriptor::AbortChannel(const TString& message) {
             << ", " << message
         ).Release());
         Terminate();
+    }
+}
+
+void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
+    if (!Aborted.exchange(true)) {
+        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
     }
 }
 
@@ -895,8 +927,9 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    if (descriptor->QuotaManager) {
-        Y_ENSURE(descriptor->QuotaManager->AllocateQuota(data.Bytes));
+    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(data.Bytes)) {
+        descriptor->AbortChannelByMemoryLimit(data.Bytes);
+        return;
     }
 
     if (descriptor->WaitQueueSize.load()) {
@@ -1602,10 +1635,10 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             if (result->QuotaManager) {
                 result->QuotaManager->FreeQuota(result->QueueBytes);
             }
-            if (quotaManager) {
-                Y_ENSURE(quotaManager->AllocateQuota(result->QueueBytes));
-            }
             result->QuotaManager = quotaManager;
+            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes)) {
+                result->AbortChannelByMemoryLimit(result->QueueBytes);
+            }
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;

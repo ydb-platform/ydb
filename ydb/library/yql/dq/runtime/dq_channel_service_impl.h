@@ -217,6 +217,7 @@ public:
 
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void AbortChannelByMemoryLimit(ui64 bytes);
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     NActors::TActorSystem* ActorSystem;
@@ -250,6 +251,7 @@ public:
     std::atomic<bool> OutputBound = false;
     std::atomic<bool> InputBound = false;
     std::atomic<bool> Finished = false;
+    std::atomic<bool> Aborted = false;
 
     IMemoryQuotaManager::TPtr QuotaManager;
 };
@@ -284,6 +286,7 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
+    void AbortChannelByMemoryLimit(ui64 bytes);
     void HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
@@ -420,6 +423,7 @@ public:
     bool EarlyFinish();
     void Terminate();
     void AbortChannel(const TString& message);
+    void AbortChannelByMemoryLimit(ui64 bytes);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;

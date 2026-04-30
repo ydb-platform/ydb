@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import ClassVar
 
 from ydb.tests.tools.nemesis.library import base
 
@@ -20,6 +21,12 @@ class MonitoredAgentActor(base.AbstractMonitoredNemesis):
     ``NEMESIS_EXECUTION_LOGGER`` in :class:`NemesisManager` still captures
     every record.
     """
+
+    # True if the runner can safely run inside a single-host local cluster
+    # (e.g. ydb/tests/tools/local_cluster). Default is False — opt-in only,
+    # because many runners rely on systemd, /Berkanavt paths, real disks,
+    # multi-host networking, or destructive system-wide operations.
+    supports_local_mode: ClassVar[bool] = False
 
     def __init__(self, scope: str = "node") -> None:
         base.AbstractMonitoredNemesis.__init__(self, scope=scope)

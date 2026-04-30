@@ -44,6 +44,16 @@ PY_SRCS(
     app.py
 )
 
+RESOURCE(
+    static/index.html             nemesis_static/index.html
+    static/HostProcessItem.js     nemesis_static/HostProcessItem.js
+    static/HostStatusItem.js      nemesis_static/HostStatusItem.js
+    static/NemesisGroupAccordion.js nemesis_static/NemesisGroupAccordion.js
+    static/ProcessCard.js         nemesis_static/ProcessCard.js
+    static/ProcessTypeGroup.js    nemesis_static/ProcessTypeGroup.js
+    static/WardenChecksCard.js    nemesis_static/WardenChecksCard.js
+)
+
 DEPENDS(
     ydb/tools/cfg/bin
     ydb/tests/tools/nemesis/driver
@@ -55,6 +65,7 @@ PEERDIR(
     ydb/tests/library/stability
     ydb/tests/library/wardens
     contrib/python/Flask
+    library/python/resource
 )
 
 END()

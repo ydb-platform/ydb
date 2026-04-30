@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     install_root: str = '/Berkanavt/nemesis'
     # Log directory on agents for safety wardens (grep kikimr.start, etc.); override via KIKIMR_LOGS_DIRECTORY.
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
+    # When true, the catalog is filtered to runners with supports_local_mode=True.
+    # Set by ydb/tests/tools/local_cluster when launching nemesis as a subprocess.
+    local_mode: bool = False
 
 
 class AgentSettings(BaseSettings):

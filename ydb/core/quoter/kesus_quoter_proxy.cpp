@@ -925,7 +925,8 @@ private:
                 if (resourceIt != Resources.end()) {
                     auto* resState = resourceIt->second.Get();
                     Y_ABORT_UNLESS(resState != nullptr);
-                    if (resResult.GetError().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    const Ydb::StatusIds::StatusCode resStatus = resResult.GetError().GetStatus();
+                    if (resStatus == Ydb::StatusIds::SUCCESS) {
                         KESUS_PROXY_LOG_INFO("Initialized new session with resource \"" << resourcePaths[i] << "\"");
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
                             BreakResource(*resState, GetProxyUpdateEv());
@@ -942,7 +943,11 @@ private:
                         SendProxySessionIfNotSent(resState);
                     } else {
                         // TODO: make cache with error results.
-                        KESUS_PROXY_LOG_WARN("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                        if (resStatus == Ydb::StatusIds::NOT_FOUND) {
+                            KESUS_PROXY_LOG_INFO("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                        } else {
+                            KESUS_PROXY_LOG_ERROR("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                        }
                         ProcessSubscribeResourceError(resResult.GetError().GetStatus(), resState);
                     }
                 }

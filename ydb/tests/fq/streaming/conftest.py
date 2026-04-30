@@ -37,7 +37,7 @@ def kikimr(request):
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,
-                "dq_channel_version": 1,
+                "dq_channel_version": 2
             },
             default_clusteradmin="root@builtin",
             use_in_memory_pdisks=False,

@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -63,6 +64,24 @@ public:
         Timestamp = TInstant::Now();
     }
 
+    TDataChunk(
+        NDqProto::TCheckpoint&& checkpoint,
+        bool leading)
+        : Bytes(1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Checkpoint(std::move(checkpoint))
+    {}
+
+    TDataChunk(
+        NDqProto::TWatermark&& watermark,
+        bool leading)
+        : Bytes (1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Watermark(std::move(watermark))
+    {}
+
     TChunkedBuffer Buffer;
 
     ui64 Rows = 0;
@@ -72,6 +91,8 @@ public:
     bool Leading = false;
     bool Finished = false;
     TInstant Timestamp;
+    TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    TMaybe<NDqProto::TWatermark> Watermark;
 };
 
 class IChannelBuffer {

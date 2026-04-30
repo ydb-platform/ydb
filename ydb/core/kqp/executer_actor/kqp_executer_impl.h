@@ -157,6 +157,7 @@ public:
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+        , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -1288,7 +1289,7 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
-            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
+            .EnableWatermarks = EnableWatermarks,
         });
 
         auto err = Planner->PlanExecution();
@@ -1818,7 +1819,7 @@ protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
-
+    bool EnableWatermarks = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

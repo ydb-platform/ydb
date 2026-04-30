@@ -737,6 +737,6 @@ message TKqpPhyQuery {
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
     optional bool DisableCheckpoints = 17;
-    optional bool EnableWatermarks = 18;
+    optional bool EnableWatermarks = 18  [deprecated=true];
     optional EIsolationLevel DefaultTxMode = 19;
 }

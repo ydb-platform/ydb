@@ -3,11 +3,12 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 
 namespace NYql::NDq {
 
 template<typename TDerived>
-class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync> {
+class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>, public IDqInputChannelCallbacks {
     using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>;
 public:
     using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>::TDqComputeActorBase;
@@ -284,6 +285,7 @@ protected:
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
+            channel.Channel->SetCallback(this);
         }
 
         for (auto& [inputIndex, source] : this->SourcesMap) {
@@ -392,6 +394,7 @@ protected:
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         this->ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
+
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
         if (outputInfo.Finished && !this->Checkpoints) {
@@ -428,6 +431,14 @@ protected:
 
         this->ProcessOutputsState.HasDataToSend |= !outputInfo.Finished;
         this->ProcessOutputsState.DataWasSent |= outputInfo.Finished || sent;
+    }
+
+    void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) override {
+        CA_LOG_T("Take checkpoint from channelId: " << channelId << ", checkpoint: " << checkpoint.ShortDebugString());
+        auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
+        YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
+        inputChannel->Pause(checkpoint);
+        this->Checkpoints->RegisterCheckpoint(checkpoint, channelId);
     }
 
 protected:

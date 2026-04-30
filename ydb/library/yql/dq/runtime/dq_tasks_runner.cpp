@@ -1159,7 +1159,7 @@ private:
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
 
-                    LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
+                    LOG(TStringBuilder() << "task " << TaskId << ", execution finished, finish consumers");
                     AllocatedHolder->Output->Finish();
                     return ERunStatus::Finished;
                 }

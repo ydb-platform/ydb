@@ -8,6 +8,8 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NYql::NDq {
 
 template<bool fast>
@@ -59,6 +61,16 @@ public:
         Rows = 0;
     }
 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
+    }
+    
     void Push(NUdf::TUnboxedValue&& value) override {
         Packer.AddItem(value);
         Rows++;
@@ -102,6 +114,16 @@ public:
         YQL_ENSURE(false, "Push to Wide Channel");
     }
 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
+    }
+
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         Packer.AddWideItem(values, width);
         Rows++;
@@ -138,6 +160,14 @@ public:
 
     void Push(NUdf::TUnboxedValue&&) override {
         YQL_ENSURE(false, "Push to Wide Channel");
+    }
+
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {

@@ -1190,7 +1190,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.HashJoinMode = "map";
-                PRAGMA ydb.DqChannelVersion = "1";
+                PRAGMA ydb.DqChannelVersion = "2";
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT

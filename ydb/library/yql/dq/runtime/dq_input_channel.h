@@ -3,6 +3,8 @@
 #include "dq_channel_settings.h"
 #include "dq_transport.h"
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+
 namespace NYql::NDq {
 
 struct TDqInputChannelStats : TDqInputStats {
@@ -14,6 +16,12 @@ struct TDqInputChannelStats : TDqInputStats {
     TInstant PopTime;
     bool PopResult = false;
 };
+
+ struct IDqInputChannelCallbacks {
+    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) = 0;
+    virtual ~IDqInputChannelCallbacks() = default;
+};
+
 
 class IDqInputChannel : public IDqInput {
 public:
@@ -29,6 +37,10 @@ public:
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
     virtual bool IsLocal() const = 0;
+
+    virtual void SetCallback(IDqInputChannelCallbacks* callback) {
+        Y_UNUSED(callback);
+    };
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);

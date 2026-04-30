@@ -475,7 +475,7 @@ public:
             void ReplyError(TStatus status) override {
                 TSession session;
                 if (Observation) {
-                    Observation->End(status.GetStatus());
+                    Observation->End(status.GetStatus(), status.GetEndpoint());
                 }
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }

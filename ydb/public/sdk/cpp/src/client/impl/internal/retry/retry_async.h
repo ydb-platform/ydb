@@ -103,6 +103,7 @@ protected:
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
+                self->LastBackoffMs_ = 0;
                 return DoRetry(self);
             case NextStep::RetryFastBackoff:
                 return DoBackoff(self, true);

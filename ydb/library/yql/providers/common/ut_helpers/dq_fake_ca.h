@@ -8,7 +8,7 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -20,7 +20,7 @@ namespace NYql::NDq {
 
 class TFakeActor;
 
-using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntime>;
+using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntimeBase>;
 using TCallback = std::function<void(TFakeActor&)>;
 template<typename T>
 using TReadValueParser = std::function<std::vector<T>(const NUdf::TUnboxedValue&)>;
@@ -265,4 +265,5 @@ public:
     std::shared_ptr<TAsyncOutputPromises> AsyncOutputPromises = std::make_shared<TAsyncOutputPromises>();
 };
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq
+

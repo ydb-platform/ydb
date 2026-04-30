@@ -726,11 +726,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                             << NKikimrSchemeOp::EPathState_Name(collectionState));
     }
 
-    // Removed TxProgressNotExecutedForFullBackupOnly: full-only restore now creates a
-    // LongIncrementalRestoreOp + state row so it is pollable via Get/List.
-    // Coverage moved to FullOnlyRestoreIsListable / FullOnlyRestoreReachesCompletedAcrossReboots
-    // / FullOnlyRestoreForgetCleansState.
-
     Y_UNIT_TEST(TxProgressExecutionWithCorrectBackupCollectionPathId) {
         TLongOpTestSetup setup;
 
@@ -2001,8 +1996,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE(failuresInjected.load(), FailuresBeforeSuccess);
     }
 
-    // Test 6 (integration): non-retriable failure short-circuits to Failed
-    // without consuming the retry budget.
+    // Non-retriable failure short-circuits to Failed without consuming the retry budget.
     Y_UNIT_TEST(IncrementalRestoreNonRetriableShortCircuits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2037,12 +2031,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             << failuresInjected.load());
     }
 
-    // Test 8 (integration, anti-double-fire): concurrent completion events do
-    // not double-count the retry counter.
-    //
-    // Use 4 tables so 4 concurrent NotifyIncrementalRestoreOperationCompleted
-    // events fire during the failure wave. With the two-phase backoff guard,
-    // the cap should NOT trigger after a single round of failures.
+    // Concurrent completion events must not double-count the retry counter.
     Y_UNIT_TEST(IncrementalRestoreRetryNotDoubleCountedOnConcurrentEvents) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2087,10 +2076,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    // Plan v4 T-R1: tier-A retry path (shard failure + retry) issues a new
-    // TEvAllocate per replayed sub-op. Synchronous GetCachedTxId would never
-    // surface as a TEvAllocate event; a new async allocate per item must be
-    // observable on the wire.
+    // Each retried sub-op must issue a fresh TEvAllocate, not reuse a cached TxId.
     Y_UNIT_TEST(RetryUsesAllocatorClientNotCachedPool) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2133,9 +2119,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Plan v4 T-R2: when TxAllocatorClient returns an empty TxIds vector, the
-    // orchestrator must NOT advance the item (no FAIL, no skip). It schedules a
-    // retry; once a non-empty result arrives, the restore continues normally.
+    // An empty TxIds allocator result must schedule a retry, not fail or skip the item.
     Y_UNIT_TEST(EmptyAllocatorResultRetriesItem) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2187,11 +2171,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Plan v4 T-R3: tier-B retries (allocator-level) must NOT consume the
-    // tier-A retry budget (MaxIncrementalRestoreRetriesPerIncremental).
-    // With cap=1, if allocator retries DID consume the budget, even a single
-    // empty allocator result would drive the restore to FAIL. Black-box
-    // verification: cap=1, inject 5 empty allocator results, restore SUCCEEDS.
+    // Allocator-level retries must not consume the per-incremental retry budget.
     Y_UNIT_TEST(AllocatorRetryDoesNotConsumeRetryBudget) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2242,10 +2222,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Plan v4 T-R5: when N concurrent allocations are in flight (rate-limit
-    // cap=N, N tables), each TEvAllocateResult must bind to a DISTINCT item
-    // identified by the cookie's low-32 itemSeq and a DISTINCT TxId. This
-    // exercises the cookie-packing fix for parallel allocations.
+    // Each concurrent TEvAllocateResult must bind to a distinct item and TxId via cookie.
     Y_UNIT_TEST(RetryUnderConcurrentAllocations) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2310,9 +2287,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    // Plan v4 T-R6: out-of-order TEvAllocateResult arrival must still bind by
-    // cookie's itemSeq, not by FIFO order. We re-order the first 3 allocator
-    // results and assert each cookie binds to its own item (no swapping).
+    // Out-of-order TEvAllocateResult delivery must bind by cookie itemSeq, not FIFO order.
     Y_UNIT_TEST(AllocateResultArrivesOutOfOrder) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2432,11 +2407,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    // Plan v4 T-R7: an allocator result that arrives after FORGET removed the
-    // restore state must be silently dropped. No crash, no AssertFail, and the
-    // forgotten restore must not reappear. Setup uses the natural Completed
-    // path (driving Failed deterministically via injection is fragile because
-    // the orchestrator may complete before the failure registers).
+    // A TEvAllocateResult arriving after FORGET must be silently dropped with no crash.
     Y_UNIT_TEST(OrphanAllocateResultAfterForgetIsIgnored) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

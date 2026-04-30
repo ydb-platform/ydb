@@ -838,9 +838,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // Test 7 (integration, reboot): backoff state survives reboot — but not
-    // by replay. New transient state is wiped, so the next attempt fires
-    // immediately. Restore eventually succeeds.
+    // Transient backoff state is wiped on reboot; the next attempt fires immediately and restore succeeds.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalRestoreBackoffSurvivesReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -1037,13 +1035,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // Plan v4 T-R4: a reboot landing between TEvAllocate-send and
-    // TEvAllocateResult-arrival must not strand the restore. TTxInit re-loads
-    // the IncrementalRestoreItem row with WaitTxId=Invalid, pushes it to
-    // PendingItems, and the orchestrator re-issues TEvAllocate on Resume.
-    // The held pre-reboot allocator result is dropped by the actor system as
-    // the recipient mailbox is destroyed; the restore must still converge to
-    // SUCCESS via the post-reboot allocate.
+    // A reboot between TEvAllocate and TEvAllocateResult must not strand the restore; TTxInit re-issues the allocate.
     Y_UNIT_TEST(RebootDuringAllocateReissues) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

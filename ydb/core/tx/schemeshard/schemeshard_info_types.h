@@ -3769,9 +3769,35 @@ struct TIncrementalRestoreState {
     // map to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED).
     ui32 FinalStatus = 0;
     TString FinalIssues;
-    // Persisted alongside State == Finalizing so TTxInit can tell whether the
-    // finalize sub-op is still tracked in Self->Operations after a reboot.
-    ui64 FinalizeTxId = 0;
+
+    // Per-sub-op tracking, mirrors Export's ExportItems. Each enqueued sub-op
+    // gets a row in Schema::IncrementalRestoreItem (Table<133>) and a TItem in
+    // PendingItems. Once the TxAllocatorClient supplies a TxId, the item moves
+    // to InFlightItems and WaitTxIdToItemSeq is populated for reverse lookup
+    // when TEvModifySchemeTransactionResult arrives.
+    struct TItem {
+        enum class EKind : ui32 {
+            Table = 0,
+            Index = 1,
+            Finalize = 2,
+        };
+        ui32 ItemSeq = 0;
+        EKind Kind = EKind::Table;
+        TPathId TablePathId;
+        ui64 WaitTxId = 0;  // 0 == InvalidTxId == awaiting allocation
+
+        // In-memory only: the prebuilt request whose TxId field we will fill in
+        // and Send() once TxAllocatorClient replies. THolder around an opaque
+        // event base keeps info_types.h decoupled from schemeshard.h. The
+        // orchestrator rebuilds these on reboot via the standard TEvProgress
+        // re-entry path, so durability is not required.
+        TAutoPtr<NActors::IEventBase> PendingRequest;
+    };
+
+    ui32 NextItemSeq = 0;
+    TDeque<TItem> PendingItems;
+    THashMap<ui32 /*ItemSeq*/, TItem> InFlightItems;
+    THashMap<ui64 /*WaitTxId*/, ui32 /*ItemSeq*/> WaitTxIdToItemSeq;
 
     // Returns progress within the current incremental as a fraction [0.0, 1.0]
     // based on per-shard completion across all table operations

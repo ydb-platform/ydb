@@ -195,22 +195,21 @@ public:
         LOG_D("Finish " << status);
 
         const bool success = IsScanSuccess(status);
-        const bool retriable = IsScanRetriable(status);
+        const auto endStatus = MapScanStatus(status);
         if (!success) {
             // Error propagation: see github.com/ydb-platform/ydb/issues/18797
-            // Failure status is propagated via TEvFinished -> schemeOp->Success -> OpResult
-            // -> SchemeShard detects and retries the current incremental.
-            // The Retriable flag lets non-retriable failures short-circuit the
-            // retry loop instead of consuming the budget.
+            // The DS-side classifies the cause (EndStatus); SS owns the
+            // policy that decides whether to retry. See
+            // schemeshard_incremental_restore_classify.h for the SS policy.
             LOG_E("IncrementalRestoreScan finished with error status: " << status
-                  << " retriable=" << retriable);
+                  << " endStatus=" << static_cast<int>(endStatus));
         }
 
         TString errorMsg;
         if (!success) {
             errorMsg = TStringBuilder() << "Scan finished with status: " << status;
         }
-        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg, retriable));
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg, endStatus));
 
         PassAway();
         return nullptr;

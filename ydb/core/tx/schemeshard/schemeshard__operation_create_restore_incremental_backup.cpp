@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_incremental_restore_classify.h"
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -20,15 +21,19 @@ void TrackIncrementalRestoreShardReply(
         TStringBuf debugHint)
 {
     const auto& record = ev->Get()->Record;
-    bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
-    bool retriable = !failed
-        || !record.HasOpResult()
-        || !record.GetOpResult().HasRetriable()
-        || record.GetOpResult().GetRetriable();
+    const bool failed = record.HasOpResult() && !record.GetOpResult().GetSuccess();
+    // EndStatus is the DS-side cause; SS owns the retry policy.
+    // When OpResult is missing or EndStatus is unset, the wire defaults to
+    // END_UNSPECIFIED, which the SS policy treats as "do not retry".
+    const auto endStatus = (record.HasOpResult() && record.GetOpResult().HasEndStatus())
+        ? record.GetOpResult().GetEndStatus()
+        : NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
+    const bool retriable = ShouldRetryIncrementalRestore(endStatus);
     if (failed) {
         context.SS->FailedIncrementalRestoreOperations.insert(operationId);
         LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             debugHint << " Shard reported failure: " << record.GetOpResult().GetExplain()
+                      << " endStatus=" << static_cast<int>(endStatus)
                       << " retriable=" << retriable);
     }
 

@@ -1128,7 +1128,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
     class TTxProgressIncrementalRestore;
+    class TTxProgressIncrementalRestoreAllocateResult;
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestoreAllocateResult(
+        TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
 
     struct TTxShardStateChanged;
     NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
@@ -1276,6 +1279,7 @@ public:
     // a SchemeShard reboot between memory mutation and DB commit cannot leave the
     // operation invisible to Get/List.
     static void PersistIncrementalRestoreTerminalState(
+        TSchemeShard* self,
         NIceDb::TNiceDb& db,
         ui64 originalOpId,
         TIncrementalRestoreState& state,
@@ -1292,7 +1296,32 @@ public:
     void DispatchPendingIncrementalRestoreTables(
         TIncrementalRestoreState& state,
         ui64 operationId,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx);
+
+    // Persists a per-sub-op IncrementalRestoreItem row, stashes the prebuilt
+    // ModifyScheme request on the in-memory TItem, and asynchronously requests
+    // a TxId via TxAllocatorClient. Cookie packs (originalOpId<<32 | itemSeq)
+    // so the TEvAllocateResult handler can bind to the exact item even when
+    // multiple allocations are in flight concurrently.
+    void EnqueueIncrementalRestoreItem(
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::TItem::EKind kind,
+        TPathId tablePathId,
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    // Removes all IncrementalRestoreItem rows for the given originalOpId,
+    // sweeps TxIdToIncrementalRestore entries pointing to it, and (when
+    // `state` is non-null) clears in-memory PendingItems / InFlightItems /
+    // WaitTxIdToItemSeq. Called from PersistIncrementalRestoreTerminalState
+    // (terminal sweep) and from TIncrementalRestore::TTxForget (FORGET path).
+    void CleanupIncrementalRestoreItems(
+        ui64 originalOpId,
+        NIceDb::TNiceDb& db,
+        TIncrementalRestoreState* state);
 
     void EnqueueAndDiscoverIndexRestoreOperations(
         const TPathId& backupCollectionPathId,
@@ -1322,6 +1351,7 @@ public:
         ui64 operationId,
         const TString& backupName,
         const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
     void CreateSingleIndexRestoreOperation(
@@ -1331,6 +1361,7 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx,
         const TString& specificImplTableName = "");
 

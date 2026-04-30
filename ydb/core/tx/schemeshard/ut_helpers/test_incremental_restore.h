@@ -64,22 +64,25 @@ inline Ydb::StatusIds::StatusCode WaitForRestoreDone(NActors::TTestActorRuntime&
 }
 
 // Injects scan failures into TEvFinished; skips TxId=0 events from change_sender.
+// `endStatus` is the DS-side cause; SS-side classification (retry-or-fail) is
+// owned by ShouldRetryIncrementalRestore in
+// schemeshard_incremental_restore_classify.h.
 inline NActors::TTestActorRuntime::TEventObserverHolder InjectScanFailures(
     NActors::TTestActorRuntime& runtime,
     std::atomic<int>& counter,
     int maxFailures,
-    bool retriable,
+    NKikimrTxDataShard::TShardOpResult::EOpEndStatus endStatus,
     const TString& errorMessage)
 {
     return runtime.AddObserver<NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished>(
-        [&counter, maxFailures, retriable, errorMessage](
+        [&counter, maxFailures, endStatus, errorMessage](
                 NKikimr::NDataShard::TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
             if (ev->Get()->TxId == 0) {
                 return;
             }
             if (counter.fetch_add(1) < maxFailures) {
                 ev->Get()->Success = false;
-                ev->Get()->Retriable = retriable;
+                ev->Get()->EndStatus = endStatus;
                 ev->Get()->Error = errorMessage;
             }
         });

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_incremental_restore.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -716,7 +717,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            /*retriable=*/false, "Injected non-retriable failure for Failed-survives-reboot test");
+            NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE,
+            "Injected non-retriable failure for Failed-survives-reboot test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -890,7 +892,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 static std::atomic<int> failuresInjected{0};
                 failuresInjected.store(0);
                 auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-                    /*retriable=*/true, "Injected retriable failure for reboot-backoff test");
+                    NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+                    "Injected retriable failure for reboot-backoff test");
 
                 TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot",
                     R"(Name: ".backups/collections/MyCollection1")");
@@ -1032,6 +1035,110 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 1u);
             }
         });
+    }
+
+    // Plan v4 T-R4: a reboot landing between TEvAllocate-send and
+    // TEvAllocateResult-arrival must not strand the restore. TTxInit re-loads
+    // the IncrementalRestoreItem row with WaitTxId=Invalid, pushes it to
+    // PendingItems, and the orchestrator re-issues TEvAllocate on Resume.
+    // The held pre-reboot allocator result is dropped by the actor system as
+    // the recipient mailbox is destroyed; the restore must still converge to
+    // SUCCESS via the post-reboot allocate.
+    Y_UNIT_TEST(RebootDuringAllocateReissues) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold the FIRST allocator result destined for the incremental
+        // restore: detach the incoming TEvAllocateResult, do not deliver,
+        // and signal the test. We then reboot SchemeShard; the held result
+        // is moot because the recipient mailbox dies on reboot.
+        std::atomic<bool> firstAllocateSent{false};
+        std::atomic<bool> firstResultHeld{false};
+        std::atomic<bool> rebootHappened{false};
+
+        auto sendObserver = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocate>(
+            [&firstAllocateSent](NKikimr::TEvTxAllocatorClient::TEvAllocate::TPtr&) {
+                firstAllocateSent.store(true);
+            });
+
+        auto resultObserver = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&firstResultHeld, &rebootHappened](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                if (rebootHappened.load()) return;
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) return;
+                if (firstResultHeld.load()) return;
+                firstResultHeld.store(true);
+                ev.Reset();
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Wait for the held result to fire (i.e. the orchestrator allocated and
+        // the result was intercepted). Bound by 60s of simulated time.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < deadline && !firstResultHeld.load()) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(firstAllocateSent.load(),
+            "TEvAllocate never observed; orchestrator never reached enqueue");
+        UNIT_ASSERT_C(firstResultHeld.load(),
+            "TEvAllocateResult never reached the observer within 60s");
+
+        // Reboot SchemeShard while the result is held undelivered.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        rebootHappened.store(true);
+
+        // Post-reboot, TTxInit must reload the IncrementalRestoreItem row,
+        // push to PendingItems, and re-issue TEvAllocate. The natural
+        // allocator response then drives restore to completion.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
+            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS after reboot during TEvAllocate; "
+            "TTxInit may not be re-issuing allocate for orphan items.");
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
     }
 
 } // Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests)

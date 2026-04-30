@@ -115,29 +115,30 @@ public:
             );
         }
 
-        Self->IncrementalRestoreStates.erase(restoreId);
-        
         // Clean up database tables
         NIceDb::TNiceDb db(txc.DB);
-        
+
+        // CleanupIncrementalRestoreItems sweeps both the per-sub-op rows and
+        // the global TxIdToIncrementalRestore map for this restoreId. We pass
+        // the live state pointer so it can also drop in-memory PendingItems /
+        // InFlightItems / WaitTxIdToItemSeq. (We grab the pointer BEFORE
+        // erasing the state map entry below.)
+        if (auto* statePtr = Self->IncrementalRestoreStates.FindPtr(restoreId)) {
+            Self->CleanupIncrementalRestoreItems(restoreId, db, statePtr);
+        } else {
+            Self->CleanupIncrementalRestoreItems(restoreId, db, /*state=*/nullptr);
+        }
+
+        Self->IncrementalRestoreStates.erase(restoreId);
+
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
-        
+
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
-        
-        auto txIt = Self->TxIdToIncrementalRestore.begin();
-        while (txIt != Self->TxIdToIncrementalRestore.end()) {
-            if (txIt->second == restoreId) {
-                auto toErase = txIt++;
-                Self->TxIdToIncrementalRestore.erase(toErase);
-            } else {
-                ++txIt;
-            }
-        }
-        
+
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
             if (opIt->second == restoreId) {

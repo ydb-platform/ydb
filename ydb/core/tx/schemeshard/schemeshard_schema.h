@@ -2217,7 +2217,9 @@ struct Schema : NIceDb::Schema {
         struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
         struct FinalStatus : Column<5, NScheme::NTypeIds::Uint32> {};
         struct FinalIssues : Column<6, NScheme::NTypeIds::String> {};
-        struct FinalizeTxId : Column<7, NScheme::NTypeIds::Uint64> {};
+        // Column<7> previously held FinalizeTxId; per-item finalize is now tracked
+        // via the IncrementalRestoreItem table (Table<133>). The column id is left
+        // unallocated to avoid silent reuse on the same physical storage.
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -2226,8 +2228,7 @@ struct Schema : NIceDb::Schema {
             CurrentIncrementalIdx,
             SerializedData,
             FinalStatus,
-            FinalIssues,
-            FinalizeTxId>;
+            FinalIssues>;
     };
 
     // Deprecated: kept for compatibility
@@ -2366,6 +2367,22 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
     };
 
+    // Per-sub-op tracking for incremental restore. Each row corresponds to one
+    // table/index/finalize sub-operation enqueued by the orchestrator. The row
+    // is created when the sub-op is enqueued (with WaitTxId = InvalidTxId), then
+    // updated with the allocated TxId once TxAllocatorClient replies. On reboot
+    // the rows are walked to rebuild PendingItems / InFlightItems.
+    struct IncrementalRestoreItem : Table<133> {
+        struct OriginalOpId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ItemSeq      : Column<2, NScheme::NTypeIds::Uint32> {};   // monotonic per-restore
+        struct ItemKind     : Column<3, NScheme::NTypeIds::Uint32> {};   // Table=0, Index=1, Finalize=2
+        struct TablePathId  : Column<4, NScheme::NTypeIds::Uint64> {};   // 0 for Finalize
+        struct WaitTxId     : Column<5, NScheme::NTypeIds::Uint64> {};   // InvalidTxId means awaiting allocation
+
+        using TKey = TableKey<OriginalOpId, ItemSeq>;
+        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2496,7 +2513,8 @@ struct Schema : NIceDb::Schema {
         StreamingQueryState,
         ForcedCompactions,
         WaitingForcedCompactionShards,
-        SharedShards
+        SharedShards,
+        IncrementalRestoreItem
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

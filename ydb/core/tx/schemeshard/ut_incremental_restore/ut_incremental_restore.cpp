@@ -7,6 +7,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_incremental_restore.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/base/test_failure_injection.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 
@@ -14,6 +15,7 @@
 
 #include <atomic>
 #include <climits>
+#include <deque>
 
 template<>
 void Out<Ydb::Backup::RestoreProgress::Progress>(IOutputStream& out, TTypeTraits<Ydb::Backup::RestoreProgress::Progress>::TFuncParam value) {
@@ -1699,7 +1701,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            /*retriable=*/true, "Injected scan failure for retry test");
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected scan failure for retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1861,7 +1864,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Inject one TEvFinished failure (same pattern as IncrementalRestoreShardFailureTriggersRetry).
         std::atomic<int> failuresInjected{0};
         auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            /*retriable=*/true, "Injected scan failure for cap+retry test");
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected scan failure for cap+retry test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1905,7 +1909,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 }
                 if (failuresInjected.fetch_add(1) < 2) {
                     ev->Get()->Success = false;
-                    ev->Get()->Retriable = true;
+                    ev->Get()->EndStatus = NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE;
                     ev->Get()->Error = "Injected retriable failure for backoff test";
                 }
             });
@@ -1948,7 +1952,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
-            /*retriable=*/true, "Injected retriable failure for budget test");
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for budget test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1975,7 +1980,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         constexpr int FailuresBeforeSuccess = 20;
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
-            /*retriable=*/true, "Injected retriable failure for unlimited-cap test");
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for unlimited-cap test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -2009,7 +2015,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            /*retriable=*/false, "Injected non-retriable failure for short-circuit test");
+            NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE,
+            "Injected non-retriable failure for short-circuit test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -2053,7 +2060,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Subsequent attempts succeed → restore finishes after exactly 1 retry.
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/4,
-            /*retriable=*/true, "Injected retriable failure for double-fire test");
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for double-fire test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -2076,6 +2084,429 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         for (ui32 i = 0; i < 4; ++i) {
             TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
             UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Plan v4 T-R1: tier-A retry path (shard failure + retry) issues a new
+    // TEvAllocate per replayed sub-op. Synchronous GetCachedTxId would never
+    // surface as a TEvAllocate event; a new async allocate per item must be
+    // observable on the wire.
+    Y_UNIT_TEST(RetryUsesAllocatorClientNotCachedPool) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Count TEvAllocate events sent toward the allocator after the restore is issued.
+        std::atomic<int> allocateCount{0};
+        std::atomic<bool> countingArmed{false};
+        auto allocObserver = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocate>(
+            [&allocateCount, &countingArmed](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocate::TPtr&) {
+                if (countingArmed.load()) {
+                    allocateCount.fetch_add(1);
+                }
+            });
+
+        // Inject 1 retriable shard failure: the first attempt fails, retry must succeed.
+        std::atomic<int> failuresInjected{0};
+        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected scan failure for allocator-client retry test");
+
+        countingArmed.store(true);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+
+        UNIT_ASSERT_GE_C(failuresInjected.load(), 1,
+            "Expected at least 1 injected scan failure; saw " << failuresInjected.load());
+        // Initial dispatch + at least one retry dispatch must each issue a TEvAllocate.
+        UNIT_ASSERT_GE_C(allocateCount.load(), 2,
+            "Expected at least 2 TEvAllocate events (initial + retry); saw "
+            << allocateCount.load() << ". A synchronous GetCachedTxId would emit zero.");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
+    }
+
+    // Plan v4 T-R2: when TxAllocatorClient returns an empty TxIds vector, the
+    // orchestrator must NOT advance the item (no FAIL, no skip). It schedules a
+    // retry; once a non-empty result arrives, the restore continues normally.
+    Y_UNIT_TEST(EmptyAllocatorResultRetriesItem) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Drop the first N TEvAllocateResult events and replace them with empty
+        // ones. We can't mutate the const TxIds field in place; instead we
+        // intercept the event before it lands at SchemeShard, swallow it, and
+        // re-issue a fresh empty TEvAllocateResult with the same cookie.
+        constexpr int EmptyResultsToInject = 1;
+        std::atomic<int> emptyInjected{0};
+        TActorId schemeShardId;
+        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&runtime, &emptyInjected, &schemeShardId](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                if (emptyInjected.load() >= EmptyResultsToInject) {
+                    return;
+                }
+                if (!schemeShardId) {
+                    schemeShardId = ev->Recipient;
+                }
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) {
+                    return; // not ours
+                }
+                emptyInjected.fetch_add(1);
+                runtime.Send(new IEventHandle(
+                    ev->Recipient, ev->Sender,
+                    new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(TVector<ui64>{}),
+                    /*flags=*/0, cookie),
+                    /*nodeIndex=*/0, /*viaActorSystem=*/true);
+                ev.Reset();
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Restore must succeed once allocator delivers a non-empty result.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
+            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS after empty allocator result + retry");
+        UNIT_ASSERT_GE_C(emptyInjected.load(), EmptyResultsToInject,
+            "Did not inject any empty allocator results; observer unhooked too early");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
+    }
+
+    // Plan v4 T-R3: tier-B retries (allocator-level) must NOT consume the
+    // tier-A retry budget (MaxIncrementalRestoreRetriesPerIncremental).
+    // With cap=1, if allocator retries DID consume the budget, even a single
+    // empty allocator result would drive the restore to FAIL. Black-box
+    // verification: cap=1, inject 5 empty allocator results, restore SUCCEEDS.
+    Y_UNIT_TEST(AllocatorRetryDoesNotConsumeRetryBudget) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Tier-A budget = 1: one tier-A retry permitted, then FAIL.
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Inject 5 empty allocator results before letting one through.
+        constexpr int EmptyResultsToInject = 5;
+        std::atomic<int> emptyInjected{0};
+        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&runtime, &emptyInjected](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                if (emptyInjected.load() >= EmptyResultsToInject) {
+                    return;
+                }
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) {
+                    return; // unrelated allocator client
+                }
+                emptyInjected.fetch_add(1);
+                runtime.Send(new IEventHandle(
+                    ev->Recipient, ev->Sender,
+                    new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(TVector<ui64>{}),
+                    /*flags=*/0, cookie),
+                    /*nodeIndex=*/0, /*viaActorSystem=*/true);
+                ev.Reset();
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Restore must SUCCEED despite N empty allocator results, because
+        // tier-B retries are budget-independent.
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
+            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore FAILED after empty allocator results — allocator retries appear "
+            "to be consuming the per-incremental retry budget (cap=1).");
+        UNIT_ASSERT_GE_C(emptyInjected.load(), EmptyResultsToInject,
+            "Expected " << EmptyResultsToInject << " empty allocator results injected; saw "
+            << emptyInjected.load());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
+    }
+
+    // Plan v4 T-R5: when N concurrent allocations are in flight (rate-limit
+    // cap=N, N tables), each TEvAllocateResult must bind to a DISTINCT item
+    // identified by the cookie's low-32 itemSeq and a DISTINCT TxId. This
+    // exercises the cookie-packing fix for parallel allocations.
+    Y_UNIT_TEST(RetryUnderConcurrentAllocations) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Cap = 3 to allow 3 concurrent allocations.
+        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/3);
+
+        // Capture (cookie -> txId) pairs from each allocator result aimed at SchemeShard.
+        TMutex captureMutex;
+        TVector<std::pair<ui64, ui64>> captures;
+        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&captureMutex, &captures](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) {
+                    return;
+                }
+                const auto& txIds = ev->Get()->TxIds;
+                if (txIds.empty()) {
+                    return;
+                }
+                TGuard<TMutex> g(captureMutex);
+                captures.emplace_back(cookie, txIds.front());
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+
+        TVector<std::pair<ui64, ui64>> snap;
+        {
+            TGuard<TMutex> g(captureMutex);
+            snap = captures;
+        }
+        // We need at least 3 binds for the 3 tables (more if finalize/index also hit).
+        UNIT_ASSERT_GE_C(snap.size(), 3u,
+            "Expected >=3 allocator results bound; saw " << snap.size());
+
+        // Every allocator result destined for incremental restore must bind a
+        // DISTINCT itemSeq (low-32) to a DISTINCT TxId. Duplicates would mean
+        // the cookie packing collapsed two items into one bind.
+        THashSet<ui32> itemSeqs;
+        THashSet<ui64> txIds;
+        for (const auto& [cookie, tx] : snap) {
+            const ui32 seq = static_cast<ui32>(cookie & 0xFFFFFFFFULL);
+            UNIT_ASSERT_C(itemSeqs.insert(seq).second,
+                "Duplicate itemSeq " << seq << " bound across concurrent allocations");
+            UNIT_ASSERT_C(txIds.insert(tx).second,
+                "Duplicate TxId " << tx << " bound across concurrent allocations");
+        }
+
+        for (ui32 i = 0; i < 3; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Plan v4 T-R6: out-of-order TEvAllocateResult arrival must still bind by
+    // cookie's itemSeq, not by FIFO order. We re-order the first 3 allocator
+    // results and assert each cookie binds to its own item (no swapping).
+    Y_UNIT_TEST(AllocateResultArrivesOutOfOrder) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Cap = 3 to allow 3 concurrent allocations.
+        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/3);
+
+        // Hold the first 3 allocator results; release them in reversed order
+        // (2, 1, 0) so cookie unpacking is the only thing that can correctly
+        // bind each TxId to its sub-op. Capture the (cookie, txId) for the
+        // post-completion assertion.
+        constexpr size_t HoldCount = 3;
+        TMutex queueMutex;
+        struct THeld {
+            TActorId Recipient;
+            TActorId Sender;
+            ui64 Cookie;
+            TVector<ui64> TxIds;
+        };
+        TVector<THeld> held;
+        std::atomic<bool> released{false};
+        TVector<std::pair<ui64, ui64>> finalCaptures;
+
+        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&runtime, &queueMutex, &held, &released, &finalCaptures](
+                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) {
+                    return;
+                }
+
+                bool needHold = false;
+                {
+                    TGuard<TMutex> g(queueMutex);
+                    if (!released.load() && held.size() < HoldCount) {
+                        held.push_back(THeld{
+                            ev->Recipient, ev->Sender, cookie,
+                            TVector<ui64>(ev->Get()->TxIds)});
+                        needHold = true;
+                    } else {
+                        if (!ev->Get()->TxIds.empty()) {
+                            finalCaptures.emplace_back(cookie, ev->Get()->TxIds.front());
+                        }
+                    }
+                }
+
+                if (needHold) {
+                    ev.Reset();
+
+                    // Once we have HoldCount results queued, replay in reverse.
+                    bool readyToReplay = false;
+                    {
+                        TGuard<TMutex> g(queueMutex);
+                        readyToReplay = (held.size() == HoldCount && !released.load());
+                    }
+                    if (readyToReplay) {
+                        TVector<THeld> snapshot;
+                        {
+                            TGuard<TMutex> g(queueMutex);
+                            snapshot = held;
+                            released.store(true);
+                        }
+                        // Replay reversed. Replayed events flow through this same
+                        // observer with released=true, so they'll be captured by
+                        // the else-branch above — do NOT push to finalCaptures
+                        // manually here, that would double-count.
+                        for (size_t i = snapshot.size(); i-- > 0;) {
+                            const auto& h = snapshot[i];
+                            TVector<ui64> txIdsCopy = h.TxIds;
+                            runtime.Send(new IEventHandle(
+                                h.Recipient, h.Sender,
+                                new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(std::move(txIdsCopy)),
+                                /*flags=*/0, h.Cookie),
+                                /*nodeIndex=*/0, /*viaActorSystem=*/true);
+                        }
+                    }
+                }
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
+            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore failed after out-of-order allocator delivery");
+
+        // Each captured cookie must bind to a unique itemSeq with a unique TxId.
+        TVector<std::pair<ui64, ui64>> snap;
+        {
+            TGuard<TMutex> g(queueMutex);
+            snap = finalCaptures;
+        }
+        UNIT_ASSERT_GE_C(snap.size(), HoldCount,
+            "Did not capture enough allocator results: " << snap.size());
+
+        THashSet<ui32> itemSeqs;
+        THashSet<ui64> txIds;
+        for (const auto& [cookie, tx] : snap) {
+            if (tx == 0) continue;
+            const ui32 seq = static_cast<ui32>(cookie & 0xFFFFFFFFULL);
+            UNIT_ASSERT_C(itemSeqs.insert(seq).second,
+                "Duplicate itemSeq " << seq << " bound after re-ordering — "
+                "cookie unpacking did not preserve item identity");
+            UNIT_ASSERT_C(txIds.insert(tx).second,
+                "Duplicate TxId " << tx << " bound after re-ordering");
+        }
+
+        for (ui32 i = 0; i < 3; ++i) {
+            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
+            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
+        }
+    }
+
+    // Plan v4 T-R7: an allocator result that arrives after FORGET removed the
+    // restore state must be silently dropped. No crash, no AssertFail, and the
+    // forgotten restore must not reappear. Setup uses the natural Completed
+    // path (driving Failed deterministically via injection is fragile because
+    // the orchestrator may complete before the failure registers).
+    Y_UNIT_TEST(OrphanAllocateResultAfterForgetIsIgnored) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Capture an allocator-result envelope (recipient/sender/cookie) so we
+        // can replay one after FORGET. We ONLY capture metadata — we let the
+        // event itself flow through unmodified so the restore proceeds normally.
+        TMutex mtx;
+        struct TCaptured {
+            TActorId Recipient;
+            TActorId Sender;
+            ui64 Cookie = 0;
+        };
+        TMaybe<TCaptured> captured;
+        auto allocObserver = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
+            [&mtx, &captured](NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+                const ui64 cookie = ev->Cookie;
+                const ui64 originalOpId = cookie >> 32;
+                if (originalOpId == 0) return;
+                TGuard<TMutex> g(mtx);
+                if (!captured) {
+                    captured = TCaptured{ev->Recipient, ev->Sender, cookie};
+                }
+                // Pass through unmodified.
+            });
+
+        // Run a normal restore to Completed.
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
+            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after Completed");
+        const ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        TCaptured envelope;
+        {
+            TGuard<TMutex> g(mtx);
+            UNIT_ASSERT_C(captured, "No allocator result observed during restore");
+            envelope = *captured;
+        }
+
+        // FORGET wipes the IncrementalRestoreStates entry.
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId,
+            Ydb::StatusIds::SUCCESS);
+
+        // Deliver an orphan TEvAllocateResult bearing a cookie whose high-32
+        // bits point at the now-forgotten restore. The handler must drop it
+        // silently because IncrementalRestoreStates.find(originalOpId)==end().
+        runtime.Send(new IEventHandle(
+            envelope.Recipient, envelope.Sender,
+            new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(ui64(0xDEADBEEFULL)),
+            /*flags=*/0, envelope.Cookie),
+            /*nodeIndex=*/0, /*viaActorSystem=*/true);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        // SchemeShard still alive: list/get continue to work; the forgotten
+        // restore must NOT reappear in the listing.
+        auto listAfterOrphan = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        for (const auto& entry : listAfterOrphan.GetEntries()) {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(entry.GetId(), restoreId,
+                "Forgotten restore reappeared after orphan allocator delivery");
         }
     }
 }

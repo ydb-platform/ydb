@@ -388,7 +388,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // Persist terminal Completed state in the same db tx that releases path
                 // states / Long-op tracking. After the tx commits the row remains for
                 // Get/List to surface SUCCESS until FORGET clears it.
-                TSchemeShard::PersistIncrementalRestoreTerminalState(db, originalOpId, state,
+                TSchemeShard::PersistIncrementalRestoreTerminalState(context.SS, db, originalOpId, state,
                     TIncrementalRestoreState::EState::Completed,
                     static_cast<ui32>(Ydb::StatusIds::SUCCESS));
 

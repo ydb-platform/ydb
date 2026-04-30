@@ -2,7 +2,8 @@
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
-#include <ydb/core/tx/datashard/incr_restore_scan.h>  // IsScanSuccess / IsScanRetriable
+#include <ydb/core/tx/datashard/incr_restore_scan.h>  // IsScanSuccess / MapScanStatus
+#include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>  // ShouldRetryIncrementalRestore
 #include <ydb/core/tx/datashard/scan_common.h>  // GetRetryWakeupTimeoutBackoff
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -3619,27 +3620,41 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(6), TDuration::Seconds(8));
     }
 
-    // Guards IsScanSuccess/IsScanRetriable classification against new EStatus values.
+    // Guards the DS-side classifier (NTable::EStatus -> EOpEndStatus) and the
+    // SS-side policy (EOpEndStatus -> retry decision) against new EStatus values.
     Y_UNIT_TEST(IncrementalRestoreScanStatusToRetriable) {
         using NKikimr::NTable::EStatus;
         using NKikimr::NDataShard::IsScanSuccess;
-        using NKikimr::NDataShard::IsScanRetriable;
+        using NKikimr::NDataShard::MapScanStatus;
+        using NKikimr::NSchemeShard::ShouldRetryIncrementalRestore;
+        using NKikimrTxDataShard::TShardOpResult;
 
+        // Done -> END_SUCCESS: success, no retry needed.
         UNIT_ASSERT(IsScanSuccess(EStatus::Done));
-        UNIT_ASSERT(IsScanRetriable(EStatus::Done));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Done)),
+            static_cast<int>(TShardOpResult::END_SUCCESS));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_SUCCESS));
 
-        UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
-        UNIT_ASSERT(!IsScanRetriable(EStatus::Lost));
-
-        // Operator-issued termination is retriable (the operator may re-issue).
+        // Operator-issued termination -> END_TRANSIENT_FAILURE: SS retries.
         UNIT_ASSERT(!IsScanSuccess(EStatus::Term));
-        UNIT_ASSERT(IsScanRetriable(EStatus::Term));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Term)),
+            static_cast<int>(TShardOpResult::END_TRANSIENT_FAILURE));
+        UNIT_ASSERT(ShouldRetryIncrementalRestore(TShardOpResult::END_TRANSIENT_FAILURE));
 
+        // Lost / StorageError / Exception -> END_FATAL_FAILURE: short-circuit Failed.
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Lost)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
         UNIT_ASSERT(!IsScanSuccess(EStatus::StorageError));
-        UNIT_ASSERT(!IsScanRetriable(EStatus::StorageError));
-
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::StorageError)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
         UNIT_ASSERT(!IsScanSuccess(EStatus::Exception));
-        UNIT_ASSERT(!IsScanRetriable(EStatus::Exception));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Exception)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_FATAL_FAILURE));
+
+        // END_UNSPECIFIED: safe default, treat as fatal (no retry).
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_UNSPECIFIED));
     }
 
     // Polls TestListBackupCollectionRestores until the latest entry reaches PROGRESS_DONE

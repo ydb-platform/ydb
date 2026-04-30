@@ -5479,14 +5479,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString serializedData = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::SerializedData>("");
                 ui32 finalStatus = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalStatus>(0);
                 TString finalIssues = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalIssues>("");
-                ui64 finalizeTxId = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalizeTxId>(0);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
                 state.FinalStatus = finalStatus;
                 state.FinalIssues = finalIssues;
-                state.FinalizeTxId = finalizeTxId;
 
                 // Do NOT restore CompletedOperations for Running states — after reboot we retry
                 // the current incremental from scratch (ops are idempotent; transient failure
@@ -5589,27 +5587,88 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Step E: read IncrementalRestoreItem rows. Each row identifies a
+        // per-sub-op binding between an originalOpId and an allocated TxId.
+        // Items already bound to a TxId still tracked by Self->Operations are
+        // restored to InFlightItems with the TxIdToIncrementalRestore reverse
+        // mapping. Orphan items (WaitTxId=Invalid, or TxId no longer in
+        // Operations) are dropped — the orchestrator's TEvProgressIncrementalRestore
+        // re-entry will re-enqueue them via the existing PendingTables/dispatch
+        // path.
+        {
+            auto irow = db.Table<Schema::IncrementalRestoreItem>().Range().Select();
+            if (!irow.IsReady()) {
+                return false;
+            }
+            while (!irow.EndOfSet()) {
+                ui64 originalOpId = irow.GetValue<Schema::IncrementalRestoreItem::OriginalOpId>();
+                ui32 itemSeq = irow.GetValue<Schema::IncrementalRestoreItem::ItemSeq>();
+                ui32 kind = irow.GetValue<Schema::IncrementalRestoreItem::ItemKind>();
+                ui64 tableLocal = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::TablePathId>(0);
+                ui64 waitTxId = irow.GetValueOrDefault<Schema::IncrementalRestoreItem::WaitTxId>(0);
+
+                auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
+                if (stateIt == Self->IncrementalRestoreStates.end()) {
+                    // Orphan row (state already forgotten / cleaned up). Drop.
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(originalOpId, itemSeq).Delete();
+                    if (!irow.Next()) return false;
+                    continue;
+                }
+                auto& state = stateIt->second;
+
+                // Bookkeeping: track NextItemSeq so future enqueues don't collide.
+                state.NextItemSeq = Max(state.NextItemSeq, itemSeq + 1);
+
+                if (waitTxId != 0 && Self->Operations.contains(TTxId(waitTxId))) {
+                    // Sub-op survived reboot. Rebuild reverse mappings.
+                    TIncrementalRestoreState::TItem item;
+                    item.ItemSeq = itemSeq;
+                    item.Kind = static_cast<TIncrementalRestoreState::TItem::EKind>(kind);
+                    item.TablePathId = TPathId(Self->TabletID(), tableLocal);
+                    item.WaitTxId = waitTxId;
+                    state.InFlightItems[itemSeq] = std::move(item);
+                    state.WaitTxIdToItemSeq[waitTxId] = itemSeq;
+                    Self->TxIdToIncrementalRestore[TTxId(waitTxId)] = originalOpId;
+                } else {
+                    // Either WaitTxId was never bound, or the modify-scheme
+                    // sub-op did not survive the reboot. Drop the row; the
+                    // orchestrator's re-entry will re-enqueue from PendingTables
+                    // (rebuilt from backup-collection contents).
+                    db.Table<Schema::IncrementalRestoreItem>()
+                        .Key(originalOpId, itemSeq).Delete();
+                }
+
+                if (!irow.Next()) return false;
+            }
+        }
+
         for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
-            // A Finalizing row whose FinalizeTxId has no matching entry in
-            // Self->Operations means the finalize sub-op did not survive the reboot.
-            // Reset to Running so TTxProgressIncrementalRestore re-triggers the
-            // Finalizing transition with a fresh FinalizeTxId. Re-execution is safe:
-            // SyncIndexSchemaVersions and ReleasePathState are no-ops the second time.
+            // A Finalizing row with no live finalize InFlightItem (Kind=Finalize)
+            // means the finalize sub-op did not survive the reboot. Reset to
+            // Running so TTxProgressIncrementalRestore re-triggers the Finalizing
+            // transition with a fresh allocator-supplied TxId. Re-execution is
+            // safe: SyncIndexSchemaVersions and ReleasePathState are no-ops the
+            // second time.
             if (state.State == TIncrementalRestoreState::EState::Finalizing) {
-                const bool finalizeStillInFlight =
-                    state.FinalizeTxId != 0 && Self->Operations.contains(TTxId(state.FinalizeTxId));
+                bool finalizeStillInFlight = false;
+                for (const auto& [_, item] : state.InFlightItems) {
+                    if (item.Kind == TIncrementalRestoreState::TItem::EKind::Finalize
+                        && item.WaitTxId != 0
+                        && Self->Operations.contains(TTxId(item.WaitTxId))) {
+                        finalizeStillInFlight = true;
+                        break;
+                    }
+                }
                 if (!finalizeStillInFlight) {
                     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TTxInit resetting Finalizing -> Running because finalize sub-op missing"
                         << ", operationId: " << operationId
-                        << ", FinalizeTxId: " << state.FinalizeTxId
                         << ", at schemeshard: " << Self->TabletID());
                     state.State = TIncrementalRestoreState::EState::Running;
-                    state.FinalizeTxId = 0;
                     db.Table<Schema::IncrementalRestoreState>().Key(operationId).Update(
                         NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(
-                            static_cast<ui32>(state.State)),
-                        NIceDb::TUpdate<Schema::IncrementalRestoreState::FinalizeTxId>(0));
+                            static_cast<ui32>(state.State)));
                 }
             }
 

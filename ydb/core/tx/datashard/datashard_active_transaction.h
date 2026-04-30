@@ -77,7 +77,8 @@ struct TSchemaOperation {
     TString Error;
     ui64 BytesProcessed;
     ui64 RowsProcessed;
-    bool Retriable = true;
+    NKikimrTxDataShard::TShardOpResult::EOpEndStatus EndStatus =
+        NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED;
 
     TScanState ScanState;
 

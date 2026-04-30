@@ -282,14 +282,14 @@ protected:
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                    "IncrementalRestoreScan finished for txId: " << msg->TxId
                    << " success: " << msg->Success
-                   << " retriable: " << msg->Retriable
+                   << " endStatus: " << static_cast<int>(msg->EndStatus)
                    << " at DataShard: " << DataShard.TabletID());
 
         auto* schemeOp = DataShard.FindSchemaTx(msg->TxId);
         if (schemeOp) {
             schemeOp->Success = msg->Success;
             schemeOp->Error = msg->Error;
-            schemeOp->Retriable = msg->Retriable;
+            schemeOp->EndStatus = msg->EndStatus;
             schemeOp->BytesProcessed = 0;
             schemeOp->RowsProcessed = 0;
         }

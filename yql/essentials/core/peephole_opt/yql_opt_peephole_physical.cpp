@@ -3089,31 +3089,58 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
             // This enables spilling through WideSort and avoids OOM on large datasets.
             // The Chopper in the processing lambda will split at partition boundaries.
             if (haveSort) {
-                // Build combined sort: first by partition key (ascending), then by sort keys
-                // Directions: [Bool(true), originalSortDirections...]
-                // Key selector: λ(item) → [keySelector(item), sortKeySelector(item)]
-                auto combinedDirections = ctx.Builder(node->Pos())
-                    .List()
-                        .Callable(0, "Bool")
-                            .Atom(0, "true", TNodeFlags::Default)
-                        .Seal()
-                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections))
-                    .Seal()
-                    .Build();
+                // Build combined sort: first by partition key (ascending), then by sort keys.
+                // Must produce a flat tuple of directions and a flat tuple key selector.
+                const auto sortDirsNode = node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections);
+                const auto partKeyLambda = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
+                const auto sortKeyLambda = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda);
 
-                auto combinedKeySelector = ctx.Builder(node->Pos())
-                    .Lambda()
-                        .Param("item")
-                        .List()
-                            .Apply(0, *node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda))
-                                .With(0, "item")
-                            .Seal()
-                            .Apply(1, *node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda))
-                                .With(0, "item")
-                            .Seal()
-                        .Seal()
+                // Build flat directions: [Bool(true), sortDir1, sortDir2, ...]
+                // The partition key is treated as a single component (ascending).
+                // Sort directions may be a single Bool or a list of Bools.
+                TExprNode::TListType dirChildren;
+                dirChildren.push_back(ctx.Builder(node->Pos())
+                    .Callable("Bool")
+                        .Atom(0, "true", TNodeFlags::Default)
                     .Seal()
-                    .Build();
+                    .Build());
+                if (sortDirsNode->IsList()) {
+                    for (ui32 i = 0; i < sortDirsNode->ChildrenSize(); ++i) {
+                        dirChildren.push_back(sortDirsNode->ChildPtr(i));
+                    }
+                } else {
+                    dirChildren.push_back(sortDirsNode);
+                }
+                auto combinedDirections = ctx.NewList(node->Pos(), std::move(dirChildren));
+
+                // Build flat key selector: λ(item) → [partKey(item), sortKey1(item), sortKey2(item), ...]
+                // We construct the lambda body by inlining expressions from both key selectors.
+                // The partition key selector body is used as-is (single component).
+                // The sort key selector body may be a list (tuple) - we flatten its children.
+                auto itemArg = ctx.NewArgument(node->Pos(), "item");
+
+                TExprNode::TListType keyChildren;
+
+                // Partition key: substitute itemArg for the lambda argument
+                keyChildren.push_back(ctx.ReplaceNode(partKeyLambda->TailPtr(),
+                    partKeyLambda->Head().Head(), itemArg));
+
+                // Sort key: substitute itemArg and flatten if tuple
+                const auto& sortKeyBody = sortKeyLambda->Tail();
+                auto sortKeyWithItem = ctx.ReplaceNode(sortKeyLambda->TailPtr(),
+                    sortKeyLambda->Head().Head(), itemArg);
+                if (sortKeyBody.IsList()) {
+                    // Sort key is a tuple - flatten its components
+                    for (ui32 i = 0; i < sortKeyWithItem->ChildrenSize(); ++i) {
+                        keyChildren.push_back(sortKeyWithItem->ChildPtr(i));
+                    }
+                } else {
+                    keyChildren.push_back(sortKeyWithItem);
+                }
+
+                auto combinedKeyBody = ctx.NewList(node->Pos(), std::move(keyChildren));
+                auto combinedKeySelector = ctx.NewLambda(node->Pos(),
+                    ctx.NewArguments(node->Pos(), {itemArg}), std::move(combinedKeyBody));
 
                 sort = ctx.Builder(node->Pos())
                     .Callable("Sort")

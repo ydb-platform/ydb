@@ -2,6 +2,7 @@
 
 #include "dq_channel_storage.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -25,6 +26,7 @@ struct TDqChannelSettings {
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
     ui64 MaxStoredBytes = 8_MB;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 
     // Output channels settings (may changed in future)
 

@@ -1352,7 +1352,7 @@ struct TAnalyzeParams {
 
 struct TCompactEntry {
     TNodePtr Cascade;
-    TNodePtr MaxShardsInFlight;
+    TNodePtr Parallel;
 };
 
 struct TAlterTableParameters {

@@ -1,6 +1,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
@@ -661,6 +662,47 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                      NLs::ChildrenCount(0) });
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
                                    { NLs::PathNotExist });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyColumnTableWithLocalBloomIndexes, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                    NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableSrc"));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/MyRoot", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/ColumnTableSrc"
+                    DstPath: "/MyRoot/ColumnTableDst"
+                    IsBackup: true
+                }
+            )", {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableDst"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableDst/idx_bloom"),
+                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/ColumnTableDst/idx_ngram"),
+                    {NLs::PathExist, NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter),
+                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
             }
         });
     }

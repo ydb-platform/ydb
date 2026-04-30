@@ -994,7 +994,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
 }
 
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination,
-    const TDownstreamConnTypes& downstreamMap) {
+    const TDownstreamConnTypes& /*downstreamMap*/) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
     if (stage.GetIsEffectsStage() && stage.GetSinks().empty()) {
@@ -1173,8 +1173,8 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
 
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 const bool enableScatter = GetMeta().EnableScatterConnection;
-                if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1
-                    && !HasStreamLookupDownstream(downstreamMap, stageInfo.Id))
+                if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1)
+                    /* && !HasStreamLookupDownstream(downstreamMap, stageInfo.Id))*/
                 {
                     LOG_D("ParallelUnionAll upgraded to scatter wiring: srcTasks=" << inputStageInfo.Tasks.size()
                         << " dstTasks=" << stageInfo.Tasks.size());

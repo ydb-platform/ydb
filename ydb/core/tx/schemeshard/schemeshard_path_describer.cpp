@@ -1199,7 +1199,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             checks.NotUnderDeleting(NKikimrScheme::StatusPathDoesNotExist);
         }
 
-        if (!Params.GetOptions().GetShowPrivateTable()) {
+        const bool skipCommonSensePathCheck = Params.GetOptions().GetShowPrivateTable() || path.ShouldSkipCommonPathCheckForIndexImplTable();
+        if (!skipCommonSensePathCheck) {
             checks.IsCommonSensePath();
         }
 

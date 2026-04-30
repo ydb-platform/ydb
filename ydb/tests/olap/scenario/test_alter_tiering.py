@@ -158,6 +158,8 @@ class TieringTestBase(BaseTestSet):
 
         self.access_key_secret = self._get_test_prefix() + '_access_key'
         self.secret_key_secret = self._get_test_prefix() + '_secret_key'
+        self._drop_secret_if_exists(sth, self.access_key_secret)
+        self._drop_secret_if_exists(sth, self.secret_key_secret)
         sth.execute_scheme_query(CreateSecret(self.access_key_secret, self.s3_access_key))
         sth.execute_scheme_query(CreateSecret(self.secret_key_secret, self.s3_secret_key))
 
@@ -197,6 +199,12 @@ class TieringTestBase(BaseTestSet):
 
     def _override_external_data_source(self, sth, path, config):
         sth.execute_scheme_query(CreateExternalDataSource(path, config, True))
+
+    def _drop_secret_if_exists(self, sth: ScenarioTestHelper, secret_name: str):
+        sth.execute_scheme_query(
+            DropSecret(secret_name),
+            expected_status={StatusCode.SUCCESS, StatusCode.SCHEME_ERROR},
+        )
 
     def _get_test_duration(self, test_class: str) -> datetime.timedelta:
         class_to_duration = {

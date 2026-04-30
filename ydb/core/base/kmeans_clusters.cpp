@@ -658,10 +658,9 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
     return true;
 }
 
-bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
-    const TString nameLower = to_lower(name);
     if (nameLower == "distance") {
         if (settings.mutable_settings()->has_metric()) {
             error = "only one of distance or similarity should be set, not both";
@@ -677,17 +676,17 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
     } else if (nameLower =="vector_type") {
         settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
     } else if (nameLower =="vector_dimension") {
-        settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
+        settings.mutable_settings()->set_vector_dimension(ParseUInt32(nameLower, value, MinVectorDimension, MaxVectorDimension, error));
     } else if (nameLower =="clusters") {
-        settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+        settings.set_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {
-        settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+        settings.set_levels(ParseUInt32(nameLower, value, MinLevels, MaxLevels, error));
     } else if (nameLower == "overlap_clusters") {
-        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+        settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
-        settings.set_overlap_ratio(ParseDouble(name, value, error));
+        settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else {
-        error = TStringBuilder() << "Unknown index setting: " << name;
+        error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;
     }
 

@@ -742,16 +742,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
-            index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
-            index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-            index.Type == TIndexDescription::EType::LocalBloomFilter ||
-            index.Type == TIndexDescription::EType::LocalBloomNgramFilter) {
-            if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
-                return false;
-            }
-        } else {
-            AltNotImplemented("with", indexType);
+        if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
             return false;
         }
     }

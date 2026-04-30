@@ -243,6 +243,9 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
 
 void TProducer::TSplittedPartitionWorker::MoveTo(EState state) {
     State = state;
+    if (State == EState::Done || State == EState::Failed) {
+        DoneAt = TInstant::Now();
+    }
     LOG_LAZY(Producer->DbDriverState->Log, TLOG_INFO, Producer->LogPrefix() << "Moving splitted partition worker for partition " << PartitionId << " to state " << GetStateName());
 }
 
@@ -251,13 +254,12 @@ void TProducer::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint32_t partition
     MaxSeqNo = std::max(MaxSeqNo, maxSeqNo);
 }
 
-bool TProducer::TSplittedPartitionWorker::IsDone() {
+bool TProducer::TSplittedPartitionWorker::IsDone() const {
     std::lock_guard lock(Lock);
-    DoneAt = TInstant::Now();
     return State == EState::Done || State == EState::Failed;
 }
 
-bool TProducer::TSplittedPartitionWorker::IsInit() {
+bool TProducer::TSplittedPartitionWorker::IsInit() const {
     std::lock_guard lock(Lock);
     return State == EState::Init;
 }
@@ -362,13 +364,13 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
                 return;
             }
 
-            if (selfPtr->IsDone()) {
-                return;
-            }
-            
             bool needRunMainWorker = false;
             {
                 std::lock_guard lock(selfPtr->Lock);
+                if (selfPtr->State == EState::Done || selfPtr->State == EState::Failed) {
+                    return;
+                }
+
                 if (result.HasException()) {
                     LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << selfPtr->PartitionId);
                     selfPtr->WriteSessionsToCloseOnError.push_back(wrappedSession);
@@ -428,7 +430,10 @@ void TProducer::TEventsWorker::HandleSessionClosedEvent(TSessionClosedEvent&& ev
         return;
     }
 
-    Producer->Partitions[partition].Locked_ = true;
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt != Producer->Partitions.end()) {
+        partitionIt->second.Locked_ = true;
+    }
 
     if (event.GetStatus() == EStatus::OVERLOADED) {
         Producer->HandleAutoPartitioning(partition);
@@ -491,16 +496,36 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::DoWork() {
         lock.lock();
     }
 
-    if (!Producer->Done.load() && TransferEventsToOutputQueue()) {
-        return EventsPromise;
+    if (Producer->Done.load() || !TransferEventsToOutputQueue()) {
+        return std::nullopt;
     }
 
-    return std::nullopt;
+    // Atomically rotate EventsPromise/EventsFuture under Lock:
+    //   - the returned promise will be fulfilled by the caller outside the lock,
+    //   - any concurrent WaitEvent() seeing the lock will get the fresh, not-yet-set future.
+    // This avoids racing with WaitEvent re-creating the promise out from under us.
+    auto firedPromise = std::move(EventsPromise);
+    EventsPromise = NThreading::NewPromise<void>();
+    EventsFuture = EventsPromise.GetFuture();
+    return firedPromise;
+}
+
+NThreading::TPromise<void> TProducer::TEventsWorker::WakeAndRotate() {
+    std::lock_guard lock(Lock);
+    auto firedPromise = std::move(EventsPromise);
+    EventsPromise = NThreading::NewPromise<void>();
+    EventsFuture = EventsPromise.GetFuture();
+    return firedPromise;
 }
 
 void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
-    if (Producer->Partitions[partition].IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
-        Producer->Partitions[partition].Future(NThreading::MakeFuture());
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt == Producer->Partitions.end()) {
+        return;
+    }
+
+    if (partitionIt->second.IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
+        partitionIt->second.Future(NThreading::MakeFuture());
         return;
     }
 
@@ -526,7 +551,7 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
         }
         producerPtr->RunMainWorker(static_cast<std::int64_t>(partition));
     });
-    Producer->Partitions[partition].Future(newFuture);
+    partitionIt->second.Future(newFuture);
 }
 
 std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEvent() {
@@ -541,7 +566,12 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMes
     std::lock_guard lock(Lock);
     if (Producer->MessagesWorker->IsMemoryUsageOK()) {
         AddContinuationToken();
-        return EventsPromise;
+        // Rotate atomically under Lock: hand the current promise to the caller (will be
+        // fulfilled outside the lock), install a fresh promise/future for future waiters.
+        auto firedPromise = std::move(EventsPromise);
+        EventsPromise = NThreading::NewPromise<void>();
+        EventsFuture = EventsPromise.GetFuture();
+        return firedPromise;
     }
 
     Producer->Metrics.IncBufferFull();
@@ -746,24 +776,26 @@ std::vector<TWriteSessionEvent::TEvent> TProducer::TEventsWorker::GetEvents(bool
 }
 
 NThreading::TFuture<void> TProducer::TEventsWorker::WaitEvent() {
-    std::unique_lock lock(Lock);
+    std::lock_guard lock(Lock);
 
     AddSessionClosedIfNeeded();
     if (!EventsOutputQueue.empty()) {
         return NThreading::MakeFuture();
     }
 
-    if (EventsFuture.IsReady() && !Producer->Closed.load()) {
-        EventsPromise = NThreading::NewPromise();
-        EventsFuture = EventsPromise.GetFuture();
-    }
-
+    // Invariant maintained under Lock: EventsPromise has not been set yet, and
+    // EventsFuture corresponds to that promise. The promise is rotated atomically
+    // by DoWork()/WakeAndRotate() (under the same Lock), so we can simply hand
+    // out the current future without any reset logic.
     return EventsFuture;
 }
 
 void TProducer::TEventsWorker::UnsubscribeFromPartition(std::uint32_t partition) {
     ReadyFutures.erase(partition);
-    Producer->Partitions[partition].Future(NThreading::MakeFuture());
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt != Producer->Partitions.end()) {
+        partitionIt->second.Future(NThreading::MakeFuture());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1625,7 +1657,9 @@ TProducer::TProducer(
     EventsWorker->AddContinuationToken();
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
-    Settings.EventHandlers_.HandlersExecutor_->Start();
+    if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+        handlersExecutor->Start();
+    }
 
     CloseFuture.Subscribe([this](const NThreading::TFuture<void>&) {
         RunMainWorker(-1);
@@ -1697,7 +1731,7 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     if (sessionClosedEvent && sessionClosedEvent->GetStatus() != EStatus::SUCCESS) {
         return TCloseResult{
             .Status = ECloseStatus::Error,
-            .ClosedDescription = sessionClosedEvent ? std::make_optional<TCloseDescription>(*sessionClosedEvent) : std::nullopt
+            .ClosedDescription = std::make_optional<TCloseDescription>(*sessionClosedEvent)
         };
     }
 
@@ -1717,7 +1751,9 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 TProducer::~TProducer() {
     try {
         auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-        Settings.EventHandlers_.HandlersExecutor_->Stop();
+        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+            handlersExecutor->Stop();
+        }
 
         if (MainWorkerState.load() == 0) {
             ShutdownPromise.TrySetValue();
@@ -1972,7 +2008,9 @@ void TProducer::RunMainWorker(std::int64_t owner) {
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
         if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
-            EventsWorker->EventsPromise.TrySetValue();
+            // Use the canonical wake path: rotate under EventsWorker's Lock and fire outside.
+            auto closeWakeup = EventsWorker->WakeAndRotate();
+            closeWakeup.TrySetValue();
             auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
             MessagesWorker->SetClosedStatusToFlushPromises(
                 sessionClosedEvent ?

@@ -226,8 +226,8 @@ private:
     public:
         TSplittedPartitionWorker(TProducer* producer, std::uint32_t partitionId);
         void DoWork();
-        bool IsDone();
-        bool IsInit();
+        bool IsDone() const;
+        bool IsInit() const;
         std::string GetStateName() const;
             
     private:
@@ -241,7 +241,7 @@ private:
         std::vector<std::uint32_t> WriteSessionPartitionsToDestroy;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
         std::unordered_map<std::uint32_t, std::uint64_t> CachedMaxSeqNos;
-        std::mutex Lock;
+        mutable std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
         size_t Retries = 0;
         TInstant DoneAt = TInstant::Max();
@@ -258,6 +258,11 @@ private:
         
         std::optional<NThreading::TPromise<void>> DoWork();
         NThreading::TFuture<void> WaitEvent();
+        // Atomically takes ownership of the current EventsPromise and installs a fresh one.
+        // The returned promise must be fulfilled (TrySetValue) by the caller — outside Lock.
+        // This is the only sanctioned way to wake WaitEvent waiters; never set EventsPromise
+        // from outside or recreate EventsPromise/EventsFuture in WaitEvent.
+        NThreading::TPromise<void> WakeAndRotate();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
         std::optional<NThreading::TPromise<void>> HandleNewMessage();

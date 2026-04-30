@@ -115,19 +115,10 @@ public:
             );
         }
 
-        // Clean up database tables
         NIceDb::TNiceDb db(txc.DB);
 
-        // CleanupIncrementalRestoreItems sweeps both the per-sub-op rows and
-        // the global TxIdToIncrementalRestore map for this restoreId. We pass
-        // the live state pointer so it can also drop in-memory PendingItems /
-        // InFlightItems / WaitTxIdToItemSeq. (We grab the pointer BEFORE
-        // erasing the state map entry below.)
-        if (auto* statePtr = Self->IncrementalRestoreStates.FindPtr(restoreId)) {
-            Self->CleanupIncrementalRestoreItems(restoreId, db, statePtr);
-        } else {
-            Self->CleanupIncrementalRestoreItems(restoreId, db, /*state=*/nullptr);
-        }
+        Self->CleanupIncrementalRestoreItems(restoreId, db,
+            Self->IncrementalRestoreStates.FindPtr(restoreId));
 
         Self->IncrementalRestoreStates.erase(restoreId);
 

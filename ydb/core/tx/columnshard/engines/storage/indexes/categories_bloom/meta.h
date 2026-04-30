@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
@@ -12,7 +13,7 @@ public:
 
 private:
     using TBase = TSkipBitmapIndex;
-    double FalsePositiveProbability = 0.1;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
@@ -20,7 +21,7 @@ private:
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
 
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;

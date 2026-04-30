@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 class TestBasicReading(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("basic_reading")
+
     def check_query_result(self, result, error, downsampling_disabled):
         if error is not None:
             return False, error

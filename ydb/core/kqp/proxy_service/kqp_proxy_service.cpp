@@ -1885,6 +1885,8 @@ private:
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
+        auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
+
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
@@ -1892,11 +1894,11 @@ private:
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
             AppData()->TenantName,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+            counters,
             pqGatewayFactory->CreatePqGateway(),
             *FederatedQuerySetup->Driver,
             AppData()->Mon,
-            Counters->GetKqpCounters(),
+            Counters->GetRootCounters(),
             {},
             FeatureFlags.GetEnableStreamingQueriesCounters());
 

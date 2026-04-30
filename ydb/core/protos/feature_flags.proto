@@ -230,12 +230,12 @@ message TFeatureFlags {
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
-    optional bool EnableStreamingQueries = 206 [default = false];
+    optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
-    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = false];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
@@ -260,7 +260,24 @@ message TFeatureFlags {
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
+    // Split protocol control.
+    // By default, the schemeshard handles sorting and split boundary selection.
+    // These flags move that work to the datashard side:
+    //
+    // EnableDataShardSplitHistogramSorting - sort KeyAccessSample on datashard
+    // EnableDataShardSplitKeySelection - select split boundaries on datashard
+    //     using sorted key access histogram and data size histogram
+    // EnableDataShardSplitHistogramOmission - stop sending KeyAccessSample
+    //     and DataSizeHistogram in datashard stats
+    //
+    // Enabling a flag also enables all flags above it (HistogramSorting ⊃ KeySelection ⊃ HistogramOmission).
+    optional bool EnableDataShardSplitHistogramSorting = 244 [default = false];
+    optional bool EnableDataShardSplitKeySelection = 245 [default = false];
+    optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
+
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
+    optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
+    optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
 }

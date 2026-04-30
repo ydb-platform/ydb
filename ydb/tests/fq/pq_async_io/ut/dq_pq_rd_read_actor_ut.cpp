@@ -75,7 +75,8 @@ public:
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
                 CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
-                true
+                true,
+                TDuration{}
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -411,7 +412,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         StartSession(Settings);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         MockSessionError(RowDispatcherId1);
 
         bool failed = false;

@@ -1,5 +1,17 @@
 #include "yql_pq_provider_impl.h"
 
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -7,42 +19,32 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/library/yql/utils/plan/plan_utils.h>
-
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
-
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
-    struct TPushdownSettings: public NPushdown::TSettings {
-        TPushdownSettings()
-            : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
-        {
-            using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(
-                // Operator features
-                EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
-                EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
-                EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
 
-                // Split features
-                EFlag::SplitOrOperator
-            );
-            EnableFunction("Re2.Grep");  // For REGEXP pushdown
-        }
-    };
+struct TPushdownSettings: public NPushdown::TSettings {
+    TPushdownSettings()
+        : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
+    {
+        using EFlag = NPushdown::TSettings::EFeatureFlag;
+        Enable(
+            // Operator features
+            EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
+            EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+            EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
+            EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
+
+            // Split features
+            EFlag::SplitOrOperator
+        );
+        EnableFunction("Re2.Grep");  // For REGEXP pushdown
+    }
+};
 
 std::unordered_set<TString> GetUsedColumnNames(const TCoExtractMembers& extractMembers) {
     std::unordered_set<TString> usedColumnNames;
@@ -160,6 +162,7 @@ public:
       //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
+        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
         #undef HNDL
     }
 
@@ -183,7 +186,7 @@ public:
             .Done();
     }*/
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const {
+    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto& extractMembers = node.Cast<TCoExtractMembers>();
         const auto& extractMembersInput = extractMembers.Input();
         const auto& maybeDqSourceWrap = extractMembersInput.Maybe<TDqSourceWrap>();
@@ -210,16 +213,47 @@ public:
             GetUsedWatermarkColumnNames(watermarkExpr, usedColumnNames);
         }
 
+        const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto oldRowColumnsCount = oldRowType->GetSize();
+
+        // If shared reading disabled we should check that this optimisation will not produce double topic reading
+        std::vector<TCoExtractMembers> remapNodes;
+        if (!UseSharedReadingForTopic(dqPqTopicSource)) {
+            if (const auto& consumers = NDq::GetConsumers(dqSourceWrap, *getParents()); consumers.size() > 1) {
+                for (const auto& consumer : consumers) {
+                    const auto& maybeExtractMembers = TMaybeNode<TCoExtractMembers>(consumer);
+                    if (!maybeExtractMembers) {
+                        YQL_CLOG(TRACE, ProviderPq) << "PQ ExtractMembersOverDqWrap. Detected source multi usage, skip optimisation";
+                        return node;
+                    }
+
+                    if (consumer == node.Raw()) {
+                        continue;
+                    }
+
+                    const auto& otherExtractMembers = maybeExtractMembers.Cast();
+                    remapNodes.emplace_back(otherExtractMembers);
+                    for (const auto& member : otherExtractMembers.Members()) {
+                        usedColumnNames.emplace(member.Value());
+                    }
+
+                    if (usedColumnNames.size() == oldRowColumnsCount) {
+                        return node;
+                    }
+                }
+
+                YQL_CLOG(TRACE, ProviderPq) << "PQ ExtractMembersOverDqWrap. Detected source multi usage, extract common columns: " << usedColumnNames.size();
+            }
+        }
+
         const TStructExprType* inputRowType = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-        const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (outputRowType->GetSize() == 0 && inputRowType->GetSize() > 0) {
+        if (usedColumnNames.size() == 0 && inputRowType->GetSize() > 0) {
             auto item = GetLightColumn(*inputRowType);
             YQL_ENSURE(item);
             YQL_ENSURE(usedColumnNames.insert(TString(item->GetName())).second);
         }
 
-        const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (oldRowType->GetSize() == usedColumnNames.size()) {
+        if (oldRowColumnsCount == usedColumnNames.size()) {
             return node;
         }
 
@@ -245,14 +279,25 @@ public:
             .Done()
             .Ptr();
 
-        if (outputRowType->GetSize() == usedColumnNames.size()) {
-            return newDqSourceWrap;
+        const auto makeNewExtractMembers = [&ctx, &usedColumnNames, &dqSourceWrap, &newDqSourceWrap](const TCoExtractMembers& initialExtractMembers) {
+            const TStructExprType* outputRowType = initialExtractMembers.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            if (outputRowType->GetSize() == usedColumnNames.size()) {
+                return newDqSourceWrap;
+            }
+
+            return Build<TCoExtractMembers>(ctx, initialExtractMembers.Pos())
+                .InitFrom(initialExtractMembers)
+                .Input(ctx.ReplaceNode(initialExtractMembers.Input().Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
+                .Done()
+                .Ptr();
+        };
+
+        // Replace Topic source for all consumers with common columns set
+        for (const auto& otherExtractMembers : remapNodes) {
+            optCtx.RemapNode(otherExtractMembers.Ref(), makeNewExtractMembers(otherExtractMembers));
         }
 
-        return Build<TCoExtractMembers>(ctx, node.Pos())
-            .InitFrom(extractMembers)
-            .Input(ctx.ReplaceNode(extractMembersInput.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
-            .Done();
+        return makeNewExtractMembers(extractMembers);
     }
 
     bool IsEmptyFilterPredicate(const TCoLambda& lambda) const {
@@ -281,6 +326,12 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+
+        // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
+        if (!UseSharedReadingForTopic(dqPqTopicSource)) {
+            return node;
+        }
+
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
@@ -330,10 +381,33 @@ public:
     }
 
 private:
+    static std::optional<TStringBuf> GetTopicSourceSetting(const TDqPqTopicSource& topicSource, TStringBuf name) {
+        const auto settingsCount = topicSource.Settings().Size();
+        for (size_t i = 0; i < settingsCount; ++i) {
+            const auto& setting = topicSource.Settings().Item(i);
+            if (setting.Name().Value() != name) {
+                continue;
+            }
+            if (const auto& maybeValue = setting.Value()) {
+                const TExprNode& value = maybeValue.Cast().Ref();
+                YQL_ENSURE(value.IsAtom());
+                return value.Content();
+            }
+            break;
+        }
+        return std::nullopt;
+    }
+
+    bool UseSharedReadingForTopic(const TDqPqTopicSource& topicSource) const {
+        const bool sharedReading = FromString(GetTopicSourceSetting(topicSource, SharedReading).value_or("false"));
+        const bool streamingTopicRead = FromString(GetTopicSourceSetting(topicSource, StreamingTopicRead).value_or(State_->StreamingTopicsReadByDefault ? "true" : "false"));
+        return sharedReading && streamingTopicRead;
+    }
+
     TPqState::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqLogicalOptProposalTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqLogicalOptProposalTransformer>(state);

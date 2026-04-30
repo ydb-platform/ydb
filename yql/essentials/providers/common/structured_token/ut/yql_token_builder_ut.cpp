@@ -12,6 +12,7 @@ Y_UNIT_TEST(Empty) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
 }
 
@@ -24,6 +25,7 @@ Y_UNIT_TEST(ServiceAccountId) {
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(!p.IsNoAuth());
+    UNIT_ASSERT(!p.HasIamAuth());
     TString id, sign;
     UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign));
     UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
@@ -38,6 +40,7 @@ Y_UNIT_TEST(ServiceAccountIdWithSecret) {
     UNIT_ASSERT(p.HasServiceAccountIdAuth());
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
     TString id, sign, reference;
     UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign, reference));
@@ -62,6 +65,7 @@ Y_UNIT_TEST(BasicAuth) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
     TString login, password;
     UNIT_ASSERT(p.GetBasicAuth(login, password));
@@ -77,6 +81,7 @@ Y_UNIT_TEST(BasicAuthWithSecret) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
     TString login, password, reference;
     UNIT_ASSERT(p.GetBasicAuth(login, password, reference));
@@ -103,6 +108,7 @@ Y_UNIT_TEST(TokenAuthWithSecret) {
     UNIT_ASSERT(p.HasIAMToken());
     UNIT_ASSERT(!p.HasTransientToken());
     UNIT_ASSERT(!p.IsNoAuth());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(p.GetIAMToken() == "my_token");
     TSet<TString> references;
     p.ListReferences(references);
@@ -123,6 +129,7 @@ Y_UNIT_TEST(IAMToken) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
     TString token = p.GetIAMToken();
     UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
@@ -137,6 +144,7 @@ Y_UNIT_TEST(TransientToken) {
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
     UNIT_ASSERT(p.HasTransientToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
     TSet<TString> references;
     p.ListReferences(references);
@@ -156,6 +164,7 @@ Y_UNIT_TEST(NoAuth) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(!p.HasBasicAuth());
     UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(p.IsNoAuth());
 }
 
@@ -168,6 +177,7 @@ Y_UNIT_TEST(BasicAuthAndToken) {
     UNIT_ASSERT(!p.HasServiceAccountIdAuth());
     UNIT_ASSERT(p.HasBasicAuth());
     UNIT_ASSERT(p.HasIAMToken());
+    UNIT_ASSERT(!p.HasIamAuth());
     UNIT_ASSERT(!p.IsNoAuth());
 
     TString login, password;
@@ -177,6 +187,22 @@ Y_UNIT_TEST(BasicAuthAndToken) {
 
     TString token = p.GetIAMToken();
     UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
+}
+
+Y_UNIT_TEST(IamAuth) {
+    TStructuredTokenBuilder b;
+    b.SetIamAuth("my_sa_id", "my_resource");
+    UNIT_ASSERT_VALUES_EQUAL(R"({"iam_resource_id":"my_resource","iam_sa_id":"my_sa_id"})", b.ToJson());
+    const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
+    UNIT_ASSERT(!p.HasServiceAccountIdAuth());
+    UNIT_ASSERT(!p.HasBasicAuth());
+    UNIT_ASSERT(!p.HasIAMToken());
+    UNIT_ASSERT(!p.IsNoAuth());
+    UNIT_ASSERT(p.HasIamAuth());
+    TString id, res;
+    UNIT_ASSERT(p.GetIamAuth(id, res));
+    UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
+    UNIT_ASSERT_VALUES_EQUAL(res, "my_resource");
 }
 
 Y_UNIT_TEST(ComposeForBasicAuth) {
@@ -203,6 +229,18 @@ Y_UNIT_TEST(ComposeForTransientTokenAuth) {
 
     TString json2 = ComposeStructuredTokenJsonForTransientTokenAuth("");
     UNIT_ASSERT_VALUES_EQUAL(json2, R"({"no_auth":""})");
+}
+
+Y_UNIT_TEST(ComposeForIamAuth) {
+    TStructuredTokenBuilder b;
+    TString json1 = ComposeStructuredTokenJsonForIamAuth("my_sa_id", "my_resource");
+    UNIT_ASSERT_VALUES_EQUAL(json1, R"({"iam_resource_id":"my_resource","iam_sa_id":"my_sa_id"})");
+
+    TString json2 = ComposeStructuredTokenJsonForIamAuth("my_sa_id", "");
+    UNIT_ASSERT_VALUES_EQUAL(json2, R"({"no_auth":""})");
+
+    TString json3 = ComposeStructuredTokenJsonForIamAuth("", "my_resource");
+    UNIT_ASSERT_VALUES_EQUAL(json3, R"({"no_auth":""})");
 }
 
 } // Y_UNIT_TEST_SUITE(TokenBuilderTest)

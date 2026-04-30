@@ -1,18 +1,14 @@
 #pragma once
 #include "abstract.h"
 
-#include <ydb/library/accessor/accessor.h>
-
 #include <util/generic/bitmap.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NOlap::NIndexes {
-class TBitSetStorage: public IBitsStorage {
+class TBitSetStorage: public IBitsStorageViewer {
 private:
-    TDynBitMap Bits;
+    const TDynBitMap Bits;
 
-    virtual TConclusionStatus DoDeserializeFromString(const TString& data) override;
-    virtual TString DoSerializeToString() const override;
     virtual bool DoGet(const ui32 idx) const override;
     virtual ui32 DoGetBitsCount() const override {
         return Bits.Size();
@@ -24,23 +20,6 @@ public:
     TBitSetStorage(TDynBitMap&& bits)
         : Bits(std::move(bits)) {
     }
-    template <class TFixedSizeBitMap>
-    TBitSetStorage(TFixedSizeBitMap&& bits)
-        : Bits(std::move(bits)) {
-    }
-
-    bool TestHash(const ui64 hash) const {
-        if (!Bits.Size()) {
-            return false;
-        }
-        return Bits.Get(hash % Bits.Size());
-    }
-
-    static ui32 GrowBitsCountToByte(const ui32 bitsCount) {
-        const ui32 bytesCount = bitsCount / 8;
-        return (bytesCount + ((bitsCount % 8) ? 1 : 0)) * 8;
-    }
-
 };
 
 class TBitSetStorageConstructor: public IBitsStorageConstructor {
@@ -50,17 +29,10 @@ public:
     }
 
 private:
-    virtual std::shared_ptr<IBitsStorage> DoBuild(TDynBitMap&& bm) const override {
-        return std::make_shared<TBitSetStorage>(std::move(bm));
-    }
-    virtual TConclusion<std::shared_ptr<IBitsStorage>> DoBuild(const TString& data) const override {
-        auto result = std::make_shared<TBitSetStorage>();
-        auto conclusion = result->DeserializeFromString(data);
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-        return result;
-    }
+    virtual TString DoSerializeToString(TDynBitMap&& bitsVector) const override;
+    virtual TString DoSerializeToString(const TArrayPower2BitsStorage& storage) const override;
+    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override;
+
     static inline const auto Registrator = TFactory::TRegistrator<TBitSetStorageConstructor>(GetClassNameStatic());
 
 public:

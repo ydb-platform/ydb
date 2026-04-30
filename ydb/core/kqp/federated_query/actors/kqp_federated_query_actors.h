@@ -194,4 +194,13 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames);
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName);
 
+NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(
+    const TString& endpoint,
+    const TString& database,
+    bool ssl,
+    const TString& caCert,
+    const TString& token,
+    TActorSystem* actorSystem
+);
+
 }  // namespace NKikimr::NKqp

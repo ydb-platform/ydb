@@ -704,6 +704,13 @@ public:
 
         QueryState->FillTopicOperations();
 
+        if (AppData()->FeatureFlags.GetEnableOltpSinkForTopicOnlyTx()
+            && QueryState->TxCtx->TopicOperations.HasOperations()
+            && !QueryState->TxCtx->HasTableWrite
+            && !QueryState->TxCtx->HasTableRead) {
+            QueryState->TxCtx->EnableOltpSink = true;
+        }
+
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
             Become(&TKqpSessionActor::ExecuteState);

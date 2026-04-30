@@ -3032,7 +3032,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     }
 
     ui64 txInfly = TxInFly();
-    TDuration lag = GetDataTxCompleteLag();
+    TDuration lag = GetTxCompleteLag();
     if (txInfly > 1 && lag > TDuration::MilliSeconds(MaxTxLagMilliseconds)) {
         reject = true;
         rejectReasons |= ERejectReasons::OverloadByLag;
@@ -3443,8 +3443,9 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
-                        event->Get()->Record.GetUserSID()), ctx);
+                    auto userSID = event->Get()->Record.GetUserSID();
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan),
+                        userSID), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {
@@ -3972,11 +3973,11 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
-    TDuration dataTxCompleteLag = GetDataTxCompleteLag();
-    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(dataTxCompleteLag.MilliSeconds());
-    if (dataTxCompleteLag > TDuration::Minutes(5)) {
+    TDuration txCompleteLag = GetTxCompleteLag();
+    TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(txCompleteLag.MilliSeconds());
+    if (txCompleteLag > TDuration::Minutes(5)) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Tx completion lag (" << dataTxCompleteLag << ") is > 5 min on tablet "
+                   "Tx completion lag (" << txCompleteLag << ") is > 5 min on tablet "
                    << TabletID());
     }
 

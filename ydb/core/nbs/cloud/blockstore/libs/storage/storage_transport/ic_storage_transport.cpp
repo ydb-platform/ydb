@@ -610,7 +610,8 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         msg->RequestId
     );
 
-    ListPersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    auto requestId = msg->RequestId;
+    ListPersistentBufferEventsByRequestId.emplace(requestId, std::move(*msg));
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferResult(

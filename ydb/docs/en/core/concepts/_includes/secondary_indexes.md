@@ -21,21 +21,11 @@ Unlike a synchronous index, an asynchronous index doesn't use distributed transa
 
 You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
 
-## Unique Secondary Index {#unique}
-
-This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
-
-A unique secondary index is a synchronous index, so the update process is the same as in the [Synchronous Secondary Index](#sync) section described above from a transaction perspective.
-
-### Limitations
-
-Currently, a unique index cannot be added to an existing table.
-
 ## Vector Index
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions.
+Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
 ### Creating a Secondary Index Online {#index-add}
 

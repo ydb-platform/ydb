@@ -431,8 +431,8 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
     for (auto& expr : vec) {
         if (expr.Ctx) {
@@ -479,8 +479,8 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
 
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {
     // Fetch context and plan properties from one of the arguments
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
     if (left.Ctx) {
         ctx = left.Ctx;

@@ -2,6 +2,7 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 SIZE(MEDIUM)
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 REQUIREMENTS(cpu:4)
 

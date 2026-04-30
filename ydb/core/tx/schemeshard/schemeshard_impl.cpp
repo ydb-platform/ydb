@@ -432,6 +432,10 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     return txId;
 }
 
+void TSchemeShard::ReturnTxIdToCache(const TTxId txId) {
+    CachedTxIds.push_back(txId);
+}
+
 EAttachChildResult TSchemeShard::AttachChild(TPathElement::TPtr child) {
     Y_ABORT_UNLESS(PathsById.contains(child->ParentPathId));
     TPathElement::TPtr parent = PathsById.at(child->ParentPathId);
@@ -1977,9 +1981,15 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
-    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
-    );
+    if (IsLocalId(pathId)) {
+        db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    } else {
+        db.Table<Schema::MigratedTableIndex>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    }
 }
 
 void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) {

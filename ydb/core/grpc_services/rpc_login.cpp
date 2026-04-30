@@ -138,6 +138,11 @@ public:
 
         AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
 
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        if (operation.status() == Ydb::StatusIds::UNAUTHORIZED && securityConfig.GetHideAuthenticationFailureReasons()) {
+            operation.clear_issues();
+        }
+
         return Reply(response);
     }
 

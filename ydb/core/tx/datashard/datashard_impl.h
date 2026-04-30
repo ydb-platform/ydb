@@ -1427,10 +1427,10 @@ class TDataShard
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
-    TDuration GetDataTxCompleteLag()
+    TDuration GetTxCompleteLag()
     {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
-        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime));
+        return TDuration::MilliSeconds(Pipeline.GetTxCompleteLag(mediatorTime));
     }
     TDuration GetScanTxCompleteLag()
     {

@@ -973,6 +973,7 @@ message TEvUploadRowsRequest {
     optional bool UpsertIfExists = 8 [ default = false ];
     optional uint64 SchemaVersion = 9;
     optional string UserSID = 10;
+    optional bool DisableChangeCollection = 11 [ default = false ];
 }
 
 message TEvUploadRowsResponse {

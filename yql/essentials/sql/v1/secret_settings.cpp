@@ -162,6 +162,11 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
                               TSecretSettingsNames("service_account_secret"),
                               TSecretSettingsNames("password_secret"),
                           })},
+        {"IAM", TExternalDataSourceAuthFields(
+                    {"service_account_id"},
+                    {
+                        TSecretSettingsNames("initial_token_secret"),
+                    })},
         {"TOKEN", TExternalDataSourceAuthFields(
                       {},
                       {

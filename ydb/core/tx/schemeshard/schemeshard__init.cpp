@@ -2953,6 +2953,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << indexes.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            // See KIKIMR-25153
+            TVector<std::pair<TPathId, ui64>> migratedAlteredIndexes;
             for (auto& rec: indexes) {
                 TPathId pathId = std::get<0>(rec);
                 ui64 alterVersion = std::get<1>(rec);
@@ -2960,16 +2962,36 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TTableIndexInfo::EState state = std::get<3>(rec);
                 auto description = std::get<4>(rec);
 
-                Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
-                TPathElement::TPtr path = Self->PathsById.at(pathId);
-                Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index"
-                               << ", pathId: " << pathId
-                               << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
+                if (Self->PathsById.contains(pathId)) {
+                    TPathElement::TPtr path = Self->PathsById.at(pathId);
+                    Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index"
+                                   << ", pathId: " << pathId
+                                   << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
-                Y_ABORT_UNLESS(!Self->Indexes.contains(pathId));
-                Self->Indexes[pathId] = new TTableIndexInfo(alterVersion, indexType, state, description);
-                Self->IncrementPathDbRefCount(pathId);
+                    Y_ABORT_UNLESS(!Self->Indexes.contains(pathId));
+                    Self->Indexes[pathId] = new TTableIndexInfo(alterVersion, indexType, state, description);
+                    Self->IncrementPathDbRefCount(pathId);
+                } else {
+                    migratedAlteredIndexes.emplace_back(pathId, alterVersion);
+                }
             }
+
+            // KIKIMR-25153: fixup after altering migrated indexes.
+            // Move index version from Schema::TableIndex to Schema::MigratedTableIndex.
+            for (const auto& [pathId, alterVersion] : migratedAlteredIndexes) {
+                // proper path-id for migrated index has owner-id equal to root schemeshard tablet-id
+                TPathId migratedIndexPathId = TPathId(Self->ParentDomainId.OwnerId, pathId.LocalPathId);
+                if (Self->Indexes.contains(migratedIndexPathId)) {
+                    // update record in Schema::MigratedTableIndex and in memory
+                    db.Table<Schema::MigratedTableIndex>().Key(migratedIndexPathId.OwnerId, migratedIndexPathId.LocalPathId).Update(
+                        NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(alterVersion)
+                    );
+                    Self->Indexes[migratedIndexPathId]->AlterVersion = alterVersion;
+                    // remove record from Schema::TableIndex
+                    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Delete();
+                }
+            }
+            migratedAlteredIndexes.clear();
 
             // Read IndexesAlterData
             {

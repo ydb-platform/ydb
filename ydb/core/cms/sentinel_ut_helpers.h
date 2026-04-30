@@ -19,6 +19,8 @@ auto& MockNodes = TFakeNodeWhiteboardService::Info;
 static constexpr ui32 DefaultStateLimit = 5;
 static constexpr ui32 GoodStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
+static constexpr TDuration ZeroGracePeriod = TDuration::Zero();
+static constexpr TInstant ZeroBootTimestamp = TInstant::Zero();
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 
 static constexpr NCms::EPDiskState ErrorStates[] = {

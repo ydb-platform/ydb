@@ -344,8 +344,8 @@ public:
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
         auto& response = ev->Get()->Record.GetResponse();
-        Counters[idx].push_back(std::make_pair(std::move(response), TInstant::Now()));
         CountersSize += response.size();
+        Counters[idx].push_back(std::make_pair(std::move(response), TInstant::Now()));
         if (CountersSize > MaxCountersSize) {
             ReplyAndPassAway();
         }

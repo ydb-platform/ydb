@@ -8,7 +8,11 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
 
 {% list tabs %}
 
-- С++
+- Go
+
+  This functionality is not currently supported.
+
+- C++
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -25,5 +29,17 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
     return 0;
   }
   ```
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  This functionality is not currently supported.
 
 {% endlist %}

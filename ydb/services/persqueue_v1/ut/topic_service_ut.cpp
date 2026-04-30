@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -215,6 +216,10 @@ protected:
         });
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
     }
+
+    void SetEnableOltpSinkForTopicOnlyTx(bool enabled) {
+        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableOltpSinkForTopicOnlyTx(enabled);
+    }
 };
 
 Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TUpdateOffsetsInTransactionFixture) {
@@ -377,7 +382,9 @@ Y_UNIT_TEST_F(ThereAreGapsInTheOffsetRanges, TUpdateOffsetsInTransactionFixture)
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
 }
 
-Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TUpdateOffsetsInTransactionFixture) {
+Y_UNIT_TEST_TWIN_F(OnePartitionAndNoGapsInTheOffsets, EnableOltpSinkForTopicOnlyTx, TUpdateOffsetsInTransactionFixture) {
+    SetEnableOltpSinkForTopicOnlyTx(EnableOltpSinkForTopicOnlyTx);
+
     auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={
@@ -412,7 +419,9 @@ Y_UNIT_TEST_F(OnePartitionAndNoGapsInTheOffsets, TUpdateOffsetsInTransactionFixt
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
 }
 
-Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransactionFixture) {
+Y_UNIT_TEST_TWIN_F(MultiplePartitionsAndNoGapsInTheOffsets, EnableOltpSinkForTopicOnlyTx, TUpdateOffsetsInTransactionFixture) {
+    SetEnableOltpSinkForTopicOnlyTx(EnableOltpSinkForTopicOnlyTx);
+
     auto response = Call_UpdateOffsetsInTransaction({
         TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
             TPartition{.Id=1, .Offsets={

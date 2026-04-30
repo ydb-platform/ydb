@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 #include "events.h"
 #include "event_local.h"

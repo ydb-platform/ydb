@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/util/struct_log/create_message.h>
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/testlib/test_runtime.h>

@@ -20,12 +20,12 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
-#include <ydb/core/util/struct_log/create_message.h>
-#include <ydb/core/util/struct_log/json_writer.h>
-#include <ydb/core/util/struct_log/meta_writer.h>
-#include <ydb/core/util/struct_log/text_writer.h>
-#include <ydb/core/util/struct_log/log_stack.h>
-#include <ydb/core/util/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/json_writer.h>
+#include <ydb/library/actors/struct_log/meta_writer.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
 #include <ydb/library/services/services.pb.h>
 

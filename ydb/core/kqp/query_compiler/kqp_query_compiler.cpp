@@ -1521,8 +1521,15 @@ private:
 
             if (settingsObj.Tokens) {
                 for (const auto& tokenNode : TExprBase(settingsObj.Tokens).Cast<TExprList>()) {
-                    fullTextProto.MutableQuerySettings()->AddTokens(
-                        TString(tokenNode.Cast<TCoString>().Literal().Value()));
+                    auto pair = tokenNode.Cast<TExprList>();
+                    YQL_ENSURE(pair.Size() == 2, "Expected 2 items in token pair, got: " << pair.Size());
+
+                    auto path = TString(pair.Item(0).Cast<TCoString>().Literal().Value());
+                    auto paramName = TString(pair.Item(1).Cast<TCoString>().Literal().Value());
+
+                    auto* protoToken = fullTextProto.MutableQuerySettings()->AddTokens();
+                    protoToken->SetToken(std::move(path));
+                    protoToken->SetParamName(std::move(paramName));
                 }
             }
 

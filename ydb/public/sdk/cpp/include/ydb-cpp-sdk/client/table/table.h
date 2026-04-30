@@ -427,9 +427,6 @@ struct TLocalBloomFilterSettings {
 
 struct TLocalBloomNgramFilterSettings {
     uint32_t NgramSize = 0;
-    uint32_t HashesCount = 0;
-    uint32_t FilterSizeBytes = 0;
-    uint32_t RecordsCount = 0;
     std::optional<bool> CaseSensitive;
     std::optional<double> FalsePositiveProbability;
 

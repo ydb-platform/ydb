@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/formats/arrow/switch
     yql/essentials/core
+    ydb/core/local_indexes/bloom
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme

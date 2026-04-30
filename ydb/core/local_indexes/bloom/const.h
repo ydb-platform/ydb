@@ -1,18 +1,38 @@
 #pragma once
 
+<<<<<<< HEAD:ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
+=======
+>>>>>>> 54fd2e591aa (xyliganSereja review fixes):ydb/core/local_indexes/bloom/const.h
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/system/types.h>
 
 #include <algorithm>
 #include <cmath>
+<<<<<<< HEAD:ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h
 #include <optional>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+=======
+#include <cstdint>
+#include <optional>
+
+namespace NKikimr::NLocalIndex::NBloom {
+
+namespace NDefaults {
+
+constexpr double FalsePositiveProbability = 0.1;
+constexpr bool CaseSensitive = true;
+constexpr std::uint32_t NGrammSize = 3;
+constexpr std::uint32_t HashesCount = 2;
+
+}   // namespace NDefaults
+>>>>>>> 54fd2e591aa (xyliganSereja review fixes):ydb/core/local_indexes/bloom/const.h
 
 struct TRequestSettings {
     std::optional<ui32> NGrammSize;
@@ -58,6 +78,19 @@ struct TRequestSettings {
             }
         } else if (FalsePositiveProbability) {
             bFilter.SetFalsePositiveProbability(*FalsePositiveProbability);
+        }
+    }
+
+    template <class TPublicProto>
+    void SerializeToPublicProto(TPublicProto& proto) const {
+        if (NGrammSize) {
+            proto.set_ngram_size(*NGrammSize);
+        }
+        if (CaseSensitive) {
+            proto.set_case_sensitive(*CaseSensitive);
+        }
+        if (FalsePositiveProbability) {
+            proto.set_false_positive_probability(*FalsePositiveProbability);
         }
     }
 
@@ -127,10 +160,21 @@ public:
         return std::pow(std::clamp(oneMinus, 0.0, 1.0), k);
     }
 
-    static TString GetHashesCountIntervalString();
-    static TString GetFilterSizeBytesIntervalString();
-    static TString GetNGrammSizeIntervalString();
-    static TString GetRecordsCountIntervalString();
+    static TString GetHashesCountIntervalString() {
+        return TStringBuilder() << "[" << MinHashesCount << ", " << MaxHashesCount << "]";
+    }
+
+    static TString GetFilterSizeBytesIntervalString() {
+        return TStringBuilder() << "[" << MinFilterSizeBytes << ", " << MaxFilterSizeBytes << "]";
+    }
+
+    static TString GetNGrammSizeIntervalString() {
+        return TStringBuilder() << "[" << MinNGrammSize << ", " << MaxNGrammSize << "]";
+    }
+
+    static TString GetRecordsCountIntervalString() {
+        return TStringBuilder() << "[" << MinRecordsCount << ", " << MaxRecordsCount << "]";
+    }
 
     static TConclusionStatus ValidateParams(const double falsePositiveProbability, const ui32 nGrammSize) {
         return ValidateParams(falsePositiveProbability, nGrammSize, std::nullopt, std::nullopt);
@@ -218,4 +262,4 @@ inline ui32 TRequestSettings::ResolvedRecordsCount() const {
     return TConstants::DeprecatedRecordsCount;
 }
 
-}   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm
+}   // namespace NKikimr::NLocalIndex::NBloom

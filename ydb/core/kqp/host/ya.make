@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/local_indexes/bloom
     ydb/core/tx/long_tx_service/public
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/http_gateway

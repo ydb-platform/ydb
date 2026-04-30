@@ -11,6 +11,7 @@
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -235,30 +236,29 @@ private:
                     olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
                     auto* ngram = olapIndex->MutableBloomNGrammFilter();
                     const auto& idxProto = index.local_bloom_ngram_filter_index();
+
+                    using namespace NKikimr::NLocalIndex::NBloom;
+                    TRequestSettings request;
                     if (idxProto.has_false_positive_probability()) {
-                        double fpp = idxProto.false_positive_probability();
-                        if (!std::isfinite(fpp) || fpp <= 0.0 || fpp >= 1.0) {
-                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid false_positive_probability " << fpp << " for index '" << index.name() << "': must be a finite number in range (0, 1)"));
-                            code = StatusIds::BAD_REQUEST;
-                            return false;
-                        }
-                        ngram->SetFalsePositiveProbability(fpp);
+                        request.FalsePositiveProbability = idxProto.false_positive_probability();
                     }
                     if (idxProto.ngram_size()) {
-                        ngram->SetNGrammSize(idxProto.ngram_size());
-                    }
-                    if (idxProto.hashes_count()) {
-                        ngram->SetHashesCount(idxProto.hashes_count());
-                    }
-                    if (idxProto.filter_size_bytes()) {
-                        ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
-                    }
-                    if (idxProto.records_count()) {
-                        ngram->SetRecordsCount(idxProto.records_count());
+                        request.NGrammSize = idxProto.ngram_size();
                     }
                     if (idxProto.has_case_sensitive()) {
-                        ngram->SetCaseSensitive(idxProto.case_sensitive());
+                        request.CaseSensitive = idxProto.case_sensitive();
                     }
+                    if (auto c = TConstants::ValidateParams(
+                            request.ResolvedFalsePositiveProbability(),
+                            request.ResolvedNGrammSize());
+                        c.IsFail())
+                    {
+                        issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid bloom ngram filter index '" << index.name() << "' parameters: " << c.GetErrorMessage()));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    request.SerializeToProtoFilterRaw(*ngram);
+
                     if (index.index_columns().size() != 1) {
                         issues.AddIssue(NYql::TIssue("Bloom NGram filter index supports exactly one column"));
                         code = StatusIds::BAD_REQUEST;

@@ -75,9 +75,6 @@ struct TIndexDescription {
 
     struct TLocalBloomNgramFilterDescription {
         std::optional<ui32> NgramSize;
-        std::optional<ui32> HashesCount;
-        std::optional<ui32> FilterSizeBytes;
-        std::optional<ui32> RecordsCount;
         std::optional<bool> CaseSensitive;
         std::optional<double> FalsePositiveProbability;
     };
@@ -181,15 +178,6 @@ struct TIndexDescription {
                     const auto& desc = index.GetBloomNGrammFilterDescription();
                     if (desc.HasNGrammSize()) {
                         ngramDesc.NgramSize = desc.GetNGrammSize();
-                    }
-                    if (desc.HasHashesCount()) {
-                        ngramDesc.HashesCount = desc.GetHashesCount();
-                    }
-                    if (desc.HasFilterSizeBytes()) {
-                        ngramDesc.FilterSizeBytes = desc.GetFilterSizeBytes();
-                    }
-                    if (desc.HasRecordsCount()) {
-                        ngramDesc.RecordsCount = desc.GetRecordsCount();
                     }
                     if (desc.HasCaseSensitive()) {
                         ngramDesc.CaseSensitive = desc.GetCaseSensitive();

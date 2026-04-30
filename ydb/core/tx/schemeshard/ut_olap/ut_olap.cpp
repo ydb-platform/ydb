@@ -1276,6 +1276,23 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {
 
+    static TString AlterUpsertBloomFilterIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName, double falsePositiveProbability) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: [")" << columnName << R"("]
+                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                    }
+                }
+            }
+        )";
+    }
+
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1629,19 +1646,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestDescribeResult(descr, {NLs::PathNotExist});
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTableLifecycle"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_data"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.05
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -1681,19 +1687,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTableLifecycle"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_data_v2"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.01
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -1788,19 +1783,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTableAlter"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_data"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.05
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -1821,19 +1805,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_C(foundBloom, "bloom_data index must exist in column table schema");
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TestTableAlter"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_data_v2"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.01
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
@@ -1900,19 +1873,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "MigrationTableAlter"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_data"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.05
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         // Before migration: no scheme object children on either table
@@ -2067,19 +2029,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
 
         // Alter an existing table to add a local index - should succeed without scheme object children
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "MigrationTableAlter"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_alter_no_scheme"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["data"]
-                        FalsePositiveProbability: 0.01
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_alter_no_scheme", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         // Verify the table still has no scheme object children
@@ -2310,19 +2261,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Test case: Re-create an index with the same name as the dropped one
         // This verifies that RemoveChild was called during orphaned cleanup,
         // allowing a new index with the same name to be created
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "CleanupTable"
-            AlterSchema {
-                UpsertIndexes {
-                    Name: "bloom_key"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        ColumnNames: ["key"]
-                        FalsePositiveProbability: 0.02
-                    }
-                }
-            }
-        )");
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertBloomFilterIndex("CleanupTable", "bloom_key", "key", 0.02));
         env.TestWaitNotification(runtime, txId);
 
         // Verify the new index was created successfully

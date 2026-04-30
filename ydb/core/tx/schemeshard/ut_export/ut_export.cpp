@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -1021,37 +1022,8 @@ namespace {
 
             ui64 txId = 100;
 
-            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "OlapBloomTable"
-            ColumnShardCount: 1
-            Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                Columns { Name: "resource_id" Type: "Utf8" }
-                Columns { Name: "uid" Type: "Utf8" NotNull: true }
-                KeyColumnNames: "timestamp"
-                KeyColumnNames: "uid"
-                Indexes {
-                    Id: 1
-                    Name: "idx_bloom"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        FalsePositiveProbability: 0.01
-                        ColumnIds: 2
-                    }
-                }
-                Indexes {
-                    Id: 2
-                    Name: "idx_ngram"
-                    ClassName: "BLOOM_NGRAMM_FILTER"
-                    BloomNGrammFilter {
-                        NGrammSize: 3
-                        FalsePositiveProbability: 0.01
-                        CaseSensitive: true
-                        ColumnId: 2
-                    }
-                }
-            }
-        )");
+            TestCreateColumnTable(Runtime(), ++txId, "/MyRoot",
+                NLocalIndexes::OlapTableWithBloomAndNgramIndexes("OlapBloomTable"));
             Env().TestWaitNotification(Runtime(), txId);
 
             auto assertBloomIndexes = [this](const TString& path) {

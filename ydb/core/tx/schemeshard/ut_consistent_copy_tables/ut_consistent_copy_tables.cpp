@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
@@ -280,37 +281,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
 
         // 1. Create column table with local bloom indexes
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ColumnTableWithLocalIndexes"
-            ColumnShardCount: 1
-            Schema {
-                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-                Columns { Name: "resource_id" Type: "Utf8" }
-                Columns { Name: "uid" Type: "Utf8" NotNull: true }
-                KeyColumnNames: "timestamp"
-                KeyColumnNames: "uid"
-                Indexes {
-                    Id: 1
-                    Name: "idx_bloom"
-                    ClassName: "BLOOM_FILTER"
-                    BloomFilter {
-                        FalsePositiveProbability: 0.01
-                        ColumnIds: 2
-                    }
-                }
-                Indexes {
-                    Id: 2
-                    Name: "idx_ngram"
-                    ClassName: "BLOOM_NGRAMM_FILTER"
-                    BloomNGrammFilter {
-                        NGrammSize: 3
-                        FalsePositiveProbability: 0.01
-                        CaseSensitive: true
-                        ColumnId: 2
-                    }
-                }
-            }
-        )");
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableWithLocalIndexes"));
         env.TestWaitNotification(runtime, txId);
 
         // 2. Perform consistent copy with backup flag (required for column tables)

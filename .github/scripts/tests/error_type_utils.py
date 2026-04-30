@@ -7,9 +7,12 @@ from urllib import request as urllib_request
 
 DEFAULT_FETCH_TIMEOUT_SEC = 5
 DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
-DEFAULT_FETCH_MAX_WORKERS = 100
+_DEFAULT_FETCH_MAX_WORKERS = 100
 DEFAULT_FETCH_MAX_ATTEMPTS = 3
 DEFAULT_FETCH_RETRY_DELAY_SEC = 0.5
+
+# After classify+merge: drop these tags from stored error_type (case-insensitive). Keep NOT_LAUNCHED etc.
+_ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
 
 
 def _normalize_text(value):
@@ -27,6 +30,24 @@ def normalize_fetch_url(url):
     return _normalize_text(url).strip()
 
 
+def _apply_error_type_blacklist(merged_error_type):
+    t = _normalize_text(merged_error_type).strip()
+    if not t:
+        return ""
+    if t.upper() in _ERROR_TYPE_BLACKLIST:
+        return ""
+    return t
+
+
+def merge_classified_error_type(classified, source_error_type):
+    """Classifier tag wins; else keep upstream (e.g. NOT_LAUNCHED). Blacklisted upstream values become empty."""
+    if classified:
+        merged = classified
+    else:
+        merged = _normalize_text(source_error_type)
+    return _apply_error_type_blacklist(merged)
+
+
 def is_sanitizer_issue(error_text):
     """
     Detect if a test failure is caused by a sanitizer.
@@ -37,14 +58,10 @@ def is_sanitizer_issue(error_text):
         return False
 
     sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
         r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
         r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        # UndefinedBehaviorSanitizer runtime errors
         r'runtime error:',
         r'==\d+==.*runtime error:',
-        # Memory leak detection (specific LeakSanitizer output)
         r'detected memory leaks',
         r'==\d+==.*detected memory leaks',
     ]
@@ -68,17 +85,45 @@ def is_verify_issue(error_text):
     return bool(re.search(r'\bVERIFY\s+failed\b', error_text, re.IGNORECASE))
 
 
-def is_verify_classification(source_error_type, status_description=None, verify_source_text=None):
+def is_verify_classification(source_error_type, status_description=None, error_file_text=None):
     if _normalize_text(source_error_type).upper() == "VERIFY":
         return True
 
     status_desc = _normalize_text(status_description)
-    if verify_source_text is None:
+    if error_file_text is None:
         return is_verify_issue(status_desc)
 
-    stderr_text = _normalize_text(verify_source_text).strip()
-    verify_text = stderr_text if stderr_text else status_desc
+    file_text = _normalize_text(error_file_text).strip()
+    verify_text = file_text if file_text else status_desc
     return is_verify_issue(verify_text)
+
+
+def _failure_like_status(status):
+    return _normalize_text(status).strip().lower() in ("failure", "mute", "error")
+
+
+def _classify_failure_branch(status, status_description, source_error_type, error_file_text):
+    """SANITIZER / TIMEOUT / VERIFY / '' for rows that already passed the failure-like status gate."""
+    if is_sanitizer_issue(status_description):
+        return "SANITIZER"
+    if is_timeout_issue(source_error_type):
+        return "TIMEOUT"
+    if is_verify_classification(source_error_type, status_description, error_file_text):
+        return "VERIFY"
+    return ""
+
+
+def classify_error_type(status, status_description, source_error_type, error_file_text=None):
+    if not _failure_like_status(status):
+        return ""
+    return _classify_failure_branch(status, status_description, source_error_type, error_file_text)
+
+
+def should_prefetch_stderr_for_verify(status, status_description, source_error_type):
+    """True only if stderr might change outcome (VERIFY not already fixed from type/snippet alone)."""
+    if not _failure_like_status(status):
+        return False
+    return _classify_failure_branch(status, status_description, source_error_type, None) == ""
 
 
 def fetch_text_by_url(
@@ -105,7 +150,7 @@ def fetch_text_by_url(
     return ""
 
 
-def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_FETCH_MAX_WORKERS):
+def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=_DEFAULT_FETCH_MAX_WORKERS):
     cache = existing_cache if existing_cache is not None else {}
     seen = set()
     unique_urls = []
@@ -135,21 +180,3 @@ def is_not_launched_issue(source_error_type, status_name=None):
         return False
 
     return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
-
-
-def classify_error_type(status, status_description, source_error_type, verify_source_text=None):
-    status_norm = _normalize_text(status).strip().lower()
-    if status_norm not in ("failure", "mute", "error"):
-        return ""
-
-    if is_sanitizer_issue(status_description):
-        return "SANITIZER"
-
-    if is_timeout_issue(source_error_type):
-        return "TIMEOUT"
-
-    if is_verify_classification(source_error_type, status_description, verify_source_text):
-        return "VERIFY"
-
-    return ""
-

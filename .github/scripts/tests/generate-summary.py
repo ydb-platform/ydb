@@ -574,6 +574,34 @@ def iter_build_results_files(path):
             continue
 
 
+def _collect_stderr_urls_for_verify_badges(tests):
+    """HTML summary: stderr URLs for failing tests (VERIFY badge vs logs, independent of other badges)."""
+    urls = []
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            continue
+        raw = getattr(test, "stderr_url", None) or ""
+        if normalize_fetch_url(raw):
+            urls.append(raw)
+    return urls
+
+
+def _apply_verify_badges(tests, stderr_fetch_cache):
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            test.is_verify_issue = False
+            continue
+        su = normalize_fetch_url(getattr(test, "stderr_url", None) or "")
+        stderr_text = stderr_fetch_cache.get(su, "") if su else None
+        test.is_verify_issue = is_verify_classification(
+            getattr(test, "error_type", None),
+            getattr(test, "status_description", None),
+            error_file_text=stderr_text,
+        )
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
     stderr_fetch_cache = {}
@@ -585,17 +613,9 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
 
-        stderr_fetch_cache = prefetch_texts_by_urls(
-            [test.stderr_url for test in summary_line.tests],
-            existing_cache=stderr_fetch_cache,
-        )
-        for test in summary_line.tests:
-            stderr_text = stderr_fetch_cache.get(normalize_fetch_url(test.stderr_url), "")
-            test.is_verify_issue = is_verify_classification(
-                test.error_type,
-                test.status_description,
-                verify_source_text=stderr_text,
-            )
+        urls_to_fetch = _collect_stderr_urls_for_verify_badges(summary_line.tests)
+        stderr_fetch_cache = prefetch_texts_by_urls(urls_to_fetch, existing_cache=stderr_fetch_cache)
+        _apply_verify_badges(summary_line.tests, stderr_fetch_cache)
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

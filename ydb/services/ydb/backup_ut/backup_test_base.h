@@ -118,6 +118,7 @@ protected:
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
         }
         return *Server_;

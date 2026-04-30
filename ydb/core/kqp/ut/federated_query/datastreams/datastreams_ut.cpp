@@ -2338,7 +2338,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 CREATE SECRET `{secret}` WITH (value = "{token}");
             )",
             "secret"_a = secretPath,
-            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
+            "token"_a = BUILTIN_ACL_ROOT
             ));
 
         // Check successful EDS creation

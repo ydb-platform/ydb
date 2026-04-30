@@ -25,12 +25,12 @@ inline bool IsExcluded(const std::string& str, const TVector<TRegExMatch>& exclu
 template <typename TSettings>
 void ExcludeItems(TSettings& settings, const TVector<TRegExMatch>& exclusionPatterns) {
     auto items(std::move(settings.Item_));
-    for (const auto& item : items) {
+    for (auto& item : items) {
         if (IsExcluded(item.Src, exclusionPatterns)) {
             continue;
         }
 
-        settings.AppendItem({item.Src, item.Dst});
+        settings.AppendItem(std::move(item));
     }
 }
 

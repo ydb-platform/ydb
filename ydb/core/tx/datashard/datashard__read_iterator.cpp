@@ -2359,7 +2359,8 @@ public:
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
-                    error = "Target vector has invalid format";
+                    error = TStringBuilder() << "Target vector has invalid format: "
+                        << topState->KMeans->FormatError(topK.GetTargetVector());
                 }
             }
             for (auto& colIdx: topK.GetDistinctColumns()) {

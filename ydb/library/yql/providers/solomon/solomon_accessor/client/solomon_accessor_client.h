@@ -16,7 +16,8 @@ public:
 
     static TPtr Make(
         NYql::NSo::NProto::TDqSolomonSource source,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const TSolomonReadActorConfig& cfg);
     
 public:
     virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const = 0;

@@ -9,13 +9,6 @@ struct TAsyncStreamPipeTag
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAsyncStreamPipe::TItem::TItem(TSharedRef sharedRef, TPromise<void> writeComplete)
-    : Data(std::move(sharedRef))
-    , WriteComplete(std::move(writeComplete))
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
 TFuture<void> TAsyncStreamPipe::Write(const TSharedRef& buffer)
 {
     if (!buffer) {
@@ -23,24 +16,30 @@ TFuture<void> TAsyncStreamPipe::Write(const TSharedRef& buffer)
         return OKFuture;
     }
 
-    auto writeComplete = NewPromise<void>();
-    Queue_.Enqueue(TItem(TSharedRef::MakeCopy<TAsyncStreamPipeTag>(buffer), writeComplete));
-    return writeComplete;
+    auto promise = NewPromise<void>();
+    Queue_.Enqueue(TItem{
+        .Data = TSharedRef::MakeCopy<TAsyncStreamPipeTag>(buffer),
+        .WriteCompletePromise = promise,
+    });
+    return promise;
 }
 
 TFuture<TSharedRef> TAsyncStreamPipe::Read()
 {
-    auto result = Queue_.Dequeue();
-    return result.Apply(BIND([] (TItem item) {
-        item.WriteComplete.Set();
+    return Queue_.Dequeue().Apply(BIND([] (const TItem& item) {
+        item.WriteCompletePromise.Set();
         return item.Data;
     }));
 }
 
 TFuture<void> TAsyncStreamPipe::Close()
 {
-    Queue_.Enqueue(TItem(TSharedRef(), NewPromise<void>()));
-    return OKFuture;
+    auto promise = NewPromise<void>();
+    Queue_.Enqueue(TItem{
+        .Data = {}, // sentinel
+        .WriteCompletePromise = promise,
+    });
+    return promise;
 }
 
 TFuture<void> TAsyncStreamPipe::Abort(const TError& error)

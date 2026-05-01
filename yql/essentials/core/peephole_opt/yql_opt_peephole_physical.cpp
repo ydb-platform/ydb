@@ -3085,19 +3085,11 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         }
     } else {
         if (isStream) {
-            // POC: Use Sort by [partitionKeys, sortKeys] instead of SqueezeToDict.
-            // This enables spilling through WideSort and avoids OOM on large datasets.
-            // The Chopper in the processing lambda will split at partition boundaries.
             if (haveSort) {
-                // Build combined sort: first by partition key (ascending), then by sort keys.
-                // Must produce a flat tuple of directions and a flat tuple key selector.
                 const auto sortDirsNode = node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections);
                 const auto partKeyLambda = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
                 const auto sortKeyLambda = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda);
 
-                // Build flat directions: [Bool(true), sortDir1, sortDir2, ...]
-                // The partition key is treated as a single component (ascending).
-                // Sort directions may be a single Bool or a list of Bools.
                 TExprNode::TListType dirChildren;
                 dirChildren.push_back(ctx.Builder(node->Pos())
                     .Callable("Bool")
@@ -3113,24 +3105,17 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 }
                 auto combinedDirections = ctx.NewList(node->Pos(), std::move(dirChildren));
 
-                // Build flat key selector: λ(item) → [partKey(item), sortKey1(item), sortKey2(item), ...]
-                // We construct the lambda body by inlining expressions from both key selectors.
-                // The partition key selector body is used as-is (single component).
-                // The sort key selector body may be a list (tuple) - we flatten its children.
                 auto itemArg = ctx.NewArgument(node->Pos(), "item");
 
                 TExprNode::TListType keyChildren;
 
-                // Partition key: substitute itemArg for the lambda argument
                 keyChildren.push_back(ctx.ReplaceNode(partKeyLambda->TailPtr(),
                     partKeyLambda->Head().Head(), itemArg));
 
-                // Sort key: substitute itemArg and flatten if tuple
                 const auto& sortKeyBody = sortKeyLambda->Tail();
                 auto sortKeyWithItem = ctx.ReplaceNode(sortKeyLambda->TailPtr(),
                     sortKeyLambda->Head().Head(), itemArg);
                 if (sortKeyBody.IsList()) {
-                    // Sort key is a tuple - flatten its components
                     for (ui32 i = 0; i < sortKeyWithItem->ChildrenSize(); ++i) {
                         keyChildren.push_back(sortKeyWithItem->ChildPtr(i));
                     }
@@ -3150,7 +3135,6 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                     .Seal()
                     .Build();
             } else {
-                // No sort keys - just sort by partition key (ascending) to group partitions
                 sort = ctx.Builder(node->Pos())
                     .Callable("Sort")
                         .Add(0, node->HeadPtr())

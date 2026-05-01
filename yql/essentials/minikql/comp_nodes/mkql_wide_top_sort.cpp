@@ -817,6 +817,14 @@ private:
             }
             lastSpilledState.Spiller->AsyncWriteCompleted(lastSpilledState.AsyncWriteOperation->ExtractValue());
             lastSpilledState.AsyncWriteOperation = std::nullopt;
+            // If FinishWrite was already initiated and just completed, go straight to cleanup
+            if (IsFinishWriteInProgress) {
+                IsFinishWriteInProgress = false;
+                TStorage().swap(Storage);
+                Full.clear();
+                Full.shrink_to_fit();
+                return true;
+            }
         } else {
             SealInMemory();
             if (Full.empty()) {
@@ -835,6 +843,7 @@ private:
 
         auto writeFinishOp = lastSpilledState.FinishWrite();
         if (writeFinishOp) {
+            IsFinishWriteInProgress = true;
             return false;
         }
         TStorage().swap(Storage);
@@ -883,6 +892,7 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
+    bool IsFinishWriteInProgress = false;
     static constexpr size_t MinSpillBatchRows = 64 * 1024;
     const NYql::NUdf::TLoggerPtr Logger;
     const NYql::NUdf::TLogComponentId LogComponent;

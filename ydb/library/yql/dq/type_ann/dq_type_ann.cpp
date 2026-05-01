@@ -1709,6 +1709,12 @@ TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) {
     return settings;
 }
 
+TDqStageSettings TDqStageSettings::New(const TString& stageGUID) {
+    TDqStageSettings s;
+    s.Id = stageGUID;
+    return s;
+}
+
 TDqStageSettings TDqStageSettings::New() {
     TDqStageSettings s;
     s.Id = CreateGuidAsString();

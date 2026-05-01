@@ -491,6 +491,8 @@ public:
     TKikimrTransactionContextBase& Tx() { Y_ABORT_UNLESS(HasTx()); return *TxCtx; }
 
     TKikimrConfiguration::TPtr ConfigPtr() { return Configuration; }
+    TIntrusiveConstPtr<TKikimrConfiguration>  ConfigConstPtr() { return Configuration; }
+
     TIntrusivePtr<TKikimrTablesData> TablesPtr() { return TablesData; }
     TIntrusivePtr<TKikimrQueryContext> QueryPtr() { return QueryCtx; }
     TIntrusivePtr<TKikimrTransactionContextBase> TxPtr() { return TxCtx; }

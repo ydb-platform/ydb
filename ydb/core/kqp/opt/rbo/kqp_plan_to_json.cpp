@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -12,24 +13,25 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
     auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
+    res["OperatorId"] = operatorId;
     return res;
 }
 
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, explainFlags));
+    operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child) {
-        auto childJson = GetExplainJsonRec(child, nodeCounter, explainFlags);
+        auto childJson = GetExplainJsonRec(child, nodeCounter, operatorIds, explainFlags);
 
         // Insert shuffle connections if needed
         // (currently always needed for GraceJoin)
@@ -62,12 +64,34 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& no
     return result;
 }
 
+[[maybe_unused]]
+void FindPlanNodes(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
+    if (node.IsArray()) {
+        for (const auto& item: node.GetArray()) {
+            FindPlanNodes(item, key, results);
+        }
+        return;
+    }
+
+    if (!node.IsMap()) {
+        return;
+    }
+
+    if (auto* valueNode = node.GetValueByPath(key)) {
+        results.push_back(*valueNode);
+    }
+
+    for (const auto& [_, value]: node.GetMap()) {
+        FindPlanNodes(value, key, results);
+    }
+}
+
 }
 
 namespace NKikimr {
 namespace NKqp {
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     // First construct the ResultSet
@@ -87,9 +111,11 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 
     THashMap<int, TVector<TIntrusivePtr<IOperator>>> stageOpMap;
     std::set<int> stages;
+    ui32 operatorId = 0;
 
     for (auto it : *this) {
         auto & currOp = it.Current;
+        operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;
         if (!stageOpMap.contains(stageId)) {
             stageOpMap.insert({stageId, {}});
@@ -124,7 +150,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(MakeJson(op, explainFlags));
+            operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
         }
 
         // Build a list of subplans - these are connection objects of input stages
@@ -139,6 +165,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
         // If this is the final stage, add the child plans and operators to it
         if(stageOutputs.empty()) {
             finalStage["Node Type"] = stageName;
+            finalStage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
             if (ops.size()) {
                 finalStage["Operators"] = operatorList;
             }
@@ -162,6 +189,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 
                 auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
                 stage["Node Type"] = stageName;
+                stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+
                 if (ops.size()) {
                     stage["Operators"] = operatorList;
                 }
@@ -186,7 +215,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags
 }
 
 // For explain JSON we recurse over the operators of the plan
-NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     NJson::TJsonValue result;
@@ -195,10 +224,54 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) 
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, explainFlags));
+    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, operatorIds, explainFlags));
     result["Plans"] = plans;
 
     return result;
+}
+
+
+TString AddExecStatsToNewRboPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats) {
+    Y_UNUSED(stats);
+
+    THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
+    THashMap<ui32, TString> stageIdToGuid;
+    THashSet<TString> stageGuids;
+
+    for (const auto& stage : stats.GetStages()) {
+        stages[stage.GetStageGuid()] = &stage;
+        stageIdToGuid[stage.GetStageId()] = stage.GetStageGuid();
+        stageGuids.insert(stage.GetStageGuid());
+    }
+
+    NJson::TJsonValue root;
+    NJson::ReadJsonTree(txPlan, &root, true);
+    std::vector<NJson::TJsonValue> stageNodes;
+    FindPlanNodes(root, "StageGuid", stageNodes);
+
+    auto physStageGuids = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    auto logStageGuids = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+
+    for (auto& stageGuid : stageGuids) {
+        physStageGuids.AppendValue(NJson::TJsonValue(stageGuid));
+    }
+    for (auto& stageGuid : stageNodes) {
+        logStageGuids.AppendValue(NJson::TJsonValue(stageGuid.GetStringSafe()));
+    }
+
+    root["PhysStages"] = physStageGuids;
+    root["LogStages"] = logStageGuids;
+
+    NJsonWriter::TBuf writer;
+    writer.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
+    return writer.Str();
+}
+
+TString AddExecStatsToNewRboPlans(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
+    Y_UNUSED(txPlans);
+    Y_UNUSED(queryStats);
+    Y_UNUSED(poolId);
+    return txPlans.at(txPlans.size()-1);
 }
 
 }

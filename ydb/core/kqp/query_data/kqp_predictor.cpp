@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 
 namespace NKikimr::NKqp {
 
@@ -128,6 +129,22 @@ ui32 TStagePredictor::GetUsableThreads() {
         ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
+    return Max<ui32>(1, *userPoolSize);
+}
+
+ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
+    std::optional<ui32> userPoolSize;
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
+        NActors::TExecutorPoolState poolState;
+        NActors::GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        userPoolSize = Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
+    }
+
+    if (!userPoolSize) {
+        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool possible max limit is undefined for executer tasks construction";
+        userPoolSize = NSystemInfo::NumberOfCpus();
+    }
+
     return Max<ui32>(1, *userPoolSize);
 }
 

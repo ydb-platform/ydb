@@ -10,7 +10,7 @@ namespace NKikimr::NConveyor {
 LWTRACE_USING(YDB_CONVEYOR_PROVIDER);
 
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const TConfig& config, const TCounters& counters)
-    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads()))
+    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);
     for (ui32 i = 0; i < WorkersCount; ++i) {

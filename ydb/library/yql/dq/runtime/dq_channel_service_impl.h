@@ -182,12 +182,13 @@ class TLocalBufferRegistry;
 
 class TLocalBuffer : public IChannelBuffer {
 public:
-    TLocalBuffer(const std::shared_ptr<TLocalBufferRegistry> registry, const TChannelFullInfo& info, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
+    TLocalBuffer(const std::shared_ptr<TLocalBufferRegistry> registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
         : IChannelBuffer(info)
         , Registry(registry)
         , ActorSystem(actorSystem)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -216,6 +217,7 @@ public:
 
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void AbortChannelByMemoryLimit(ui64 bytes);
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     NActors::TActorSystem* ActorSystem;
@@ -249,6 +251,9 @@ public:
     std::atomic<bool> OutputBound = false;
     std::atomic<bool> InputBound = false;
     std::atomic<bool> Finished = false;
+    std::atomic<bool> Aborted = false;
+
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 class TOutputBuffer;
@@ -256,7 +261,7 @@ class TNodeState;
 
 class TOutputDescriptor {
 public:
-    TOutputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
+    TOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
         ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
@@ -264,10 +269,12 @@ public:
         , OutputBufferChunks(outputBufferChunks)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
     }
+    ~TOutputDescriptor();
 
     void PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void AddPopChunk(ui64 bytes, ui64 rows);
@@ -279,6 +286,7 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
+    void AbortChannelByMemoryLimit(ui64 bytes);
     void HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
@@ -323,6 +331,8 @@ public:
 
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
+
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 struct TOutputDescriptorCompare {
@@ -343,6 +353,7 @@ public:
     TOutputItem(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor)
         : Data(std::move(data)), Descriptor(descriptor), State(EState::Init) {
     }
+    ~TOutputItem();
 
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
@@ -385,7 +396,7 @@ public:
 class TInputDescriptor {
 public:
 
-    TInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
+    TInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
@@ -394,6 +405,7 @@ public:
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
         , InputBufferInflightBytes(inputBufferInflightBytes)
+        , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -411,6 +423,7 @@ public:
     bool EarlyFinish();
     void Terminate();
     void AbortChannel(const TString& message);
+    void AbortChannelByMemoryLimit(ui64 bytes);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -435,6 +448,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 class TInputBuffer : public IChannelBuffer {
@@ -540,8 +555,8 @@ public:
     void HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
     void HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev);
     void HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr& ev);
-    std::shared_ptr<TOutputDescriptor> GetOrCreateOutputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
-    std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
+    std::shared_ptr<TOutputDescriptor> GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading);
+    std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading);
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void CleanupUnbound();
@@ -662,7 +677,7 @@ public:
         LocalBufferInflightBytes = counters->GetCounter("LocalBuffer/InflightBytes", false);
     }
     ~TLocalBufferRegistry();
-    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info);
+    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager);
     void DeleteLocalBufferInfo(const TChannelInfo& info);
 
     NActors::TActorSystem* ActorSystem;
@@ -694,13 +709,13 @@ public:
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
     // binded helpers
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) final;
-    std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) final;
+    std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) final;
+    std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) final;
     // remote buffers
-    std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage);
-    std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info);
+    std::shared_ptr<TOutputBuffer> GetRemoteOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage);
+    std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager);
     // local buffer
-    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage);
+    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bindInput, IDqChannelStorage::TPtr storage);
     // unbinded channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
@@ -724,7 +739,7 @@ class TFastDqOutputChannel : public IDqOutputChannel {
 
 public:
     TFastDqOutputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool localChannel)
-        : Service(service), Serializer(CreateSerializer(settings, buffer, localChannel)), Storage(settings.ChannelStorage) {
+        : Service(service), Serializer(CreateSerializer(settings, buffer, localChannel)), Storage(settings.ChannelStorage), ChannelQuotaManager(settings.ChannelQuotaManager) {
         PushStats.Level = settings.Level;
         PopStats.ChannelId = settings.ChannelId;
         PopStats.DstStageId = settings.DstStageId;
@@ -855,6 +870,7 @@ public:
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
     bool IsLocalChannel = false;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {
@@ -862,7 +878,7 @@ class TFastDqInputChannel : public IDqInputChannel {
 public:
 
     TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer)
-        : Service(service), Buffer(buffer) {
+        : Service(service), Buffer(buffer), ChannelQuotaManager(settings.ChannelQuotaManager) {
         PushStats.ChannelId = settings.ChannelId;
         PushStats.SrcStageId = settings.SrcStageId;
         PushStats.Level = settings.Level;
@@ -965,6 +981,7 @@ public:
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

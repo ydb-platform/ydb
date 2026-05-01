@@ -1,8 +1,18 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
 #include <util/generic/function.h>
+#include <util/system/type_name.h>
+
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <memory>
+#include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Async {
 
@@ -18,9 +28,37 @@ protected:
 
 public:
     TAsyncStatusType Execute() {
+        ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
+
         this->RetryStartTime_ = TInstant::Now();
-        this->Retry();
-        return this->Promise_.GetFuture();
+        TPtr self(this);
+        DoRetry(self);
+
+        return this->Promise_.GetFuture().Apply(
+            [self](const auto& f) mutable {
+                try {
+                    auto value = f.GetValue();
+                    if (self->ParentSpan_) {
+                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
+                        self->ParentSpan_->End(value.GetStatus());
+                    }
+                    return value;
+                } catch (...) {
+                    if (self->ParentSpan_) {
+                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
+                        try {
+                            std::rethrow_exception(std::current_exception());
+                        } catch (const std::exception& e) {
+                            self->ParentSpan_->RecordException(TypeName(e).c_str(), e.what());
+                        } catch (...) {
+                            self->ParentSpan_->RecordException("unknown", "unknown exception");
+                        }
+                        self->ParentSpan_->End(EStatus::CLIENT_INTERNAL_ERROR);
+                    }
+                    throw;
+                }
+            }
+        );
     }
 
 protected:
@@ -35,6 +73,11 @@ protected:
     virtual TAsyncStatusType RunOperation() = 0;
 
     static void DoRetry(TPtr self) {
+        [[maybe_unused]] auto parentScope = self->ParentSpan_ ? self->ParentSpan_->Activate() : nullptr;
+
+        self->StartAttemptSpan();
+
+        [[maybe_unused]] auto attemptScope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
         self->Retry();
     }
 
@@ -42,14 +85,20 @@ protected:
         auto backoffSettings = fast ? self->Settings_.FastBackoffSettings_
                                     : self->Settings_.SlowBackoffSettings_;
         AsyncBackoff(self->Client_.Impl_, backoffSettings, self->RetryNumber_,
-            [self]() {DoRetry(self);});
+            [self](std::chrono::microseconds backoff) {
+                self->LastBackoffMs_ =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count();
+                DoRetry(self);
+            });
     }
 
     static void HandleExceptionAsync(TPtr self, std::exception_ptr e) {
+        self->EndAttemptSpan(EStatus::CLIENT_INTERNAL_ERROR);
         self->Promise_.SetException(e);
     }
 
     static void HandleStatusAsync(TPtr self, const TStatusType& status) {
+        self->EndAttemptSpan(status.GetStatus());
         auto nextStep = self->GetNextStep(status);
         if (nextStep != NextStep::Finish) {
             self->RetryNumber_++;
@@ -58,6 +107,7 @@ protected:
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
+                self->LastBackoffMs_ = 0;
                 return DoRetry(self);
             case NextStep::RetryFastBackoff:
                 return DoBackoff(self, true);
@@ -71,6 +121,7 @@ protected:
     static void DoRunOperation(TPtr self) {
         self->RunOperation().Subscribe(
             [self](const TAsyncStatusType& result) {
+                [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
                 try {
                     HandleStatusAsync(self, result.GetValue());
                 } catch (...) {
@@ -79,6 +130,28 @@ protected:
             }
         );
     }
+
+protected:
+    std::unique_ptr<NTrace::IScope> ActivateAttemptSpan() {
+        return AttemptSpan_ ? AttemptSpan_->Activate() : nullptr;
+    }
+
+private:
+    void StartAttemptSpan() {
+        AttemptSpan_ = Client_.Impl_->CreateRetryAttemptSpan(
+            this->RetryNumber_, LastBackoffMs_, ParentSpan_);
+    }
+
+    void EndAttemptSpan(EStatus status) {
+        if (AttemptSpan_) {
+            AttemptSpan_->End(status);
+            AttemptSpan_.reset();
+        }
+    }
+
+    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
+    std::shared_ptr<NObservability::TRequestSpan> AttemptSpan_;
+    std::int64_t LastBackoffMs_ = 0;
 };
 
 template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
@@ -141,6 +214,7 @@ public:
 
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
+                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {

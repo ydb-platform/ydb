@@ -18,7 +18,7 @@
 #include <boost/filesystem/config.hpp>
 #include <boost/filesystem/exception.hpp>
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 #include <boost/winapi/basic_types.hpp>
 #include <boost/winapi/get_last_error.hpp>
 #include <boost/winapi/error_codes.hpp>
@@ -29,7 +29,7 @@
 namespace boost {
 namespace filesystem {
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 typedef int err_t;
 

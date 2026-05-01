@@ -3030,6 +3030,23 @@ Y_UNIT_TEST(FunctionLangVer) {
     }
     {
         NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT AsOptional(1);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            Err2Str(res),
+            "AsOptional is not available before language version 2026.01");
+    }
+    {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2026, 1);
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT AsOptional(1);
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+    {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
             SELECT FormatType(OptionalType(Int32));
         )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -4562,7 +4579,7 @@ Y_UNIT_TEST(AlterTableCompactIsCorrect) {
 Y_UNIT_TEST(AlterTableCompactWithSettingsIsCorrect) {
     auto res = SqlToYql(R"sql(
         USE ydb;
-        ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2);
+        ALTER TABLE table COMPACT WITH (CASCADE = true, PARALLEL = 2);
     )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
@@ -4570,31 +4587,31 @@ Y_UNIT_TEST(AlterTableCompactWithSettingsIsCorrect) {
 Y_UNIT_TEST(AlterTableCompactWithSettingsWrongValues) {
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (cascade = 23, MAX_SHARDS_IN_FLIGHT = 2);
+            ALTER TABLE table COMPACT WITH (cascade = 23, PARALLEL = 2);
     )sql", "<main>:3:55: Error: CASCADE value should be a boolean\n");
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = "abc");
-    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+            ALTER TABLE table COMPACT WITH (CASCADE = true, parallel = "abc");
+    )sql", "<main>:3:72: Error: PARALLEL value should be a Int32\n");
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, some_option = 3);
-    )sql", "<main>:3:87: Error: SOME_OPTION: unknown setting for compact\n");
+            ALTER TABLE table COMPACT WITH (CASCADE = true, PARALLEL = 2, some_option = 3);
+    )sql", "<main>:3:75: Error: SOME_OPTION: unknown setting for compact\n");
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (CASCADE = true, max_shards_in_flight = 5000000000);
-    )sql", "<main>:3:84: Error: MAX_SHARDS_IN_FLIGHT value should be a Int32\n");
+            ALTER TABLE table COMPACT WITH (CASCADE = true, parallel = 5000000000);
+    )sql", "<main>:3:72: Error: PARALLEL value should be a Int32\n");
 }
 
 Y_UNIT_TEST(AlterTableCompactWithSettingsDuplicatedValues) {
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
-    )sql", "<main>:3:87: Error: Duplicated CASCADE\n");
+            ALTER TABLE table COMPACT WITH (CASCADE = true, PARALLEL = 2, CASCADE = false);
+    )sql", "<main>:3:75: Error: Duplicated CASCADE\n");
     ExpectFailWithError(R"sql(
             USE ydb;
-            ALTER TABLE table COMPACT WITH (CASCADE = true, MAX_SHARDS_IN_FLIGHT = 2, MAX_SHARDS_IN_FLIGHT = 10);
-    )sql", "<main>:3:87: Error: Duplicated MAX_SHARDS_IN_FLIGHT\n");
+            ALTER TABLE table COMPACT WITH (CASCADE = true, PARALLEL = 2, PARALLEL = 10);
+    )sql", "<main>:3:75: Error: Duplicated PARALLEL\n");
 }
 
 Y_UNIT_TEST(AlterSequence) {
@@ -6068,22 +6085,6 @@ Y_UNIT_TEST(WarnForAggregationBySelectAlias) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res),
                         "<main>:2:22: Warning: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
                         "<main>:1:10: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n");
-}
-
-Y_UNIT_TEST(WarnForAggregationBySelectAliasAsError) {
-    NSQLTranslation::TTranslationSettings settings;
-
-    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
-            PRAGMA Warning("error", "*");
-            SELECT c + 1 AS c
-            FROM plato.Input
-            GROUP BY c;
-        )sql", settings);
-
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    UNIT_ASSERT_NO_DIFF(Err2Str(res),
-                        "<main>:5:22: Error: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
-                        "<main>:3:22: Error: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n");
 }
 
 Y_UNIT_TEST(WarnForAggregationBySelectAliasAsErrorStrict) {
@@ -13902,7 +13903,7 @@ Y_UNIT_TEST(TopLevelHintBeatsPragmaAuto) {
 
     res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        SELECT /*+ yqlselect(force) */ DISTINCT 1;
+        SELECT /*+ yqlselect(force) */ STREAM 1;
     )sql", settings);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "was forced, but unsupported");

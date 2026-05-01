@@ -23,6 +23,8 @@ void TQueryReplayConfig::ParseConfig(int argc, const char** argv) {
     opts.AddLongOption("query", "Single query to replay").StoreResult(&QueryFile);
     opts.AddLongOption("log-level", "Yql log level").StoreResult(&YqlLogLevel);
     opts.AddLongOption("oltp-sink-side-by-side-compare", "Olpt sink side by side comparing").NoArgument().SetFlag(&EnableOltpSinkSideBySinkCompare);
+    opts.AddLongOption("obfuscate-rows", "Obfuscate queries and compare original vs obfuscated compilation").NoArgument().SetFlag(&EnableObfuscateRows);
+    opts.AddLongOption("dst-path2", "Second output table path (successes for --obfuscate-rows)").StoreResult(&DstPath2);
     opts.AddLongOption("antlr4-parser-ambiguity-error", "Check queries ambiguity").NoArgument().SetFlag(&Antlr4ParserIsAmbiguityError);
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);

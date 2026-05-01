@@ -14,13 +14,11 @@ using namespace NKikimr::NMiniKQL;
 class TDqSpillerFactory : public NKikimr::NMiniKQL::ISpillerFactory
 {
 public:
-    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,
-                      ::NMonitoring::TDynamicCounterPtr counters = nullptr)
+    TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback) 
         : ActorSystem_(actorSystem),
         TxId_(txId),
         WakeUpCallback_(wakeUpCallback),
-        ErrorCallback_(errorCallback),
-        Counters_(counters)
+        ErrorCallback_(errorCallback)
     {
     }
 
@@ -38,17 +36,12 @@ public:
         Y_UNUSED(reportFree);
     }
 
-    ::NMonitoring::TDynamicCounterPtr GetCounters() const override {
-        return Counters_;
-    }
-
 private:
     TActorSystem* ActorSystem_;
     TTxId TxId_;
     TWakeUpCallback WakeUpCallback_;
     TErrorCallback ErrorCallback_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
-    ::NMonitoring::TDynamicCounterPtr Counters_;
 };
 
 } // namespace NYql::NDq

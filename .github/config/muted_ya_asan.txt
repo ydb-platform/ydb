@@ -134,6 +134,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRedrivePolicy
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteMessage
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSendMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
@@ -161,6 +162,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.CleanupMultipleResultSets+WithResultsMeta
+ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.CleanupMultipleResultSets-WithResultsMeta
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeStrings
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithThinFile
@@ -3779,6 +3781,11 @@ ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_validation.py.TestS3.test_nested_type[v2-client0]
 ydb/tests/fq/s3 test_ydb_over_fq.py.TestYdbOverFq.test_list_directory_v1[v1-client0]
 ydb/tests/fq/s3 test_ydb_over_fq.py.TestYdbOverFq.test_list_directory_v2[v2-client0]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[False-kikimr0]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-no_partition_balancing]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-partition_balancing]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[True-no_partition_balancing]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[True-partition_balancing]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestBackupCollectionServiceObjectsRotation.test_service_schema_objects_cleanup_on_rotate

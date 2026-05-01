@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -11,8 +12,8 @@
 #include <arrow/io/file.h>
 #include <arrow/io/stdio.h>
 #include <arrow/table.h>
-#include <util/string/builder.h>
 #include <library/cpp/string_utils/csv/csv.h>
+#include <util/string/builder.h>
 #include <util/stream/file.h>
 #include <regex>
 
@@ -352,20 +353,19 @@ WITH (
 );)";
 
     if (Execute) {
-        Cerr << "Executing request: " << Endl << Endl << query << Endl << Endl;
+        const auto& colors = NConsoleClient::AutoColors(Cout);
+        Cerr << colors.Green() << "Executing request:" << colors.OldColor() << Endl << Endl << query << Endl << Endl;
         TDriver driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
         auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), true)
             .GetValueSync();
         if (result.IsSuccess()) {
-            Cerr << "Query executed successfully." << Endl;
+            Cerr << colors.Green() << "Query executed successfully." << colors.OldColor() << Endl;
             if (!result.GetIssues().Empty()) {
-                Cerr << "Issues: " << result.GetIssues().ToString() << Endl;
+                Cerr << colors.Yellow() << "Issues: " << colors.OldColor() << result.GetIssues().ToString() << Endl;
             }
         } else {
-            Cerr << "Failed to create a table." << Endl;
-            result.Out(Cerr);
-            Cerr << Endl;
+            Cerr << colors.Red() << "Failed to create a table:" << colors.OldColor() << Endl << "Status: " << result.GetStatus() << Endl << "Issues:" << Endl << Strip(result.GetIssues().ToString()) << Endl;
             return EXIT_FAILURE;
         }
         driver.Stop(true);

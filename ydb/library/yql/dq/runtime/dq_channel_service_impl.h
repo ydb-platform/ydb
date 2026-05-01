@@ -9,6 +9,8 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
 
+#include <ydb/library/actors/core/interconnect.h>
+
 // Flow control design principles
 //
 // 1. There are several ui64 counters which grow monotonically
@@ -490,6 +492,7 @@ struct TEvPrivate {
         EvProcessPending,
         EvSendWaiters,
         EvReconciliation,
+        EvFreeNodeSession,
         EvEnd
     };
 
@@ -511,9 +514,15 @@ struct TEvPrivate {
     };
 
     struct TEvReconciliation : public NActors::TEventLocal<TEvReconciliation, EvReconciliation> {
-        TEvReconciliation(ui64 genMajor, ui64 genMinor) : GenMajor(genMajor), GenMinor(genMinor) {}
+        TEvReconciliation(ui64 genMajor, ui64 genMinor, ui64 count) : GenMajor(genMajor), GenMinor(genMinor), Count(count) {}
         const ui64 GenMajor;
         const ui64 GenMinor;
+        const ui64 Count;
+    };
+
+    struct TEvFreeNodeSession : public NActors::TEventLocal<TEvFreeNodeSession, EvFreeNodeSession> {
+        TEvFreeNodeSession(ui32 nodeId) : NodeId(nodeId) {}
+        const ui32 NodeId;
     };
 };
 
@@ -523,13 +532,7 @@ public:
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Subscribed(false)
-        , GenMajor(0), GenMinor(0)
-        , PeerGenMajor(0), PeerGenMinor(0)
         , Limits(limits)
-        , WaitersQueueSize(0)
-        , Reconciliation(0)
-        , WaiterBytes(0)
-        , WaiterMessages(0)
     {
         OutputBufferCount = counters->GetCounter("OutputBuffer/Count", false);
         OutputBufferBytes = counters->GetCounter("OutputBuffer/Bytes", true);
@@ -548,6 +551,7 @@ public:
     virtual ~TNodeState();
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
+    void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev);
@@ -572,8 +576,6 @@ public:
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major);
-    bool UpdateReconciliationDelay();
-    void ScheduleReconciliation();
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
 
@@ -590,25 +592,26 @@ public:
     bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     // Sender
-    ui64 GenMajor = 0;
-    ui64 GenMinor = 0;
+    ui64 GenMajor = 1;
+    ui64 GenMinor = 1;
+    ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
     ui64 InflightBytes = 0;
     // Receiver
     NActors::TActorId PeerActorId;
-    std::atomic<ui64> PeerGenMajor;
-    std::atomic<ui64> PeerGenMinor;
+    std::atomic<ui64> PeerGenMajor = 0;
+    std::atomic<ui64> PeerGenMinor = 0;
     ui64 ConfirmedSeqNo = 0;
     TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
     mutable std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
-    std::atomic<ui64> WaitersQueueSize;
+    std::atomic<ui64> WaitersQueueSize = 0;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
-    std::atomic<ui64> Reconciliation;
-    std::atomic<ui64> WaiterBytes;
-    std::atomic<ui64> WaiterMessages;
+    std::atomic<ui64> Reconciliation = 1;
+    std::atomic<ui64> WaiterBytes = 0;
+    std::atomic<ui64> WaiterMessages = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
@@ -621,14 +624,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
-    TDuration ReconciliationDelay = TDuration::Zero();
-    bool ReReconciliation = false;
-    ui64 ReconciliationCount = 0;
-    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(100);
-    const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
-    std::atomic<ui64> FailureLossSend;
-    std::atomic<ui64> FailureDoubleSend;
-    std::atomic<ui64> FailureReconciliation;
+    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(250);
+    const ui64 MaxReconciliationCount = 3;
+    std::atomic<ui64> FailureLossSend = 0;
+    std::atomic<ui64> FailureDoubleSend = 0;
+    std::atomic<ui64> FailureReconciliation = 0;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -705,6 +705,7 @@ public:
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
+    void FreeNodeSession(ui32 nodeId);
 
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
@@ -1008,6 +1009,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvServiceLookup, Handle);
+            hFunc(TEvPrivate::TEvFreeNodeSession, Handle);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
             hFunc(NActors::NMon::TEvHttpInfo, Handle);
         }
@@ -1039,6 +1041,10 @@ public:
         Send(ev->Sender, evReply.Release());
     }
 
+    void Handle(TEvPrivate::TEvFreeNodeSession::TPtr& ev) {
+        ChannelService->FreeNodeSession(ev->Get()->NodeId);
+    }
+
     void HandleWakeup() {
         ChannelService->CleanupUnbound();
         Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
@@ -1059,6 +1065,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
@@ -1068,6 +1075,10 @@ public:
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvReconciliation, Handle);
         }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        NodeState->HandleDisconnected(ev);
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -1114,6 +1125,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
@@ -1123,6 +1135,10 @@ public:
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvProcessPending, Handle);
         }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        NodeState->HandleDisconnected(ev);
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {

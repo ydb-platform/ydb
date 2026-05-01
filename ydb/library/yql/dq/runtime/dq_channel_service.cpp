@@ -1156,6 +1156,12 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     SendAck(evAck, ev->Cookie);
 }
 
+void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+    LOG_W("NODE DISCONNECTED NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
+    Subscribed.store(false);
+    StartReconciliation(false);
+}
+
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
@@ -1518,7 +1524,6 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
-            ReconciliationDelay = TDuration::Zero();
             LOG_W("RECONCILED, SeqNo=" << SeqNo << ", Queue.size()=" << Queue.size() << ", deltaBytes=" << deltaBytes << ", InflightBytes=" << InflightBytes << ", " << NodeActorId << " from peer " << PeerActorId);
             if (!Queue.empty()) {
                 LOG_D("DATA REPEAT, SeqNo=" << Queue.front()->SeqNo << '/' << Queue.back()->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
@@ -1705,20 +1710,14 @@ void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
     // NOOP
 }
 
-void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
-    if (ev->Get()->GenMajor == Reconciliation.load() /* GenMajor */ && ev->Get()->GenMinor == GenMinor) {
-        std::lock_guard lock(Mutex);
+// All reconciliation activity if processed from NodeStateActor event loop, thus it is single threaded and need
+// no additional synchronization. Other (sender actor's) threads look for Reconciliation atomic only and wait
+// for reconciliation to finish
 
-        if (ReconciliationDelay >= MaxReconciliationDelay && !ReReconciliation) {
-            ReReconciliation = true;
-            PeerActorId = NActors::TActorId{};
-            GenMajor++;
-            GenMinor = 1;
-            SeqNo = 0;
-        }
-        UpdateReconciliationDelay();
+void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
+    auto& msg = *ev->Get();
+    if (msg.GenMajor == Reconciliation.load() /* GenMajor */ && msg.GenMinor == GenMinor  && msg.Count == ReconciliationCount) {
         DoReconciliation();
-        ScheduleReconciliation();
     }
 }
 
@@ -1731,43 +1730,27 @@ void TNodeState::StartReconciliation(bool major) {
         } else {
             GenMinor++;
         }
-
-        ReReconciliation = false;
         Reconciliation.store(GenMajor);
-
-        if (!UpdateReconciliationDelay()) {
-            DoReconciliation();
-        }
-        ScheduleReconciliation();
+        ReconciliationCount = 0;
+        DoReconciliation();
     }
-}
-
-bool TNodeState::UpdateReconciliationDelay() {
-    if (ReconciliationDelay) {
-        if (ReconciliationDelay < MaxReconciliationDelay) {
-            ReconciliationDelay *= 2;
-        }
-        return true;
-    } else {
-        ReconciliationDelay = MinReconciliationDelay;
-        return false;
-    }
-}
-
-void TNodeState::ScheduleReconciliation() {
-    ActorSystem->Schedule(ReconciliationDelay, new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor)));
 }
 
 void TNodeState::DoReconciliation() {
+    if (++ReconciliationCount > MaxReconciliationCount) {
+        // give up and request destroy
+        ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId));
+        return;
+    }
 
-    ReconciliationCount++;
+    auto reconciliationDelay = MinReconciliationDelay * (1 << (ReconciliationCount - 1));
     if (ReconciliationCount > 1) {
         LOG_W("NODE RECONCILIATION x" << ReconciliationCount << ", to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
-            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
+            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << reconciliationDelay);
     } else {
         LOG_I("NODE RECONCILIATION, to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
             << ", Queue" << (Queue.empty() ? " IS EMPTY" : ".front().SeqNo=" + ToString(Queue.front()->SeqNo))
-            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
+            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << reconciliationDelay);
     }
 
     ui32 delta = 0;
@@ -1802,6 +1785,8 @@ void TNodeState::DoReconciliation() {
     InflightBytes -= delta;
 
     SendDiscovery(PeerActorId ? PeerActorId : MakeChannelServiceActorID(NodeId), seqNo);
+    ActorSystem->Schedule(reconciliationDelay,
+        new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
 
 void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
@@ -1956,7 +1941,7 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
         nodeState->Self = nodeState;
         NodeStates.emplace(nodeId, nodeState);
         LOG_N("NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
-        nodeState->StartReconciliation(true);
+        ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
         return nodeState;
     }
 }
@@ -1972,6 +1957,14 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     LOG_N("DEBUG NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
     nodeState->StartReconciliation(true);
     return nodeState;
+}
+
+void TDqChannelService::FreeNodeSession(ui32 nodeId) {
+    std::lock_guard lock(Mutex);
+    if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
+        ActorSystem->Send(it->second->NodeActorId, new NActors::TEvents::TEvPoison());
+        NodeStates.erase(it);
+    }
 }
 
 // unbinded stubs

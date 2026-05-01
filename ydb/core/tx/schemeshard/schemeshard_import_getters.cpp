@@ -298,8 +298,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
 
         // Absolute path in the prefix is possible if the backup with SchemaMapping
-        if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
-            return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+        if (importInfo.Kind == TImportInfo::EKind::FS) {
+            if (!srcPrefix.empty() && srcPrefix[0] != '/') {
+                srcPrefix = CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+            } else if (srcPrefix.empty()) {
+                srcPrefix = importInfo.GetFsSettings().base_path();
+            }
         }
 
         return srcPrefix;
@@ -865,7 +869,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");
+        ListObjects(GetItemSource(*ImportInfo, ItemIdx) + "/");
     }
 
     void DownloadMetadata() {

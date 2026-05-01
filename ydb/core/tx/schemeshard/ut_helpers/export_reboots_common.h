@@ -5,6 +5,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <functional>
+
 namespace NActors {
     class TTestActorRuntime;
 }
@@ -15,9 +17,16 @@ class TTestWithReboots;
 
 namespace NExportReboots {
 
+using TRuntimeSetup = std::function<void(NActors::TTestActorRuntime&)>;
+
 void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t);
 void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t);
 void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t);
+
+void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup);
+void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup);
+void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup);
+
 void CreateSchemeObjects(TTestWithReboots& t, NActors::TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects);
 
 } // NExportReboots

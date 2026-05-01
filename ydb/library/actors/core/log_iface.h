@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/actors/struct_log/structured_message.h>
+
 #include "events.h"
 #include "event_local.h"
 
@@ -137,6 +139,25 @@ namespace NActors {
             {
             }
 
+            TEvLog(
+                    EPriority prio,
+                    EComponent comp,
+                    const char* fileName,
+                    ui64 lineNumber,
+                    TString line,
+                    NKikimr::NStructuredLog::TStructuredMessage&& structuredMessage,
+                    TInstant time = TInstant::Now())
+                : Stamp(time)
+                , Level(EPrio(prio))
+                , Component(comp)
+                , FileName(fileName)
+                , LineNumber(lineNumber)
+                , Line(std::move(line))
+                , Json(false)
+                , StructuredMessage(std::move(structuredMessage))
+            {
+            }
+
             const TInstant Stamp = TInstant::Max();
             const TLevel Level;
             const EComponent Component = 0;
@@ -144,6 +165,7 @@ namespace NActors {
             const ui64 LineNumber = 0;
             TString Line;
             const bool Json;
+            const TMaybe<NKikimr::NStructuredLog::TStructuredMessage> StructuredMessage;
         };
 
     }

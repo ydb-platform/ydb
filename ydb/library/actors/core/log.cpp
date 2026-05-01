@@ -79,9 +79,14 @@ namespace {
             return TLogRecord(Priority, Buf.Data(), Buf.Filled());
         }
     };
+
+    static const NKikimr::NStructuredLog::TJsonKeyValueWriter::TNameSet BusyJsonKeyNames{
+        "@timestamp", "@log_type", "microseconds", "host", "cluster","database", "node_id",
+        "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
 }
 
 namespace NActors {
+
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -90,6 +95,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -101,6 +107,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerCounters>(counters))
         , LogBuffer(*Metrics, *Settings)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -112,6 +119,7 @@ namespace NActors {
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -123,6 +131,7 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
         , LogBuffer(*Metrics, *Settings)
+        , StructuredJsonWriter(BusyJsonKeyNames)
     {
     }
 
@@ -144,7 +153,8 @@ namespace NActors {
                 __FILE_NAME__,
                 __LINE__,
                 formatted,
-                false);
+                false,
+                {});
             Y_UNUSED(ok);
             va_end(params);
         }
@@ -181,7 +191,8 @@ namespace NActors {
                     __FILE_NAME__,
                     __LINE__,
                     message,
-                    false))
+                    false,
+                    {}))
             {
                 BecomeDefunct();
             }
@@ -212,6 +223,7 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
+
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {
@@ -521,7 +533,8 @@ namespace NActors {
             evLog->FileName,
             evLog->LineNumber,
             evLog->Line,
-            evLog->Json);
+            evLog->Json,
+            evLog->StructuredMessage);
     }
 
     bool TLoggerActor::OutputRecord(
@@ -531,9 +544,16 @@ namespace NActors {
         const char* fileName,
         ui64 lineNumber,
         const TString& formatted,
-        bool json) noexcept
+        bool json,
+        const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
+
         const auto logPrio = ::ELogPriority(ui16(priority));
+
+        TLogRecord::TMetaFlags metaFlags;
+        if (structuredMessage.Defined()) {
+            StructuredMetaWriter.Write(metaFlags, structuredMessage.GetRef());
+        }
 
         char buf[TimeBufSize];
         switch (Settings->Format) {
@@ -553,8 +573,14 @@ namespace NActors {
                     logRecord << ": " << fileName << ":" << lineNumber;
                 }
                 logRecord << ": " << formatted;
+
+                if (structuredMessage.Defined()) {
+                    logRecord << " ";
+                    StructuredTextWriter.Write(logRecord, structuredMessage.GetRef());
+                }
+
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::PLAIN_SHORT_FORMAT: {
@@ -562,11 +588,17 @@ namespace NActors {
                 logRecord
                     << Settings->ComponentName(component)
                     << ": " << formatted;
+
+                if (structuredMessage.Defined()) {
+                    logRecord << " ";
+                    StructuredTextWriter.Write(logRecord, structuredMessage.GetRef());
+                }
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
+
                 NJsonWriter::TBuf j;
                 j.BeginObject()
                     .WriteKey("@timestamp")
@@ -613,10 +645,14 @@ namespace NActors {
                 } else {
                     j.WriteKey("message").WriteString(formatted);
                 }
+
+                if (structuredMessage.Defined()) {
+                    StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
+                }
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size()));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), metaFlags));
             } break;
         }
 

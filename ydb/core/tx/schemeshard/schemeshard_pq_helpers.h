@@ -1,9 +1,12 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 class PQGroupReserve {
 public:
@@ -17,5 +20,27 @@ public:
     ui64 Throughput;
 };
 
-} // NSchemeShard
-} // NKikimr
+void ScheduleSendTopicCloudEvent(
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    TOperationContext& context,
+    NKikimrScheme::EStatus status,
+    const TString& reason);
+
+void FinishWithError(
+    TProposeResponse* result,
+    const NKikimrSchemeOp::TModifyScheme& operation,
+    NKikimrScheme::EStatus status,
+    const TString& errStr,
+    TOperationContext& context);
+
+class TPQDoneWithCloudEvents : public TDone {
+public:
+    explicit TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx);
+
+    bool ProgressState(TOperationContext&) override;
+
+private:
+    const TTxTransaction Transaction;
+};
+
+} // NKikimr::NSchemeShard

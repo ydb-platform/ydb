@@ -9,7 +9,8 @@ namespace NKikimr::NKqp {
 /// Interface for updating the execution state of a KQP session within the Workload Manager (WM).
 /// Used to track request progression through WM queues (pending, delayed) and execution start.
 ///   
-struct IWmSessionUpdater {
+class IWmSessionUpdater {
+public:
     enum EWmState : ui32 {
         NONE = 0,      // Request is not in workload manager queue
         PENDING = 1,   // Request is in local pending queue, waiting to be delayed or started
@@ -23,4 +24,4 @@ struct IWmSessionUpdater {
     virtual void SetPoolId(TString poolId) = 0;
 };
 
-}
+} // namespace NKikimr::NKqp

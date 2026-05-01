@@ -5,10 +5,12 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -17,6 +19,8 @@
 
 #include <util/datetime/base.h>
 #include <limits>
+
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
 
@@ -528,36 +532,6 @@ public:
         return !databaseInfo || !databaseInfo->Serverless;
     }
 
-    TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        TString resultPoolId;
-        i64 resultRank = std::numeric_limits<i64>::max();
-
-        const bool isSystemUser = userToken && userToken->IsSystemUser();
-        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
-
-        if (!isSystemUser) {
-            auto userSID = userToken ? userToken->GetUserSID() : NACLib::TSID();
-            std::tie(resultPoolId, resultRank) = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
-        }
-
-        // System user maybe just default unspecified user like "user@system", so if there are group sids then check them first.
-        // TODO: explicitly distinguish "no user but has group" vs "real system user".
-        for (const auto& groupSID : userToken->GetGroupSIDs()) {
-            const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, groupSID, databaseInfo, userToken, actorContext);
-            if (poolId && (resultPoolId.empty() || resultRank > rank)) {
-                resultPoolId = poolId;
-                resultRank = rank;
-            }
-        }
-
-        // System user by default always goes to the default pool.
-        if (isSystemUser && resultPoolId.empty()) {
-            return NResourcePool::DEFAULT_POOL_ID;
-        }
-
-        return resultPoolId ? resultPoolId : NResourcePool::DEFAULT_POOL_ID;
-    }
-
     std::optional<TPoolInfo> GetPoolInfo(const TString& databaseId, const TString& poolId, TActorContext actorContext) const {
         auto it = PoolsCache.find(GetPoolKey(databaseId, poolId));
         if (it == PoolsCache.end()) {
@@ -581,8 +555,6 @@ public:
     }
 
     void UpdatePoolInfo(const TString& databaseId, const TString& poolId, const std::optional<NResourcePool::TPoolSettings>& config, const std::optional<NACLib::TSecurityObject>& securityObject, TActorContext actorContext) {
-        bool clearClassifierCache = false;
-
         const TString& poolKey = GetPoolKey(databaseId, poolId);
         if (!config) {
             auto it = PoolsCache.find(poolKey);
@@ -591,7 +563,6 @@ public:
             }
             if (it->second.Expired) {
                 // Pool was dropped
-                clearClassifierCache = true;
                 PoolsCache.erase(it);
             } else {
                 // Refresh pool subscription
@@ -600,19 +571,19 @@ public:
             }
         } else {
             auto& poolInfo = PoolsCache[poolKey];
-            clearClassifierCache = poolInfo.SecurityObject != securityObject;
             poolInfo.Config = *config;
             poolInfo.SecurityObject = securityObject;
             poolInfo.Expired = false;
         }
 
-        if (clearClassifierCache) {
-            GetOrCreateDatabaseInfo(databaseId)->UserToResourcePool.clear();
-        }
+        BuildResourcePoolMapSnapshot();
     }
 
-    void UpdateResourcePoolClassifiersInfo(const TResourcePoolClassifierSnapshot* snapsot, TActorContext actorContext) {
-        auto resourcePoolClassifierConfigs = snapsot->GetResourcePoolClassifierConfigs();
+    void UpdateResourcePoolClassifiersInfo(std::shared_ptr<TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
+        LastClassifierSnapshot = snapshot;
+
+        auto resourcePoolClassifierConfigs = snapshot->GetResourcePoolClassifierConfigs();
+
         for (auto& [databaseId, databaseInfo] : DatabasesCache) {
             auto it = resourcePoolClassifierConfigs.find(databaseId);
             if (it != resourcePoolClassifierConfigs.end()) {
@@ -637,6 +608,19 @@ public:
     }
 
 private:
+    void BuildResourcePoolMapSnapshot() {
+        auto pools = std::make_shared<TResourcePoolMap>();
+
+        pools->reserve(PoolsCache.size());
+        for (const auto& [key, info] : PoolsCache) {
+            if (!info.Expired) {
+                pools->emplace(key, TResourcePoolEntry{info.Config, info.SecurityObject});
+            }
+        }
+        
+        LastResourcePoolMapSnapshot = std::move(pools);
+    }
+
     void UpdateResourcePoolClassifiersSubscription(TActorContext actorContext) {
         if (EnableResourcePools) {
             SubscribeOnResourcePoolClassifiers(actorContext);
@@ -667,34 +651,6 @@ private:
         }
     }
 
-    std::pair<TString, i64> GetPoolIdFromClassifiers(const TString& databaseId, const TString& userSID, TDatabaseInfo& databaseInfo, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) const {
-        auto& usersMap = databaseInfo.UserToResourcePool;
-        if (const auto it = usersMap.find(userSID); it != usersMap.end()) {
-            return it->second;
-        }
-
-        TString poolId = ""; // TODO: use optional or replace with DEFAULT_POOL
-        i64 rank = -1;
-        for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
-            if (classifier.MemberName.value_or(userSID) != userSID) {
-                continue;
-            }
-
-            if (auto poolInfo = GetPoolInfo(databaseId, classifier.PoolId, actorContext); !poolInfo) {
-                continue;
-            } else if (userToken && !userToken->GetSerializedToken().empty() && !poolInfo->SecurityObject->CheckAccess(NACLib::DescribeSchema | NACLib::SelectRow, *userToken)) {
-                continue;
-            }
-
-            poolId = classifier.PoolId;
-            rank = classifier.Rank;
-            break;
-        }
-
-        usersMap[userSID] = {poolId, rank};
-        return {poolId, rank};
-    }
-
     TDatabaseInfo* GetOrCreateDatabaseInfo(const TString& databaseId) {
         if (const auto it = DatabasesCache.find(databaseId); it != DatabasesCache.end()) {
             return &it->second;
@@ -707,9 +663,13 @@ private:
         return it != DatabasesCache.end() ? &it->second : nullptr;
     }
 
+public:
     static TString GetPoolKey(const TString& databaseId, const TString& poolId) {
         return TStringBuilder() << databaseId << "/" << poolId;
     }
+
+    std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
+    std::shared_ptr<const TResourcePoolMap> LastResourcePoolMapSnapshot;
 
 private:
     std::unordered_map<TString, TPoolInfo> PoolsCache;

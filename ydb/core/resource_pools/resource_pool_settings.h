@@ -10,6 +10,7 @@
 namespace NKikimr::NResourcePool {
 
 inline constexpr char DEFAULT_POOL_ID[] = "default";
+inline constexpr char REJECT_POOL_ID[] = "reject";
 
 inline constexpr i64 POOL_MAX_CONCURRENT_QUERY_LIMIT = 1000;
 

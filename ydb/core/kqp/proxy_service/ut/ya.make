@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     kqp_proxy_ut.cpp
+    kqp_query_classifier_ut.cpp
     kqp_script_executions_ut.cpp
 )
 

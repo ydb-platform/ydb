@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
-
 namespace NKikimr::NKqp {
 
 namespace {

@@ -15,7 +15,7 @@
 #include <memory>
 
 namespace NKikimr::NKqp {
-    struct IWmSessionUpdater;
+class IWmSessionUpdater;
 }
 
 namespace NKikimr::NKqp::NWorkload {

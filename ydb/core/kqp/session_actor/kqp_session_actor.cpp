@@ -26,6 +26,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -52,6 +53,7 @@
 #include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
+#include <util/generic/overloaded.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -333,13 +335,10 @@ public:
     }
 
     void PassRequestToResourcePool() {
-        if (QueryState->UserRequestContext->PoolConfig) {
-            STLOG_D("Request placed into pool from cache",
-                (pool_id, QueryState->UserRequestContext->PoolId),
-                (trace_id, TraceId()));
-            CompileQuery();
-            return;
-        }
+        // PoolConfig should not be set when calling PassRequestToResourcePool
+        // If it's set, WLM admission was already done and we shouldn't be here
+        Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
+            "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
@@ -570,18 +569,57 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId) {
-            PassRequestToResourcePool();
-        } else {
-            CompileQuery();
+        if (WmPreCompileClassify()) {
+            return;
         }
+
+        CompileQuery();
+    }
+
+    bool WmPreCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier) {
+            QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PreCompileClassify();
+
+        std::visit(TOverloaded {
+            [this, &sent](const IWmQueryClassifier::TResolvedPoolId& s) {
+                STLOG_D("PreCompile Classify resolved",
+                    (pool_id, s.PoolId),
+                    (trace_id, TraceId()));
+                sent = true;
+                QueryState->UserRequestContext->PoolId = s.PoolId;
+                PassRequestToResourcePool();
+            },
+            [this](const IWmQueryClassifier::TReject& r) {
+                STLOG_N("PreCompile Classify rejected",
+                    (trace_id, TraceId()));
+                ythrow TRequestFail(r.Code) << r.Message;
+            },
+            [this](const IWmQueryClassifier::TBypass&) {
+                STLOG_D("PreCompile Classify bypass, compiling",
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+            },
+            [this](const IWmQueryClassifier::TPendingCompilation&) {
+                STLOG_D("PreCompile Classify pending, compiling",
+                    (trace_id, TraceId()));
+            },
+        }, result);
+
+        return sent;
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
-            STLOG_I("Failed to deliver request to workload service",
+            STLOG_W("Failed to deliver request to workload service, bypassing WLM",
                 (trace_id, TraceId()));
-            CompileQuery();
+            ContinueAfterWmAdmission();
         }
     }
 
@@ -593,7 +631,7 @@ public:
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
             QueryState->UserRequestContext->PoolId.clear();
-            CompileQuery();
+            ContinueAfterWmAdmission();
             return;
         }
 
@@ -619,7 +657,24 @@ public:
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
-        CompileQuery();
+        ContinueAfterWmAdmission();
+    }
+
+    void ContinueAfterWmAdmission() {
+        Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
+
+        auto classifier = QueryState->QueryClassifier;
+        auto state = classifier->GetState();
+
+        if (state == IWmQueryClassifier::EState::PreCompileDone) {
+            STLOG_D("Pre-compile admission completed, compiling", (trace_id, TraceId()));
+            CompileQuery();
+        } else if (state == IWmQueryClassifier::EState::PostCompileDone) {
+            STLOG_D("Post-compile admission completed, executing", (trace_id, TraceId()));
+            OnSuccessCompileRequest();
+        } else {
+            Y_ABORT("WmQueryClassifier with invalid state after admission");
+        }
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
@@ -886,7 +941,44 @@ public:
         return false;
     }
 
+    bool WmPostCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier || classifier->GetState() != IWmQueryClassifier::EState::WaitCompile) {
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery);
+
+        std::visit(TOverloaded {
+            [this, &sent](const IWmQueryClassifier::TResolvedPoolId& r) {
+                STLOG_D("PostCompile Classify resolved",
+                    (pool_id, r.PoolId),
+                    (trace_id, TraceId()));
+                sent = true;
+                QueryState->UserRequestContext->PoolId = r.PoolId;
+                PassRequestToResourcePool();
+            },
+            [this](const IWmQueryClassifier::TBypass&) {
+                STLOG_D("PostCompile Classify bypass",
+                    (trace_id, TraceId()));
+            },
+            [this](const IWmQueryClassifier::TReject& r) {
+                STLOG_N("PostCompile Classify rejected",
+                    (trace_id, TraceId()));
+                ythrow TRequestFail(r.Code) << r.Message;
+            }
+        }, result);
+
+        return sent;
+    }
+
     void OnSuccessCompileRequest() {
+        if (WmPostCompileClassify()) {
+            co_return;
+        }
+
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;

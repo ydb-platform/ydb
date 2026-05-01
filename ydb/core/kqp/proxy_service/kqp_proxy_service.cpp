@@ -24,6 +24,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
@@ -776,9 +777,7 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        if (!TryFillPoolInfoFromCache(ev, requestId)) {
-            return;
-        }
+        TryFillPoolInfoFromCache(ev, sessionInfo, requestId);
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1591,50 +1590,34 @@ private:
         }
     }
 
-    bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
+    void TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
-
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            ev->Get()->SetPoolId("");
-            return true;
+
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)
+            || ev->Get()->IsInternalCall()
+            || ev->Get()->GetIsWarmupCompilation()) {
+            return;
         }
 
-        const auto& userToken = ev->Get()->GetUserToken();
-        if (!ev->Get()->GetPoolId()) {
-            ev->Get()->SetPoolId(ResourcePoolsCache.GetPoolId(databaseId, userToken, ActorContext()));
-        }
+        auto poolId = ev->Get()->GetPoolId();
+        ResourcePoolsCache.GetPoolInfo(databaseId, poolId ? poolId : NResourcePool::DEFAULT_POOL_ID, ActorContext());
 
-        const auto& poolId = ev->Get()->GetPoolId();
-        const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
+        auto context = TClassifyContext{
+            // This parameter is set when user creates a request with an explicit PoolId
+            .PoolId = poolId,
+            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
+            .UserToken = ev->Get()->GetUserToken()
+        };
 
-        if (!poolInfo) {
-            Y_ASSERT(!poolId.empty());
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            return true;
-        }
+        auto classifier = CreateWmQueryClassifier(
+            ResourcePoolsCache.LastResourcePoolMapSnapshot,
+            ResourcePoolsCache.LastClassifierSnapshot,
+            databaseId,
+            context
+        );
 
-        const auto& securityObject = poolInfo->SecurityObject;
-        if (securityObject && userToken && !userToken->GetSerializedToken().empty()) {
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions", requestId);
-                return false;
-            }
-            if (!securityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                ReplyProcessError(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "You don't have access permissions for resource pool " << poolId, requestId);
-                return false;
-            }
-        }
-
-        const auto& poolConfig = poolInfo->Config;
-        if (!NWorkload::IsWorkloadServiceRequired(poolConfig)) {
-            ev->Get()->SetPoolConfig(poolConfig);
-        }
-
-        Y_ASSERT(!poolId.empty());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-
-        return true;
+        ev->Get()->SetWmQueryClassifier(classifier);
     }
 
     void UpdateYqlLogLevels() {
@@ -1915,7 +1898,7 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
+        ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
     void InitSharedReading() {

@@ -96,8 +96,8 @@ private:
                     return TCell(memberName.data(), memberName.size());
                 }});
                 insert({TSchema::ResourcePool::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["resource_pool"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                    const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
+                    return TCell(resourcePool.data(), resourcePool.size());
                 }});
             }
         };

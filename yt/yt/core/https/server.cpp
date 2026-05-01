@@ -16,6 +16,8 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
+#include <yt/yt/library/profiling/sensor.h>
+
 namespace NYT::NHttps {
 
 constinit const auto Logger = NHttp::HttpLogger;
@@ -24,6 +26,7 @@ using namespace NNet;
 using namespace NHttp;
 using namespace NCrypto;
 using namespace NConcurrency;
+using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -31,9 +34,10 @@ class TServer
     : public IServer
 {
 public:
-    TServer(IServerPtr underlying, TPeriodicExecutorPtr certificateUpdater)
+    TServer(IServerPtr underlying, TPeriodicExecutorPtr certificateUpdater, TPeriodicExecutorPtr certificateSensorsUpdater)
         : Underlying_(std::move(underlying))
         , CertificateUpdater_(certificateUpdater)
+        , CertificateSensorsUpdater_(std::move(certificateSensorsUpdater))
     { }
 
     void AddHandler(
@@ -55,6 +59,9 @@ public:
         if (CertificateUpdater_) {
             CertificateUpdater_->Start();
         }
+        if (CertificateSensorsUpdater_) {
+            CertificateSensorsUpdater_->Start();
+        }
     }
 
     //! Stops the server.
@@ -63,6 +70,9 @@ public:
         Underlying_->Stop();
         if (CertificateUpdater_) {
             YT_UNUSED_FUTURE(CertificateUpdater_->Stop());
+        }
+        if (CertificateSensorsUpdater_) {
+            YT_UNUSED_FUTURE(CertificateSensorsUpdater_->Stop());
         }
         if (OwnPoller_) {
             OwnPoller_->Shutdown();
@@ -87,10 +97,11 @@ public:
 private:
     const IServerPtr Underlying_;
     const TPeriodicExecutorPtr CertificateUpdater_;
+    const TPeriodicExecutorPtr CertificateSensorsUpdater_;
     IPollerPtr OwnPoller_;
 };
 
-static void ApplySslConfig(const TSslContextPtr&  sslContext, const TServerCredentialsConfigPtr& sslConfig)
+static void ApplySslConfig(const TSslContextPtr& sslContext, const TServerCredentialsConfigPtr& sslConfig)
 {
     sslContext->ApplyConfig(sslConfig);
 }
@@ -99,9 +110,10 @@ IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
     const IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker)
+    const IInvokerPtr& controlInvoker,
+    std::optional<NCrypto::TCertProfiler> certProfiler)
 {
-    auto sslContext =  New<TSslContext>();
+    auto sslContext = New<TSslContext>();
     ApplySslConfig(sslContext, config->Credentials);
     sslContext->Commit();
 
@@ -153,7 +165,28 @@ IServerPtr CreateServer(
         poller,
         acceptor);
 
-    return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
+    TPeriodicExecutorPtr certificateSensorsUpdater;
+    if (certProfiler && sslConfig->CertificateChain) {
+        auto certChainToExpiry = certProfiler->Profiler.Gauge("/cert_chain_to_expiry");
+        // Update expiry time ASAP after creation.
+        certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));
+
+        certificateSensorsUpdater = New<TPeriodicExecutor>(
+            certProfiler->Invoker,
+            BIND([sslConfig, certChainToExpiry] {
+                try {
+                    certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));
+                } catch (const std::exception& ex) {
+                    YT_LOG_WARNING(ex, "Failed to update HTTPS server certificate sensors");
+                }
+            }),
+            sslConfig->UpdatePeriod);
+    }
+
+    return New<TServer>(
+        std::move(httpServer),
+        std::move(certificateUpdater),
+        std::move(certificateSensorsUpdater));
 }
 
 IServerPtr CreateServer(const TServerConfigPtr& config, const IPollerPtr& poller)

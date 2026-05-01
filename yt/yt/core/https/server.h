@@ -2,9 +2,11 @@
 
 #include "public.h"
 
-#include "yt/yt/core/actions/public.h"
+#include <yt/yt/core/actions/public.h>
 
 #include <yt/yt/core/concurrency/public.h>
+
+#include <yt/yt/core/crypto/tls.h>
 
 #include <yt/yt/core/http/public.h>
 
@@ -28,7 +30,8 @@ NHttp::IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const NConcurrency::IPollerPtr& poller,
     const NConcurrency::IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker);
+    const IInvokerPtr& controlInvoker,
+    std::optional<NCrypto::TCertProfiler> certProfiler = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

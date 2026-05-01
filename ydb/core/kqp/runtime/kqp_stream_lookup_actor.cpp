@@ -805,7 +805,7 @@ private:
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
-                StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, ReadId);
+                StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, OperationId);
                 Reads.eraseRead(read);
                 ScheduleNextReads();
             } else {
@@ -874,7 +874,7 @@ private:
 
         auto guard = BindAllocator();
 
-        StreamLookupWorker->BuildRequests(Partitioning, ReadId);
+        StreamLookupWorker->BuildRequests(Partitioning, OperationId);
         ScheduleNextReads();
     }
 
@@ -1137,7 +1137,7 @@ private:
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
-            StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, ReadId);
+            StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, OperationId);
             Reads.eraseRead(failedRead);
             ScheduleNextReads();
         } else {

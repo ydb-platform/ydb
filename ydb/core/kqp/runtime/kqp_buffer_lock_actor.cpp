@@ -505,7 +505,7 @@ public:
 
 private:
     TKqpBufferLockSettings Settings;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

@@ -43,10 +43,6 @@
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 2006 Peter Dimov
-
-
-====================COPYRIGHT====================
 //  Copyright (c) 2009 Peter Dimov
 
 

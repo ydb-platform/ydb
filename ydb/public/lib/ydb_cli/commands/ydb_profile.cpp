@@ -143,9 +143,9 @@ namespace {
         profile->SetValue(AuthNode, authValue);
     }
 
-    void SetAuthMethod(const TString& id, const TString& fullName, std::shared_ptr<IProfile> profile, const TString& profileName) {
+    void SetAuthMethod(const TString& id, const TString& fullName, std::shared_ptr<IProfile> profile, const TString& profileName, bool hideInput) {
         TString title = TStringBuilder() << "Please enter " << fullName << " (" << id << ")";
-        auto newValue = RunFtxuiPasswordInput(title);
+        auto newValue = hideInput ? RunFtxuiPasswordInput(title) : RunFtxuiInput(title);
         if (!newValue) {
             Cout << Endl << "Cancelled." << Endl;
             return;
@@ -552,17 +552,17 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
     if (config.UseIamAuth) {
         options.push_back("Use IAM token\t(iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token");
         actions.push_back([&profile, &profileName]() {
-            SetAuthMethod("iam-token", "IAM token", profile, profileName);
+            SetAuthMethod("iam-token", "IAM token", profile, profileName, /* hideInput */ true);
         });
 
         options.push_back("Use OAuth token of a Yandex Passport user\t(yc-token) cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token");
         actions.push_back([&profile, &profileName]() {
-            SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName);
+            SetAuthMethod("yc-token", "OAuth token of a Yandex Passport user", profile, profileName, /* hideInput */ true);
         });
 
         options.push_back("Use OAuth 2.0 token exchange credentials\t(oauth2-key-file)");
         actions.push_back([&profile, &profileName]() {
-            SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName);
+            SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName, /* hideInput */ false);
         });
 
         options.push_back("Use metadata service on a virtual machine\t(use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm");
@@ -573,13 +573,13 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
 
         options.push_back("Use service account key file\t(sa-key-file) cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa");
         actions.push_back([&profile, &profileName]() {
-            SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName);
+            SetAuthMethod("sa-key-file", "Path to service account key file", profile, profileName, /* hideInput */ false);
         });
     }
     if (config.UseAccessToken) {
         options.push_back("Set new access token\t(ydb-token)");
         actions.push_back([&profile, &profileName]() {
-            SetAuthMethod("ydb-token", "YDB token", profile, profileName);
+            SetAuthMethod("ydb-token", "YDB token", profile, profileName, /* hideInput */ true);
         });
     }
 

@@ -36,6 +36,9 @@
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 
+#include <sstream>
+#include <thread>
+
 #if defined(__linux__) || defined(__APPLE__)
 #include <ydb/core/base/backtrace.h>
 #endif

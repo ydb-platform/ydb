@@ -19,6 +19,7 @@
 #endif
 
 #include <format>
+#include <optional>
 
 namespace NYdbGrpc::inline Dev {
 

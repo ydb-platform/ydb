@@ -105,11 +105,13 @@ namespace {
     }
 
     void PrintStringQuotedIfNeeded(TStringBuilder& builder, const std::string& str) {
-        if (str.find_first_of(" \t\n\r\v\f/") != TString::npos) {
-            builder << '`' << str << '`';
-        } else {
-            builder << str;
+        for (size_t i = 0; i < str.size(); ++i) {
+            if (!((str[i] >= '0' && str[i] <= '9' && i > 0) || (str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z') || str[i] == '_')) {
+                builder << '`' << str << '`';
+                return;
+            }
         }
+        builder << str;
     }
 
     bool IsValidColumnName(const std::string& name) {
@@ -353,11 +355,11 @@ WITH (
 );)";
 
     if (Execute) {
-        const auto& colors = NConsoleClient::AutoColors(Cout);
+        const auto& colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Green() << "Executing request:" << colors.OldColor() << Endl << Endl << query << Endl << Endl;
         TDriver driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
-        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), true)
+        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), /* isIdempotent */ false)
             .GetValueSync();
         if (result.IsSuccess()) {
             Cerr << colors.Green() << "Query executed successfully." << colors.OldColor() << Endl;

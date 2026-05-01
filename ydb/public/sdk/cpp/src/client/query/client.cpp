@@ -29,9 +29,9 @@ using TQueryObservation = NObservability::TRequestObservation;
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
 
-NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
+NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIdempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
-        .Idempotent(isIndempotent)
+        .Idempotent(isIdempotent)
         .GetSessionClientTimeout(timeout)
         .MaxTimeout(timeout);
 }
@@ -717,9 +717,9 @@ TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFu
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, const TTxControl& txControl,
-    TDuration timeout, bool isIndempotent)
+    TDuration timeout, bool isIdempotent)
 {
-    auto settings = GetRetrySettings(timeout, isIndempotent);
+    auto settings = GetRetrySettings(timeout, isIdempotent);
     auto queryFunc = [&query, &txControl](TSession session, TDuration duration) -> TAsyncExecuteQueryResult {
         return session.ExecuteQuery(query, txControl, TExecuteQuerySettings().ClientTimeout(duration));
     };

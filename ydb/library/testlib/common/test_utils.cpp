@@ -9,6 +9,8 @@
 
 #include <csignal>
 #include <cstring>
+#include <sstream>
+#include <thread>
 
 namespace NTestUtils {
 

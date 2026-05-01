@@ -134,7 +134,7 @@ protected:
 
 class TCommandImportFromCsv : public TCommandImportFileBase {
 public:
-    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file into existing table. To crate a new table for csv import use 'ydb tools infer csv' command to create table.");
+    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file into existing table. To create a new table for csv import use 'ydb tools infer csv' command to create table.");
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
 

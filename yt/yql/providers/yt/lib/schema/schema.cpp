@@ -1048,15 +1048,16 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
                 columnNode.Group(std::move(group));
             }
 
+            // nativeYtTypeFlags doesn't include aux columns nativeness, so nativeTypeCompatibility is used
             bool auxField = false;
             if (useNativeTypes) {
-                auto ytType = RowSpecYqlTypeToYtNativeType(*sortedByType, nativeYtTypeFlags);
-                columnNode.RawTypeV3(ytType);
                 auxField = 0 == fieldNativeTypes.erase(columnString);
+                auto ytType = RowSpecYqlTypeToYtNativeType(*sortedByType, auxField ? nativeTypeCompatibility : nativeYtTypeFlags);
+                columnNode.RawTypeV3(ytType);
             } else {
-                auto ytType = RowSpecYqlTypeToYtType(*sortedByType, nativeYtTypeFlags);
-                columnNode.Type(ytType.first, /*required*/ ytType.second);
                 auxField = 0 == fieldTypes.erase(columnString);
+                auto ytType = RowSpecYqlTypeToYtType(*sortedByType, auxField ? nativeTypeCompatibility : nativeYtTypeFlags);
+                columnNode.Type(ytType.first, /*required*/ ytType.second);
             }
 
             columnNode.SortOrder(sortDir->AsInt64() || auxField ? NYT::SO_ASCENDING : NYT::SO_DESCENDING);

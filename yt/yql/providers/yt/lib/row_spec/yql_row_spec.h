@@ -156,6 +156,7 @@ private:
     const TDistinctConstraintNode* Distinct = nullptr;
 };
 
+ui64 GetItemNativeYtTypeFlags(const TTypeAnnotationNode& type);
 ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMemberMapper& mapper = {});
 TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers);
 

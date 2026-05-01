@@ -929,6 +929,8 @@ private:
 
         auto sort = TYtSort(input);
 
+        const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(sort.DataSink().Cluster().StringValue(), *State_->Configuration);
+
         TYtOutTableInfo outTableInfo(sort.Output().Item(0));
         if (!outTableInfo.RowSpec) {
             ctx.AddError(TIssue(ctx.GetPosition(sort.Output().Item(0).Pos()),
@@ -952,6 +954,12 @@ private:
             }
         }
 
+        ui64 auxColumnsNativeTypeFlags = 0ul;
+        for (auto& [_, type]: outTableInfo.RowSpec->GetAuxColumns()) {
+            auxColumnsNativeTypeFlags |= GetItemNativeYtTypeFlags(*type);
+        }
+        auxColumnsNativeTypeFlags &= nativeTypeCompatibility;
+
         if (!ValidateSettings(sort.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
@@ -964,7 +972,9 @@ private:
                         << " cannot be applied to tables with QB2 premapper, inferred, yamred_dsv, or non-strict schemas"));
                     return TStatus::Error;
                 }
-                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != outTableInfo.RowSpec->GetNativeYtTypeFlags()) {
+
+                // Handle possible nativeness of aux columns introduced by sort keys extractor
+                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != (outTableInfo.RowSpec->GetNativeYtTypeFlags() | auxColumnsNativeTypeFlags)) {
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtSort::CallableName()
                         << " has different input/output native YT types"));
                     return TStatus::Error;

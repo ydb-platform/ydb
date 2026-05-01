@@ -159,9 +159,6 @@ ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWrite
 ydb/core/tx/datashard/ut_snapshot_isolation DataShardSnapshotIsolation.ReadWriteObserveOwnChanges
 ydb/core/tx/datashard/ut_volatile DataShardVolatile.DistributedWriteThenReadIteratorStream
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
-ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cPriorKnowledge
-ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithBody
-ydb/library/actors/http/ut Http2OutgoingIntegration.OutgoingH2cWithLargeResponseBody
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.BulkUpsert
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
@@ -522,7 +519,9 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
+ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltp50.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
+ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
@@ -530,6 +529,7 @@ ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressur
 ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
+ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[row]

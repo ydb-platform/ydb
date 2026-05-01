@@ -14,6 +14,7 @@ ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersio
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-1-1_to_stable-25-4-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-1-1_to_stable-26-1-1]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-2-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-1-1_and_stable-25-4-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-1-1_and_stable-25-4-1-row]
 ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk

@@ -22,6 +22,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirro
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
 ydb/core/blobstorage/ut_blobstorage/ut_bridge unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferEraseBarrier
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
@@ -68,6 +69,7 @@ ydb/core/kqp/ut/join/index_lookup KqpJoin.StreamLookupJoinOverloadDeadlock
 ydb/core/kqp/ut/opt KqpKv.ReadRows_ExternalBlobs-UseExtBlobsPrecharge
 ydb/core/kqp/ut/opt KqpNewEngine.DqSourceCount
 ydb/core/kqp/ut/opt KqpNewEngine.DqSourceLimit
+ydb/core/kqp/ut/opt KqpNewEngine.FullScanCount
 ydb/core/kqp/ut/query KqpLimits.DataShardReplySizeExceeded
 ydb/core/kqp/ut/query KqpLimits.DatashardReplySize
 ydb/core/kqp/ut/query KqpLimits.QSReplySize
@@ -98,6 +100,7 @@ ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Ascending
 ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Descending
 ydb/core/kqp/ut/scan KqpSplit.ChoosePartition+Unspecified
 ydb/core/kqp/ut/scan KqpSplit.StreamLookupJoinDeliveryProblemAfterFirstResult
+ydb/core/kqp/ut/scan KqpSplit.StreamLookupRetryAttemptForFinishedRead
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryService.LargeUpsert
 ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters
@@ -170,6 +173,7 @@ ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_ydb_over_fq.py.TestYdbOverFq.test_list_directory_v1[v1-client0]
 ydb/tests/fq/s3 test_ydb_over_fq.py.TestYdbOverFq.test_list_directory_v2[v2-client0]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
@@ -525,6 +529,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
+ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
 ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test

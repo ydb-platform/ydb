@@ -279,6 +279,12 @@ protected:
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
         const auto* msg = ev->Get();
+        // TxId=0 events are internal flow control from change_sender; ignore.
+        if (msg->TxId == 0) {
+            ResetWaiting(op);
+            return;
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                    "IncrementalRestoreScan finished for txId: " << msg->TxId
                    << " success: " << msg->Success

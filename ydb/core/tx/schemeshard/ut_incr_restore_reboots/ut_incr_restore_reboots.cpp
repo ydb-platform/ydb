@@ -1093,9 +1093,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             [&firstResultHeld, &rebootHappened](
                     NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
                 if (rebootHappened.load()) return;
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
-                if (originalOpId == 0) return;
+                if (ev->Cookie == 0) return;
                 if (firstResultHeld.load()) return;
                 firstResultHeld.store(true);
                 ev.Reset();

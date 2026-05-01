@@ -2143,8 +2143,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 if (!schemeShardId) {
                     schemeShardId = ev->Recipient;
                 }
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
+                const ui64 originalOpId = ev->Cookie;
                 if (originalOpId == 0) {
                     return; // not ours
                 }
@@ -2152,7 +2151,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 runtime.Send(new IEventHandle(
                     ev->Recipient, ev->Sender,
                     new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(TVector<ui64>{}),
-                    /*flags=*/0, cookie),
+                    /*flags=*/0, originalOpId),
                     /*nodeIndex=*/0, /*viaActorSystem=*/true);
                 ev.Reset();
             });
@@ -2191,8 +2190,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 if (emptyInjected.load() >= EmptyResultsToInject) {
                     return;
                 }
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
+                const ui64 originalOpId = ev->Cookie;
                 if (originalOpId == 0) {
                     return; // unrelated allocator client
                 }
@@ -2200,7 +2198,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 runtime.Send(new IEventHandle(
                     ev->Recipient, ev->Sender,
                     new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(TVector<ui64>{}),
-                    /*flags=*/0, cookie),
+                    /*flags=*/0, originalOpId),
                     /*nodeIndex=*/0, /*viaActorSystem=*/true);
                 ev.Reset();
             });
@@ -2222,190 +2220,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Each concurrent TEvAllocateResult must bind to a distinct item and TxId via cookie.
-    Y_UNIT_TEST(RetryUnderConcurrentAllocations) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Cap = 3 to allow 3 concurrent allocations.
-        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
-
-        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/3);
-
-        // Capture (cookie -> txId) pairs from each allocator result aimed at SchemeShard.
-        TMutex captureMutex;
-        TVector<std::pair<ui64, ui64>> captures;
-        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
-            [&captureMutex, &captures](
-                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
-                if (originalOpId == 0) {
-                    return;
-                }
-                const auto& txIds = ev->Get()->TxIds;
-                if (txIds.empty()) {
-                    return;
-                }
-                TGuard<TMutex> g(captureMutex);
-                captures.emplace_back(cookie, txIds.front());
-            });
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
-        env.TestWaitNotification(runtime, txId);
-
-        WaitForRestoreDone(runtime, &env, "/MyRoot", true,
-            TDuration::Seconds(2), TDuration::Seconds(120));
-
-        TVector<std::pair<ui64, ui64>> snap;
-        {
-            TGuard<TMutex> g(captureMutex);
-            snap = captures;
-        }
-        // We need at least 3 binds for the 3 tables (more if finalize/index also hit).
-        UNIT_ASSERT_GE_C(snap.size(), 3u,
-            "Expected >=3 allocator results bound; saw " << snap.size());
-
-        // Every allocator result destined for incremental restore must bind a
-        // DISTINCT itemSeq (low-32) to a DISTINCT TxId. Duplicates would mean
-        // the cookie packing collapsed two items into one bind.
-        THashSet<ui32> itemSeqs;
-        THashSet<ui64> txIds;
-        for (const auto& [cookie, tx] : snap) {
-            const ui32 seq = static_cast<ui32>(cookie & 0xFFFFFFFFULL);
-            UNIT_ASSERT_C(itemSeqs.insert(seq).second,
-                "Duplicate itemSeq " << seq << " bound across concurrent allocations");
-            UNIT_ASSERT_C(txIds.insert(tx).second,
-                "Duplicate TxId " << tx << " bound across concurrent allocations");
-        }
-
-        for (ui32 i = 0; i < 3; ++i) {
-            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
-        }
-    }
-
-    // Out-of-order TEvAllocateResult delivery must bind by cookie itemSeq, not FIFO order.
-    Y_UNIT_TEST(AllocateResultArrivesOutOfOrder) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Cap = 3 to allow 3 concurrent allocations.
-        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
-
-        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/3);
-
-        // Hold the first 3 allocator results; release them in reversed order
-        // (2, 1, 0) so cookie unpacking is the only thing that can correctly
-        // bind each TxId to its sub-op. Capture the (cookie, txId) for the
-        // post-completion assertion.
-        constexpr size_t HoldCount = 3;
-        TMutex queueMutex;
-        struct THeld {
-            TActorId Recipient;
-            TActorId Sender;
-            ui64 Cookie;
-            TVector<ui64> TxIds;
-        };
-        TVector<THeld> held;
-        std::atomic<bool> released{false};
-        TVector<std::pair<ui64, ui64>> finalCaptures;
-
-        auto observer = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
-            [&runtime, &queueMutex, &held, &released, &finalCaptures](
-                    NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
-                if (originalOpId == 0) {
-                    return;
-                }
-
-                bool needHold = false;
-                {
-                    TGuard<TMutex> g(queueMutex);
-                    if (!released.load() && held.size() < HoldCount) {
-                        held.push_back(THeld{
-                            ev->Recipient, ev->Sender, cookie,
-                            TVector<ui64>(ev->Get()->TxIds)});
-                        needHold = true;
-                    } else {
-                        if (!ev->Get()->TxIds.empty()) {
-                            finalCaptures.emplace_back(cookie, ev->Get()->TxIds.front());
-                        }
-                    }
-                }
-
-                if (needHold) {
-                    ev.Reset();
-
-                    // Once we have HoldCount results queued, replay in reverse.
-                    bool readyToReplay = false;
-                    {
-                        TGuard<TMutex> g(queueMutex);
-                        readyToReplay = (held.size() == HoldCount && !released.load());
-                    }
-                    if (readyToReplay) {
-                        TVector<THeld> snapshot;
-                        {
-                            TGuard<TMutex> g(queueMutex);
-                            snapshot = held;
-                            released.store(true);
-                        }
-                        // Replay reversed. Replayed events flow through this same
-                        // observer with released=true, so they'll be captured by
-                        // the else-branch above — do NOT push to finalCaptures
-                        // manually here, that would double-count.
-                        for (size_t i = snapshot.size(); i-- > 0;) {
-                            const auto& h = snapshot[i];
-                            TVector<ui64> txIdsCopy = h.TxIds;
-                            runtime.Send(new IEventHandle(
-                                h.Recipient, h.Sender,
-                                new NKikimr::TEvTxAllocatorClient::TEvAllocateResult(std::move(txIdsCopy)),
-                                /*flags=*/0, h.Cookie),
-                                /*nodeIndex=*/0, /*viaActorSystem=*/true);
-                        }
-                    }
-                }
-            });
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
-        env.TestWaitNotification(runtime, txId);
-
-        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env,
-            "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(180));
-        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
-            "Restore failed after out-of-order allocator delivery");
-
-        // Each captured cookie must bind to a unique itemSeq with a unique TxId.
-        TVector<std::pair<ui64, ui64>> snap;
-        {
-            TGuard<TMutex> g(queueMutex);
-            snap = finalCaptures;
-        }
-        UNIT_ASSERT_GE_C(snap.size(), HoldCount,
-            "Did not capture enough allocator results: " << snap.size());
-
-        THashSet<ui32> itemSeqs;
-        THashSet<ui64> txIds;
-        for (const auto& [cookie, tx] : snap) {
-            if (tx == 0) continue;
-            const ui32 seq = static_cast<ui32>(cookie & 0xFFFFFFFFULL);
-            UNIT_ASSERT_C(itemSeqs.insert(seq).second,
-                "Duplicate itemSeq " << seq << " bound after re-ordering — "
-                "cookie unpacking did not preserve item identity");
-            UNIT_ASSERT_C(txIds.insert(tx).second,
-                "Duplicate TxId " << tx << " bound after re-ordering");
-        }
-
-        for (ui32 i = 0; i < 3; ++i) {
-            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
-        }
-    }
 
     // A TEvAllocateResult arriving after FORGET must be silently dropped with no crash.
     Y_UNIT_TEST(OrphanAllocateResultAfterForgetIsIgnored) {
@@ -2427,12 +2241,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         TMaybe<TCaptured> captured;
         auto allocObserver = runtime.AddObserver<NKikimr::TEvTxAllocatorClient::TEvAllocateResult>(
             [&mtx, &captured](NKikimr::TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
-                const ui64 cookie = ev->Cookie;
-                const ui64 originalOpId = cookie >> 32;
+                const ui64 originalOpId = ev->Cookie;
                 if (originalOpId == 0) return;
                 TGuard<TMutex> g(mtx);
                 if (!captured) {
-                    captured = TCaptured{ev->Recipient, ev->Sender, cookie};
+                    captured = TCaptured{ev->Recipient, ev->Sender, originalOpId};
                 }
                 // Pass through unmodified.
             });

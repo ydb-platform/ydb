@@ -1671,7 +1671,15 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             result->SetExplain(op->Error);
             result->SetBytesProcessed(op->BytesProcessed);
             result->SetRowsProcessed(op->RowsProcessed);
-            result->SetEndStatus(op->EndStatus);
+            // Backup/Restore don't set EndStatus; derive it from Success so SS
+            // doesn't see END_UNSPECIFIED (which it treats as fatal).
+            auto endStatus = op->EndStatus;
+            if (endStatus == NKikimrTxDataShard::TShardOpResult::END_UNSPECIFIED) {
+                endStatus = op->Success
+                    ? NKikimrTxDataShard::TShardOpResult::END_SUCCESS
+                    : NKikimrTxDataShard::TShardOpResult::END_FATAL_FAILURE;
+            }
+            result->SetEndStatus(endStatus);
             break;
         }
         default:

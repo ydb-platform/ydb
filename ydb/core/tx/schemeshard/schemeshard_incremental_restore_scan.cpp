@@ -970,19 +970,17 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
 
     state.PendingItems.push_back(std::move(item));
 
-    // Cookie packs (originalOpId<<32 | itemSeq) so per-item TxId binding is
-    // unambiguous regardless of how many concurrent allocations are in flight.
-    const ui64 cookie = (originalOpId << 32) | state.PendingItems.back().ItemSeq;
+    // Cookie is the originalOpId; the item is the FIFO head of PendingItems
+    // when the reply arrives (allocator preserves cookie-keyed reply order).
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[IncrementalRestore] EnqueueIncrementalRestoreItem op=" << originalOpId
         << " itemSeq=" << state.PendingItems.back().ItemSeq
         << " kind=" << static_cast<ui32>(kind)
-        << " tablePathId=" << tablePathId
-        << " cookie=" << cookie);
+        << " tablePathId=" << tablePathId);
     ctx.Send(TxAllocatorClient,
         new TEvTxAllocatorClient::TEvAllocate(),
         /*flags=*/0,
-        cookie);
+        originalOpId);
 }
 
 void TSchemeShard::CleanupIncrementalRestoreItems(
@@ -1036,14 +1034,10 @@ public:
     {}
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
-        const ui64 cookie = Ev->Cookie;
-        const ui64 originalOpId = cookie >> 32;
-        const ui32 itemSeq = static_cast<ui32>(cookie & 0xFFFFFFFFULL);
+        const ui64 originalOpId = Ev->Cookie;
 
         LOG_I("TTxProgressIncrementalRestoreAllocateResult"
-            << " cookie=" << cookie
             << " originalOpId=" << originalOpId
-            << " itemSeq=" << itemSeq
             << " txIdsCount=" << Ev->Get()->TxIds.size());
 
         auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
@@ -1056,17 +1050,13 @@ public:
         }
         auto& state = stateIt->second;
 
-        // Match by exact ItemSeq (cookie packs it) — no FIFO-by-arrival
-        // assumption needed. Concurrent allocations may complete in any order.
-        auto pendingIt = std::find_if(state.PendingItems.begin(), state.PendingItems.end(),
-            [itemSeq](const auto& it) { return it.ItemSeq == itemSeq; });
-        if (pendingIt == state.PendingItems.end()) {
-            LOG_W("TTxProgressIncrementalRestoreAllocateResult: itemSeq "
-                  << itemSeq << " not found in PendingItems for op "
-                  << originalOpId << "; dropping allocator result (item likely "
-                  << "completed or canceled while allocate was in flight)");
+        if (state.PendingItems.empty()) {
+            LOG_W("TTxProgressIncrementalRestoreAllocateResult: no PendingItems "
+                  << "for op " << originalOpId
+                  << "; dropping allocator result");
             return true;
         }
+        const ui32 itemSeq = state.PendingItems.front().ItemSeq;
 
         if (Ev->Get()->TxIds.empty()) {
             // Allocator transient failure: re-send TEvAllocate after a backoff.
@@ -1080,8 +1070,8 @@ public:
         const TTxId allocatedTxId = TTxId(Ev->Get()->TxIds.front());
 
         // Move from PendingItems -> InFlightItems with the bound TxId.
-        TIncrementalRestoreState::TItem item = std::move(*pendingIt);
-        state.PendingItems.erase(pendingIt);
+        TIncrementalRestoreState::TItem item = std::move(state.PendingItems.front());
+        state.PendingItems.pop_front();
         item.WaitTxId = ui64(allocatedTxId);
         state.WaitTxIdToItemSeq[ui64(allocatedTxId)] = item.ItemSeq;
 
@@ -1134,15 +1124,15 @@ private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr Ev;
 
     void ScheduleAllocatorRetry(ui64 originalOpId, ui32 itemSeq, const TActorContext& ctx) {
-        // Re-send TEvAllocate for the same cookie after a small backoff.
-        // CurrentIncrementalRetryCount is intentionally not touched — the
-        // per-incremental retry budget is independent of allocator retries.
-        const ui64 cookie = (originalOpId << 32) | itemSeq;
+        // Re-send TEvAllocate after a backoff. CurrentIncrementalRetryCount is
+        // intentionally not touched — the per-incremental retry budget is
+        // independent of allocator retries.
+        Y_UNUSED(itemSeq);
         const TActorId txAllocator = Self->TxAllocatorClient;
         std::unique_ptr<IEventHandle> ev(new IEventHandle(
             txAllocator, Self->SelfId(),
             new TEvTxAllocatorClient::TEvAllocate(),
-            /*flags=*/0, cookie));
+            /*flags=*/0, originalOpId));
         ctx.Schedule(TDuration::MilliSeconds(500), std::move(ev));
     }
 };

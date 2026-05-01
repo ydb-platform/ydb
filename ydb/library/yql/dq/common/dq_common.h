@@ -96,7 +96,6 @@ enum class EEnabledSpillingNodes : ui64 {
     None        = 0ULL      /* "None" */,
     GraceJoin   = 1ULL      /* "GraceJoin" */,
     Aggregation = 2ULL      /* "Aggregation" */,
-    Sort        = 4ULL      /* "Sort" */,
     All         = ~0ULL     /* "All" */,
 };
 
@@ -121,10 +120,6 @@ public:
 
     bool IsAggregationSpillingEnabled() const {
         return Mask & ui64(EEnabledSpillingNodes::Aggregation);
-    }
-
-    bool IsSortSpillingEnabled() const {
-        return Mask & ui64(EEnabledSpillingNodes::Sort);
     }
 
 private:

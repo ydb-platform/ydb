@@ -19,10 +19,6 @@ TSpillingCounters::TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamic
     InitTypeCounters(ComputeSpilling, counters, "Spilling/Compute");
     InitTypeCounters(ChannelSpilling, counters, "Spilling/Channel");
     SpillingIOQueueSize = counters->GetCounter("Spilling/IOQueueSize", false);
-
-    Sort.YellowZoneEnabled = counters->GetCounter("Spilling/Sort/YellowZoneEnabled", false);
-    Sort.MemoryUsed = counters->GetCounter("Spilling/Sort/MemoryUsed", false);
-    Sort.MemoryLimit = counters->GetCounter("Spilling/Sort/MemoryLimit", false);
 }
 
 } // namespace NYql::NDq

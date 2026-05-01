@@ -1237,7 +1237,6 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     auto index = 1U - offset;
     std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
 
-
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),

@@ -33,7 +33,9 @@
 #include "resource_subscriber/counters.h"
 #include "transactions/operators/ev_write/sync.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -41,6 +43,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
@@ -195,15 +198,63 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
-    ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
-    ui64 passedStep = GetOutdatedStep();
-    ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
-    return NOlap::TSnapshot(minReadStep, 0);
+    const ui64 passedStep = GetOutdatedStep();
+
+    if (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
+        const ui64 legacyDelayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
+        const ui64 legacyMinReadStep = (passedStep > legacyDelayMillisec ? passedStep - legacyDelayMillisec : 0);
+        Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(legacyMinReadStep));
+        return NOlap::TSnapshot(legacyMinReadStep, 0);
+    }
+
+    const auto& longTxConfig = AppDataVerified().LongTxServiceConfig;
+    // How long will it take for a snapshot from the most remote node to reach this columnshard in worst case.
+    // 10 is an estimate of the time that all the messages traveling takes here.
+    // 4 messages * log_10(100k nodes) * 0.5 seconds = 10 seconds
+    const ui64 delaySeconds =
+        longTxConfig.GetLocalSnapshotPromotionTimeSeconds() +
+        longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
+        longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() +
+        10;
+    const ui64 delayMillisec = TDuration::Seconds(delaySeconds).MilliSeconds();
+    const ui64 serviceMinReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
+
+    NOlap::TSnapshot minSnapshot(serviceMinReadStep, 0);
+    // the border in SnapshotRegistry may be older than the calculated delay,
+    // in this case we use the border value
+    if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
+        if (const auto& registry = holder->Get()) {
+            const TRowVersion border = registry->GetBorder();
+            minSnapshot = std::min(minSnapshot, NOlap::TSnapshot(border.Step, border.TxId));
+        }
+    }
+
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+    return minSnapshot;
 }
 
-bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot) const {
-    return GetMinSnapshotForNewReads() <= snapshot || InFlightReadsTracker.HasLiveSnapshot(snapshot);
+bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NKikimr::TTableId& tableId) const {
+    if (GetMinSnapshotForNewReads() <= snapshot) {
+        return true;
+    }
+
+    if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
+        if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
+            if (const auto& registry = holder->Get()) {
+                return registry->HasSnapshot(
+                    tableId,
+                    TRowVersion(snapshot.GetPlanStep(), snapshot.GetTxId())
+                );
+            }
+        }
+        // If the SnapshotLocking is enabled and the registry is null,
+        // it means the node recently restarted and the registry has not materialized yet (it takes up to 30-40 seconds by default).
+        // During this period the shard does not delete anything and assumes all incoming snapshots are allowed to start.
+        // It is hard to understand, but if the SnapshotRegistry system works correctly, one may prove that this is safe.
+        return true;
+    }
+
+    return InFlightReadsTracker.HasLiveSnapshot(snapshot);
 }
 
 NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {

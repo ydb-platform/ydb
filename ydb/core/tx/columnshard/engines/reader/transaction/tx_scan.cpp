@@ -72,7 +72,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        TReadDescription read(Self->TabletID(), snapshot, sorting);
+        auto tableId = NKikimr::TTableId(
+            Self->CurrentSchemeShardId,
+            request.GetLocalPathId(),
+            request.GetSchemaVersion()
+        );
+        TReadDescription read(Self->TabletID(), tableId, snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.Orbit = orbit;
         read.TxId = txId;

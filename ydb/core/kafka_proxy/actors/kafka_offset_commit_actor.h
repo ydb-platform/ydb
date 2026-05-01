@@ -20,10 +20,15 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include "ydb/services/persqueue_v1/actors/persqueue_utils.h"
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 
 namespace NKafka {
 using namespace NKikimr;
+
+extern const TString CHECK_GROUP_GENERATION;
 
 class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor> {
 
@@ -60,6 +65,8 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
         }
     }
 
@@ -69,6 +76,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendAuthRequest(const NActors::TActorContext& ctx);
     void CreateConsumerGroupIfNecessary(const TString& topicName,
@@ -77,6 +86,8 @@ private:
     void AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx);
     void ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx);
     void SendFailedForAllPartitions(EKafkaErrors error, const TActorContext& ctx);
+    void SendCommits(const TActorContext& ctx);
+    void SendGenerationCheckRequest(const TActorContext& ctx);
 
 private:
     const TContext::TPtr Context;
@@ -96,6 +107,7 @@ private:
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
     EKafkaErrors Error = NONE_ERROR;
+    std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
         .RetryLimitCount = 6,

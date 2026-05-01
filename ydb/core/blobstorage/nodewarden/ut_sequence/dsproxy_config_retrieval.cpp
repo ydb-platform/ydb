@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -20,42 +21,68 @@ void SetupLogging(TTestBasicRuntime& runtime) {
 void SetupServices(TTestBasicRuntime& runtime) {
     TAppPrepare app;
 
+    THashSet<ui32> registeredNodeIds;
+    TTestActorRuntimeBase::TEventObserver prevObserver = runtime.SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerRegisterNode::EventType) {
+            auto *msg = ev->Get<TEvBlobStorage::TEvControllerRegisterNode>();
+            registeredNodeIds.insert(msg->Record.GetNodeID());
+        }
+        return prevObserver(ev);
+    });
+
     app.ClearDomainsAndHive();
     auto dom = TDomainsInfo::TDomain::ConstructEmptyDomain("dom-1", 0);
     app.AddDomain(dom.Release());
 
     TTempDir temp;
-    TString path = "SectorMap:" + temp() + "static.dat";
     ui64 pdiskSize = 32ULL << 30;
     ui64 chunkSize = 32ULL << 20;
-    ui64 guid = RandomNumber<ui64>();
-    auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(pdiskSize);
-    FormatPDisk(path, 0, 4096, chunkSize, guid, 0x1234567890 + 1, 0x4567890123 + 1, 0x7890123456 + 1,
-        NPDisk::YdbDefaultPDiskSequence, TString(), false, false, sectorMap, false);
+    TVector<TString> paths(runtime.GetNodeCount());
+    TVector<ui64> guids(runtime.GetNodeCount());
+    TVector<TIntrusivePtr<NPDisk::TSectorMap>> sectorMaps(runtime.GetNodeCount());
+
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+        paths[i] = TStringBuilder() << "SectorMap:" << temp() << "node-" << i << ".dat";
+        guids[i] = 0x9E3779B97F4A7C15ull + i;
+        auto sectorMap = sectorMaps[i] = MakeIntrusive<NPDisk::TSectorMap>(pdiskSize);
+        if (i == 0) {
+            // Only format static pdisks, other should format themselves on startup
+            FormatPDisk(paths[i], 0, 4096, chunkSize, guids[i], 0x1234567890 + 1, 0x4567890123 + 1, 0x7890123456 + 1,
+                NPDisk::YdbDefaultPDiskSequence, TString(), false, false, sectorMap, false);
+        } else {
+            sectorMaps[i]->ZeroInit(1_MB / NKikimr::NPDisk::NSectorMap::SECTOR_SIZE);
+        }
+    }
 
     // per-node NodeWarden configurations; node 0 has the static group and the BS_CONTROLLER tablet
     THashMap<ui32, NKikimrBlobStorage::TNodeWardenServiceSet> configs;
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+        auto& cfg = configs[i];
+        cfg.AddAvailabilityDomains(0);
+    }
+
     auto& st = configs[0];
-    auto& pdisk = *st.AddPDisks();
-    pdisk.SetNodeID(runtime.GetNodeId(0));
-    pdisk.SetPDiskID(1);
-    pdisk.SetPath(path);
-    pdisk.SetPDiskGuid(guid);
-    pdisk.SetPDiskCategory(0);
-    pdisk.MutablePDiskConfig()->SetExpectedSlotCount(2);
-    auto& vdisk = *st.AddVDisks();
-    auto& id = *vdisk.MutableVDiskID();
+    auto& staticVdisk = *st.AddVDisks();
+    auto& staticPDisk = *st.AddPDisks();
+    staticPDisk.SetNodeID(runtime.GetNodeId(0));
+    staticPDisk.SetPDiskID(1);
+    staticPDisk.SetPath(paths[0]);
+    staticPDisk.SetPDiskGuid(guids[0]);
+    staticPDisk.SetPDiskCategory(0);
+    staticPDisk.MutablePDiskConfig()->SetExpectedSlotCount(2);
+    auto& id = *staticVdisk.MutableVDiskID();
     id.SetGroupID(0);
     id.SetGroupGeneration(1);
     id.SetRing(0);
     id.SetDomain(0);
     id.SetVDisk(0);
-    auto& loc = *vdisk.MutableVDiskLocation();
-    loc.SetNodeID(pdisk.GetNodeID());
-    loc.SetPDiskID(pdisk.GetPDiskID());
+    auto& loc = *staticVdisk.MutableVDiskLocation();
+    loc.SetNodeID(staticPDisk.GetNodeID());
+    loc.SetPDiskID(staticPDisk.GetPDiskID());
     loc.SetVDiskSlotID(1);
-    loc.SetPDiskGuid(pdisk.GetPDiskGuid());
-    vdisk.SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
+    loc.SetPDiskGuid(staticPDisk.GetPDiskGuid());
+    staticVdisk.SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
     auto& g = *st.AddGroups();
     g.SetGroupID(0);
     g.SetGroupGeneration(1);
@@ -64,13 +91,12 @@ void SetupServices(TTestBasicRuntime& runtime) {
     auto& d = *r.AddFailDomains();
     auto& l = *d.AddVDiskLocations();
     l.CopyFrom(loc);
-    st.AddAvailabilityDomains(0);
     app.BSConf = st;
 
     for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
         SetupStateStorage(runtime, i);
         auto config = MakeIntrusive<TNodeWardenConfig>(new TStrandedPDiskServiceFactory(runtime));
-        config->SectorMaps[path] = sectorMap;
+        config->SectorMaps[paths[i]] = sectorMaps[i];
         config->BlobStorageConfig.MutableServiceSet()->CopyFrom(configs[i]);
         SetupBSNodeWarden(runtime, i, config);
         SetupTabletResolver(runtime, i);
@@ -81,6 +107,12 @@ void SetupServices(TTestBasicRuntime& runtime) {
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController), &CreateFlatBsController);
 
+    runtime.WaitFor("all nodes registered in BS_CONTROLLER", [&] {
+        return registeredNodeIds.size() == runtime.GetNodeCount();
+    }, TDuration::Seconds(10));
+
+    runtime.SetObserverFunc(prevObserver);
+
     // setup box and storage pool for testing
     {
         TActorId edge = runtime.AllocateEdgeActor();
@@ -89,25 +121,34 @@ void SetupServices(TTestBasicRuntime& runtime) {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        ui32 nodeId = runtime.GetNodeId(0);
-        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
-        auto& nodeInfo = nodesInfo->Nodes[0];
-
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto *r = ev->Record.MutableRequest();
-        auto *hc = r->AddCommand()->MutableDefineHostConfig();
-        hc->SetHostConfigId(1);
-        auto *d = hc->AddDrive();
-        d->SetPath(pdisk.GetPath());
-        d->SetType(NKikimrBlobStorage::ROT);
-        d->MutablePDiskConfig()->SetExpectedSlotCount(2);
+
+        THashMap<ui32, ui64> hostConfigIdByNodeId;
+        for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+            auto *hc = r->AddCommand()->MutableDefineHostConfig();
+            const ui64 hostConfigId = i + 1;
+            hc->SetHostConfigId(hostConfigId);
+            auto *d = hc->AddDrive();
+            d->SetPath(paths[i]);
+            d->SetType(NKikimrBlobStorage::ROT);
+            d->MutablePDiskConfig()->SetExpectedSlotCount(2);
+            hostConfigIdByNodeId.emplace(runtime.GetNodeId(i), hostConfigId);
+        }
+
         auto *db = r->AddCommand()->MutableDefineBox();
         db->SetBoxId(1);
-        auto *h = db->AddHost();
-        auto *hk = h->MutableKey();
-        hk->SetFqdn(nodeInfo.Host);
-        hk->SetIcPort(nodeInfo.Port);
-        h->SetHostConfigId(hc->GetHostConfigId());
+        for (const auto& nodeInfo : nodesInfo->Nodes) {
+            auto it = hostConfigIdByNodeId.find(nodeInfo.NodeId);
+            if (it == hostConfigIdByNodeId.end()) {
+                continue;
+            }
+            auto *h = db->AddHost();
+            auto *hk = h->MutableKey();
+            hk->SetFqdn(nodeInfo.Host);
+            hk->SetIcPort(nodeInfo.Port);
+            h->SetHostConfigId(it->second);
+        }
         auto *ds = r->AddCommand()->MutableDefineStoragePool();
         ds->SetBoxId(db->GetBoxId());
         ds->SetStoragePoolId(1);
@@ -126,6 +167,78 @@ void SetupServices(TTestBasicRuntime& runtime) {
 void Setup(TTestBasicRuntime& runtime) {
     SetupLogging(runtime);
     SetupServices(runtime);
+}
+
+NKikimrBlobStorage::TBaseConfig QueryBaseConfig(TTestBasicRuntime& runtime) {
+    TActorId edge = runtime.AllocateEdgeActor();
+    auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    ev->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
+    runtime.SendToPipe(MakeBSControllerID(), edge, ev.release());
+    auto resp = runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+    const auto& response = resp->Get()->Record.GetResponse();
+    UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+    return response.GetStatus(0).GetBaseConfig();
+}
+
+void ReassignGroupDisk(TTestBasicRuntime& runtime, ui64 groupId, ui32 groupGeneration,
+        ui32 targetNodeId, ui32 targetPDiskId) {
+    TActorId edge = runtime.AllocateEdgeActor();
+    auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto *request = ev->Record.MutableRequest();
+    request->SetIgnoreGroupFailModelChecks(true);
+    request->SetIgnoreDegradedGroupsChecks(true);
+    request->SetIgnoreDisintegratedGroupsChecks(true);
+    auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
+    cmd->SetGroupId(groupId);
+    cmd->SetGroupGeneration(groupGeneration);
+    cmd->SetFailRealmIdx(0);
+    cmd->SetFailDomainIdx(0);
+    cmd->SetVDiskIdx(0);
+    auto *targetPDisk = cmd->MutableTargetPDiskId();
+    targetPDisk->SetNodeId(targetNodeId);
+    targetPDisk->SetPDiskId(targetPDiskId);
+
+    runtime.SendToPipe(MakeBSControllerID(), edge, ev.release());
+    auto resp = runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+    const auto& response = resp->Get()->Record.GetResponse();
+    UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+}
+
+TMaybe<ui32> QueryNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex, ui32 nodeId, ui32 groupId,
+        TDuration simTimeout = TDuration::Seconds(1)) {
+    const TActorId edge = runtime.AllocateEdgeActor(nodeIndex);
+    runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, new TEvNodeWardenQueryGroupInfo(groupId)), nodeIndex);
+    auto resp = runtime.GrabEdgeEvent<TEvNodeWardenGroupInfo>(edge, simTimeout);
+    if (!resp) {
+        return Nothing();
+    }
+    if (resp->Get()->Record.HasGroup()) {
+        return resp->Get()->Record.GetGroup().GetGroupGeneration();
+    }
+    return Nothing();
+}
+
+void WaitForNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex, ui32 nodeId, ui32 groupId,
+        ui32 expectedGeneration) {
+    TDuration simTimeout = TDuration::Seconds(10);
+    TDuration queryTimeout = TDuration::MilliSeconds(50);
+    const TInstant deadline = runtime.GetCurrentTime() + simTimeout;
+    TMaybe<ui32> generation;
+    while (runtime.GetCurrentTime() < deadline) {
+        generation = QueryNodeWardenGroupGeneration(runtime, nodeIndex, nodeId, groupId, queryTimeout);
+        if (generation && *generation == expectedGeneration) {
+            return;
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    }
+
+    generation = QueryNodeWardenGroupGeneration(runtime, nodeIndex, nodeId, groupId, queryTimeout);
+    UNIT_ASSERT_C(false, TStringBuilder() << "Timeout while waiting for owner local group info update"
+        << " NodeId# " << nodeId
+        << " GroupId# " << groupId
+        << " ExpectedGeneration# " << expectedGeneration
+        << " ActualGeneration# " << (generation ? TStringBuilder() << *generation : TString("<none>")));
 }
 
 Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
@@ -194,6 +307,151 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         allowConfiguring = true;
         auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(LocalGroupInfoUpdatesAfterMovingOut) {
+        // Regression scenario:
+        // 1) a dynamic group is initially local for owner node;
+        // 2) its VDisk is moved away from owner, owner still has last GroupInfo;
+        // 3) owner nodewarden reconnects to BSC while proxy is not started locally;
+        // 4) VDisk is moved again between non-owner nodes.
+        // Original owner must continue receiving fresh generation updates after each reconnect.
+        TTestBasicRuntime runtime(3);
+
+        ui32 ownerNodeId = 0;
+        ui32 ownerNodeIndex = 0;
+        ui32 groupId = 0;
+        ui32 oldGeneration = 0;
+        ui32 newGeneration = 0;
+
+        THashMap<TActorId, TActorId> connectedPipeClientByWarden;
+        THashMap<ui32, TActorId> nodeWardenActorIdByNodeId;
+
+        TTestActorRuntimeBase::TRegistrationObserver prevReg = runtime.SetRegistrationObserverFunc(
+                [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+            if (IActor *actor = runtime.FindActor(actorId); dynamic_cast<NKikimr::NStorage::TNodeWarden*>(actor)) {
+                nodeWardenActorIdByNodeId[actorId.NodeId()] = actorId;
+                runtime.EnableScheduleForActor(actorId);
+            }
+            return prevReg(runtime, parentId, actorId);
+        });
+
+        TTestActorRuntimeBase::TEventObserver prev = runtime.SetObserverFunc(
+                [&](TAutoPtr<IEventHandle>& ev) {
+            if (auto *msg = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
+                if (msg->TabletId == MakeBSControllerID() && msg->Status == NKikimrProto::OK) {
+                    connectedPipeClientByWarden[ev->Recipient] = msg->ClientId;
+                }
+            }
+            return prev(ev);
+        });
+
+        Setup(runtime);
+
+        auto findNodeIndex = [&](ui32 nodeId) {
+            for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+                if (runtime.GetNodeId(i) == nodeId) {
+                    return i;
+                }
+            }
+            Y_ABORT("Node index not found");
+        };
+
+        auto baseConfig = QueryBaseConfig(runtime);
+
+        bool foundGroup = false;
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (TGroupID(group.GetGroupId()).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+                continue;
+            }
+            ui32 nodeId = 0;
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == group.GetGroupId() && vslot.HasVSlotId()) {
+                    nodeId = vslot.GetVSlotId().GetNodeId();
+                    break;
+                }
+            }
+            if (nodeId) {
+                groupId = group.GetGroupId();
+                oldGeneration = group.GetGroupGeneration();
+                ownerNodeId = nodeId;
+                ownerNodeIndex = findNodeIndex(ownerNodeId);
+                foundGroup = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundGroup, "Failed to locate target dynamic group");
+
+        runtime.WaitFor("owner node warden registration and initial BSC pipe connection", [&] {
+            return nodeWardenActorIdByNodeId.contains(ownerNodeId) &&
+                connectedPipeClientByWarden.contains(nodeWardenActorIdByNodeId.at(ownerNodeId));
+        }, TDuration::Seconds(1));
+
+        auto ownerGeneration = QueryNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId);
+        UNIT_ASSERT_C(ownerGeneration, "Owner node warden has no group info");
+        UNIT_ASSERT_VALUES_EQUAL(*ownerGeneration, oldGeneration);
+
+        // Move the only group VDisk between non-owner nodes and bump group generation.
+        // Owner node is expected to keep receiving generation updates via BSC subscription.
+        auto moveVDisk = [&]() {
+            auto baseConfig = QueryBaseConfig(runtime);
+
+            ui32 currentNodeId = 0;
+
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == groupId) {
+                    currentNodeId = vslot.GetVSlotId().GetNodeId();
+                    break;
+                }
+            }
+
+            ui32 destinationNodeId = 0;
+            ui32 destinationPDiskId = 0;
+            for (const auto& pdisk : baseConfig.GetPDisk()) {
+                // Don't move to original node at all
+                // And move to any other node.
+                if (pdisk.GetNodeId() != ownerNodeId && pdisk.GetNodeId() != currentNodeId) {
+                    destinationNodeId = pdisk.GetNodeId();
+                    destinationPDiskId = pdisk.GetPDiskId();
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(destinationNodeId && destinationPDiskId, "Failed to locate destination PDisk");
+            // Move VDisk from the initial node to trigger group info change
+            ReassignGroupDisk(runtime, groupId, oldGeneration, destinationNodeId, destinationPDiskId);
+            baseConfig = QueryBaseConfig(runtime);
+            for (const auto& group : baseConfig.GetGroup()) {
+                if (group.GetGroupId() == groupId) {
+                    newGeneration = group.GetGroupGeneration();
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(newGeneration > oldGeneration, "Expected generation bump after reassign");
+            oldGeneration = newGeneration;
+        };
+
+        moveVDisk();
+
+        WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, newGeneration);
+
+        // Reconnect owner nodewarden several times while the group is already moved out from it.
+        // Then move the VDisk again and verify owner still gets fresh generation updates.
+        for (ui8 i = 0; i < 3; ++i) {
+            // Force pipe disconnect to trigger RegisterNode
+            const TActorId ownerWardenActorId = nodeWardenActorIdByNodeId.at(ownerNodeId);
+            const TActorId ownerClientId = connectedPipeClientByWarden.at(ownerWardenActorId);
+            runtime.Send(new IEventHandle(ownerWardenActorId, runtime.AllocateEdgeActor(ownerNodeIndex),
+                new TEvTabletPipe::TEvClientDestroyed(MakeBSControllerID(), ownerClientId, {})), ownerNodeIndex, true);
+
+            runtime.WaitFor("owner pipe reconnect after ClientDestroyed", [&] {
+                return connectedPipeClientByWarden.contains(ownerWardenActorId) &&
+                    connectedPipeClientByWarden.at(ownerWardenActorId) != ownerClientId;
+            }, TDuration::Seconds(1));
+
+            moveVDisk();
+
+            WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, newGeneration);
+        }
     }
 
 }

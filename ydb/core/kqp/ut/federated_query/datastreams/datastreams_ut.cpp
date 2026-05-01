@@ -20,6 +20,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <fmt/format.h>
+#include <random>
 
 #include <library/cpp/protobuf/interop/cast.h>
 
@@ -78,6 +79,16 @@ public:
     inline static constexpr TDuration TEST_OPERATION_TIMEOUT = TDuration::Seconds(10);
 
 public:
+
+    ~TStreamingTestFixture () {
+        if (InternalDriver) {
+            InternalDriver->Stop(true);
+        }
+        if (ExternalDriver) {
+            ExternalDriver->Stop(true);
+        }
+    }
+
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig() {
@@ -87,6 +98,24 @@ public:
         auto& result = AppConfig.emplace();
         result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
         return result;
+    }
+
+    void UpdateConfig(NKikimrConfig::TAppConfig& appConfig) {
+        auto& runtime = GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *evProxy->Record.MutableConfig() = appConfig;
+
+        runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(response);
+
+        auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *evStorage->Record.MutableConfig() = appConfig;
+
+        runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+        response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+        UNIT_ASSERT(response);
     }
 
     TIntrusivePtr<IMockPqGateway> SetupMockPqGateway() {
@@ -136,12 +165,14 @@ public:
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .NodeCount = NodeCount,
+                .DynamicNodeCount = DynamicNodeCount,
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
                 .UseLocalCheckpointsInStreamingQueries = true,
                 .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+                .StoragePoolTypes = StoragePoolTypes,
             });
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -854,9 +885,11 @@ private:
 
 protected:
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
+    TVector<TString> StoragePoolTypes;
     TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NTopic::TTopicClientSettings TopicClientSettings = NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
@@ -2192,27 +2225,74 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     "value": 23333
   }
 ])";
-        UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+
+        // TODO canonize order and avoid duplication
+        TString expectedMetrics2 = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert-2"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 23333
+  },
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 13333
+  }
+])";
+        auto results = GetSolomonMetrics(soLocation);
+        if (results != expectedMetrics2) {
+            UNIT_ASSERT_VALUES_EQUAL(results, expectedMetrics);
+        }
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        ++DynamicNodeCount;
+        auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
-        constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
+        constexpr char cloudId[] =  "testcloud4";
 
-        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
-        CreateTopic(inputTopicName);
-        constexpr char secretPath[] = "eds_iam_token";
-        ExecQuery(fmt::format(R"(
-            CREATE SECRET {secret} WITH (value = "{token}");
-            )",
-            "secret"_a = secretPath,
-            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
-            ));
+        constexpr char sourceName[] = "sourceName";
+        constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
+        constexpr char serviceAccountId[] = "foobar"; // not verified
 
-        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
-        constexpr char pqSourceName[] = "sourceNameCloud";
-        ExecQuery(fmt::format(R"(
+        // Prepare "mock cloud" database
+        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto location = GetKikimrRunner()->GetEndpoint();
+        {
+            NYdb::TDriver driver(
+                NYdb::TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase(databasePath)
+            );
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            auto result = topicClient.CreateTopic(topicName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        constexpr char missingSecretPath[] = "eds_missing_iam_token";
+
+        // Check missing INITIAL_TOKEN secret
+        constexpr auto createExternalDataSourceTemplate = R"(
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{pq_location}",
@@ -2220,15 +2300,64 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 AUTH_METHOD = "IAM",
                 INITIAL_TOKEN_SECRET_PATH = "{secret}",
                 SERVICE_ACCOUNT_ID = "{service_account_id}"
-            );)",
-            "pq_source"_a = pqSourceName,
-            "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE,
+            );)";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = missingSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::BAD_REQUEST,
+            fmt::format(
+                R"(Error: secret `/Root/{secret}` not found)",
+                "secret"_a = missingSecretPath));
+
+        // Check bad INITIAL_TOKEN
+        constexpr char badSecretPath[] = "eds_bad_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
+            "secret"_a = badSecretPath,
+            "token"_a = "xyz@builtin"
+            ));
+
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNAUTHORIZED, "Error: Access denied");
+
+        constexpr char secretPath[] = "eds_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
             "secret"_a = secretPath,
-            "service_account_id"_a = serviceAccountId
+            "token"_a = BUILTIN_ACL_ROOT
+            ));
+
+        // Check successful EDS creation
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
         ));
+
+        // Verify EDS description
         {
-            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/" + std::string(pqSourceName), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -2243,7 +2372,39 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT(iam.HasResourceId());
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
-        // cannot verify use without some kind of "mock IAM"
+
+        // Cannot verify successful use without some kind of "mock IAM"
+        // Check with disabled feature-flag
+        {
+            auto& runtime = GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableExternalDataSourceAuthMethodIam(false);
+            appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(false);
+
+            UpdateConfig(appConfig);
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // a) Attempt to use existing EDS fails
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+
+        // b) Attempt to create new EDS fails
+        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNSUPPORTED,
+            "Error: AUTH_METHOD=IAM is disabled");
     }
 }
 
@@ -3645,22 +3806,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
+            UpdateConfig(appConfig);
 
             Sleep(TDuration::Seconds(1));
 
@@ -4919,16 +5067,39 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "topic"_a = topic
         ));
 
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         Sleep(TDuration::Seconds(3));
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-        {
-            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+        std::random_device rng;
+        for (;;) {
+            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil, Issues FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_GE(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
-                UNIT_ASSERT(*resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            bool ok = false;
+            CheckScriptResult(result[0], 3, 1, [&](TResultSetParser& resultSet) {
+                Cerr << "Now " << TInstant::Now();
+                if (auto suspendedUntil = resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp()) {
+                    Cerr << " SuspendedUntil " << *suspendedUntil;
+                    ok = *suspendedUntil > TInstant::Now() + TDuration::MilliSeconds(500);
+                    UNIT_ASSERT(*suspendedUntil);
+                }
+                if (auto retryCount = resultSet.ColumnParser("RetryCount").GetOptionalUint64()) {
+                    Cerr << " RetryCount " << *retryCount;
+                    if (*retryCount < 1) {
+                        ok = false;
+                    }
+                } else {
+                    ok = false;
+                }
+                if (auto issues = resultSet.ColumnParser("Issues").GetOptionalUtf8()) {
+                    Cerr << " Issues " << *issues;
+                }
+                Cerr << Endl;
             });
+            if (ok) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(50 + (rng() % 100))); // 100+-50ms
         }
 
         ExecQuery(fmt::format(R"(
@@ -5357,7 +5528,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
         }
 
-        failAt = TInstant::Now();
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE

@@ -17,7 +17,6 @@ IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -25,7 +24,16 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     dq_hash_combine_ut.cpp
+)
+
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
+PEERDIR(
+    ydb/core/kqp/tools/join_perf
+)
+
+SRCS(
     dq_hash_join_ut.cpp
 )
+ENDIF()
 
 END()

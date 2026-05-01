@@ -55,12 +55,11 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
     {
         TString authError;
         auto pathWithName = TStringBuilder() << "topic " << TopicPath;
-        auto authResult = NKikimr::NTopicHelpers::CheckAccess(*AppData(ActorContext()), response, Event->Get()->UserToken, pathWithName, authError);
+        auto authResult = NKikimr::NTopicHelpers::CheckAccess(response, Event->Get()->UserToken, pathWithName, authError);
         switch (authResult) {
             case NKikimr::NTopicHelpers::EAuthResult::AuthOk:
                 break;
             case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
-            case NKikimr::NTopicHelpers::EAuthResult::TokenRequired:
                 return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", authError));
         }
     }

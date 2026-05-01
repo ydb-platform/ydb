@@ -86,7 +86,7 @@ namespace {
 
         auto selectedIdx = RunFtxuiMenu("Please choose profile to configure", options);
         if (!selectedIdx) {
-            Cout << "Cancelled." << Endl;
+            Cout << Endl << "Cancelled." << Endl;
             exit(EXIT_SUCCESS);
         }
 
@@ -106,7 +106,7 @@ namespace {
             if (result) {
                 profileName = *result;
             } else {
-                Cout << "Cancelled." << Endl;
+                Cout << Endl << "Cancelled." << Endl;
                 exit(EXIT_SUCCESS);
             }
         } else {
@@ -145,16 +145,16 @@ namespace {
 
     void SetAuthMethod(const TString& id, const TString& fullName, std::shared_ptr<IProfile> profile, const TString& profileName) {
         TString title = TStringBuilder() << "Please enter " << fullName << " (" << id << ")";
-        auto newValue = RunFtxuiInput(title);
+        auto newValue = RunFtxuiPasswordInput(title);
         if (!newValue) {
-            Cout << "Cancelled." << Endl;
+            Cout << Endl << "Cancelled." << Endl;
             return;
         }
         if (*newValue) {
             PutAuthMethod(profile, id, *newValue);
-            Cout << "Saved " << fullName << " for profile \"" << profileName << "\"." << Endl;
+            Cout << Endl << "Saved " << fullName << " for profile \"" << profileName << "\"." << Endl;
         } else {
-            Cout << "Empty value not saved." << Endl;
+            Cout << Endl << "Empty value not saved." << Endl;
         }
     }
 

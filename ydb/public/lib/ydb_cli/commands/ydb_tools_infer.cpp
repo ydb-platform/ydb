@@ -87,6 +87,10 @@ void TCommandToolsInferCsv::Parse(TConfig& config) {
 
 namespace {
     std::string GetRelativePath(const std::string& fullPath, TClientCommand::TConfig& config) {
+        if (!config.Database) {
+            return fullPath;
+        }
+
         std::string databasePath = config.Database;
         if (databasePath.back() != '/' && databasePath.back() != '\\') {
             databasePath += '/';
@@ -114,7 +118,7 @@ namespace {
         static const std::regex namePattern("^[a-zA-Z_][a-zA-Z0-9_]*$");
         return std::regex_match(name, namePattern);
     }
-}
+} // anonymous namespace
 
 int TCommandToolsInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
@@ -350,7 +354,7 @@ WITH (
         Cerr << "Executing request: " << Endl << Endl << query << Endl << Endl;
         TDriver driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
-        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Zero(), true)
+        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), true)
             .GetValueSync();
         if (result.IsSuccess()) {
             Cerr << "Query executed successfully." << Endl;

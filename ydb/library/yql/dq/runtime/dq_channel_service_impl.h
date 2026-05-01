@@ -625,7 +625,6 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
     const TDuration MinReconciliationDelay = TDuration::MilliSeconds(250);
-    const ui64 MaxReconciliationCount = 3;
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;

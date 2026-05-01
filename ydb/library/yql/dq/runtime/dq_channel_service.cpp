@@ -1158,6 +1158,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
 void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
     LOG_W("NODE DISCONNECTED NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
+    std::lock_guard lock(Mutex);
     Subscribed.store(false);
     StartReconciliation(false);
 }
@@ -1710,13 +1711,15 @@ void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
     // NOOP
 }
 
-// All reconciliation activity if processed from NodeStateActor event loop, thus it is single threaded and need
+// All reconciliation activity is processed from NodeStateActor event loop, thus it is single threaded and need
 // no additional synchronization. Other (sender actor's) threads look for Reconciliation atomic only and wait
-// for reconciliation to finish
+// for reconciliation to finish. But common use fields like Queue are still used from sender thread and require
+// some kind of synchronization
 
 void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
     auto& msg = *ev->Get();
     if (msg.GenMajor == Reconciliation.load() /* GenMajor */ && msg.GenMinor == GenMinor  && msg.Count == ReconciliationCount) {
+        std::lock_guard lock(Mutex);
         DoReconciliation();
     }
 }
@@ -1737,7 +1740,7 @@ void TNodeState::StartReconciliation(bool major) {
 }
 
 void TNodeState::DoReconciliation() {
-    if (++ReconciliationCount > MaxReconciliationCount) {
+    if (++ReconciliationCount > Limits.ReconciliationCount) {
         // give up and request destroy
         ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId));
         return;
@@ -1955,7 +1958,7 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     nodeState->Self = nodeState;
     NodeStates.emplace(nodeId, nodeState);
     LOG_N("DEBUG NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
-    nodeState->StartReconciliation(true);
+    ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
     return nodeState;
 }
 

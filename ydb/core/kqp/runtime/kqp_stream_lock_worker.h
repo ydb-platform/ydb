@@ -43,7 +43,7 @@ struct TKqpStreamLockSettings {
 class TKqpStreamLockWorker {
 public:
     using TLockRequestList = std::vector<std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>>>;
-    using TPartitionInfo = std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>;
+    using TPartitionInfo = TPartitioning::TCPtr;
 
     struct TRowBatchInfo {
         size_t BatchSize = 0;

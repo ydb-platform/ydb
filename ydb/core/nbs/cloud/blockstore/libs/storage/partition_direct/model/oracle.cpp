@@ -24,13 +24,13 @@ ui64 GetFromConfig(ui64 value, ui64 defaultValue)
     return value ? value : defaultValue;
 }
 
-THostState::EState StatusToState(EHostStatus status)
+THostState::EState StatusToState(EHostHealth status)
 {
     switch (status) {
-        case EHostStatus::Online:
-        case EHostStatus::Sufferer:
+        case EHostHealth::Online:
+        case EHostHealth::Sufferer:
             return THostState::EState::Enabled;
-        case EHostStatus::Offline:
+        case EHostHealth::Offline:
             return THostState::EState::Disabled;
     }
 }
@@ -96,7 +96,7 @@ TOracle::TOracle(
 
     Statuses.resize(Stats.size());
     for (auto& status: Statuses) {
-        status = EHostStatus::Online;
+        status = EHostHealth::Online;
     }
 }
 
@@ -104,7 +104,7 @@ void TOracle::Think(TInstant now)
 {
     const TOracleConfig config(StorageConfig);
 
-    TVector<EHostStatus> newStatuses(Statuses);
+    TVector<EHostHealth> newStatuses(Statuses);
 
     for (size_t i = 0; i < Stats.size(); ++i) {
         auto errorsInfo = Stats[i].GetErrorsInfo(now);
@@ -121,12 +121,12 @@ void TOracle::Think(TInstant now)
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));
 
-        newStatuses[i] = EHostStatus::Online;
+        newStatuses[i] = EHostHealth::Online;
 
         if (hasOfflineSymptom) {
-            newStatuses[i] = EHostStatus::Offline;
+            newStatuses[i] = EHostHealth::Offline;
         } else if (hasSufferingSymptom) {
-            newStatuses[i] = EHostStatus::Sufferer;
+            newStatuses[i] = EHostHealth::Sufferer;
         }
     }
 

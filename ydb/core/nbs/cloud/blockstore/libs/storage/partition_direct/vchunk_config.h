@@ -1,41 +1,30 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
 
-#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui8 InvalidHostIndex = 0xFF;
-
-// DirectBlockGroup consists of 5 hosts. Each VChunk of DirectBlockGroup
-// is configured to use 3 hosts for the primary storage location and 2 for
-// hand-offs. For this reason, the VChunk configuration contains 5 node indexes
-// from 0 to 4, the indexes cannot be repeated.
 struct TVChunkConfig
 {
-    ui32 VChunkIndex = 0;
-    ui8 PrimaryHost0 = InvalidHostIndex;
-    ui8 PrimaryHost1 = InvalidHostIndex;
-    ui8 PrimaryHost2 = InvalidHostIndex;
-    ui8 HandOffHost0 = InvalidHostIndex;
-    ui8 HandOffHost1 = InvalidHostIndex;
+    // Default number of Primary hosts at config init time. Not a hard cap —
+    // the runtime may grow this by promoting HandOff hosts to Primary.
+    static constexpr size_t DefaultPrimaryCount = 3;
 
-    static TVChunkConfig Make(ui32 vChunkIndex);
+    ui32 VChunkIndex = 0;
+    THostStatusList PBufferHosts;
+    THostStatusList DDiskHosts;
+
+    static TVChunkConfig Make(
+        ui32 vChunkIndex,
+        size_t hostCount = DirectBlockGroupHostCount,
+        size_t primaryCount = DefaultPrimaryCount);
 
     [[nodiscard]] bool IsValid() const;
-
-    // Translates location to host index.
-    [[nodiscard]] ui8 GetHostIndex(ELocation location) const;
-
-    // Translates host index to PBuffer location.
-    [[nodiscard]] ELocation GetPBufferLocation(ui8 hostIndex) const;
-
-    // Makes dictionary for translation host index to location.
-    [[nodiscard]] THashMap<ui8, ELocation> GetPBuffersMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

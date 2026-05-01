@@ -13,7 +13,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EHostStatus
+enum class EHostHealth
 {
     Online,
     Sufferer,
@@ -44,7 +44,7 @@ private:
     const TVector<THostStat>& Stats;
     const TVector<THostState>& States;
 
-    TVector<EHostStatus> Statuses;
+    TVector<EHostHealth> Statuses;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -48,7 +48,8 @@ TDDiskDataCopier::TDDiskDataCopier(
     IPartitionDirectServicePtr partitionDirectService,
     IDirectBlockGroupPtr directBlockGroup,
     TBlocksDirtyMap* dirtyMap,
-    ELocation destination)
+    TDDiskStateList* ddiskStates,
+    THostIndex destination)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
@@ -56,8 +57,9 @@ TDDiskDataCopier::TDDiskDataCopier(
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
     , DirtyMap(dirtyMap)
+    , DDiskStates(ddiskStates)
 {
-    Y_ASSERT(IsDDisk(Destination));
+    Y_ASSERT(Destination < VChunkConfig.DDiskHosts.HostCount());
 }
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
@@ -76,7 +78,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
         }
     }
 
-    if (auto watermark = DirtyMap->GetFreshWatermark(Destination)) {
+    if (auto watermark = DDiskStates->GetFreshWatermark(Destination)) {
         FreshWatermark = *watermark;
         Complete = NewPromise<EResult>();
         StartCopyRange();
@@ -129,8 +131,8 @@ void TDDiskDataCopier::StartCopyRange()
     }
 
     Y_ABORT_UNLESS(
-        DirtyMap->GetFreshWatermark(Destination) &&
-        FreshWatermark == DirtyMap->GetFreshWatermark(Destination));
+        DDiskStates->GetFreshWatermark(Destination) &&
+        FreshWatermark == DDiskStates->GetFreshWatermark(Destination));
 
     const ui64 futureWatermark = FreshWatermark + CopyRangeSize;
     auto range = TBlockRange64::WithLength(
@@ -139,12 +141,19 @@ void TDDiskDataCopier::StartCopyRange()
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         range,
-        TRangeLock(DirtyMap, range, TLocationMask::MakeOne(Destination)),
+        TRangeLock(DirtyMap, range, THostMask::MakeOne(Destination)),
         CreateSpan());
 
-    DirtyMap->SetFlushWatermark(Destination, futureWatermark);
+    DDiskStates->SetFlushWatermark(Destination, futureWatermark);
 
-    auto readHint = DirtyMap->MakeReadHint(range);
+    // Read source DDisk content only; in-flight PBuffer writes belong to
+    // a future state and will reach the destination via flushing, not via
+    // copying (mixing them in here would copy a half-written state).
+    auto readHint = DirtyMap->MakeReadHint(
+        range,
+        THostMask::MakeEmpty(),
+        VChunkConfig.DDiskHosts.GetActive(),
+        *DDiskStates);
     Y_ABORT_UNLESS(!readHint.RangeHints.empty());
 
     const ui64 requestId = Random();
@@ -200,7 +209,7 @@ void TDDiskDataCopier::OnRangeRead(
 
     auto writeFuture = DirectBlockGroup->WriteBlocksToDDisk(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Destination),
+        Destination,
         copyRangeState->Range,
         copyRangeState->GetSgList(),
         NWilson::TTraceId());
@@ -234,7 +243,7 @@ void TDDiskDataCopier::OnRangeWritten(
     }
 
     FreshWatermark = (copyRangeState->Range.End + 1) * VolumeConfig->BlockSize;
-    DirtyMap->SetReadWatermark(Destination, FreshWatermark);
+    DDiskStates->SetReadWatermark(Destination, FreshWatermark);
     Y_ABORT_UNLESS(VolumeConfig->VChunkSize > 0);
     if (FreshWatermark < VolumeConfig->VChunkSize) {
         StartCopyRange();

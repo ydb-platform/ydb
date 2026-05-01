@@ -180,7 +180,7 @@ void TDirectBlockGroup::Run(IPartitionDirectService* service)
 NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -255,7 +255,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
@@ -334,7 +334,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -411,7 +411,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
@@ -490,7 +490,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
 TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
-    std::vector<ui8> hostIndexes,
+    TVector<THostIndex> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
     TDuration replyTimeout,
@@ -590,7 +590,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
 void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
-    ui8 coordinatorHostIndex,
+    THostIndex coordinatorHostIndex,
     TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
     TDuration executionTime)
 {
@@ -599,7 +599,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         MakeError(E_FAIL, "coordinator response not found");
 
     for (const auto& singlePBufferResponse: response.GetResult()) {
-        const ui8* const hostIndex = PBufferIdToHostIndex.FindPtr(
+        const THostIndex* const hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
         if (!hostIndex) {
             LOG_ERROR(
@@ -643,8 +643,8 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     ui32 vChunkIndex,
-    ui8 pbufferHostIndex,
-    ui8 ddiskHostIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
@@ -772,7 +772,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
@@ -878,7 +878,7 @@ NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(
 }
 
 NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
-    ui8 hostIndex)
+    THostIndex hostIndex)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1104,7 +1104,7 @@ void TDirectBlockGroup::DoRestore(
     promise.SetValue(std::move(RestoredPBuffers[vChunkIndex]));
 }
 
-void TDirectBlockGroup::OnRequest(ui8 hostIndex, EOperation operation)
+void TDirectBlockGroup::OnRequest(THostIndex hostIndex, EOperation operation)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1112,7 +1112,7 @@ void TDirectBlockGroup::OnRequest(ui8 hostIndex, EOperation operation)
 }
 
 void TDirectBlockGroup::OnResponse(
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TDuration executionTime,
     EOperation operation,
     const NProto::TError& error)
@@ -1130,8 +1130,8 @@ void TDirectBlockGroup::OnResponse(
 }
 
 void TDirectBlockGroup::OnMultiFlushResponse(
-    ui8 pbufferHostIndex,
-    ui8 ddiskHostIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
     TDuration executionTime,
     const TVector<NProto::TError>& errors)
 {

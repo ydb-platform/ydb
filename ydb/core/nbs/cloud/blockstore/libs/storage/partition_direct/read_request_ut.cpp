@@ -28,7 +28,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
                 .RequestId = 1,
                 .Range = range});
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap.MakeReadHint(
+            range,
+            PBufferActive(),
+            DDiskReadable(),
+            DDiskStates);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             VChunkConfig,
@@ -67,9 +71,13 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
-        auto readHint = DirtyMap.MakeReadHint(range);
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
+        auto readHint = DirtyMap.MakeReadHint(
+            range,
+            PBufferActive(),
+            DDiskReadable(),
+            DDiskStates);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             VChunkConfig,
@@ -98,7 +106,11 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap.MakeReadHint(
+            range,
+            PBufferActive(),
+            DDiskReadable(),
+            DDiskStates);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
@@ -131,20 +143,24 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirtyMap.WriteFinished(
             100,
             TBlockRange64::WithLength(20, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
 
         DirtyMap.WriteFinished(
             200,
             TBlockRange64::WithLength(40, 10),
-            TLocationMask::MakePrimaryPBuffers(),
-            TLocationMask::MakePrimaryPBuffers());
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            VChunkConfig.PBufferHosts.GetPrimary());
 
         const TBlockRange64 range = TBlockRange64::WithLength(10, 100);
         ExpectedRange = range;
         RangeData = GenerateRandomString(ExpectedRange.Size() * BlockSize);
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap.MakeReadHint(
+            range,
+            PBufferActive(),
+            DDiskReadable(),
+            DDiskStates);
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));

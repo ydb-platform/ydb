@@ -4,7 +4,7 @@
 #include "read_request_executor.h"
 #include "vchunk_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -13,6 +13,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TBlocksDirtyMap;
+class TDDiskStateList;
 
 class TDDiskDataCopier: public std::enable_shared_from_this<TDDiskDataCopier>
 {
@@ -37,10 +38,11 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
-        ELocation destination);
+        TDDiskStateList* ddiskStates,
+        THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
-    // dirtyMap.
+    // ddiskStates.
     NThreading::TFuture<EResult> Start();
     // Stops processing. After stopping, the processing can be started again.
     NThreading::TFuture<EResult> Stop();
@@ -63,8 +65,9 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IPartitionDirectServicePtr PartitionDirectService;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const ELocation Destination;
+    const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;
+    TDDiskStateList* const DDiskStates;
 
     EState State = EState::Stopped;
     size_t FreshWatermark = 0;

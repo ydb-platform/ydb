@@ -14,6 +14,8 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 
 namespace NYdb {
@@ -336,6 +338,101 @@ Y_UNIT_TEST(ResultSetFloatPrintTest) {
         << "-inf,inf" << Endl
         << "nan,nan" << Endl;
     TestResultSetParsedOk(resultSetStr, expect);
+}
+
+Y_UNIT_TEST(ParseFloatNanInfFromString) {
+    // Verify that ydb tools restore can parse float/double special values
+    // produced by ydb tools dump (nan, -nan, inf, -inf)
+    auto tableDesc = NTable::TTableBuilder()
+        .AddNullableColumn("ColFloat", EPrimitiveType::Float)
+        .AddNullableColumn("ColDouble", EPrimitiveType::Double)
+        .Build();
+
+    NBackup::TQueryBuilder qb("path/to/table", tableDesc.GetColumns());
+    qb.Begin();
+    // All these must not throw
+    qb.AddLine("nan,nan");
+    qb.AddLine("-nan,-nan");
+    qb.AddLine("inf,inf");
+    qb.AddLine("-inf,-inf");
+    qb.AddLine("1.5,2.5");
+    TParams params = qb.EndAndGetResultingParams();
+
+    auto value = params.GetValue("$items");
+    UNIT_ASSERT(value);
+
+    TValueParser parser(*value);
+    UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::List);
+
+    parser.OpenList();
+
+    // Row 0: nan, nan
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isnan(parser.GetFloat()));
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isnan(parser.GetDouble()));
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    // Row 1: -nan, -nan (treated as nan)
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isnan(parser.GetFloat()));
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isnan(parser.GetDouble()));
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    // Row 2: inf, inf
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isinf(parser.GetFloat()) && parser.GetFloat() > 0);
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isinf(parser.GetDouble()) && parser.GetDouble() > 0);
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    // Row 3: -inf, -inf
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isinf(parser.GetFloat()) && parser.GetFloat() < 0);
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT(std::isinf(parser.GetDouble()) && parser.GetDouble() < 0);
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    // Row 4: 1.5, 2.5
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT_EQUAL(parser.GetFloat(), 1.5f);
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    UNIT_ASSERT_EQUAL(parser.GetDouble(), 2.5);
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    UNIT_ASSERT(!parser.TryNextListItem());
+    parser.CloseList();
 }
 
 

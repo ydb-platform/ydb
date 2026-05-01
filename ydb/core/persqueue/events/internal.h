@@ -227,6 +227,7 @@ struct TEvPQ {
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
         EvEnd,
     };
 
@@ -240,6 +241,28 @@ struct TEvPQ {
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
+        enum class EWriteExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Checked,
+            Error,
+        };
+
+        enum class EMessageExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Duplicate,
+            Unique,
+            Error,
+        };
+
+        struct TMessageExternalDeduplicationInfo {
+            struct TPartitonAndOffset {
+                ui32 Partition;
+                ui64 Offset;
+            };
+            EMessageExternalDeduplicationStatus Status = EMessageExternalDeduplicationStatus::Unchecked;
+            std::optional<TPartitonAndOffset> OriginalPartitionAndOffset;
+        };
+
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
@@ -264,9 +287,10 @@ struct TEvPQ {
             TMaybe<i16> ProducerEpoch;
 
             std::optional<TString> MessageDeduplicationId;
+            TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
@@ -274,6 +298,7 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
+        , ExternalDeduplicationStatus(externalDeduplicationStatus)
         {
         }
 
@@ -284,7 +309,7 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
-
+        EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -631,6 +656,7 @@ struct TEvPQ {
         TString OwnerCookie;
         ui64 MessageNo;
         bool LastRequest;
+        bool FromDeduplicatedQueue = false;
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
@@ -1728,6 +1754,18 @@ struct TEvPQ {
             Record.SetPartitionId(partitionId);
             Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
+        }
+    };
+
+    struct TEvMLPUpdateExternalLockedMessageGroupsId : TEventPB<TEvMLPUpdateExternalLockedMessageGroupsId, NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId, EvMLPUpdateExternalLockedMessageGroupsId> {
+        TEvMLPUpdateExternalLockedMessageGroupsId() = default;
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
         }
     };
 };

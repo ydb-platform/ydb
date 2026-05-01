@@ -684,7 +684,7 @@ void TPartitionFixture::SendWrite
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
     msgs.push_back(msg);
 
-    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1873,7 +1873,7 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
             msgs.push_back(makeMsg( sourceId, seqNo));
         }
     }
-    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     SendEvent(event.Release());
     UserActs.emplace(id, act);
     messageNo++;

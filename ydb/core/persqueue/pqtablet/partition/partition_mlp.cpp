@@ -34,6 +34,11 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     MLPPendingEvents.emplace_back(ev);
 }
 
+void TPartition::HandleOnInit(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.GetConsumer() << ":" << ev->Get()->GetPartitionId());
+    MLPPendingEvents.emplace_back(ev);
+}
+
 template<typename TEventHandle>
 void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
     auto it = MLPConsumers.find(consumer);
@@ -75,6 +80,11 @@ void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
 void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev)  {
+    LOG_D("Handle TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.GetConsumer() << ":" << ev->Get()->GetPartitionId());
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
@@ -180,6 +190,7 @@ void TPartition::InitializeMLPConsumers() {
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
+            TabletGeneration,
             Config,
             consumer,
             retentionPeriod(consumer),

@@ -60,6 +60,8 @@ namespace NKikimr::TEvPersQueue {
         EvBalancingUnsubscribe,
         EvBalancingSubscribeNotify,
         EvPartitionUpdateReadMetrics,
+        EvCheckMessageDeduplicationRequest,
+        EvCheckMessageDeduplicationResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -315,4 +317,19 @@ namespace NKikimr::TEvPersQueue {
         }
     };
 
+    struct TEvCheckMessageDeduplicationRequest: TEventPB<TEvCheckMessageDeduplicationRequest, NKikimrPQ::TEvCheckMessageDeduplicationRequest, EvCheckMessageDeduplicationRequest> {
+        TEvCheckMessageDeduplicationRequest() = default;
+
+        TEvCheckMessageDeduplicationRequest(ui32 partitionId, ui32 generation, const auto& messageDeduplicationIds) {
+            Record.SetPartitionId(partitionId);
+            Record.SetGeneration(generation);
+            for (const auto& id : messageDeduplicationIds) {
+                Record.AddMessageDeduplicationId(id);
+            }
+        }
+    };
+
+    struct TEvCheckMessageDeduplicationResponse: TEventPB<TEvCheckMessageDeduplicationResponse, NKikimrPQ::TEvCheckMessageDeduplicationResponse, EvCheckMessageDeduplicationResponse> {
+        TEvCheckMessageDeduplicationResponse() = default;
+    };
 } // namespace NKikimr::TEvPersQueue

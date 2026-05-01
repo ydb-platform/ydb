@@ -1,8 +1,9 @@
 #include "mlp_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/string/join.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <util/string/join.h>
+#include <util/stream/labeled.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -57,11 +58,15 @@ struct MockTimeProvider : public ITimeProvider {
 
 struct TUtils {
     TUtils()
+        : TUtils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true})
+    {
+    }
+
+    explicit TUtils( TStorage::TStorageSettings storageSettings)
         : TimeProvider(TIntrusivePtr<MockTimeProvider>(new MockTimeProvider()))
-        , Storage(TimeProvider, 1, 8)
+        , Storage(TimeProvider, std::move(storageSettings))
         , BaseWriteTimestamp(TimeProvider->Now() - TDuration::Seconds(8))
     {
-        Storage.SetKeepMessageOrder(true);
         Storage.SetMaxMessageProcessingCount(1);
         Storage.SetRetentionPeriod(TDuration::Seconds(10));
         Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
@@ -95,7 +100,8 @@ struct TUtils {
 
     void AssertLoad() {
         {
-            TUtils utils;
+            Cerr << "LOAD BeginSnapshot+WAL\n";
+            TUtils utils(TStorage::TStorageSettings{.KeepMessageOrder = Storage.GetKeepMessageOrder()});
             utils.LoadSnapshot(BeginSnapshot);
             utils.LoadWAL(WAL);
             utils.Storage.InitMetrics();
@@ -103,7 +109,8 @@ struct TUtils {
             utils.AssertEquals(*this);
         }
         {
-            TUtils utils;
+            Cerr << "LOAD EndSnapshot+WAL\n";
+            TUtils utils(TStorage::TStorageSettings{.KeepMessageOrder = Storage.GetKeepMessageOrder()});
             utils.LoadSnapshot(EndSnapshot);
             utils.Storage.InitMetrics();
             utils.AssertEquals(*this);
@@ -173,11 +180,17 @@ struct TUtils {
         return std::nullopt;
     }
 
-    ui64 Next(TDuration timeout = TDuration::Seconds(8)) {
+    ui64 Next(TDuration timeout = TDuration::Seconds(8), TStringBuf descr = {}) {
         TStorage::TPosition position;
         auto result = Storage.Next(TimeProvider->Now() + timeout, position);
-        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result, descr);
         return result.value();
+    }
+
+    void CheckNoNext(TDuration timeout = TDuration::Seconds(8), TStringBuf descr = {}) {
+        TStorage::TPosition position;
+        auto result = Storage.Next(TimeProvider->Now() + timeout, position);
+        UNIT_ASSERT_C(!result.has_value(), descr);
     }
 
     bool Commit(ui64 offset) {
@@ -237,7 +250,7 @@ struct TUtils {
 };
 
 Y_UNIT_TEST(NextFromEmptyStorage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
 
     TStorage::TPosition position;
     auto result = storage.Next(TInstant::Now(), position);
@@ -263,7 +276,7 @@ Y_UNIT_TEST(NextFromEmptyStorage) {
 }
 
 Y_UNIT_TEST(CommitToEmptyStorage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Commit(123);
     UNIT_ASSERT(!result);
@@ -288,7 +301,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
 }
 
 Y_UNIT_TEST(UnlockToEmptyStorage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.Unlock(123);
     UNIT_ASSERT(!result);
@@ -313,7 +326,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
 }
 
 Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
 
     auto result = storage.ChangeMessageDeadline(123, TInstant::Now());
     UNIT_ASSERT(!result);
@@ -341,7 +354,7 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
 
     storage.AddMessage(0, true, 5, writeTimestamp);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 0);
@@ -383,7 +396,7 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
 
     storage.AddMessage(3, true, 5, writeTimestamp);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -423,7 +436,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
 
     storage.AddMessage(3, true, 5, timeProvider->Now() - TDuration::Seconds(137));
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -575,11 +588,12 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     utils.AssertLoad();
 }
 
-Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
-    TUtils utils;
+void AddMessageWithDelay_UnlockImpl(bool keepMessageOrder, bool differentGroups) {
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = keepMessageOrder});
 
-    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
-    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+    ui32 groupHash = 100;
+    utils.Storage.AddMessage(3, true, groupHash += differentGroups, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, groupHash += differentGroups, utils.TimeProvider->Now());
 
     auto result = utils.Next(TDuration::Seconds(10));
     UNIT_ASSERT_VALUES_EQUAL(result, 4); // offset 3 delayed by 1 second, so it should be the next message
@@ -600,7 +614,57 @@ Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, keepMessageOrder ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
+    AddMessageWithDelay_UnlockImpl(false, false);
+}
+
+Y_UNIT_TEST(AddMessageWithDelayWithKeepOrderDifferentGroups_Unlock) {
+    AddMessageWithDelay_UnlockImpl(true, true);
+}
+
+Y_UNIT_TEST(AddMessageWithDelayWithKeepOrder_Unlock) {
+    TUtils utils(TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = true});
+
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+
+    utils.CheckNoNext(TDuration::Seconds(10)); // offset 3 delayed by 1 second, but 4 should wait for it
+
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2)); // delay of message with offset 3 expired
+    utils.Storage.ProccessDeadlines();
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -623,7 +687,7 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
     auto processingDeadline = timeProvider->Now() + TDuration::Seconds(13);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
 
     storage.AddMessage(3, true, 5, writeTimestamp);
 
@@ -663,8 +727,7 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
 }
 
 Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
-    TStorage storage(CreateDefaultTimeProvider());
-    storage.SetKeepMessageOrder(true);
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     TStorage::TPosition position;
@@ -694,7 +757,7 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
 Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.SetRetentionPeriod(TDuration::Seconds(5));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
@@ -730,7 +793,7 @@ Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
 Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.SetRetentionPeriod(std::nullopt);
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
@@ -761,7 +824,7 @@ Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
 }
 
 Y_UNIT_TEST(SkipLockedMessage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
     {
         TStorage::TPosition position;
         storage.AddMessage(3, true, 5, TInstant::Now());
@@ -793,8 +856,7 @@ Y_UNIT_TEST(SkipLockedMessage) {
 }
 
 Y_UNIT_TEST(SkipLockedMessageGroups) {
-    TStorage storage(CreateDefaultTimeProvider());
-    storage.SetKeepMessageOrder(true);
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 5, TInstant::Now());
     storage.AddMessage(5, true, 7, TInstant::Now());
@@ -834,7 +896,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     {
@@ -879,8 +941,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
-    TStorage storage(CreateDefaultTimeProvider());
-    storage.SetKeepMessageOrder(true);
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     {
@@ -915,7 +976,7 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     auto result = storage.Commit(3);
@@ -955,7 +1016,7 @@ Y_UNIT_TEST(CommitCommittedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     {
@@ -1001,7 +1062,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     {
@@ -1044,9 +1105,8 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     {
-        storage.SetKeepMessageOrder(true);
         storage.AddMessage(3, true, 5, TInstant::Now());
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
@@ -1076,7 +1136,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(UnlockUnlockedMessage) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.Unlock(3);
@@ -1105,7 +1165,7 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     {
@@ -1150,7 +1210,7 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.AddMessage(3, true, 5, writeTimestamp);
 
     {
@@ -1190,7 +1250,7 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
 Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
     auto now = TInstant::Now();
 
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
     storage.AddMessage(3, true, 5, TInstant::Now());
 
     auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));
@@ -1216,7 +1276,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
     NKikimrPQ::TMLPStorageSnapshot snapshot;
 
     {
-        TStorage storage(timeProvider);
+        TStorage storage(timeProvider, {});
 
         storage.SerializeTo(snapshot);
 
@@ -1228,7 +1288,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMessages().size(), 0);
     }
     {
-        TStorage storage(timeProvider);
+        TStorage storage(timeProvider, {});
 
         storage.Initialize(snapshot);
 
@@ -1263,8 +1323,7 @@ Y_UNIT_TEST(StorageSerialization) {
     auto deadline4 = timeProvider->Now() + TDuration::Seconds(113);
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
 
         storage.AddMessage(3, true, 5, writeTimestamp3);
         storage.AddMessage(4, true, 7, writeTimestamp4);
@@ -1291,8 +1350,7 @@ Y_UNIT_TEST(StorageSerialization) {
     timeProvider->Tick(TDuration::Seconds(13));
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
 
         storage.Initialize(snapshot);
         storage.InitMetrics();
@@ -1458,8 +1516,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
     NKikimrPQ::TMLPStorageWAL wal;
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp);
@@ -1476,8 +1533,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
@@ -1587,8 +1643,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
     NKikimrPQ::TMLPStorageWAL wal;
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp3);
@@ -1602,8 +1657,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
@@ -1648,8 +1702,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
     NKikimrPQ::TMLPStorageWAL wal;
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp3);
@@ -1699,8 +1752,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
     timeProvider->Tick(TDuration::Seconds(7));
 
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+        TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
@@ -1743,7 +1795,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
 }
 
 Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
     storage.AddMessage(5, true, 11, TInstant::Now());
@@ -1811,7 +1863,7 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(13);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.SetRetentionPeriod(TDuration::Seconds(1));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
@@ -1864,7 +1916,7 @@ Y_UNIT_TEST(CompactStorage_ByDeadline) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(7);
 
-    TStorage storage(timeProvider);
+    TStorage storage(timeProvider, {});
     storage.SetRetentionPeriod(TDuration::Seconds(1));
 
     storage.AddMessage(3, true, 5, writeTimestamp, TDuration::Seconds(1));
@@ -1911,7 +1963,7 @@ Y_UNIT_TEST(CompactStorage_ByDeadline) {
 }
 
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
-    TStorage storage(CreateDefaultTimeProvider());
+    TStorage storage(CreateDefaultTimeProvider(), {});
     storage.SetMaxMessageProcessingCount(1);
     storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
 
@@ -1974,8 +2026,7 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
 Y_UNIT_TEST(ProccessDeadlines) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
-    TStorage storage(timeProvider);
-    storage.SetKeepMessageOrder(true);
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 7, timeProvider->Now());
     storage.AddMessage(5, true, 11, timeProvider->Now());
@@ -2023,8 +2074,7 @@ Y_UNIT_TEST(ProccessDeadlines) {
 Y_UNIT_TEST(MoveBaseDeadline) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
-    TStorage storage(timeProvider);
-    storage.SetKeepMessageOrder(true);
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 7, timeProvider->Now());
     storage.AddMessage(5, true, 11, timeProvider->Now());
@@ -2647,6 +2697,158 @@ Y_UNIT_TEST(MarkDLQMoved_unexpected) {
     }
 }
 
+
+Y_UNIT_TEST(NextFromLockedStorage) {
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
+
+    storage.AddMessage(3, true, 5, TInstant::Now());
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 4);
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(4);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(10);
+        unlock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL);
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+    }
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+    }
+}
+
+Y_UNIT_TEST(LockedStorageGeneration) {
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
+
+    storage.AddMessage(3, true, 5, TInstant::Now());
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 4);
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    {
+        NKikimrPQ::TExternalLockedMessageGroupsId lock;
+        lock.SetParentPartitionId(4);
+        lock.SetGeneration(1);
+        lock.SetConsumerGeneration(1);
+        lock.SetStep(10);
+        lock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL);
+        storage.UpdateExternalLockedMessageGroupsId(lock);
+    }
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(4);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(9); // prev step
+        unlock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL);
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+    }
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(4);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(11); // next step
+        unlock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL);
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+    }
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+    }
+}
+
+Y_UNIT_TEST(NextFromBlacklistedStorage) {
+    constexpr TDuration deadline = TDuration::Seconds(50000);
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
+
+    storage.AddMessage(3, true, 3, TInstant::Now());
+    storage.AddMessage(4, true, 4, TInstant::Now());
+    storage.AddMessage(5, true, 5, TInstant::Now());
+    storage.AddMessage(6, true, 6, TInstant::Now());
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+
+    auto setLocked = [&, step = 10](std::vector<ui32> locked) mutable {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(4);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(step++);
+        unlock.SetMode(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST);
+        auto* blacklist = unlock.MutableFullBlacklist();
+        for (auto hash : locked) {
+            blacklist->AddParentLockedMessageGroupsIdHash(hash);
+        }
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+    };
+    setLocked({3, 5, 6});
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*result, 4);
+
+        result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    setLocked({3, 6});
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*result, 5);
+
+        result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+    setLocked({});
+    {
+        TStorage::TPosition position;
+        THashSet<ui64> expected = {{3, 6}};
+        while (expected.size() > 0) {
+            const TString caseDesc = TStringBuilder() << "Expected=[" << JoinSeq(",", expected) << "]";
+            auto result = storage.Next(TInstant::Now() + deadline, position);
+            UNIT_ASSERT_C(result.has_value(), caseDesc);
+            UNIT_ASSERT_C(expected.contains(*result), LabeledOutput(*result) << " " << caseDesc);
+            expected.erase(*result);
+        }
+        auto result = storage.Next(TInstant::Now() + deadline, position);
+        UNIT_ASSERT(!result.has_value());
+    }
+}
 }
 
 } // namespace NKikimr::NPQ::NMLP

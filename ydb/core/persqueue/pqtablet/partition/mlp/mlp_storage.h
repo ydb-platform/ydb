@@ -6,9 +6,12 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
+#include <library/cpp/iterator/iterate_keys.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+
+#include <util/generic/intrlist.h>
 
 #include <deque>
 #include <map>
@@ -21,6 +24,8 @@ class TStorage {
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
     static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
+
+    struct TParentPartitionExternalLockInfo;
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -52,7 +57,7 @@ public:
         Delayed = 4,
     };
 
-    struct TMessage {
+    struct TMessageData {
         ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
         ui32 Reserve: 3 = 0;
         // It stores how many times the message was submitted to work.
@@ -80,7 +85,35 @@ public:
             Status = static_cast<ui32>(status);
         }
     };
-    static_assert(sizeof(TMessage) == sizeof(ui32) * 4);
+    static_assert(sizeof(TMessageData) == sizeof(ui32) * 4);
+
+    class TMessage: public TMessageData {
+    public:
+        explicit TMessage(const TMessageData& data)
+            : TMessageData(data)
+            , NextMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
+        {
+        }
+
+        TMaybe<ui64> NextMessageGroupIdOffset() const {
+            if (!HasMessageGroupId) {
+                return Nothing();
+            }
+            if (NextMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
+                return Nothing();
+            }
+            return NextMessageGroupIdOffset_;
+        }
+
+        void SetNextMessageGroupIdOffset(ui64 offset) {
+            Y_ASSERT(NextMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel && "attempt to overwrite next link");
+            NextMessageGroupIdOffset_ = offset;
+        }
+
+    private:
+        ui64 NextMessageGroupIdOffset_; // not serialized
+        static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
+    };
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -94,8 +127,10 @@ public:
         bool MessageGroupIsLocked;
     };
 
+    using TSlowMessagesMap = std::map<ui64, TMessage>; // offset -> TMessage
+
     struct TMessageIterator {
-        TMessageIterator(const TStorage& storage, std::map<ui64, TMessage>::const_iterator it, ui64 offset);
+        TMessageIterator(const TStorage& storage, TSlowMessagesMap::const_iterator it, ui64 offset);
 
         TMessageIterator& operator++();
         TMessageWrapper operator*() const;
@@ -103,7 +138,7 @@ public:
 
     private:
         const TStorage& Storage;
-        std::map<ui64, TMessage>::const_iterator Iterator;
+        TSlowMessagesMap::const_iterator Iterator;
         ui64 Offset;
     };
 
@@ -130,6 +165,7 @@ public:
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
+        void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -145,14 +181,21 @@ public:
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
         bool Purged = false;
+        absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
     };
 
-    TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
+    struct TStorageSettings {
+        size_t MinMessages = MIN_MESSAGES;
+        size_t MaxMessages = MAX_MESSAGES;
+        bool KeepMessageOrder = false;
+        std::vector<ui32> ParentPartitionId; // length=0 for root, length=1 for split, length=2 for merge
+    };
 
-    void SetKeepMessageOrder(bool keepMessageOrder);
+    explicit TStorage(TIntrusivePtr<ITimeProvider> timeProvider, const TStorageSettings& settings);
+
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
     void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
@@ -169,9 +212,15 @@ public:
     bool DLQEmpty() const;
     std::deque<TDLQMessage> GetDLQMessages();
     const absl::flat_hash_set<ui32>& GetLockedMessageGroupsId() const;
+    auto GetMessageGroupsIdFromSelf() const;
+    void IterateMessageGroupsIdExclusiveFromParent(const std::function<void(ui32)>& callback) const;
+    size_t GetLockedMessageGroupsIdSize() const; // from current partition only
+    size_t GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents() const;
     void InitMetrics();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
+    bool HasUnlockedMessageGroupsId() const;
+    NKikimrPQ::EReadWithKeepOrder ReadWithKeepOrder() const;
 
     struct TPosition {
         std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;
@@ -191,6 +240,14 @@ public:
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
+    struct TUpdateExternalLockedMessageGroupsResult {
+        bool Applied : 1 = false;
+        bool Invalid : 1 = false;
+        bool VersionChanged : 1 = false;
+        bool ModeChanged : 1 = false;
+        bool SetChanged : 1 = false;
+    };
+    TUpdateExternalLockedMessageGroupsResult UpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&);
 
     size_t ProccessDeadlines();
     size_t Compact();
@@ -202,6 +259,7 @@ public:
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool ApplyWAL(const NKikimrPQ::TMLPStorageWAL&);
+    void SerializeFullExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg, const TParentPartitionExternalLockInfo& info) const;
 
     const TMetrics& GetMetrics() const;
 
@@ -222,6 +280,10 @@ private:
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
+    TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);
+    bool CanReadMessageGroupIdHash(ui32 messageGroupIdHash) const;
+    bool CanReadMessageGroupIdHashFromParentPartition(const ui32 messageGroupIdHash) const;
+
 
     void UpdateFirstUncommittedOffset();
 
@@ -231,9 +293,22 @@ private:
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);
+    TSlowMessagesMap::iterator RemoveMessageFromSlowZone(TSlowMessagesMap::iterator it);
+    void RemoveMessageFromSlowZone(ui64 offset);
+    void RemoveFirstMessageFromFastZone();
     void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
+
+    void UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message);
+    void UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
+    void UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
+    void BuildAndLinkMessageGroups();
+
+    template <class Fn>
+    void IterateAllMessagesInOrder(Fn&& fn);
 
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -254,16 +329,76 @@ private:
     TInstant NextVacuumRun;
 
     std::deque<TMessage> Messages;
-    std::map<ui64, TMessage> SlowMessages;
-    absl::flat_hash_set<ui32> LockedMessageGroupsId;
+    TSlowMessagesMap SlowMessages;
+
+    struct TLockedGroup {
+        bool LockedSelf : 1 = false;
+        bool LockedParent : 1 = false;
+        bool Delayed : 1 = false;
+        bool WaitDLQ : 1 = false;
+
+        bool IsAccessible() const {
+            return !IsLocked() && !Delayed && !WaitDLQ;
+        }
+
+        bool IsLocked() const {
+            return LockedSelf || LockedParent;
+        }
+
+        void FillFromStatus(EMessageStatus status) {
+            LockedSelf = status == EMessageStatus::Locked;
+            Delayed = status == EMessageStatus::Delayed;
+            WaitDLQ = status == EMessageStatus::DLQ;
+        }
+    };
+    struct TSingleMessageGroupIdInfo {
+        ui32 Size = 0;
+        TLockedGroup Locked;
+        ui64 FirstOffset; // exclude DLQ
+        ui64 LastOffset;
+    };
+
+    struct TMessageGroups {
+        absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
+        absl::flat_hash_set<ui32> UnlockedMessageGroupsId; // without parents
+        absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
+        absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
+
+        void Clear();
+    };
+    TMessageGroups MessageGroups;
+
     std::deque<TDLQMessage> DLQQueue;
     // offset->seqNo
     absl::flat_hash_map<ui64, ui64> DLQMessages;
+
+    struct TParentPartitionExternalLockInfo {
+        ui32 PartitionId = 0;
+        NKikimrPQ::EReadWithKeepOrder ReadWithKeepOrder = NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL;
+        absl::flat_hash_set<ui32> LockedMessageGroupsIdSet;
+
+        ui64 TabletGeneration = 0;
+        ui64 ConsumerGeneration = 0;
+        ui64 ConsumerStep = 0;
+    };
+    std::vector<TParentPartitionExternalLockInfo> ParentPartitionExternalLockInfo;
 
     TBatch Batch;
     TMetrics Metrics;
 };
 
+inline auto TStorage::GetMessageGroupsIdFromSelf() const {
+    return IterateKeys(MessageGroups.Groups);
+}
 
+template <class Fn>
+inline void TStorage::IterateAllMessagesInOrder(Fn&& fn) {
+    for (auto& [offset, m] : SlowMessages) {
+        fn(offset, m);
+    }
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        fn(FirstOffset + i, Messages[i]);
+    }
+}
 
 }

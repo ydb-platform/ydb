@@ -1240,6 +1240,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 
     if (!partitionId.IsSupportivePartition()) {
         ProcessCheckPartitionStatusRequests(partitionId);
+        ProcessCheckMessageDeduplicationRequests(partitionId);
     }
 
     if (allInitialized) {
@@ -2113,10 +2114,16 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         initialSeqNo = req.GetInitialSeqNo();
     }
     THolder<TEvPQ::TEvWrite> event =
-        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
-                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
-                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
+        MakeHolder<TEvPQ::TEvWrite>(
+            responseCookie,
+            req.GetMessageNo(),
+            req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
+            req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
+            std::move(msgs),
+            req.GetIsDirectWrite(),
+            initialSeqNo,
+            TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
+        );
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -4821,7 +4828,7 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
     }
 }
 
-bool TPersQueue::ReadyForDroppedReply() const 
+bool TPersQueue::ReadyForDroppedReply() const
 {
     if (TabletState != NKikimrPQ::EDropped) {
         return false;
@@ -5230,6 +5237,20 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
+void TPersQueue::ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId)
+{
+    PQ_ENSURE(!partitionId.WriteId.Defined());
+    ui32 originalPartitionId = partitionId.OriginalPartitionId;
+    auto sit = CheckMessageDeduplicationRequests.find(originalPartitionId);
+    if (sit != CheckMessageDeduplicationRequests.end()) {
+        auto it = Partitions.find(partitionId);
+        for (auto& r : sit->second) {
+            Forward(r, it->second.Actor);
+        }
+        CheckMessageDeduplicationRequests.erase(sit);
+    }
+}
+
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_TX_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
@@ -5479,6 +5500,33 @@ void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     Forward(ev, ReadBalancerActorId);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    auto partitionId = record.GetPartitionId();
+    auto* p = Partitions.FindPtr(TPartitionId{partitionId});
+    if (p == nullptr) [[unlikely]] {
+        PQ_LOG_I("TEvCheckMessageDeduplicationRequest: unknown partition " << partitionId);
+        auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+        response->Record.SetPartitionId(partitionId);
+        response->Record.SetGeneration(record.GetGeneration());
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    if (!p->InitDone) [[unlikely]] {
+        CheckMessageDeduplicationRequests[partitionId].push_back(std::move(ev));
+        return;
+    }
+    Forward(ev, p->Actor);
+}
+
 template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
@@ -5499,16 +5547,13 @@ bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev
 
 void TPersQueue::ProcessMLPQueue() {
     auto queue = std::exchange(MLPRequests, {});
-    while(!queue.empty()) {
+    while (!queue.empty()) {
         auto ev = std::move(queue.front());
         queue.pop_front();
 
-        auto result = std::visit([&, this](auto& ev) {
+        std::visit([&, this](auto& ev) {
             return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
         }, ev);
-        if (!result) {
-            return;
-        }
     }
 }
 
@@ -5568,6 +5613,8 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;
     }

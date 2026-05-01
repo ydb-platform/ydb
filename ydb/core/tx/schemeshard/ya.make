@@ -352,6 +352,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
+    library/cpp/iterator
     library/cpp/json
     library/cpp/protobuf/json
     library/cpp/regex/pcre

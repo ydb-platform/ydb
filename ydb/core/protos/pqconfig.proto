@@ -436,6 +436,7 @@ message TPQTabletConfig {
         repeated uint32 ChildPartitionIds = 5;
         optional uint64 CreateVersion = 6;
         optional uint64 TabletId = 7;
+        optional uint64 CreationTimestampSeconds = 8;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 
@@ -544,6 +545,7 @@ message TUpdateBalancerConfig { //for schemeshard use only
         repeated uint32 ParentPartitionIds = 6;
         repeated uint32 ChildPartitionIds = 7;
         optional uint64 CreateVersion = 8;
+        optional uint64 CreationTimestampSeconds = 9;
     }
 
     repeated TPartition Partitions = 6;
@@ -1437,6 +1439,34 @@ message TMLPMetrics {
     optional uint64 TotalDeletedByRetentionMessageCount = 6;
 }
 
+enum EReadWithKeepOrder {
+    READ_WITH_KEEP_ORDER_UNSPECIFIED = 0;
+    READ_WITH_KEEP_ORDER_BLOCK_ALL = 1; /* reading from a partition returns an empty list of messages */
+    READ_WITH_KEEP_ORDER_BLACKLIST = 2; /* reading returns only messages whose message group id is not included in the locked list */
+    READ_WITH_KEEP_ORDER_ALLOW_ALL = 3; /* no reading restrictions */
+}
+
+message TFullBlacklist {
+    repeated fixed32 ParentLockedMessageGroupsIdHash = 1 [packed = true];
+};
+message TExternalLockedMessageGroupsId {
+    optional uint32 ParentPartitionId = 1;
+    optional uint64 Generation = 2;
+    optional uint64 ConsumerGeneration = 3; /* increases when the consumer is recreated */
+    optional uint64 Step = 4; /* increases when the new full state is sent */
+
+    optional EReadWithKeepOrder Mode = 5;
+    oneof BlacklistUpdate {
+       TFullBlacklist FullBlacklist = 6; /* full list of locked message group id */
+    }
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1462,6 +1492,8 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
 }
 
 message TMLPStorageWAL {
@@ -1485,6 +1517,8 @@ message TMLPStorageWAL {
 
     optional bytes AddedToDLQMessages = 14;
     optional uint64 FirstDLQSeqNo = 15;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
 }
 
 message TMessageDeduplicationIdWAL {
@@ -1495,3 +1529,20 @@ message TMessageDeduplicationIdWAL {
     }
     repeated TMessage Message = 1;
 };
+
+message TEvCheckMessageDeduplicationRequest {
+    optional uint32 PartitionId = 1;
+    optional uint32 Generation = 2;
+    repeated string MessageDeduplicationId = 3;
+}
+
+message TEvCheckMessageDeduplicationResponse {
+    optional uint32 PartitionId = 1;
+    optional uint32 Generation = 2;
+    message TMessageDeduplicationResult {
+        optional bool IsDuplicate = 1;
+        optional uint64 Offset = 2;
+    }
+    optional EStatus Status = 3;
+    map<string, TMessageDeduplicationResult> Result = 4;
+}

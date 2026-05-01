@@ -13,6 +13,8 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
+#include <ydb/core/tx/columnshard/engines/portions/portion_slice_concept.h>
+
 #include <util/generic/hash_set.h>
 
 
@@ -453,5 +455,7 @@ public:
         return out;
     }
 };
+
+static_assert(CPortionInfoSlice<NArrow::TSimpleRow, TPortionInfo>);
 
 }   // namespace NKikimr::NOlap

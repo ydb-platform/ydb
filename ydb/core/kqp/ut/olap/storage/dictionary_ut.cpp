@@ -418,6 +418,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
             (1u, 1u, 'a', 4u),
@@ -647,6 +650,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, NULL);
@@ -703,6 +709,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk) VALUES (100u);
         ------
@@ -734,6 +743,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk) VALUES (200u);
@@ -767,6 +779,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
@@ -823,6 +838,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, 'a'),
@@ -878,6 +896,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
+        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
             (1u, 'a'),
@@ -928,6 +949,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES

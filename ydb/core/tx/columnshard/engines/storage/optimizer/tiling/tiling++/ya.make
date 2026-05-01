@@ -1,8 +1,7 @@
 LIBRARY()
 
 SRCS(
-    GLOBAL tiling.cpp
-    counters.cpp
+    GLOBAL wrapper.cpp
 )
 
 PEERDIR(
@@ -14,6 +13,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes/abstract
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner
+    ydb/core/tx/columnshard/engines/storage/optimizer/tiling
     ydb/library/intersection_tree
 )
 

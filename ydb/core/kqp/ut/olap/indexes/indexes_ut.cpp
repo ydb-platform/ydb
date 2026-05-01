@@ -220,6 +220,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         )");
 
+        // Switch the table to tiling++ with settings that keep every portion
+        // in the accumulator and never trigger compaction during the bulk inserts.
+        assertDDLQueryOk(NKikimr::Tests::NCS::THelper::GetTilingNoCompactionAlter("/Root/minmax_test_applied_applied"));
+
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
@@ -231,6 +235,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
             SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item AS String) AS `value` FROM AS_TABLE($data2);
         )");
+        // Re-route every portion to the last level and force compaction there.
+        assertDDLQueryOk(NKikimr::Tests::NCS::THelper::GetTilingForceLastLevelCompactionAlter("/Root/minmax_test_applied_applied"));
         csController->WaitCompactions(TDuration::Seconds(5));
 
         auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();

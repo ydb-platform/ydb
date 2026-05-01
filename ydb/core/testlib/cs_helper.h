@@ -57,6 +57,16 @@ public:
 
     void SetForcedCompaction(const TString& storeName = "olapStore");
 
+    // Builds an `ALTER OBJECT ... (TYPE TABLE)` SQL statement that switches
+    // the table to `tiling++` planner with settings that route every portion
+    // into the accumulator and never trigger compaction.
+    static TString GetTilingNoCompactionAlter(const TString& tablePath);
+
+    // Builds an `ALTER OBJECT ... (TYPE TABLE)` SQL statement that switches
+    // the table to `tiling++` planner with settings that route portions
+    // straight to the last level and compact them there immediately.
+    static TString GetTilingForceLastLevelCompactionAlter(const TString& tablePath);
+
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "resource_id" Type: "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" }}

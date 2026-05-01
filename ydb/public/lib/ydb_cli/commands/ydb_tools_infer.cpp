@@ -60,12 +60,14 @@ void TCommandToolsInferCsv::Config(TConfig& config) {
     config.Opts->MutuallyExclusiveOpt(columnsOption, genColumnsOption);
     config.Opts->MutuallyExclusiveOpt(columnsOption, headerOption);
     config.Opts->MutuallyExclusiveOpt(genColumnsOption, headerOption);
-
-    config.NeedToConnect = false;
 }
 
 void TCommandToolsInferCsv::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+
+    if (!Execute) {
+        config.NeedToConnect = false;
+    }
 
     for (const auto& filePath : config.ParseResult->GetFreeArgs()) {
         FilePaths.push_back(filePath);
@@ -121,7 +123,6 @@ namespace {
 } // anonymous namespace
 
 int TCommandToolsInferCsv::Run(TConfig& config) {
-    Y_UNUSED(config);
     std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
     if (ReadingFromStdin) {
         inputs.push_back(std::make_shared<arrow::io::StdinStream>());

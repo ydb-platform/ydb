@@ -258,29 +258,36 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     TInGranuleConstructors constructors;
     {
         if (!db.LoadPortions(
-                PathId, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
-                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                    AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
-                })) {
+            [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+                return true;
+            },
+            PathId
+        )) {
             return false;
         }
     }
 
     {
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
+        if (!db.LoadColumns([&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 constructor->AddBuildInfo(loadContext.CreateBuildInfo());
-            })) {
+            }, PathId)) {
             return false;
         }
     }
 
     {
-        if (!db.LoadIndexes(PathId, [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
+        if (!db.LoadIndexes(
+            [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(portionId);
                 constructor->LoadIndex(std::move(loadContext));
-            })) {
+                return true;
+            },
+            PathId
+        )) {
             return false;
         };
     }

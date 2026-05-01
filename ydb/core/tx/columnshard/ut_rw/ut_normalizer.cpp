@@ -362,20 +362,23 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
 
         const ui64 rowCount = checker.RowCount();
         const ui32 portionCount = checker.PortionCount();
-        auto batchFull = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(rowCount);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         ui64 snapshotTxId = baseTxId;
-        UNIT_ASSERT_C(rowCount % portionCount == 0, "TestNormalizerRowCount must be divisible by PortionCount for multi-portion load");
-        const ui64 rowsPerCommit = rowCount / portionCount;
-        ui64 commitTxId = baseTxId;
-        for (ui32 p = 0; p < portionCount; ++p) {
-            auto batch = batchFull->Slice(p * rowsPerCommit, rowsPerCommit);
-            AFL_VERIFY(writer.Write(batch, {1, 2, 3}, commitTxId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            planStep = writer.StartCommit(commitTxId);
-            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, commitTxId));
-            ++commitTxId;
+        if (rowCount > 0) {
+            UNIT_ASSERT_C(portionCount > 0, "PortionCount must be > 0 when RowCount > 0");
+            UNIT_ASSERT_C(rowCount % portionCount == 0, "TestNormalizerRowCount must be divisible by PortionCount for multi-portion load");
+            auto batchFull = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(rowCount);
+            const ui64 rowsPerCommit = rowCount / portionCount;
+            ui64 commitTxId = baseTxId;
+            for (ui32 p = 0; p < portionCount; ++p) {
+                auto batch = batchFull->Slice(p * rowsPerCommit, rowsPerCommit);
+                AFL_VERIFY(writer.Write(batch, {1, 2, 3}, commitTxId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                planStep = writer.StartCommit(commitTxId);
+                PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, commitTxId));
+                ++commitTxId;
+            }
+            snapshotTxId = commitTxId - 1;
         }
-        snapshotTxId = commitTxId - 1;
 
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, snapshotTxId), schema);
@@ -532,7 +535,13 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
         TestNormalizerImpl<TInit, TVerify>(checker);
     }
 
-    Y_UNIT_TEST(LeakedBlobsNormalizer) {
+    struct TLeakedBlobsNormalizerTestScenario {
+        ui64 RowCount = 0;
+        ui32 PortionCount = 1;
+        size_t BatchSize = 1;
+    };
+
+    void LeakedBlobsNormalizerTestImpl(TLeakedBlobsNormalizerTestScenario scenario) {
         class TExpectation {
             THashSet<TString> BlobIdLegacyKeys;
 
@@ -555,7 +564,8 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
 
         class TController: public TInitVerifyDBController<TInit, TVerify> {
         public:
-            mutable TExpectation Expectation;
+            TExpectation Expectation;
+            ui32 ExpectedPortionsCount = 0;
         };
 
         // TestNormalizerImpl creates a table (scheme-shard local path SchemeShardPathId), writes rows in
@@ -566,7 +576,7 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
             void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
                 using namespace NColumnShard;
 
-                auto* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
+                TController* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
                 UNIT_ASSERT_C(ctrl != nullptr, "LeakedBlobsNormalizer: expected TController registered via RegisterCSControllerGuard");
                 ctrl->Expectation.Clear();
 
@@ -600,13 +610,20 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
                         UNIT_ASSERT(rowset.Next());
                     }
                 }
+                if (ctrl->ExpectedPortionsCount == 0) {
+                    UNIT_ASSERT_C(portionSet.empty(),
+                        "LeakedBlobsNormalizer: expected no portions for zero-rows scenario");
+                    return;
+                }
+
                 UNIT_ASSERT_C(!portionSet.empty(),
                     "LeakedBlobsNormalizer: no portions for the test table path before corruption "
                     "(data must come from TestNormalizerImpl write path)");
 
                 std::vector<std::pair<ui64, ui64>> portionVec(portionSet.begin(), portionSet.end());
-                UNIT_ASSERT_C(portionVec.size() == 10,
-                    "LeakedBlobsNormalizer: expected 10 portions from multi-commit load "
+                UNIT_ASSERT_C(portionVec.size() == ctrl->ExpectedPortionsCount,
+                    TStringBuilder() << "LeakedBlobsNormalizer: expected " << ctrl->ExpectedPortionsCount
+                                     << " portions from multi-commit load "
                     "(adjust row count / commit count if portions merge)");
                 const size_t corruptCount = portionVec.size() / 2;
                 const std::set<std::pair<ui64, ui64>> corruptedPortions(portionVec.begin(), portionVec.begin() + corruptCount);
@@ -708,20 +725,29 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
         };
 
         class TChecker: public TNormalizerChecker {
+            TLeakedBlobsNormalizerTestScenario Scenario;
+
         public:
+            explicit TChecker(const TLeakedBlobsNormalizerTestScenario& scenario)
+                : Scenario(scenario) {
+            }
+
             ui64 RowCount() const override {
-                return 20000;
+                return Scenario.RowCount;
             }
 
             ui32 PortionCount() const override {
-                return 10;
+                return Scenario.PortionCount;
             }
 
             ui64 RowCountAfterReboot() const override {
-                return RowCount() / 2;
+                return Scenario.RowCount / 2;
             }
 
             void OnControllerRegistered(NYDBTest::NColumnShard::TController& controller) const override {
+                auto& localController = static_cast<TController&>(controller);
+                localController.ExpectedPortionsCount = Scenario.PortionCount;
+
                 // Otherwise blob GC (SetupGC) loads BlobsToDeleteWT, runs CollectGarbage, and EraseBlobToDelete —
                 // rows vanish before TVerify reads the table (see IBlobsGCAction::OnExecuteTxAfterCleaning, blob_manager_db.cpp).
                 controller.DisableBackground(NYDBTest::ICSController::EBackground::GC);
@@ -736,12 +762,48 @@ void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()
             void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
                 repair->SetClassName("LeakedBlobsNormalizer");
-                repair->SetDescription("Detecting leaked blobs after index tear-down");
+                repair->SetDescription(TStringBuilder() << "Detecting leaked blobs after index tear-down" << ";batch_size=" << Scenario.BatchSize);
             }
         };
 
-        TChecker checker;
+        TChecker checker(scenario);
         TestNormalizerImpl<TInit, TVerify, TController>(checker);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_BatchLargerThanPortionsCount) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 100,
+            .BatchSize = 200,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_BatchSmallerThanPortionsCount) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 33,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_PortionsCountDividesByBatchSize) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 50,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_NoPortions) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 0,
+            .PortionCount = 0,
+            .BatchSize = 10,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
     }
 
     Y_UNIT_TEST(CleanIndexColumnsV1Normalizer) {

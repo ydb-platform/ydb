@@ -276,6 +276,8 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
 
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
 }

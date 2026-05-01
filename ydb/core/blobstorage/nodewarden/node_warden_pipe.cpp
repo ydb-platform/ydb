@@ -73,7 +73,10 @@ void TNodeWarden::SendRegisterNode() {
 
     TVector<ui32> startedDynamicGroups, generations;
     for (const auto& [groupId, group] : Groups) {
-        if (group.ProxyId && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic &&
+        // RegisterNode carries dynamic groups that are either actively proxied now or marked as sticky
+        // local-placement subscriptions (MustSubscribe) to keep their updates across reconnects.
+        if ((group.ProxyId || group.MustSubscribe) &&
+                TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic &&
                 (!group.Info || group.Info->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::DONE)) {
             startedDynamicGroups.push_back(groupId);
             generations.push_back(group.Info ? group.Info->GroupGeneration : 0);

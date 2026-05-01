@@ -320,7 +320,8 @@ public:
         NYql::NDq::TDqChannelLimits limits = {
             .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
             .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
-            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes()
+            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
+            .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
         };
 
         ui32 channelPoolId = AppData()->UserPoolId;

@@ -498,4 +498,6 @@ message TTableServiceConfig {
     optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
+
+    optional uint64 DqChannelReconciliationCount = 126 [default = 3];
 };

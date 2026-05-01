@@ -45,8 +45,7 @@ bool UseEventEngineClient() {
 bool UseEventEngineListener() {
 // TODO(hork, eryu): Adjust the ifdefs accordingly when event engines become
 // available for other platforms.
-#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM) && \
-    !defined(GRPC_DO_NOT_INSTANTIATE_POSIX_POLLER)
+#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM)
   return grpc_core::IsEventEngineListenerEnabled();
 #else
   return false;
@@ -54,8 +53,7 @@ bool UseEventEngineListener() {
 }
 
 bool EventEngineSupportsFd() {
-#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM) && \
-    !defined(GRPC_DO_NOT_INSTANTIATE_POSIX_POLLER)
+#if defined(GRPC_POSIX_SOCKET_TCP) && !defined(GRPC_CFSTREAM)
   return g_event_engine_supports_fd;
 #else
   return false;

@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/core/protos/table_service_config.pb.h>
@@ -148,12 +149,12 @@ struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
     const NKikimrConfig::TTliConfig& TliConfig;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TTliConfig& tliConfig,
-        NACLib::TUserContext::TPtr userCtx
+        TIntrusivePtr<NACLib::TUserContext> userCtx
     )
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)

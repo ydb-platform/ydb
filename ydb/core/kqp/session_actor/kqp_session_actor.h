@@ -13,6 +13,10 @@
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr::NKqp::NComputeActor {
     struct IKqpNodeComputeActorFactory;
 }
@@ -105,7 +109,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    NACLib::TUserContext::TPtr userCtx);
+    TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 IActor* CreateKqpTempTablesManager(
     TKqpTempTablesState tempTablesState, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TActorId& target, const TString& database);

@@ -16,6 +16,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 
@@ -364,7 +367,7 @@ public:
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true,
-                                                      NACLib::TUserContext::TPtr userCtx = nullptr);
+                                                      TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
 class TLambdaActor : public IActorCallback {
 public:
@@ -822,13 +825,13 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
              NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
-             NACLib::TUserContext::TPtr userCtx = nullptr);
+             TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
 void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             NACLib::TUserContext::TPtr userCtx);
+             TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

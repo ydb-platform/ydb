@@ -40,6 +40,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -243,7 +244,7 @@ public:
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -1920,7 +1921,7 @@ public:
         return results;
     }
 
-    NACLib::TUserContext::TPtr CreateUserContext() {
+    TIntrusivePtr<NACLib::TUserContext> CreateUserContext() {
         NACLib::TUserContextBuilder builder;
 
         if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
@@ -3804,7 +3805,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 } // namespace
@@ -3820,7 +3821,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),

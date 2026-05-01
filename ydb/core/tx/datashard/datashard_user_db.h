@@ -9,6 +9,10 @@
 
 #include <util/generic/maybe.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr::NMiniKQL {
     struct TEngineHostCounters;
 }
@@ -44,43 +48,43 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             const ui32 defaultFilledColumnCount,
-            NACLib::TUserContext::TPtr userCtx) = 0;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) = 0;
-    
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) = 0;
-    
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
+
     virtual void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) = 0;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) = 0;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             bool insertMissing,
-            NACLib::TUserContext::TPtr userCtx) = 0;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            NACLib::TUserContext::TPtr userCtx) = 0;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
     virtual void CommitChanges(
             const TTableId& tableId,
@@ -130,12 +134,12 @@ public:
             NTable::TDatabase& db,
             ui64 globalTxId,
             const TRowVersion& mvccVersion,
-            NMiniKQL::TEngineHostCounters& counters, 
+            NMiniKQL::TEngineHostCounters& counters,
             TInstant now
     );
 
 //IDataShardUserDb
-public:  
+public:
     NTable::EReady SelectRow(
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
@@ -156,55 +160,55 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             const ui32 defaultFilledColumnCount,
-            NACLib::TUserContext::TPtr userCtx) override;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) override;
-    
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) override;
-            
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void InsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) override;
-            
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
-            NACLib::TUserContext::TPtr userCtx) override;
-        
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+
     void IncrementRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             bool insertMissing,
-            NACLib::TUserContext::TPtr userCtx) override;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            NACLib::TUserContext::TPtr userCtx) override;
+            TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
     void CommitChanges(
-            const TTableId& tableId, 
+            const TTableId& tableId,
             ui64 lockId) override;
 
 //IDataShardChangeGroupProvider
-public:  
+public:
     std::optional<ui64> GetCurrentChangeGroup() const override;
     ui64 GetChangeGroup() override;
 
 //IDataShardConflictChecker
-public:  
+public:
     void AddReadConflict(ui64 txId) override;
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
@@ -235,15 +239,15 @@ public:
 
     bool PrechargeRow(
         const TTableId& tableId,
-        const TArrayRef<const TRawTypeValue> key);    
+        const TArrayRef<const TRawTypeValue> key);
 
 private:
     void EnsureVolatileTxId();
 
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, 
-        const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 

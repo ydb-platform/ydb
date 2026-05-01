@@ -8,6 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/library/signals/object_counter.h>
@@ -53,12 +54,12 @@ protected:
 
 public:
     TLongTxWriteBase(
-        const TString& databaseName, 
-        const TString& path, 
-        const TString& token, 
-        const TLongTxId& longTxId, 
+        const TString& databaseName,
+        const TString& path,
+        const TString& token,
+        const TLongTxId& longTxId,
         const TString& dedupId,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)
@@ -226,7 +227,7 @@ private:
     NEvWrite::TWritersController::TPtr InternalController;
     bool ColumnShardReady = false;
     bool IndexReady = false;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -259,7 +260,7 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, NACLib::TUserContext::TPtr userCtx)
+        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx)
         : TBase(databaseName, path, TString(), longTxId, dedupId, userCtx)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
@@ -308,7 +309,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const TString& dedupId, const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    NACLib::TUserContext::TPtr userCtx) {
+    TIntrusivePtr<NACLib::TUserContext> userCtx) {
     return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userCtx));
 }
 

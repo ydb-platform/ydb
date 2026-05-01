@@ -12,6 +12,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>

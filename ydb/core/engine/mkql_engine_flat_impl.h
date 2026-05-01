@@ -2,6 +2,10 @@
 #include "mkql_engine_flat.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NMiniKQL {
     typedef THashMap<ui32, TVector<TString>> TIncomingResults;
@@ -116,7 +120,7 @@ namespace NMiniKQL {
         TIncomingResults Results;
     };
 
-    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, NACLib::TUserContext::TPtr userCtx);
+    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, TIntrusivePtr<NACLib::TUserContext> userCtx);
     TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
 
     NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,

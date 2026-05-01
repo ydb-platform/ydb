@@ -12,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
 
@@ -95,7 +96,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(NACLib::TUserContext::TPtr userCtx);
+    TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool IsSerializable() const override {
         return true;
@@ -107,7 +108,7 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    NACLib::TUserContext::TPtr GetUserCtx();
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx();
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
@@ -473,7 +474,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;

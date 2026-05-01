@@ -10,6 +10,10 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -64,8 +68,8 @@ public:
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override;
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        const TArrayRef<const TUpdateCommand>& commands, NACLib::TUserContext::TPtr userCtx) override;
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, NACLib::TUserContext::TPtr userCtx) override;
+        const TArrayRef<const TUpdateCommand>& commands, TIntrusivePtr<NACLib::TUserContext> userCtx) override;
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, TIntrusivePtr<NACLib::TUserContext> userCtx) override;
     bool IsPathErased(const TTableId& tableId) const override;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;

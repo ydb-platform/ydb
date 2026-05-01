@@ -15,6 +15,10 @@
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/library/actors/async/async.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -118,7 +122,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, NACLib::TUserContext::TPtr userCtx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -272,7 +276,7 @@ public:
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                    NACLib::TUserContext::TPtr userCtx);
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
@@ -280,12 +284,12 @@ public:
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx,
-                     NACLib::TUserContext::TPtr userCtx);
+                     TIntrusivePtr<NACLib::TUserContext> userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
             const TActorContext &ctx,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
     {
         return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }

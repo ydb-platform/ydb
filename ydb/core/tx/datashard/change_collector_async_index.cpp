@@ -3,6 +3,7 @@
 #include "datashard_user_db.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -69,7 +70,7 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
     Y_UNUSED(userCtx);

@@ -12,6 +12,8 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -28,7 +30,7 @@ private:
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
     YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
-    YDB_READONLY_DEF(NACLib::TUserContext::TPtr, UserCtx);
+    YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {

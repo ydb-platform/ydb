@@ -818,9 +818,11 @@ public:
 
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
-        , Begin(other.Begin)
-        , End(other.End)
-    {}
+    {
+        auto span = Backend.GetData();
+        Begin = span.data();
+        End = Begin + span.size();
+    }
 
     TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
@@ -828,7 +830,16 @@ public:
         , End(other.End)
     {}
 
-    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(const TRcBuf& other) {
+        if (this != &other) {
+            Backend = other.Backend;
+            auto span = Backend.GetData();
+            Begin = span.data();
+            End = Begin + span.size();
+        }
+        return *this;
+    }
+
     TRcBuf& operator =(TRcBuf&&) = default;
 
     static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)

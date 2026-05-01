@@ -186,6 +186,27 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_EQUAL(otherData.Tailroom(), 0);
     }
 
+    Y_UNIT_TEST(CopyWithStringBackend) {
+        TString str(100, 'x');
+        TRcBuf original(str);
+
+        TRcBuf byCtor = original;
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), original.size());
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 0);
+        UNIT_ASSERT_EQUAL(::memcmp(byCtor.data(), str.data(), str.size()), 0);
+
+        TRcBuf byAssign;
+        byAssign = original;
+        UNIT_ASSERT_VALUES_EQUAL(byAssign.size(), original.size());
+        UNIT_ASSERT_VALUES_EQUAL(byAssign.Headroom(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(byAssign.Tailroom(), 0);
+        UNIT_ASSERT_EQUAL(::memcmp(byAssign.data(), str.data(), str.size()), 0);
+
+        byCtor.GrowFront(4);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 104);
+    }
+
     Y_UNIT_TEST(Reserve) {
         TRcBuf data = TRcBuf::Copy("test", 4, 5, 6);
         TRcBuf data2 = data;

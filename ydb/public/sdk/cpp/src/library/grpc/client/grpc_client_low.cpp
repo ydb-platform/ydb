@@ -22,6 +22,27 @@
 
 namespace NYdbGrpc::inline Dev {
 
+namespace {
+
+class TWorkerInfo {
+public:
+    TWorkerInfo() = default;
+
+    TWorkerInfo(const TGRpcClientLow* client, size_t workerIndex)
+        : Client(client)
+        , WorkerIndex(workerIndex)
+        , IsRunning(true)
+    {}
+
+    const TGRpcClientLow* Client = nullptr;
+    size_t WorkerIndex = 0;
+    bool IsRunning = false;
+};
+
+thread_local std::optional<TWorkerInfo> WorkerInfo;
+
+} // anonymous namespace
+
 void EnableGRpcTracing() {
     grpc_tracer_set_enabled("tcp", true);
     grpc_tracer_set_enabled("client_channel", true);
@@ -218,7 +239,8 @@ void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const std::
 
 static void PullEvents(grpc::CompletionQueue* cq) {
     TThread::SetCurrentThreadName("grpc_client");
-    while (true) {
+    Y_ABORT_UNLESS(WorkerInfo, "WorkerInfo is not set");
+    while (WorkerInfo->IsRunning) {
         void* tag;
         bool ok;
 
@@ -454,7 +476,8 @@ void TGRpcClientLow::Init(size_t numWorkerThread) {
         for (size_t i = 0; i < numWorkerThread; i++) {
             CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
             auto* cq = CQS_.back().get();
-            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
+            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq, w = TWorkerInfo(this, WorkerThreads_.size())]() {
+                WorkerInfo = w;
                 PullEvents(cq);
             }).Release());
         }
@@ -462,7 +485,8 @@ void TGRpcClientLow::Init(size_t numWorkerThread) {
         CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
         auto* cq = CQS_.back().get();
         for (size_t i = 0; i < numWorkerThread; i++) {
-            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
+            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq, w = TWorkerInfo(this, WorkerThreads_.size())]() {
+                WorkerInfo = w;
                 PullEvents(cq);
             }).Release());
         }
@@ -473,12 +497,14 @@ void TGRpcClientLow::AddWorkerThreadForTest() {
     if (UseCompletionQueuePerThread_) {
         CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
         auto* cq = CQS_.back().get();
-        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
+        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq, w = TWorkerInfo(this, WorkerThreads_.size())]() {
+            WorkerInfo = w;
             PullEvents(cq);
         }).Release());
     } else {
         auto* cq = CQS_.back().get();
-        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
+        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq, w = TWorkerInfo(this, WorkerThreads_.size())]() {
+            WorkerInfo = w;
             PullEvents(cq);
         }).Release());
     }
@@ -553,8 +579,17 @@ void TGRpcClientLow::StopInternal(bool silent) {
 void TGRpcClientLow::WaitInternal() {
     std::unique_lock<std::mutex> guard(JoinMutex_);
 
-    for (auto& ti : WorkerThreads_) {
-        ti->Join();
+    size_t callFromWorker = WorkerThreads_.size();
+    if (WorkerInfo && WorkerInfo->Client == this) {
+        WorkerInfo->IsRunning = false;
+        callFromWorker = WorkerInfo->WorkerIndex;
+    }
+
+    for (size_t i = 0; i < WorkerThreads_.size(); i++) {
+        if (i == callFromWorker) {
+            continue;
+        }
+        WorkerThreads_[i]->Join();
     }
 }
 

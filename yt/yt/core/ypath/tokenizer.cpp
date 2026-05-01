@@ -148,8 +148,9 @@ int TTokenizer::ParseHexDigit(char ch, TStringBuf context)
     YT_ABORT();
 }
 
-void TTokenizer::Expect(ETokenType expectedType) const
+void TTokenizer::Expect(ETokenType expectedType, TSourceLocation location) const
 {
+    auto guard = MakeSourceLocationErrorCodicil(location);
     if (expectedType != Type_) {
         if (Type_ == ETokenType::EndOfStream) {
             if (PreviousType_ == ETokenType::Slash) {
@@ -169,9 +170,11 @@ void TTokenizer::Expect(ETokenType expectedType) const
     }
 }
 
-void TTokenizer::ExpectListIndex() const
+void TTokenizer::ExpectListIndex(TSourceLocation location) const
 {
-    Expect(NYPath::ETokenType::Literal);
+    Expect(NYPath::ETokenType::Literal, location);
+
+    auto guard = MakeSourceLocationErrorCodicil(location);
     i64 index;
     const auto& token = GetLiteralValue();
     if (!IsSpecialListKey(token) && !TryFromString(token, index)) {
@@ -190,12 +193,14 @@ bool TTokenizer::Skip(ETokenType expectedType)
     return false;
 }
 
-void TTokenizer::ThrowUnexpected() const
+void TTokenizer::ThrowUnexpected(TSourceLocation location) const
 {
+    auto guard = MakeSourceLocationErrorCodicil(location);
+
     if (Type_ == ETokenType::EndOfStream) {
         if (PreviousType_ == ETokenType::Slash) {
-            THROW_ERROR_EXCEPTION("Unexpected end-of-string in YPath; please note that YPath cannot "
-                "normally end with \"/\"");
+            THROW_ERROR_EXCEPTION("Unexpected end-of-string in YPath; "
+                "please note that YPath cannot normally end with \"/\"");
         } else {
             THROW_ERROR_EXCEPTION("Unexpected end-of-string in YPath");
         }

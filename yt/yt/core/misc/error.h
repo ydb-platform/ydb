@@ -13,6 +13,8 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <library/cpp/yt/misc/source_location.h>
+
 #include <util/generic/noncopyable.h>
 
 namespace NYT {
@@ -146,6 +148,8 @@ private:
     THashMap<std::string, TGetter> Getters_;
     static bool Initialized_;
 };
+
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 

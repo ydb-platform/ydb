@@ -783,6 +783,13 @@ auto TErrorCodicils::Get(const std::string& key) const -> TGetter
     return GetOrDefault(Getters_, key);
 }
 
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location)
+{
+    return TErrorCodicils::MakeGuard("location", [location = std::move(location)] () -> std::string {
+        return NYT::ToString(location);
+    });
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
+
 namespace NYql::NConnector::NApi {
     class TExpression;
     class TPredicate;
@@ -31,4 +33,5 @@ namespace NYql {
     );
     TString FormatExpression(const NConnector::NApi::TExpression& expression);
     TString FormatPredicate(const NConnector::NApi::TPredicate& predicate);
+
 } // namespace NYql

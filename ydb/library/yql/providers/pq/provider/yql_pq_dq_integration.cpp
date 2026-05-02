@@ -41,7 +41,12 @@ public:
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
+    ui64 PartitionTopicRead(
+        const TPqTopic& topic,
+        size_t maxPartitions,
+        TVector<TString>& partitions,
+        bool streamingTopicRead,
+        const std::set<ui64>& predicatePartitions) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -57,26 +62,59 @@ public:
             maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
-        partitions.reserve(tasks);
-        for (size_t i = 0; i < tasks; ++i) {
-            NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
-            partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
-            partitioningParams->SetEachTopicPartitionGroupId(i);
-            partitioningParams->SetDqPartitionsCount(tasks);
-            YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+        if (predicatePartitions.empty()) {      // read all partitions
+            const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+            partitions.reserve(tasks);
+            for (size_t i = 0; i < tasks; ++i) {
+                NPq::NProto::TDqReadTaskParams params;
+                auto* partitioningParams = params.MutablePartitioningParams();
+                partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                partitioningParams->SetEachTopicPartitionGroupId(i);
+                partitioningParams->SetDqPartitionsCount(tasks);
+                YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
 
-            TString serializedParams;
-            YQL_ENSURE(params.SerializeToString(&serializedParams));
-            partitions.emplace_back(std::move(serializedParams));
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
+        } else {    // read only predicate partitions
+             const size_t tasks = predicatePartitions.size();
+             partitions.reserve(tasks);
+             for (auto partition : predicatePartitions) {
+                 NPq::NProto::TDqReadTaskParams params;
+                 auto* partitioningParams = params.MutablePartitioningParams();
+                 partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                 partitioningParams->SetEachTopicPartitionGroupId(partition);
+                 partitioningParams->SetDqPartitionsCount(topicPartitionsCount);    // todo 
+                 YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
         }
         return 0;
     }
 
+    bool GetPartition(const TExprNode& node, std::set<ui64>& partitions) {
+        partitions.clear();
+
+        if (!node.IsCallable("AsList")) {
+            return false;
+        }
+
+        for (ui32 j = 0; j < node.ChildrenSize(); ++j) {
+            if (!node.Child(j)->IsCallable("Uint64")) {
+                return false;
+            }
+            partitions.insert(FromString<ui64>(node.Child(j)->Child(0)->Content()));
+        }
+        return true;
+    }
+
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true, {});
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto srcSettings = maybeDqSource.Cast().Settings();
@@ -93,7 +131,13 @@ public:
                     streamingTopicRead = FromString<bool>(Value(setting));
                     break;
                 }
-                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
+                std::set<ui64> predicatePartitions;
+                bool success = GetPartition(*topicSource.Partitions().Ptr(), predicatePartitions);
+                if (success) {
+                    YQL_CLOG(DEBUG, ProviderPq) << "partitions999  " << JoinSeq(" ", predicatePartitions);
+                }
+
+                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead, predicatePartitions);
             }
         }
         return 0;
@@ -150,6 +194,12 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
+            auto listType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+            TExprNode::TPtr emptyList = ctx.NewCallable(pqReadTopic.Pos(), "List", {
+                ExpandType(pqReadTopic.Pos(), *listType, ctx)
+            });
+            TExprNode::TPtr emptyList2; 
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -161,6 +211,11 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(expandedRowType)
+                    .Partitions(emptyList)
+                    .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .Predicate<TCoVoid>().Build()
+                    .CompareArgsEvaluate<TCoVoid>().Build()
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
@@ -378,13 +433,25 @@ public:
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
 
-                NYql::NConnector::NApi::TPredicate predicateProto;
-                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-                YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+                NYql::NConnector::NApi::TPredicate filterPredicateProto;
+                auto filterSerializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE(filterPredicateProto.ParseFromString(filterSerializedProto));
+                TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
 
-                TString predicateSql = NYql::FormatPredicate(predicateProto);
+                NPq::NProto::TOffsetPredicate offsetPredicates;
+                auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
+                YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
+
+                NPq::NProto::TWriteTimePredicate writeTimePredicate;
+                auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
+                YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
+
+                if (!streamingTopicRead) {
+                    *srcDesc.MutableOffsetPredicate() = offsetPredicates;
+                    *srcDesc.MutableWriteTimePredicate() = writeTimePredicate;
+                }
                 if (sharedReading) {
-                    srcDesc.SetPredicate(predicateSql);
+                    srcDesc.SetPredicate(filterPredicateSql);
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
@@ -422,8 +489,8 @@ public:
                     protoSettings.PackFrom(srcDesc);
                 }
 
-                if (sharedReading && !predicateSql.empty()) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                if (sharedReading && !filterPredicateSql.empty()) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));

@@ -170,7 +170,9 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
 
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
-        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path)
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
             .Apply([path](const TAsyncDescribeTopicResult& f) {
                 IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
 
@@ -183,6 +185,13 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
                         info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
+                        const auto& partitions =  response.GetTopicDescription().GetPartitions();
+                        for (const auto& partitionInfo : partitions) {
+                            if (!partitionInfo.GetPartitionStats()) {
+                                continue;
+                            }
+                            info.MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
+                        }
                     } else {
                         setError(response.GetIssues().ToString());
                     }

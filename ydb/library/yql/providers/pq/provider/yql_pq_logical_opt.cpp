@@ -1,7 +1,9 @@
 #include "yql_pq_provider_impl.h"
 
+#include <limits>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/intervals_converter.h>
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -13,6 +15,7 @@
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
@@ -326,10 +329,25 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
+        const auto& topic = dqPqTopicSource.Topic();
 
-        // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
-        if (!UseSharedReadingForTopic(dqPqTopicSource)) {
-            return node;
+        size_t topicPartitionsCount = 0;
+        for (auto kv : topic.Props()) {
+            auto key = kv.Name().Value();
+            if (key == PartitionsCountProp) {
+                topicPartitionsCount = FromString(kv.Value().Ref().Content());
+            }
+        }
+        const auto* topicMeta = State_->FindTopicMeta(topic);
+        TInstant minWriteTime = TInstant::Max();
+        if (topicMeta) {
+            if (topicMeta->FederatedTopic) {
+                const auto& federatedTopics = *(topicMeta->FederatedTopic);
+              
+                for (auto [p, time] : federatedTopics[0].MaxWriteTime) {
+                    minWriteTime = std::min(minWriteTime, time);
+                }
+            }
         }
 
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
@@ -337,21 +355,168 @@ public:
             return node;
         }
 
-        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
-        if (predicate.IsEmpty()) {
+        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
 
-        TStringBuilder err;
-        NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+        if (!dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
 
-        TString serializedProto;
-        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));
+        if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
+            YQL_CLOG(TRACE, ProviderPq) << "OffsetPredicate is already not empty";
+            return node;
+        }
+
+        if (dqPqTopicSource.CompareArgsEvaluate().Maybe<TCoVoid>()) {
+            auto compareArgsEvaluate = GetEvaluteListFromCompareNodes(flatmap.Lambda(), ctx);
+            if(compareArgsEvaluate) {
+               auto maybeOptionalIf = flatmap.Lambda().Body().Maybe<TCoOptionalIf>();
+               if (!maybeOptionalIf.IsValid()) { // Nothing to push
+                    return node;    // TODO
+               }
+            
+                TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
+                TNodeOnNodeOwnedMap deepClones;
+                auto predicateLambdaCopy = ctx.DeepCopy(flatmap.Lambda().Ref(), ctx, deepClones, true, true);
+                
+                if (maybeExtractMembers) {
+                    return Build<TCoFlatMap>(ctx, flatmap.Pos())
+                        .InitFrom(flatmap)
+                        .Input<TCoExtractMembers>()
+                            .InitFrom(maybeExtractMembers.Cast())
+                            .Input<TDqSourceWrap>()
+                                .InitFrom(dqSourceWrap)
+                                .Input<TDqPqTopicSource>()
+                                    .InitFrom(dqPqTopicSource)
+                                    .Predicate(predicateLambdaCopy)
+                                    .CompareArgsEvaluate(compareArgsEvaluate)
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .Done();
+                }
+                return Build<TCoFlatMap>(ctx, flatmap.Pos())
+                    .InitFrom(flatmap)
+                    .Input<TDqSourceWrap>()
+                        .InitFrom(dqSourceWrap)
+                        .Input<TDqPqTopicSource>()
+                            .InitFrom(dqPqTopicSource)
+                            .Predicate(predicateLambdaCopy)
+                            .CompareArgsEvaluate(compareArgsEvaluate)
+                            .Build()
+                        .Build()
+                    .Done();
+            }
+        } else if (dqPqTopicSource.CompareArgsEvaluate().Raw()->IsList()) {
+            auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
+            for (ui32 j = 0; j < list->ChildrenSize(); ++j) {
+                if (list->Child(j)->IsCallable("EvaluateExpr")) {
+                    return node;    // wait EvaluateExpr is calculated
+                }
+            }
+        }
+
+        auto maybeLambda = dqPqTopicSource.Predicate().Maybe<TCoLambda>();
+        if (!maybeLambda) {
+            maybeLambda = flatmap.Lambda();
+        }
+
+        auto list = dqPqTopicSource.CompareArgsEvaluate().Ptr();
+        ReplaceCompareNodes(maybeLambda.Cast(), ctx, list);
+
+        TString sharedReadingPridicateSerializedProto;
+        if (UseSharedReadingForTopic(dqPqTopicSource)) {
+            // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
+            auto settings = TPushdownSettings();
+
+            
+            NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+            if (!sharedReadingPredicate.IsEmpty()) {
+                TStringBuilder err;
+                NYql::NConnector::NApi::TPredicate predicateProto;
+                if (!NYql::SerializeFilterPredicate(ctx, sharedReadingPredicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                    return node;
+                }
+                YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
+            }   
+        }
+
+        bool isPartitionListUpdated = false;
+        TExprNode::TPtr partitionList = dqPqTopicSource.Partitions().Ptr();
+        {
+            auto settings = TPushdownSettings();
+            settings.EnableMember("_yql_sys_partition_id");
+            NPushdown::TPredicateNode partitionIdPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+            if (!partitionIdPredicate.IsEmpty()) {
+                auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
+                auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
+                    .Args({"_yql_sys_partition_id"})
+                    .Body<TExprApplier>()
+                        .Apply(partitionIdPredicate.ExprNode.Cast())
+                        .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
+                        .Build()
+                    .Done();
+
+                isPartitionListUpdated = true;
+                partitionList = ctx.Builder(node.Pos())
+                    .Callable("EvaluateExpr")
+                        .Callable(0, "Map")
+                            .Callable(0, "Filter")
+                                .Callable(0, "Map")
+                                    .Callable(0, "Enumerate")
+                                        .Callable(0, "Replicate")
+                                            .Callable(0, "Int32")
+                                                .Atom(0, "1")
+                                            .Seal()
+                                            .Callable(1, "Int32")
+                                                .Atom(0, ToString(topicPartitionsCount))
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Callable("AsStruct")
+                                            .List(0)
+                                                .Atom(0, "_yql_sys_partition_id")
+                                                .Callable(1, "Nth")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, "0", TNodeFlags::Default)
+                                                .Seal()
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                                .Add(1, newFilterLambda.Ptr())
+                            .Seal()
+                            .Lambda(1)
+                                .Param("item")
+                                .Callable("Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, "_yql_sys_partition_id", TNodeFlags::Default)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+        }
+
+        TString offsetPredicateSerializedProto = SerializePredicate("_yql_sys_offset", maybeLambda.Cast(), ctx);
+        TString writeTimePredicateSerializedProto = SerializePredicate("_yql_sys_write_time", maybeLambda.Cast(), ctx, minWriteTime.MicroSeconds());// TODO minWriteTime? 
+
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
+        
+
+        if (sharedReadingPridicateSerializedProto.empty()
+            && !isPartitionListUpdated
+            && offsetPredicateSerializedProto.empty()
+            && writeTimePredicateSerializedProto.empty()) {
+            return node;
+        }
 
         if (maybeExtractMembers) {
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
@@ -362,7 +527,12 @@ public:
                         .InitFrom(dqSourceWrap)
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
-                            .FilterPredicate().Value(serializedProto).Build()
+                            .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
+                            .Partitions(partitionList)
+                            .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
+                            .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                            .Predicate<TCoVoid>().Build()
+                            .CompareArgsEvaluate<TCoVoid>().Build()
                             .Build()
                         .Build()
                     .Build()
@@ -374,7 +544,12 @@ public:
                 .InitFrom(dqSourceWrap)
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
-                    .FilterPredicate().Value(serializedProto).Build()
+                    .FilterPredicate().Value(sharedReadingPridicateSerializedProto).Build()
+                    .Partitions(partitionList)
+                    .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
+                    .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                    .Predicate<TCoVoid>().Build()
+                    .CompareArgsEvaluate<TCoVoid>().Build()
                     .Build()
                 .Build()
             .Done();
@@ -402,6 +577,119 @@ private:
         const bool sharedReading = FromString(GetTopicSourceSetting(topicSource, SharedReading).value_or("false"));
         const bool streamingTopicRead = FromString(GetTopicSourceSetting(topicSource, StreamingTopicRead).value_or(State_->StreamingTopicsReadByDefault ? "true" : "false"));
         return sharedReading && streamingTopicRead;
+    }
+
+    TExprNode::TPtr GetEvaluteListFromCompareNodes(const TCoLambda& lambda, TExprContext& ctx) const {
+        auto body = lambda.Body().Ptr();
+        TExprNode::TListType evaluatedExprs;
+
+        ForEachNonMemberExpressions(lambda, [&](const TExprNode::TPtr& expr) {
+            auto evaluated = ctx.Builder(expr->Pos())
+                .Callable("EvaluateExpr")
+                    .Add(0, expr)
+                .Seal()
+                .Build();
+            evaluatedExprs.push_back(std::move(evaluated));
+        });
+        if (evaluatedExprs.empty()) {
+            return {};
+        }
+        return ctx.NewList(lambda.Pos(), std::move(evaluatedExprs));
+    }
+
+    void ReplaceCompareNodes(const TCoLambda& lambda, TExprContext& ctx, const TExprNode::TPtr& list) const {
+        Y_UNUSED(ctx);
+        auto body = lambda.Body().Ptr();
+        ui32 index = 0;
+
+        auto containsMember = [](const TExprNode::TPtr& root) -> bool {
+            return !!FindNode(root, [](const TExprNode::TPtr& n) {
+                return TCoMember::Match(n.Get());
+            });
+        };
+
+        VisitExpr(body, [&](const TExprNode::TPtr& exprNode) {
+            if (TCoCompare::Match(exprNode.Get())) {
+                auto right = exprNode->ChildPtr(TCoCompare::idx_Right);
+                auto left = exprNode->ChildPtr(TCoCompare::idx_Left);
+
+                if (!containsMember(right) && index < list->ChildrenSize()) {
+                    exprNode->ChildRef(TCoCompare::idx_Right) = list->ChildPtr(index);
+                    ++index;
+                }
+                if (!containsMember(left) && index < list->ChildrenSize()) {
+                    exprNode->ChildRef(TCoCompare::idx_Left) = list->ChildPtr(index);
+                    ++index;
+                }
+                return false;
+            }
+            return true;
+        });
+    }
+
+    void ForEachNonMemberExpressions(const TCoLambda& lambda, std::function<void(const TExprNode::TPtr&)> callback) const {
+        auto body = lambda.Body().Ptr();
+        auto containsMember = [](const TExprNode::TPtr& root) -> bool {
+            return !!FindNode(root, [](const TExprNode::TPtr& n) {
+                return TCoMember::Match(n.Get());
+            });
+        };
+
+        VisitExpr(body, [&](const TExprNode::TPtr& exprNode) {
+            if (TCoCompare::Match(exprNode.Get())) {
+                auto compare = TCoCompare(exprNode.Get());
+                auto left = compare.Left().Ptr();
+                auto right = compare.Right().Ptr();
+
+                if (!containsMember(right)) {
+                    callback(right);
+                }
+                if (!containsMember(left)) {
+                    callback(left);
+                }
+                return false; // don't descend into compare children
+            }
+            return true; // continue traversal
+        });
+    }
+
+    TString SerializePredicate(
+        const TString& memberName,
+        const NNodes::TCoLambda& lambda,
+        TExprContext& ctx,
+        std::optional<ui64> min = std::nullopt
+    ) const {
+        auto settings = TPushdownSettings();
+        settings.EnableMember(memberName);
+        settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor); // TODO
+        NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
+        if (predicate.IsEmpty()) {
+            return {};
+        }
+        TStringBuilder err;
+        TDisjointIntervalTree<ui64> tree;
+        if (!NYql::NPushdown::ConvertPredicateToIntervals(ctx, predicate.ExprNode.Cast(), tree, err)) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
+            return {};
+        }
+
+        if (tree.Empty() || (tree.Min() == std::numeric_limits<ui64>::min() && tree.Max() == std::numeric_limits<ui64>::max())) {
+            NPq::NProto::TOffsetPredicate proto;
+            TString result;
+            YQL_ENSURE(proto.SerializeToString(&result));
+            return result;
+        }
+        NPq::NProto::TOffsetPredicate proto;
+        auto* item = proto.AddItem();
+        if (tree.Min() != std::numeric_limits<ui64>::min()) {
+            item->SetBegin(!min ? tree.Min() : std::min(tree.Min(), *min)); 
+        }
+        if (tree.Max() != std::numeric_limits<ui64>::max()) {
+            item->SetEnd(tree.Max());
+        }
+        TString result; 
+        YQL_ENSURE(proto.SerializeToString(&result));
+        return result;
     }
 
     TPqState::TPtr State_;

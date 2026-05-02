@@ -298,6 +298,38 @@ public:
 
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
+
+        YQL_ENSURE(SourceParams.GetOffsetPredicate().ItemSize() <= 1, "Multiple OffsetPredicate is not implemented");
+        
+        for (const auto& predicateOffset: SourceParams.GetOffsetPredicate().GetItem()) {
+            YQL_ENSURE(!predicateOffset.HasPartitionId(), "Not empty PartitionId is not implemented");
+
+            if (predicateOffset.HasBegin()) {
+                BeginOffset = predicateOffset.GetBegin();
+            }
+            if (predicateOffset.HasEnd()) {
+                EndOffset = predicateOffset.GetEnd();
+            }
+        }
+
+        YQL_ENSURE(SourceParams.GetWriteTimePredicate().ItemSize() <= 1, "Multiple WriteTimePredicate is not implemented");
+        for (const auto& predicateWriteTime: SourceParams.GetWriteTimePredicate().GetItem()) {
+            YQL_ENSURE(!predicateWriteTime.HasPartitionId(), "Not empty PartitionId is not implemented");
+            YQL_ENSURE(SourceParams.GetDisposition().GetDispositionCase() == NPq::NProto::StreamingDisposition::kOldest, "WriteTimePredicate is supported in table mode");
+
+            if (predicateWriteTime.HasBegin()) {
+                BeginWriteTime = TInstant::MicroSeconds(predicateWriteTime.GetBegin());
+            }
+            if (predicateWriteTime.HasEnd()) {
+                EndWriteTime = TInstant::MicroSeconds(predicateWriteTime.GetEnd());
+            }
+        }
+        SRC_LOG_I("BeginOffset " << BeginOffset << ", EndOffset " << EndOffset << ", BeginWriteTime " << BeginWriteTime << ", EndWriteTime " << EndWriteTime);
+        
+        if (BeginWriteTime &&  StartingMessageTimestamp < *BeginWriteTime) {
+            StartingMessageTimestamp = *BeginWriteTime;
+            SRC_LOG_I("Update StartingMessageTimestamp to " << StartingMessageTimestamp);
+        }
     }
 
     ~TDqPqReadActor() {
@@ -881,6 +913,7 @@ private:
         TUnboxedValueVector Data;
         i64 UsedSpace = 0;
         THashMap<NYdb::NTopic::TPartitionSession::TPtr, std::pair<std::string, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
+        TInstant LastWriteTime;
     };
 
     // must be called with bound allocator
@@ -908,6 +941,7 @@ private:
             auto key = MakePartitionKey(TString(cluster), partitionSession);
             auto& partitionInfo = Partitions[key];
             partitionInfo.Offset = ranges.back().second;
+            partitionInfo.LastMessageWriteTime = readyBatch.LastWriteTime;
             if (SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                 FinishedPartitions.insert(key);
             }
@@ -1029,32 +1063,45 @@ private:
                 const std::string& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
-                SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
-                
+                SRC_LOG_I("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
+
+                bool needSkip = false;
                 if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
                     SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message offset: " << message.GetOffset() << ", end offset: " << *partitionInfo.EndOffset << ")");
-                    continue;
+                    needSkip = true;
+                    //continue;
                 }
 
+                const auto partitionTime = message.GetWriteTime();
+                if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.EndWriteTime && *partitionInfo.EndWriteTime <= partitionTime) {
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message writetime: " << partitionTime << ", end write time: " << *partitionInfo.EndWriteTime << ")");
+                    // activeBatch.LastWriteTime = partitionTime;
+                    needSkip = true;
+                    //continue;
+                }
+                
                 if (ClusterState.ReadSessionControl) {
                     ClusterState.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
                 }
-
+                
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
                     SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
-                    continue;
+                    needSkip = true;
+                    //continue;
                 }
-
-                auto [item, size] = CreateItem(message);
-                const auto partitionTime = message.GetWriteTime();
-
+                
+                
                 if (Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined()) {
                     Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
                 }
                 TReadyBatch& activeBatch = Self.ReadyBuffer.back();
-
-                activeBatch.Data.emplace_back(std::move(item));
-                activeBatch.UsedSpace += size;
+                
+                if (!needSkip) {
+                    auto [item, size] = CreateItem(message);
+                    activeBatch.Data.emplace_back(std::move(item));
+                    activeBatch.UsedSpace += size;
+                }
+                activeBatch.LastWriteTime = partitionTime;
 
                 auto& [cluster, offsets] = activeBatch.OffsetRanges[message.GetPartitionSession()];
                 cluster = Cluster;
@@ -1097,10 +1144,21 @@ private:
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            event.GetPartitionSession()->RequestStatus();
 
             auto& partitionInfo = Self.Partitions[partitionKey];
+            if (!partitionInfo.Offset && Self.BeginOffset) {
+                partitionInfo.Offset = *Self.BeginOffset;
+            }
+            partitionInfo.EndWriteTime = Self.EndWriteTime;
+
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
+                if (Self.EndOffset && *Self.EndOffset < *partitionInfo.EndOffset) {
+                    *partitionInfo.EndOffset = *Self.EndOffset;
+                    SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " End offset was changed to " << *partitionInfo.EndOffset);
+                }
+
                 if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                     Self.FinishedPartitions.insert(partitionKey);
                 }
@@ -1127,7 +1185,8 @@ private:
             }
         }
 
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
+        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) {
+        }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
@@ -1195,6 +1254,10 @@ private:
     const TDuration CheckPartitionCountPeriod;
     TInstant NextCheckPartitionTime = TInstant::Now();
     bool PartitionCountTimerScheduled = false;
+    TMaybe<ui64> BeginOffset;
+    TMaybe<ui64> EndOffset;
+    TMaybe<TInstant> BeginWriteTime;
+    TMaybe<TInstant> EndWriteTime;
 };
 
 ui32 ExtractPartitionsFromParams(

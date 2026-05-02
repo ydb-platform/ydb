@@ -632,6 +632,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest) {
 Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
+    std::cout << "MISHA TEST" << std::endl;
 
     const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
     const auto tupleType = pb.NewTupleType({dataType, dataType});
@@ -783,6 +784,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideSortSpillingTest) {
 Y_UNIT_TEST_LLVM_SPILLING(SortByFirstKeyAsc) {
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
+    std::cout << "MISHA OUT" << std::endl;
+    std::cerr << "MISHA ERR" << std::endl;
 
     const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
     const auto tupleType = pb.NewTupleType({dataType, dataType});

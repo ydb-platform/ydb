@@ -172,7 +172,7 @@ public:
 
     bool CheckForInit() {
         Read();
-        return HasValue;
+        return HasValue || IsFinished();
     }
 
     bool IsFinished() const {
@@ -189,6 +189,7 @@ public:
 
     TStorage Pop() {
         auto data(std::move(Data));
+        Data.resize(Width_);
         HasValue = false;
         Read();
         return data;
@@ -991,7 +992,7 @@ private:
     bool MergeHeapBuilt = false;
     bool MergeFinishWriteInProgress = false;
     static constexpr size_t MaxMergeWidth = 10;
-    static constexpr size_t MinSpillBatchRows = 64 * 1024;
+    static constexpr size_t MinSpillBatchRows = 1024;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>

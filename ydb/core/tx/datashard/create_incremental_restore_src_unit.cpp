@@ -278,13 +278,28 @@ protected:
 
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, 
-                   "IncrementalRestoreScan finished for txId: " << ev->Get()->TxId 
+        const auto* msg = ev->Get();
+        // TxId=0 events are internal flow control from change_sender; ignore.
+        if (msg->TxId == 0) {
+            ResetWaiting(op);
+            return;
+        }
+
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                   "IncrementalRestoreScan finished for txId: " << msg->TxId
+                   << " success: " << msg->Success
+                   << " endStatus: " << static_cast<int>(msg->EndStatus)
                    << " at DataShard: " << DataShard.TabletID());
-        
-        // Additional completion handling can be added here if needed
-        // (e.g., updating operation status, sending additional notifications)
-        
+
+        auto* schemeOp = DataShard.FindSchemaTx(msg->TxId);
+        if (schemeOp) {
+            schemeOp->Success = msg->Success;
+            schemeOp->Error = msg->Error;
+            schemeOp->EndStatus = msg->EndStatus;
+            schemeOp->BytesProcessed = 0;
+            schemeOp->RowsProcessed = 0;
+        }
+
         ResetWaiting(op);
     }
 

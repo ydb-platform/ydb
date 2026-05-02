@@ -194,12 +194,22 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         LOG_D("Finish " << status);
 
-        if (status != EStatus::Done) {
-            // TODO: https://github.com/ydb-platform/ydb/issues/18797
-            LOG_W("IncrementalRestoreScan finished with error status: " << status);
+        const bool success = IsScanSuccess(status);
+        const auto endStatus = MapScanStatus(status);
+        if (!success) {
+            // Error propagation: see github.com/ydb-platform/ydb/issues/18797
+            // The DS-side classifies the cause (EndStatus); SS owns the
+            // policy that decides whether to retry. See
+            // schemeshard_incremental_restore_classify.h for the SS policy.
+            LOG_E("IncrementalRestoreScan finished with error status: " << status
+                  << " endStatus=" << static_cast<int>(endStatus));
         }
 
-        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
+        TString errorMsg;
+        if (!success) {
+            errorMsg = TStringBuilder() << "Scan finished with status: " << status;
+        }
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg, endStatus));
 
         PassAway();
         return nullptr;

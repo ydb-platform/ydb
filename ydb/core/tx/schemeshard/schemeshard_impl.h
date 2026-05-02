@@ -243,6 +243,8 @@ public:
 
     TBackupSettings BackupSettings;
 
+    TIncrementalRestoreSettings IncrementalRestoreSettings;
+
     struct TTenantInitState {
         enum EInitState {
             InvalidState = 0,
@@ -335,6 +337,8 @@ public:
 
     THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
     THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
+    // Transient (not persisted): cleared on reboot so operations restart fresh.
+    THashSet<TOperationId> FailedIncrementalRestoreOperations;
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
@@ -1124,7 +1128,10 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
     class TTxProgressIncrementalRestore;
+    class TTxProgressIncrementalRestoreAllocateResult;
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestoreAllocateResult(
+        TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
 
     struct TTxShardStateChanged;
     NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
@@ -1265,10 +1272,52 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
-    void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
 
-    void DiscoverAndCreateIndexRestoreOperations(
+    // Persists a terminal IncrementalRestoreState row (Completed or Failed) and the
+    // accompanying FinalStatus/FinalIssues atomically with the in-memory transition.
+    // Both sites that move state to a terminal value MUST go through this helper so
+    // a SchemeShard reboot between memory mutation and DB commit cannot leave the
+    // operation invisible to Get/List.
+    static void PersistIncrementalRestoreTerminalState(
+        TSchemeShard* self,
+        NIceDb::TNiceDb& db,
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::EState terminal,
+        ui32 finalStatus,
+        const TString& finalIssues = {});
+
+    void EnqueueIncrementalRestoreOperations(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TActorContext& ctx);
+
+    void DispatchPendingIncrementalRestoreTables(
+        TIncrementalRestoreState& state,
+        ui64 operationId,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    // Cookie packs (originalOpId<<32 | itemSeq) so concurrent allocations bind
+    // to the right item.
+    void EnqueueIncrementalRestoreItem(
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::TItem::EKind kind,
+        TPathId tablePathId,
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    // Drops all IncrementalRestoreItem rows for originalOpId and clears the
+    // matching in-memory bookkeeping when `state` is non-null.
+    void CleanupIncrementalRestoreItems(
+        ui64 originalOpId,
+        NIceDb::TNiceDb& db,
+        TIncrementalRestoreState* state);
+
+    void EnqueueAndDiscoverIndexRestoreOperations(
         const TPathId& backupCollectionPathId,
         ui64 operationId,
         const TString& backupName,
@@ -1276,13 +1325,27 @@ public:
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TActorContext& ctx);
 
-    void DiscoverIndexesRecursive(
+    void EnqueueIncrementalRestoreIndexesRecursive(
         ui64 operationId,
         const TString& backupName,
-        const TPath& bcPath,
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TPath& currentPath,
         const TString& accumulatedRelativePath,
+        const TActorContext& ctx);
+
+    // Registers the sub-op in orchestrator maps and seeds ExpectedShards from the table's shards.
+    void TrackIncrementalRestoreSubOpAndExpectedShards(
+        TOperationId subOpId,
+        TPathId tablePathId,
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state);
+
+    void CreateSingleTableRestoreOperation(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
     void CreateSingleIndexRestoreOperation(
@@ -1292,10 +1355,11 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx,
         const TString& specificImplTableName = "");
 
-    TString FindTargetTablePath(
+    TString FindIncrementalRestoreTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TString& relativeTablePath);
 
@@ -1849,7 +1913,6 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev);
 
     // Transaction lifecycle constructor functions
-    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
 

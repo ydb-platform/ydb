@@ -87,12 +87,13 @@ public:
         // 2. Either actual incremental processing progress has been made OR the operation is fully completed, AND
         // 3. There are no incremental operations still in progress
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
-        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 || 
+        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 ||
                                    !incrementalRestore.CompletedOperations.empty() ||
                                    incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
+                                   incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
                                    incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing);
         bool hasActiveIncrementalOperations = false;
-        
+
         // Check if any of the in-progress operations are still active
         for (const auto& opId : incrementalRestore.InProgressOperations) {
             if (Self->Operations.contains(opId.GetTxId())) {
@@ -100,8 +101,12 @@ public:
                 break;
             }
         }
-        
-        bool canForget = !mainOperationActive && actualProgressMade && !hasActiveIncrementalOperations;
+
+        // PersistIncrementalRestoreTerminalState and LongIncrementalRestoreOps.erase happen in the same
+        // finalize tx, so FORGET either sees State==Finalizing (and is blocked below)
+        // or State==Completed/Failed with the long-op already released.
+        bool canForget = !mainOperationActive && actualProgressMade
+                      && !hasActiveIncrementalOperations;
         
         if (!canForget) {
             return Reply(
@@ -110,29 +115,21 @@ public:
             );
         }
 
-        Self->IncrementalRestoreStates.erase(restoreId);
-        
-        // Clean up database tables
         NIceDb::TNiceDb db(txc.DB);
-        
+
+        Self->CleanupIncrementalRestoreItems(restoreId, db,
+            Self->IncrementalRestoreStates.FindPtr(restoreId));
+
+        Self->IncrementalRestoreStates.erase(restoreId);
+
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
-        
+
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
-        
-        auto txIt = Self->TxIdToIncrementalRestore.begin();
-        while (txIt != Self->TxIdToIncrementalRestore.end()) {
-            if (txIt->second == restoreId) {
-                auto toErase = txIt++;
-                Self->TxIdToIncrementalRestore.erase(toErase);
-            } else {
-                ++txIt;
-            }
-        }
-        
+
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
             if (opIt->second == restoreId) {

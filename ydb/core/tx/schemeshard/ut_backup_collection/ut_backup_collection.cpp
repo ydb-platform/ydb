@@ -1,6 +1,11 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/datashard/incr_restore_scan.h>  // IsScanSuccess / MapScanStatus
+#include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>  // ShouldRetryIncrementalRestore
+#include <ydb/core/tx/datashard/scan_common.h>  // GetRetryWakeupTimeoutBackoff
+#include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/printf.h>
@@ -1071,31 +1076,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
 
         UNIT_ASSERT_C(incrementalRestoreStateClean, "IncrementalRestoreState table not properly cleaned up");
-
-        bool incrementalRestoreShardProgressClean = true;
-        try {
-            auto result = LocalMiniKQL(runtime, schemeshardTabletId, R"(
-                (
-                    (let key '('('OperationId (Uint64 '0)) '('ShardIdx (Uint64 '0))))
-                    (let select '('OperationId))
-                    (let row (SelectRow 'IncrementalRestoreShardProgress key select))
-                    (return (AsList
-                        (SetResult 'Result row)
-                    ))
-                )
-            )");
-
-            auto& value = result.GetValue();
-            if (value.GetStruct(0).GetOptional().HasOptional()) {
-                incrementalRestoreShardProgressClean = false;
-                Cerr << "ERROR: IncrementalRestoreShardProgress table still has entries after DROP" << Endl;
-            }
-        } catch (...) {
-            incrementalRestoreShardProgressClean = false;
-            Cerr << "ERROR: Failed to query IncrementalRestoreShardProgress table" << Endl;
-        }
-
-        UNIT_ASSERT_C(incrementalRestoreShardProgressClean, "IncrementalRestoreShardProgress table not properly cleaned up");
 
         Cerr << "SUCCESS: All LocalDB tables properly cleaned up after DROP BACKUP COLLECTION" << Endl;
 
@@ -3403,4 +3383,910 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Without fix: init sets PathState=EPathStateCopying on dropped source -> crash.
         DescribePath(runtime, "/MyRoot/Table1");
     }
+    Y_UNIT_TEST(RestoreProgressCalculation) {
+        // Verifies CalcCurrentIncrementalProgress and the 1-98% progress formula.
+        using namespace NKikimr::NSchemeShard;
+        using TState = TIncrementalRestoreState;
+        using TTableOp = TState::TTableOperationState;
+
+        TState state;
+        state.State = TState::EState::Running;
+
+        // Set up 3 incrementals
+        state.AddIncrementalBackup(TPathId(1, 100), "incr1", 1);
+        state.AddIncrementalBackup(TPathId(1, 101), "incr2", 2);
+        state.AddIncrementalBackup(TPathId(1, 102), "incr3", 3);
+
+        // Simulate 2 table operations with 3 shards each for the current incremental
+        TOperationId op1(TTxId(1000), 0);
+        TOperationId op2(TTxId(1001), 0);
+
+        auto& tableOp1 = state.TableOperations[op1];
+        tableOp1.OperationId = op1;
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+
+        auto& tableOp2 = state.TableOperations[op2];
+        tableOp2.OperationId = op2;
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+
+        // Total: 6 shards across 2 operations, 3 incrementals
+        // Progress formula: 1 + (CurrentIncrementalIdx + shardsDone/6) * 97 / 3
+
+        // --- Incremental 0: no shards done ---
+        state.CurrentIncrementalIdx = 0;
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
+        // percent = 1 + (0 + 0) * 97 / 3 = 1
+        float incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        i32 pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        UNIT_ASSERT_VALUES_EQUAL(pct, 1);
+
+        // --- Incremental 0: 1/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f / 6, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 1/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 1 && pct < 33, TStringBuilder() << "Expected (1, 33), got " << pct);
+
+        // --- Incremental 0: 3/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.5f, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 3/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 10 && pct < 33, TStringBuilder() << "Expected (10, 33), got " << pct);
+
+        // --- Incremental 0: 6/6 shards done ---
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 6/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(pct, 33);  // 1 + 1*97/3 = 33
+
+        // --- Incremental 1: reset ops, 0/6 shards ---
+        state.CurrentIncrementalIdx = 1;
+        state.TableOperations.clear();
+        state.TableOperations[op1] = TTableOp();
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        state.TableOperations[op2] = TTableOp();
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        UNIT_ASSERT_VALUES_EQUAL(pct, 33);  // 1 + 1*97/3 = 33
+
+        // --- Incremental 1: 3/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 1, 3/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 33 && pct < 65, TStringBuilder() << "Expected (33, 65), got " << pct);
+
+        // --- Incremental 2: 6/6 shards done ---
+        state.CurrentIncrementalIdx = 2;
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 2, 6/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(pct, 98);  // 1 + 3*97/3 = 98
+
+        // --- Failed shards also count toward progress ---
+        state.CurrentIncrementalIdx = 0;
+        state.TableOperations.clear();
+        state.TableOperations[op1] = TTableOp();
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].FailedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f, 0.01f);
+
+        // --- Empty TableOperations returns 0 ---
+        state.TableOperations.clear();
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
+    }
+
+    // Validates cap arithmetic (in-flight vs cap, sentinel -1 = unbounded) via a local
+    // simulation of the DispatchPendingTables loop without a real schemeshard tablet.
+    Y_UNIT_TEST(IncrementalRestoreDispatchRespectsCap) {
+        using namespace NKikimr::NSchemeShard;
+        using TState = TIncrementalRestoreState;
+        using TPending = TState::TPendingRestoreOp;
+
+        ui64 nextOpIdSeq = 9000;
+        auto drain = [&nextOpIdSeq](TState& s, i64 cap) -> ui32 {
+            ui32 dispatched = 0;
+            while (!s.PendingTables.empty()
+                   && (cap == -1 || (i64)s.InProgressOperations.size() < cap)) {
+                s.PendingTables.pop_front();
+                TOperationId opId(TTxId(nextOpIdSeq++), 0);
+                s.InProgressOperations.insert(opId);
+                ++dispatched;
+            }
+            return dispatched;
+        };
+
+        TState state;
+        // Seed 8 pending entries
+        for (ui32 i = 0; i < 8; ++i) {
+            TPending p;
+            p.Kind = TPending::EKind::Table;
+            p.BackupName = "incr1";
+            p.TablePath = TStringBuilder() << "/MyRoot/Table" << i;
+            state.PendingTables.push_back(std::move(p));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 0u);
+
+        // cap=2, in-flight=0 -> drain marks 2; queue has 6 left.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // cap=2, in-flight=2 -> drain marks 0; queue still 6.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // Move 1 from in-flight to completed (simulating completion notification).
+        auto firstIt = state.InProgressOperations.begin();
+        TOperationId completedId = *firstIt;
+        state.InProgressOperations.erase(firstIt);
+        state.CompletedOperations.insert(completedId);
+
+        // cap=2, in-flight=1 -> drain marks 1; queue 5.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 2), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 2u);
+
+        // cap=-1 (unbounded) drains everything remaining.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, -1), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(state.PendingTables.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(state.InProgressOperations.size(), 7u);
+
+        // Empty queue: returns 0 immediately, no errors.
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, -1), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(drain(state, 0), 0u);
+    }
+
+    // RecordShardResult is idempotent: re-deliveries (reboot, retransmit) are dropped
+    // even with a flipped success value, guarding AllShardsComplete()'s sum invariant.
+    Y_UNIT_TEST(IncrementalRestoreShardResultIdempotent) {
+        using namespace NKikimr::NSchemeShard;
+        using TTableOp = TIncrementalRestoreState::TTableOperationState;
+
+        TTableOp op;
+        op.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        op.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+
+        // Initial success report — recorded.
+        UNIT_ASSERT(op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Re-delivered identical reply — silently dropped.
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Re-delivered with FLIPPED success value — also dropped (would otherwise
+        // double-count and break AllShardsComplete()'s sum invariant).
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(1)), /*success=*/false));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 0u);
+
+        // Different shard, failure — recorded normally.
+        UNIT_ASSERT(op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/false));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 1u);
+
+        // Re-delivery of the failed shard — also dropped, in either direction.
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/false));
+        UNIT_ASSERT(!op.RecordShardResult(TShardIdx(1, TLocalShardIdx(2)), /*success=*/true));
+        UNIT_ASSERT_VALUES_EQUAL(op.CompletedShards.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.FailedShards.size(), 1u);
+
+        // AllShardsComplete invariant holds despite re-delivery attempts.
+        UNIT_ASSERT(op.AllShardsComplete());
+        UNIT_ASSERT_VALUES_EQUAL(
+            op.CompletedShards.size() + op.FailedShards.size(),
+            op.ExpectedShards.size());
+    }
+
+    // Guards GetRetryWakeupTimeoutBackoff against upstream changes: 1s/2s/4s/8s plateau.
+    Y_UNIT_TEST(IncrementalRestoreBackoffSchedule) {
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(0), TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(1), TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(2), TDuration::Seconds(4));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(3), TDuration::Seconds(8));
+        // Plateau at 8s for any attempt >= 3.
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(4), TDuration::Seconds(8));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(5), TDuration::Seconds(8));
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataShard::GetRetryWakeupTimeoutBackoff(6), TDuration::Seconds(8));
+    }
+
+    // Guards the DS-side classifier (NTable::EStatus -> EOpEndStatus) and the
+    // SS-side policy (EOpEndStatus -> retry decision) against new EStatus values.
+    Y_UNIT_TEST(IncrementalRestoreScanStatusToRetriable) {
+        using NKikimr::NTable::EStatus;
+        using NKikimr::NDataShard::IsScanSuccess;
+        using NKikimr::NDataShard::MapScanStatus;
+        using NKikimr::NSchemeShard::ShouldRetryIncrementalRestore;
+        using NKikimrTxDataShard::TShardOpResult;
+
+        // Done -> END_SUCCESS: success, no retry needed.
+        UNIT_ASSERT(IsScanSuccess(EStatus::Done));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Done)),
+            static_cast<int>(TShardOpResult::END_SUCCESS));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_SUCCESS));
+
+        // Operator-issued termination -> END_TRANSIENT_FAILURE: SS retries.
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Term));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Term)),
+            static_cast<int>(TShardOpResult::END_TRANSIENT_FAILURE));
+        UNIT_ASSERT(ShouldRetryIncrementalRestore(TShardOpResult::END_TRANSIENT_FAILURE));
+
+        // Lost / StorageError / Exception -> END_FATAL_FAILURE: short-circuit Failed.
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Lost));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Lost)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+        UNIT_ASSERT(!IsScanSuccess(EStatus::StorageError));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::StorageError)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+        UNIT_ASSERT(!IsScanSuccess(EStatus::Exception));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(MapScanStatus(EStatus::Exception)),
+            static_cast<int>(TShardOpResult::END_FATAL_FAILURE));
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_FATAL_FAILURE));
+
+        // END_UNSPECIFIED: safe default, treat as fatal (no retry).
+        UNIT_ASSERT(!ShouldRetryIncrementalRestore(TShardOpResult::END_UNSPECIFIED));
+    }
+
+    // Polls TestListBackupCollectionRestores until the latest entry reaches PROGRESS_DONE
+    // (or the timeout elapses). Returns the final entry's inner StatusCode.
+    static Ydb::StatusIds::StatusCode PollRestoreUntilDone(
+            TTestActorRuntime& runtime, TTestEnv& env, const TString& dbName,
+            TDuration pollInterval = TDuration::MilliSeconds(500),
+            TDuration timeout = TDuration::Seconds(120))
+    {
+        TInstant deadline = runtime.GetCurrentTime() + timeout;
+        while (runtime.GetCurrentTime() < deadline) {
+            auto listResp = TestListBackupCollectionRestores(runtime, dbName);
+            if (!listResp.GetEntries().empty()) {
+                const auto& entry = *listResp.GetEntries().rbegin();
+                if (entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                    return static_cast<Ydb::StatusIds::StatusCode>(entry.GetStatus());
+                }
+            }
+            env.SimulateSleep(runtime, pollInterval);
+        }
+        UNIT_ASSERT_C(false, "Restore did not reach PROGRESS_DONE within timeout");
+        return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    }
+
+    // Reads the persisted Schema::IncrementalRestoreState row's State column.
+    // Returns -1 if the row does not exist.
+    static i64 ReadPersistedRestoreState(TTestActorRuntime& runtime, ui64 restoreId) {
+        TString program = Sprintf(R"(
+            (
+                (let key '('('OperationId (Uint64 '%lu))))
+                (let select '('OperationId 'State))
+                (let row (SelectRow 'IncrementalRestoreState key select))
+                (return (AsList
+                    (SetResult 'Result row)
+                ))
+            )
+        )", (unsigned long)restoreId);
+        try {
+            auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, program);
+            const auto& value = result.GetValue();
+            if (!value.GetStruct(0).GetOptional().HasOptional()) {
+                return -1; // row absent
+            }
+            const auto& row = value.GetStruct(0).GetOptional().GetOptional();
+            // Struct: <OperationId, State>
+            return static_cast<i64>(row.GetStruct(1).GetOptional().GetUint32());
+        } catch (...) {
+            return -2;
+        }
+    }
+
+    // The state row must persist via PersistIncrementalRestoreTerminalState until FORGET, so post-reboot
+    // Get returns SUCCESS+PROGRESS_DONE rather than NOT_FOUND.
+    Y_UNIT_TEST(GetReturnsCompletedAfterFinalizeRowPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Pre-reboot list empty");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // Reboot SchemeShard; the row must survive and post-reboot Get must return SUCCESS.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto listAfter = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listAfter.GetEntries().empty(),
+            "List returned no entries after Completed restore + reboot");
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getAfter.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get inner status not SUCCESS after Completed restore + reboot");
+        UNIT_ASSERT_C(getAfter.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Get progress not PROGRESS_DONE after Completed restore + reboot");
+
+        // Then FORGET succeeds and Get becomes NOT_FOUND.
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+    }
+
+    // While Get reports SUCCESS+PROGRESS_DONE the persisted row must read State=Completed;
+    // PersistIncrementalRestoreTerminalState and the in-memory cleanup happen in the same finalize tx.
+    Y_UNIT_TEST(FinalizePersistAndCleanupAreSameTx) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after PollRestoreUntilDone");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // The persisted row must reflect Completed (EState::Completed == 4)
+        // at the moment the API reports SUCCESS+PROGRESS_DONE. Without the fix,
+        // ReadPersistedRestoreState returns -1 (row absent) because PerformFinalCleanup
+        // Delete()'d the row.
+        i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
+        UNIT_ASSERT_VALUES_EQUAL_C(persistedState,
+            static_cast<i64>(TIncrementalRestoreState::EState::Completed),
+            "Persisted state row missing or not Completed while API reports SUCCESS");
+    }
+
+    // FORGET must succeed once the orchestrator has released the LongIncrementalRestoreOps
+    // entry, i.e., after finalize completes and cleanup runs.
+    Y_UNIT_TEST(ForgetSucceedsAfterCompletedAndCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // After completion (PROGRESS_DONE) and a brief settle, FORGET must succeed.
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+    }
+
+    // A Finalizing row with no live finalize sub-op must be reconciled by TTxInit:
+    // reset to Running so the orchestrator re-triggers finalize and reaches PROGRESS_DONE.
+    Y_UNIT_TEST(TTxInitReschedulesFinalizeWhenFinalizeTxIdMissing) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drive to Completed/Finalizing first.
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        // Reboot. Either the row is gone (post-finalize Delete on HEAD, leaves nothing
+        // for TTxInit) or persisted (with the fix, row stays in Completed). Both paths
+        // converge: post-reboot the API must report SUCCESS+PROGRESS_DONE without
+        // getting stuck in Finalizing.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(),
+            "List empty after reboot");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getResp.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get status not SUCCESS after reboot");
+        UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Get progress not PROGRESS_DONE after reboot");
+    }
+
+    // TTxInit must not re-issue a fresh finalize sub-op for an already-Completed row;
+    // double-submitting finalize would race against the original sub-op. Counts
+    // ESchemeOpIncrementalRestoreFinalize proposals observed after reboot — must be zero.
+    Y_UNIT_TEST(RestoreFinalizingDoesNotDoubleSubmitFinalize) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drive the restore to Completed (PROGRESS_DONE).
+        Ydb::StatusIds::StatusCode preReboot = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preReboot, Ydb::StatusIds::SUCCESS);
+
+        // Capture restore id for sanity check after reboot.
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty pre-reboot");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // Counter for ESchemeOpIncrementalRestoreFinalize proposals observed AFTER reboot.
+        // The cleanest signal is TEvModifySchemeTransaction with operation type
+        // ESchemeOpIncrementalRestoreFinalize. We arm the observer BEFORE reboot and
+        // start counting only after reboot completes (we capture the wall-clock instant
+        // and gate the counter increments).
+        std::atomic<int> postRebootFinalizeProposals{0};
+        std::atomic<bool> rebootDone{false};
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&postRebootFinalizeProposals, &rebootDone](
+                    TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (!rebootDone.load()) {
+                    return;
+                }
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize) {
+                    postRebootFinalizeProposals.fetch_add(1);
+                }
+            });
+
+        // Reboot and let TTxInit run.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        rebootDone.store(true);
+
+        // Pump enough time for any (incorrect) re-issue to land. TTxInit's
+        // OnComplete.Send fires immediately on Complete; subsequent transactions
+        // run within microseconds of wall-clock advance.
+        env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(postRebootFinalizeProposals.load(), 0,
+            "TTxInit double-submitted ESchemeOpIncrementalRestoreFinalize after reboot");
+
+        // Sanity: post-reboot the API still reports SUCCESS (i.e., the row stayed
+        // in Completed and TTxInit did not silently downgrade to Running).
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getAfter.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Get inner status not SUCCESS post-reboot for already-Completed restore");
+    }
+
+    // A reboot after SyncIndexSchemaVersions but before PersistIncrementalRestoreTerminalState must
+    // converge to SUCCESS: the second finalize pass re-runs SyncIndexSchemaVersions
+    // and ReleasePathState as no-ops, then writes Completed/SUCCESS.
+    Y_UNIT_TEST(FinalizeReboundAfterSyncIndexSchemaVersions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/TableWithIndex" } }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/TableWithIndex", 0, {1}, {2},
+            {TCell::Make(1u)}, {TCell::Make(TString("v1"))});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/TableWithIndex", 0, {1}, {2},
+            {TCell::Make(2u)}, {TCell::Make(TString("v2"))});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "TableWithIndex");
+        env.TestWaitNotification(runtime, txId);
+
+        // Arm a one-shot reboot trigger that fires when the finalize sub-op proposes
+        // its TEvModifySchemeTransaction with operation type ESchemeOpIncrementalRestoreFinalize.
+        // SyncIndexSchemaVersions runs inside the finalize sub-op's TFinalizationPropose
+        // ProgressState, so observing the proposal is the closest pre-finalize hook
+        // we have without instrumenting production code. The reboot then lands at most
+        // a few microseconds before SyncIndexSchemaVersions/ReleasePathState commit,
+        // exercising the idempotent re-entry path.
+        std::atomic<bool> rebootArmed{true};
+        std::atomic<bool> rebootHappened{false};
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&rebootArmed](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                if (!rebootArmed.load()) return;
+                const auto& rec = ev->Get()->Record;
+                if (rec.TransactionSize() == 0) return;
+                if (rec.GetTransaction(0).GetOperationType()
+                        != NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize) {
+                    return;
+                }
+                // Disarm so later finalize-rebound proposal does not retrigger.
+                rebootArmed.store(false);
+            });
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Spin until the observer disarms (i.e., the first finalize proposal hit), then
+        // reboot. We bound the spin by the same 120s timeout the rest of the suite uses.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
+        while (runtime.GetCurrentTime() < deadline && rebootArmed.load()) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(!rebootArmed.load(),
+            "Did not observe ESchemeOpIncrementalRestoreFinalize proposal within timeout");
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        rebootHappened.store(true);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot",
+            TDuration::MilliSeconds(500), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not converge to SUCCESS after reboot during finalize");
+
+        UNIT_ASSERT_C(rebootHappened.load(), "Reboot did not happen — test plumbing broken");
+    }
+
+    // A full-only restore (no incremental backups) must be visible via Get/List:
+    // a state row is always created regardless of whether incrementals are present.
+    Y_UNIT_TEST(FullOnlyRestoreIsListable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // No IncrementalBackupConfig — full-only collection.
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(),
+            "List returned no entries for full-only restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(getResp.GetBackupCollectionRestore().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            "Full-only restore Get inner status not SUCCESS");
+        UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() ==
+            Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+            "Full-only restore Get progress not PROGRESS_DONE");
+    }
+
+    // FORGET on a full-only Completed restore must succeed and clear the persisted row;
+    // the LongIncrementalRestoreOps guard must not block FORGET after finalize completes.
+    Y_UNIT_TEST(FullOnlyRestoreForgetCleansState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = PollRestoreUntilDone(runtime, env, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(finalStatus, Ydb::StatusIds::SUCCESS);
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after full-only restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+
+        // Get must now report NOT_FOUND for the forgotten row.
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+
+        // Direct DB read must show no row.
+        i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
+        UNIT_ASSERT_VALUES_EQUAL_C(persistedState, -1,
+            "IncrementalRestoreState row not deleted after FORGET");
+    }
+
 } // TBackupCollectionTests

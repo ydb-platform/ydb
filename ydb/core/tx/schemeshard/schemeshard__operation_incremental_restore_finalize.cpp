@@ -236,26 +236,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
             PerformFinalCleanup(finalize, context);
 
-            {
-                ui64 originalOpId = finalize.GetOriginalOperationId();
-                NIceDb::TNiceDb db(context.GetDB());
-                
-                auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
-                if (stateIt != context.SS->IncrementalRestoreStates.end()) {
-                    const auto& involvedShards = stateIt->second.InvolvedShards;
-
-                    LOG_I("Cleaning up " << involvedShards.size() << " shard progress entries for operation " << originalOpId);
-
-                    for (const auto& shardIdx : involvedShards) {
-                        db.Table<Schema::IncrementalRestoreShardProgress>()
-                            .Key(originalOpId, ui64(shardIdx.GetLocalId()))
-                            .Delete();
-                    }
-                }
-                
-                db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Delete();
-            }
-
             context.OnComplete.DoneOperation(OperationId);
             return true;
         }
@@ -396,25 +376,30 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             }
         }
 
-        void PerformFinalCleanup(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
+        void PerformFinalCleanup(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
                                 TOperationContext& context) {
             ui64 originalOpId = finalize.GetOriginalOperationId();
-            
+
             NIceDb::TNiceDb db(context.GetDB());
-            
+
             auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
             if (stateIt != context.SS->IncrementalRestoreStates.end()) {
                 auto& state = stateIt->second;
-                state.State = TIncrementalRestoreState::EState::Completed;
-                
-                LOG_I("Marked incremental restore state as completed for operation: " << originalOpId);
+                // Persist terminal Completed state in the same db tx that releases path
+                // states / Long-op tracking. After the tx commits the row remains for
+                // Get/List to surface SUCCESS until FORGET clears it.
+                TSchemeShard::PersistIncrementalRestoreTerminalState(context.SS, db, originalOpId, state,
+                    TIncrementalRestoreState::EState::Completed,
+                    static_cast<ui32>(Ydb::StatusIds::SUCCESS));
+
+                LOG_I("Persisted incremental restore state as Completed for operation: " << originalOpId);
             }
-            
+
             LOG_I("Keeping IncrementalRestoreOperations entry for operation: " << originalOpId << " - will be cleaned up on FORGET");
-            
+
             context.SS->LongIncrementalRestoreOps.erase(TOperationId(originalOpId, 0));
             LOG_I("Cleaned up long incremental restore ops for operation: " << originalOpId);
-            
+
             CleanupMappings(context.SS, originalOpId, context);
         }
 

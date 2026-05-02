@@ -5260,6 +5260,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     BackupSettings.Register(appData->Icb);
 
+    IncrementalRestoreSettings.Register(appData->Icb);
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 
@@ -5525,7 +5527,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //namespace NIncrementalRestore {
         HFuncTraced(TEvPrivate::TEvRunIncrementalRestore, Handle);
         HFuncTraced(TEvPrivate::TEvProgressIncrementalRestore, Handle);
-        HFuncTraced(TEvDataShard::TEvIncrementalRestoreResponse, Handle);
         // } // NIncrementalRestore
 
         // namespace NLongRunningCommon {
@@ -7350,7 +7351,9 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
     } else if (Imports.contains(id)) {
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (IncrementalRestoreStates.contains(id)) {
-        return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
+        // Cookie is the originalOpId; per-item identity is FIFO via
+        // state.PendingItems (TxAllocatorClient preserves cookie-keyed order).
+        return Execute(CreateTxProgressIncrementalRestoreAllocateResult(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
     }

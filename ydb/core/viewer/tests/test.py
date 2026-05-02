@@ -1525,6 +1525,7 @@ class TestViewer(object):
         response = cls.call_viewer_api_post("/viewer/query", body, headers={
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
         result = {
             'status_code': response.status_code,

@@ -224,7 +224,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
-            LOG_ERROR_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
+            LOG_INFO_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " NodeDisconnected NodeId# " << ev->Get()->NodeId);
             NeedUnsubscribe = false;
             Reset(ctx);

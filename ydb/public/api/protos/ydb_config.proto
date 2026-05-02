@@ -194,7 +194,7 @@ message FetchConfigResult {
 message BootstrapClusterRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // This field used to make this request indempotent
+    // This field used to make this request idempotent
     // Must be set to arbitrary **unique** string
     string self_assembly_uuid = 2;
 }

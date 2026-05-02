@@ -1,8 +1,12 @@
 ## Parameterized queries
 
-{{ ydb-short-name }} supports and recommends the use of so-called [parameterized queries](https://en.wikipedia.org/wiki/Prepared_statement). In such queries, the data is transmitted separately from the request body itself, and in the SQL query, special parameters are used to indicate the location of the data.
+{{ ydb-short-name }} supports two approaches: using [prepared statements](https://en.wikipedia.org/wiki/Prepared_statement) and caching the parameterized query plan. The recommended approach is caching, in which the compiled query plan is stored in an [LRU cache](https://en.wikipedia.org/wiki/Cache_replacement_policies) on the [{{ ydb-short-name }} node](../../concepts/glossary.md#node) (up to 1,000 entries by default). This approach is optimal for the distributed architecture of {{ ydb-short-name }}.
 
-Request with data in the request body:
+In many SDKs, parameterized query caching is enabled by default. If needed, it can be disabled by setting the `KeepInCache` parameter to `false`.
+
+Parameterized queries separate data from the query text; special parameters in the SQL query indicate where the data values should be substituted.
+
+Query with data embedded in the query body:
 
 ```yql
 SELECT sa.title AS season_title, sr.title AS series_title
@@ -21,11 +25,14 @@ FROM seasons AS sa INNER JOIN series AS sr ON sa.series_id = sr.series_id
 WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId
 ```
 
-Parameterized queries are written in the form of a template in which certain types of names are replaced with specific parameters each time the query is executed. Tokens starting with the sign `$` such as `$seriesId` and `$seasonId` in the query above are used to denote parameters.
+Parameterized queries are written as templates in which certain names are replaced with specific parameter values each time the query is executed. Tokens starting with `$`, such as `$seriesId` and `$seasonId` in the example above, are used to denote parameters.
 
 Parameterized queries provide the following advantages:
 
-* For repeated requests, the database server has the ability to cache the query plan for parameterized requests. This radically reduces CPU consumption and increases system throughput.
-* The use of parameterized queries saves from vulnerabilities like [SQL Injection](https://en.wikipedia.org/wiki/SQL_injection).
+* For repeated queries, the database server can cache the query execution plan. This radically reduces CPU consumption and increases system throughput.
+* Parameterized queries protect against [SQL injection](https://en.wikipedia.org/wiki/SQL_injection) vulnerabilities.
+* Code reduction: only the query arguments change, not the query itself. No manual string concatenation is required.
 
-{{ ydb-short-name }} SDK automatically caches parameterized query plans by default, the setting `KeepInCache = true` is usually used for this.
+## See also
+
+- [{#T}](../../dev/example-app/index.md#param-queries)

@@ -275,7 +275,7 @@ private:
             YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
             stateRow.RowIndex = row[rowIndexColumnId].Data.Int64;
 
-            YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
+            YT_ASSERT(row[stateColumnId].Type == EValueType::Int64);
             stateRow.State = ERowState(row[stateColumnId].Data.Int64);
 
             rows.push_back(stateRow);
@@ -945,7 +945,7 @@ TFuture<THashMap<int, TPersistentQueueTabletState>> ReadPersistentQueueTabletsSt
                 YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
                 i64 rowIndex = row[rowIndexColumnId].Data.Int64;
 
-                YT_ASSERT(row[rowIndexColumnId].Type == EValueType::Int64);
+                YT_ASSERT(row[stateColumnId].Type == EValueType::Int64);
                 auto state = ERowState(row[stateColumnId].Data.Int64);
 
                 auto& tabletState = tabletMap[tabletIndex];

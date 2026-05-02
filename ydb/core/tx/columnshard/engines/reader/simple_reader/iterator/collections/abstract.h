@@ -19,7 +19,10 @@ private:
     virtual void DoAbort() = 0;
 
     TPositiveControlInteger SourcesInFlightCount;
+    TPositiveControlInteger PagesInFlightCount;
     YDB_READONLY(ui64, MaxInFlight, 1024);
+    YDB_ACCESSOR(ui64, MaxPagesInFlight, 8);
+    YDB_READONLY(bool, UsePagesInFlightLimit, false);
 
     virtual TString DoDebugString() const {
         return "";
@@ -47,6 +50,14 @@ public:
     ui64 GetSourcesInFlightCount() const {
         return SourcesInFlightCount.Val();
     }
+
+    ui64 GetPagesInFlightCount() const {
+        return PagesInFlightCount.Val();
+    }
+
+    void OnPageCreated();
+
+    void OnPageSent();
 
     bool HasData() const {
         return DoHasData();

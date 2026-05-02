@@ -54,6 +54,9 @@ private:
     using TBase = NCommon::IDataSource;
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
+    // When streaming mode is active, this holds the original fetch script so that
+    // ContinueCursor can restart from the beginning for each subsequent page.
+    std::shared_ptr<TFetchingScript> StreamingFetchScript;
     YDB_ACCESSOR(ui32, ResultRecordsCount, 0);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
@@ -61,6 +64,28 @@ private:
 
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
+
+    // Page-based streaming fields
+    bool StreamingMode = false;
+    // Pages computed early (before fetching) so NeedFetchColumns/DoAssembleColumns can
+    // limit work to the current page.  Set by TDecideStreamingModeStep.
+    std::vector<TPortionDataAccessor::TReadPage> EarlyPages;
+    // Index into EarlyPages pointing at the page currently being fetched/assembled.
+    ui32 CurrentEarlyPageIndex = 0;
+    // Flag to track if pre-fetching has been triggered for the current page
+    bool PrefetchTriggered = false;
+    // True when DoAssembleColumns (old path) assembled only the current page's rows
+    // (page-relative batch starting at row 0).  False when the NSSA path
+    // (DoStartFetchData + DoAssembleAccessor) assembled the entire portion
+    // (portion-relative batch starting at row 0 of the portion).
+    // Used by TBuildResultStep to decide whether batchStartIndex should be 0 or StartIndex.
+    bool AssembledDataIsPageRelative = false;
+
+    // Cached duplicate filter for streaming mode.  The DuplicateManager produces
+    // a per-portion filter on the first page; subsequent pages reuse this cached
+    // copy instead of re-requesting (which would hang because the manager already
+    // consumed the portion's borders).
+    std::optional<NArrow::TColumnFilter> CachedDuplicateFilter;
 
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
@@ -184,6 +209,13 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
+    // Returns true if the source still has a pending cursor (i.e. ContinueCursor has
+    // not been called yet for the current page).  Used by ISyncPoint::Continue to
+    // avoid double-fetching when the pre-fetch was already started in OnSourceReady.
+    bool HasCursor() const {
+        return !!ScriptCursor;
+    }
+
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
@@ -191,6 +223,85 @@ public:
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
+
+    // Saves the original fetch script so ContinueCursor can restart from the
+    // beginning for each subsequent page in streaming mode.
+    void SetStreamingFetchScript(const std::shared_ptr<TFetchingScript>& script) {
+        AFL_VERIFY(!StreamingFetchScript);
+        StreamingFetchScript = script;
+    }
+
+    const std::shared_ptr<TFetchingScript>& GetStreamingFetchScript() const {
+        return StreamingFetchScript;
+    }
+
+    // Page-based streaming methods
+    bool IsStreamingMode() const {
+        return StreamingMode;
+    }
+
+    bool HasMorePages() const;
+
+    // Called by TDecideStreamingModeStep before any fetch step.
+    // Stores the page list and activates streaming mode so that
+    // NeedFetchColumns / DoAssembleColumns can limit work to the
+    // current page.
+    void SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode);
+
+    // Returns true when pages were computed early (before fetching).
+    bool HasEarlyPages() const {
+        return !EarlyPages.empty();
+    }
+
+    // Returns the end-row (exclusive) of the page currently being
+    // fetched/assembled, or std::nullopt when not in streaming mode or
+    // pages have not been computed yet.
+    std::optional<ui32> GetCurrentEarlyPageEndRow() const;
+
+    // Advance to the next early page (called after each page's blobs
+    // have been fetched and assembled).
+    void AdvanceEarlyPage();
+
+    ui32 GetCurrentEarlyPageIndex() const {
+        return CurrentEarlyPageIndex;
+    }
+
+    const std::vector<TPortionDataAccessor::TReadPage>& GetEarlyPages() const {
+        return EarlyPages;
+    }
+
+    // Methods to manage prefetch tracking
+    bool IsPrefetchTriggered() const {
+        return PrefetchTriggered;
+    }
+
+    void SetPrefetchTriggered(bool value) {
+        PrefetchTriggered = value;
+    }
+
+    // Methods to track whether the assembled data is page-relative (old DoAssembleColumns
+    // path) or portion-relative (NSSA DoStartFetchData/DoAssembleAccessor path).
+    bool IsAssembledDataPageRelative() const {
+        return AssembledDataIsPageRelative;
+    }
+
+    void SetAssembledDataPageRelative(bool value) {
+        AssembledDataIsPageRelative = value;
+    }
+
+    // Duplicate filter caching for streaming mode.
+    bool HasCachedDuplicateFilter() const {
+        return CachedDuplicateFilter.has_value();
+    }
+
+    const NArrow::TColumnFilter& GetCachedDuplicateFilter() const {
+        AFL_VERIFY(CachedDuplicateFilter.has_value());
+        return *CachedDuplicateFilter;
+    }
+
+    void SetCachedDuplicateFilter(const NArrow::TColumnFilter& filter) {
+        CachedDuplicateFilter = filter;
+    }
 
     bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);

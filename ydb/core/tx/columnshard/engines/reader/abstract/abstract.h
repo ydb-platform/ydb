@@ -10,6 +10,9 @@ protected:
     virtual void DoOnSentDataFromInterval(const TPartialSourceAddress& /*intervalAddress*/) {
 
     }
+    virtual void DoOnStreamingPageSent(const TPartialSourceAddress& /*pageAddress*/) {
+
+    }
 public:
     virtual ~TScanIteratorBase() = default;
 
@@ -21,9 +24,22 @@ public:
 
     virtual const TReadStats& GetStats() const;
 
+    // Invoked after a result has been delivered to the client when the source
+    // still has more chunks/pages to read; routes the ack to the sync point's
+    // Continue() callback.  No-op when the source had nothing left to do.
     void OnSentDataFromInterval(const std::optional<TPartialSourceAddress>& intervalAddress) {
         if (intervalAddress) {
             DoOnSentDataFromInterval(*intervalAddress);
+        }
+    }
+
+    // Invoked after a streaming page has been delivered to the client; pairs
+    // with ISourcesCollection::OnPageCreated() to drive the per-page
+    // backpressure counter.  Set independently of OnSentDataFromInterval —
+    // the final streaming page acks here but not there.
+    void OnStreamingPageSent(const std::optional<TPartialSourceAddress>& pageAddress) {
+        if (pageAddress) {
+            DoOnStreamingPageSent(*pageAddress);
         }
     }
 

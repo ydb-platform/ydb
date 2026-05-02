@@ -260,6 +260,28 @@ public:
     }
 };
 
+// Runs after TDetectInMemFlag. If a memory limit applies and the source is not
+// already in memory, compute read pages and store them with StreamingMode.
+// This lets NeedFetchColumns() and DoAssembleColumns() work on the current page
+// instead of the whole portion.
+class TDecideStreamingModeStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& /*source*/) const override {
+        return 0;
+    }
+    TDecideStreamingModeStep()
+        : TBase("DECIDE_STREAMING_MODE") {
+    }
+};
+
 class TDeletionFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

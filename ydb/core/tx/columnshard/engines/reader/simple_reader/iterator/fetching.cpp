@@ -192,10 +192,14 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     }
     ui64 columnRawBytes = 0;
     ui64 columnBlobBytes = 0;
-    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
-        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
+
+    const auto& program = source->GetContext()->GetReadMetadata()->GetProgram();
+    // hasAggregations is false if there's no graph (GetGraphOptional returns nullptr)
+    const bool hasAggregations = program.GetGraphOptional() && program.GetChainVerified()->HasAggregations();
+    if (Columns.GetColumnsCount() && !hasAggregations) {
         columnRawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
         columnBlobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
+
         source->SetSourceInMemory(
             columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -270,6 +274,49 @@ void TPortionAccessorFetchedStep::ReportTracing(const std::shared_ptr<NCommon::I
     LWTRACK(PortionAccessorFetched, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), durationMs, source->GetRecordsCount(), source->GetReservedMemory());
+}
+
+TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    // Streaming page splitting only applies to non-in-memory portion sources;
+    // in-memory sources are read in a single batch and need no paging.
+    if (source->IsSourceInMemory()) {
+        return true;
+    }
+    if (!source->HasPortionAccessor()) {
+        // Accessor not yet available (should not happen in normal flow, but be safe).
+        return true;
+    }
+
+    auto* simpleSource = source->MutableAs<IDataSource>();
+    if (simpleSource->HasEarlyPages()) {
+        // Already decided (e.g. re-entry after ContinueCursor for next page).
+        // The page index was already advanced by ContinueCursor before restarting.
+        return true;
+    }
+
+    const ui64 memoryLimit = NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion();
+    if (memoryLimit == 0) {
+        // No memory limit configured — streaming mode is not applicable.
+        return true;
+    }
+
+    if (!TStreamingConfigHelper::ShouldUseStreamingMode()) {
+        // Streaming is disabled — skip early page computation.
+        // Finalize() will call BuildReadPages() itself when needed.
+        return true;
+    }
+
+    auto pages = source->GetPortionAccessor().BuildReadPages(
+        memoryLimit, source->GetContext()->GetProgramInputColumns()->GetColumnIds());
+
+    simpleSource->SetEarlyPages(std::move(pages), /*streamingMode=*/true);
+
+    // Store the fetch script so ContinueCursor can restart from the beginning
+    // for each subsequent page without re-running TDecideStreamingModeStep's
+    // expensive BuildReadPages call (HasEarlyPages() guards that).
+    simpleSource->SetStreamingFetchScript(step.GetScript());
+    return true;
 }
 
 TConclusion<bool> TPortionAccessorFetchedStep::DoExecuteInplace(
@@ -355,7 +402,22 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
-        contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+        // Determine the correct start index for slicing the assembled batch:
+        //
+        // Old path (DoAssembleColumns with PrepareForAssemblePageImpl):
+        //   The assembled batch contains only the current page's rows, starting at row 0
+        //   (page-relative).  IsAssembledDataPageRelative() returns true.
+        //   → batchStartIndex = 0
+        //
+        // NSSA path (TProgramStep → DoStartFetchData → DoAssembleAccessor):
+        //   The assembled batch contains the entire portion's rows, starting at row 0
+        //   of the portion (portion-relative).  IsAssembledDataPageRelative() returns false.
+        //   → batchStartIndex = StartIndex (absolute page start within the portion)
+        const auto* simpleSource = source->GetAs<IDataSource>();
+        const bool isStreamingPerPage = simpleSource->IsStreamingMode() && simpleSource->HasEarlyPages();
+        const bool pageRelative = isStreamingPerPage && simpleSource->IsAssembledDataPageRelative();
+        const ui32 batchStartIndex = pageRelative ? 0 : StartIndex;
+        contextTableConstruct.SetStartIndex(batchStartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
@@ -375,12 +437,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_idx", source->GetSourceIdx())("count", recordsCount);
     context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), sSource->GetUsedRawBytes(), recordsCount);
     sSource->MutableResultRecordsCount() += recordsCount;
-    if (!resultBatch || !resultBatch->num_rows()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
-    }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
@@ -418,8 +476,6 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
                 "source_idx", source->GetSourceIdx());
             source->MutableStageResult().ExtractPageForResult();
             continue;
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_idx", source->GetSourceIdx());
         }
         acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }
@@ -454,6 +510,15 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
 
         ReportTracing(source);
 
+        // Cache the duplicate filter in the source for streaming mode.
+        // Subsequent pages will reuse this cached filter instead of
+        // re-requesting from the DuplicateManager (which would hang
+        // because the manager already consumed the portion's borders).
+        auto* simpleSource = source->MutableAs<IDataSource>();
+        if (simpleSource->IsStreamingMode() && !simpleSource->HasCachedDuplicateFilter()) {
+            simpleSource->SetCachedDuplicateFilter(filter);
+        }
+
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }
@@ -480,6 +545,25 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCo
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    auto* simpleSource = source->MutableAs<IDataSource>();
+
+    // In streaming mode, the fetch script is restarted from step 0 for each
+    // page via ContinueCursor().  The DuplicateManager produces a per-portion
+    // filter that is valid for all pages.  On the first page we fetch it
+    // asynchronously and cache it; on subsequent pages we reuse the cached
+    // copy.  Re-requesting would hang because the manager already consumed
+    // the portion's borders on the first request.
+    if (simpleSource->IsStreamingMode() && simpleSource->HasCachedDuplicateFilter()) {
+        NArrow::TColumnFilter filter = simpleSource->GetCachedDuplicateFilter();
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "duplicate_filter_cached")(
+            "source", source->GetSourceIdx())("filter", filter.DebugString());
+        if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
+            filter = filter.ApplyFilterFrom(*appliedFilter);
+        }
+        source->MutableStageData().AddFilter(std::move(filter));
+        return true;
+    }
+
     source->MutableAs<TPortionDataSource>()->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
     return false;
 }

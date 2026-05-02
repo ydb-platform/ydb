@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <util/string/join.h>
 
@@ -14,6 +15,10 @@ ISourcesCollection::ISourcesCollection(
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
+    UsePagesInFlightLimit = TStreamingConfigHelper::ShouldUseStreamingMode();
+    if (UsePagesInFlightLimit) {
+        MaxPagesInFlight = TStreamingConfigHelper::GetMaxPagesInFlight();
+    }
 }
 
 TString ISourcesCollection::DebugString() const {
@@ -23,6 +28,8 @@ TString ISourcesCollection::DebugString() const {
     sb << "internal:{" << DoDebugString() << "};";
     sb << "constructor:{" << SourcesConstructor->DebugString() << "};";
     sb << "in_fly=" << SourcesInFlightCount.Val() << ";";
+    sb << "pages_in_fly=" << PagesInFlightCount.Val() << ";";
+    sb << "max_pages=" << MaxPagesInFlight << ";";
     sb << "type=" << GetClassName() << ";";
     sb << "}";
     return sb;
@@ -37,6 +44,20 @@ std::shared_ptr<IScanCursor> ISourcesCollection::BuildCursor(
     result->SetTabletId(tabletId);
     AFL_VERIFY(tabletId);
     return result;
+}
+
+void ISourcesCollection::OnPageCreated() {
+    PagesInFlightCount.Inc();
+    NYDBTest::TControllers::GetColumnShardController()->OnPageCreated(PagesInFlightCount.Val());
+}
+
+void ISourcesCollection::OnPageSent() {
+    // PagesInFlightCount must be > 0 here: OnPageSent is only invoked via
+    // TPlainReadData::OnStreamingPageSent, which fires only when the result
+    // carries a StreamingPageAck — set only after OnPageCreated() ran.
+    // TPositiveControlInteger::Dec() will AFL_VERIFY on underflow.
+    PagesInFlightCount.Dec();
+    NYDBTest::TControllers::GetColumnShardController()->OnPageSent(PagesInFlightCount.Val());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

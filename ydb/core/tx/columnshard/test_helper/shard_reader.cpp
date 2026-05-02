@@ -1,5 +1,7 @@
 #include "shard_reader.h"
 
+#include <ydb/library/yql/dq/actors/dq.h>
+
 namespace NKikimr::NTxUT {
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent() const {
@@ -72,4 +74,18 @@ NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<
     return *this;
 }
 
+void TShardReader::Abort(const TString &reason) {
+    AFL_VERIFY(!Finished);
+    AFL_VERIFY(ScanActorId);
+    Runtime.Send(*ScanActorId, *ScanActorId,
+                 new NKqp::TEvKqp::TEvAbortExecution(
+                     NYql::NDqProto::StatusIds::CANCELLED, reason));
+    // The scan actor processes TEvAbortExecution by calling Finish(ExternalAbort)
+    // and PassAway() WITHOUT sending TEvScanError to the edge actor. Therefore
+    // a subsequent Receive() would block forever in GrabEdgeEvents. Mark the
+    // reader as aborted immediately so any further Receive()/Ack() trips the
+    // AFL_VERIFY(!Finished) assertion instead of hanging the test.
+    Finished = -1;
 }
+
+} // namespace NKikimr::NTxUT

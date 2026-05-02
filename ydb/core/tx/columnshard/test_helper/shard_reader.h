@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -126,6 +127,21 @@ public:
         Runtime.Send(*ScanActorId, *ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(8 * 1024 * 1024, 0, 1));
         ++IterationsCount;
     }
+
+    // Send TEvAbortExecution to the scan actor, simulating a client-side abort,
+    // and immediately transition the reader to the finished/error state.
+    //
+    // The scan actor processes TEvAbortExecution by calling Finish(ExternalAbort)
+    // and PassAway() WITHOUT sending TEvScanError to the edge actor, so a
+    // subsequent Receive() would block forever in GrabEdgeEvents. To make the
+    // misuse fail fast, Abort() sets the internal Finished flag to -1 so any
+    // subsequent Receive()/Ack() trips the AFL_VERIFY(!Finished) assertion.
+    //
+    // After calling Abort() the caller may want to drain pending events via
+    // runtime.DispatchEvents(...) so the abort message is actually delivered
+    // and processed by the actor system, but no further reader-side bookkeeping
+    // is required.
+    void Abort(const TString &reason = "test abort");
 
     bool Receive() {
         AFL_VERIFY(!Finished);

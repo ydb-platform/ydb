@@ -11,6 +11,33 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+bool TStreamingConfigHelper::ShouldUseStreamingMode() {
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+        return false;
+    }
+
+    return AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetEnabled();
+}
+
+ui32 TStreamingConfigHelper::GetMaxPagesInFlight() {
+    if (!HasAppData() || !AppDataVerified().ColumnShardConfig.HasStreamingConfig()) {
+        return 8; // Default value
+    }
+    return AppDataVerified().ColumnShardConfig.GetStreamingConfig().GetMaxPagesInFlight();
+}
+
+TConclusionStatus TStreamingConfigHelper::Validate() {
+    if (!ShouldUseStreamingMode()) {
+        // Streaming is disabled – no constraints on other parameters.
+        return TConclusionStatus::Success();
+    }
+    if (GetMaxPagesInFlight() == 0) {
+        return TConclusionStatus::Fail(
+            "MaxPagesInFlight must be greater than zero when streaming is enabled");
+    }
+    return TConclusionStatus::Success();
+}
+
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {
@@ -76,6 +103,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     NCommon::TFetchingScriptBuilder acc(*this);
     acc.AddStep(std::make_shared<TInitializeSourceStep>());
     acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
+    // Decide streaming mode and compute page boundaries BEFORE any fetch step.
+    // This makes IsStreamingMode() and GetCurrentEarlyPageEndRow() return meaningful
+    // values inside NeedFetchColumns() and DoAssembleColumns(), so that only the
+    // chunks belonging to the current page are fetched and assembled.
+    acc.AddStep(std::make_shared<TDecideStreamingModeStep>());
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
         acc.AddFetchingStep(columnsFetch, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);

@@ -81,6 +81,12 @@ class TPreparedColumn {
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TAssembleBlobInfo> Blobs;
+    // Per-column slice parameters.  When ColumnSliceRows is set, the assembled
+    // column array is sliced to ColumnSliceRows rows starting at
+    // ColumnSliceOffset.  Used by the page-aware assembly path when columns
+    // have different chunk boundaries and therefore different leading offsets.
+    std::optional<ui32> ColumnSliceRows;
+    ui32 ColumnSliceOffset = 0;
 
 public:
     ui32 GetColumnId() const {
@@ -101,6 +107,19 @@ public:
         AFL_VERIFY(Loader);
     }
 
+    void SetColumnSlice(const ui32 offset, const ui32 rows) {
+        ColumnSliceOffset = offset;
+        ColumnSliceRows = rows;
+    }
+
+    std::optional<ui32> GetColumnSliceRows() const {
+        return ColumnSliceRows;
+    }
+
+    ui32 GetColumnSliceOffset() const {
+        return ColumnSliceOffset;
+    }
+
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
 };
@@ -109,6 +128,18 @@ class TPreparedBatchData {
 private:
     std::vector<TPreparedColumn> Columns;
     size_t RowsCount = 0;
+    // When set, AssembleToGeneralContainer will slice the assembled result to
+    // SliceRows rows starting at SliceOffset.  Used by the page-aware assembly
+    // path:
+    //   - A chunk that straddles pageRange.End is included in full, so the
+    //     assembled column may have more rows than the page.  SliceRows caps
+    //     the tail.
+    //   - A chunk that straddles pageRange.Start is also included in full, so
+    //     the assembled column may have leading rows before pageRange.Start.
+    //     SliceOffset skips those leading rows.
+    // Both values are 0 / nullopt when no straddling occurs.
+    std::optional<ui32> SliceRows;
+    ui32 SliceOffset = 0;
 
 public:
     struct TAssembleOptions {
@@ -157,9 +188,14 @@ public:
         return RowsCount;
     }
 
-    TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
+    TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount,
+        const std::optional<ui32> sliceRows = std::nullopt, const ui32 sliceOffset = 0)
         : Columns(std::move(columns))
-        , RowsCount(rowsCount) {
+        , RowsCount(rowsCount)
+        , SliceRows(sliceRows)
+        , SliceOffset(sliceOffset) {
+        AFL_VERIFY(!SliceRows || SliceOffset + *SliceRows <= RowsCount)
+            ("slice_offset", SliceOffset)("slice_rows", *SliceRows)("rows_count", RowsCount);
     }
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
@@ -169,7 +205,7 @@ class TColumnAssemblingInfo {
 private:
     std::vector<TAssembleBlobInfo> BlobsInfo;
     YDB_READONLY(ui32, ColumnId, 0);
-    const ui32 RecordsCount;
+    YDB_READONLY(ui32, RecordsCount, 0);
     ui32 RecordsCountByChunks = 0;
     const std::shared_ptr<TColumnLoader> DataLoader;
     const std::shared_ptr<TColumnLoader> ResultLoader;
@@ -206,7 +242,10 @@ public:
                 TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
-            AFL_VERIFY(RecordsCountByChunks == RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
+            // RecordsCountByChunks may exceed RecordsCount when a chunk straddles a
+            // page boundary (Option B fix): the straddling chunk is included in full
+            // and the assembled result is sliced back to RecordsCount rows afterwards.
+            AFL_VERIFY(RecordsCountByChunks >= RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
             AFL_VERIFY(DataLoader);
             return TPreparedColumn(std::move(BlobsInfo), DataLoader);
         }
@@ -519,12 +558,39 @@ public:
 
     TString DebugString() const;
 
+    // Row range [Start, End) within the portion that should be assembled.
+    // Used by the streaming (page-aware) assembly path so that only chunks
+    // belonging to the current page are required in blobsData.
+    struct TPageRange {
+        ui32 Start = 0;
+        ui32 End = 0;
+
+        TPageRange(const ui32 start, const ui32 end)
+            : Start(start)
+            , End(end) {
+            AFL_VERIFY(Start < End);
+        }
+
+        ui32 GetRecordsCount() const {
+            return End - Start;
+        }
+    };
+
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
     TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
         THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt,
         const bool restoreAbsent = true) const;
+
+    // Page-aware variants: only chunks intersecting [pageRange.Start, pageRange.End) are
+    // required in blobsData; the assembled batch covers exactly pageRange.GetRecordsCount() rows.
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& blobsData, const TPageRange& pageRange,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const TPageRange& pageRange,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt, const bool restoreAbsent = true) const;
 
     class TPage {
     private:

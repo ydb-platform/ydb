@@ -186,6 +186,9 @@ public:
         return DoStart();
     }
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
+    // Streaming-mode backpressure ack; default no-op for non-streaming readers.
+    virtual void OnStreamingPageSent(const TPartialSourceAddress& /*address*/) {
+    }
 
     const TReadContext& GetContext() const {
         return *Context;

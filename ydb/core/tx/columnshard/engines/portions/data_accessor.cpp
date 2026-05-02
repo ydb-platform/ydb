@@ -85,6 +85,200 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
     return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), rowsCount);
 }
 
+// Page-aware variant: assembles only the chunks needed to cover rows
+// [pageRange.Start, pageRange.End) of the portion.
+//
+// Page boundaries produced by BuildReadPages are at the UNION of per-column
+// chunk-start positions, so a page boundary is a chunk boundary for AT LEAST
+// ONE column but not necessarily for all columns.  Different columns may
+// therefore have different leading offsets (colStartOffset) within their
+// first included chunk.
+//
+// Two straddling cases are handled per column:
+//
+//   1. A chunk that straddles pageRange.End is included in full.
+//      The assembled column has trailing rows after pageRange.End.
+//
+//   2. A chunk that straddles pageRange.Start is also included in full.
+//      The assembled column has leading rows before pageRange.Start.
+//
+// Each column is individually sliced via per-column SliceOffset / SliceRows
+// (set on TPreparedColumn) so that AssembleToGeneralContainer produces
+// exactly pageRecordsCount rows per column, all corresponding to
+// [pageRange.Start, pageRange.End) of the portion.
+template <class TExternalBlobInfo>
+TPortionDataAccessor::TPreparedBatchData PrepareForAssemblePageImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
+    const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
+    const TPortionDataAccessor::TPageRange& pageRange, const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) {
+
+    // Assembles exactly the rows in [pageRange.Start, pageRange.End) from the portion.
+    //
+    // pageRange.End is an absolute row offset from the start of the portion.
+    // pageRange.Start is the first row of the page (also absolute).
+    //
+    // For each column we:
+    //   1. Skip chunks whose entire content falls before pageRange.Start.
+    //   2. Include chunks that intersect [pageRange.Start, pageRange.End).
+    //      A chunk that straddles pageRange.Start or pageRange.End is included
+    //      in full; the assembled column may have extra leading and/or trailing
+    //      rows that are trimmed per-column afterwards.
+    //   3. Require that blobsData contains an entry for every included chunk.
+    //
+    // Each TPreparedColumn carries per-column slice parameters:
+    //   ColumnSliceOffset = colStartOffset (leading rows before pageRange.Start)
+    //   ColumnSliceRows   = pageRecordsCount
+    // so that AssembleToGeneralContainer slices each column individually,
+    // producing exactly pageRecordsCount rows per column.
+
+    const ui32 pageRecordsCount = pageRange.GetRecordsCount();
+
+    // We collect columns and their per-column slice offsets in parallel vectors.
+    // presentColumnSliceOffsets[k] holds the colStartOffset for the k-th entry
+    // in `columns` that corresponds to a present (non-absent) column.
+    // Absent columns are filled with exactly pageRecordsCount default rows and
+    // need no slicing.
+    std::vector<TPortionDataAccessor::TColumnAssemblingInfo> columns;
+    columns.reserve(resultSchema.GetColumnIds().size());
+    // Per-column: index into `columns` → colStartOffset.  Only for present columns.
+    std::vector<std::pair<size_t, ui32>> presentColumnSliceOffsets;
+
+    auto it = portionData.GetRecordsVerified().begin();
+
+    // Track the maximum assembled row count across all present columns.
+    // For absent columns we always use pageRecordsCount (default fill).
+    ui32 maxAssembledRows = pageRecordsCount;
+
+    for (auto&& i : resultSchema.GetColumnIds()) {
+        while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
+            ++it;
+            continue;
+        }
+        if ((it == portionData.GetRecordsVerified().end() || i < it->GetColumnId())) {
+            // Column is absent from the portion entirely — fill with defaults for
+            // pageRecordsCount rows.
+            if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
+                columns.emplace_back(pageRecordsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+                portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
+            }
+        }
+        if (it == portionData.GetRecordsVerified().end()) {
+            continue;
+        } else if (it->GetColumnId() != i) {
+            AFL_VERIFY(i < it->GetColumnId());
+            continue;
+        }
+
+        // Scan chunks to find those that intersect [pageRange.Start, pageRange.End).
+        // Skip chunks entirely before pageRange.Start; include chunks that start before
+        // pageRange.End (including any straddling chunk).
+        // chunkRowOffset accumulates the total rows of included chunks.
+        ui32 chunkRowOffset = 0;  // total rows of all included chunks for this column
+        ui32 colStartOffset = 0;  // leading rows of the first included chunk before pageRange.Start
+        {
+            auto itCol = it;
+            ui32 absoluteRow = 0;  // absolute row offset from start of portion
+            bool firstIncluded = true;
+            while (itCol != portionData.GetRecordsVerified().end() && itCol->GetColumnId() == i) {
+                const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+                const ui32 chunkStart = absoluteRow;
+                const ui32 chunkEnd = absoluteRow + chunkRows;
+
+                if (chunkEnd <= pageRange.Start) {
+                    // Chunk is entirely before the page — skip.
+                    absoluteRow = chunkEnd;
+                    ++itCol;
+                    continue;
+                }
+                if (chunkStart >= pageRange.End) {
+                    // Chunk is entirely after the page — stop.
+                    break;
+                }
+                // Chunk intersects [pageRange.Start, pageRange.End).
+                // Include it in full (straddling chunks are trimmed afterwards).
+                if (firstIncluded) {
+                    // Record how many rows of this chunk precede pageRange.Start.
+                    colStartOffset = (pageRange.Start > chunkStart) ? (pageRange.Start - chunkStart) : 0;
+                    firstIncluded = false;
+                }
+                chunkRowOffset += chunkRows;
+                absoluteRow = chunkEnd;
+                ++itCol;
+            }
+        }
+        // chunkRowOffset is the total rows in included chunks for this column.
+        // After skipping colStartOffset leading rows, we must have at least
+        // pageRecordsCount rows remaining.
+        AFL_VERIFY(chunkRowOffset >= colStartOffset + pageRecordsCount)
+            ("chunk_row_offset", chunkRowOffset)("col_start_offset", colStartOffset)
+            ("page_records", pageRecordsCount)
+            ("page_start", pageRange.Start)("page_end", pageRange.End)
+            ("column_id", i);
+        if (chunkRowOffset > maxAssembledRows) {
+            maxAssembledRows = chunkRowOffset;
+        }
+
+        // Create the TColumnAssemblingInfo with the actual row count and
+        // add all included chunks to it.
+        const size_t columnIdx = columns.size();
+        columns.emplace_back(chunkRowOffset, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
+        presentColumnSliceOffsets.emplace_back(columnIdx, colStartOffset);
+
+        ui32 chunkIdx = 0;
+        ui32 absoluteRow = 0;
+        auto itCol = it;
+        while (itCol != portionData.GetRecordsVerified().end() && itCol->GetColumnId() == i) {
+            const ui32 chunkRows = itCol->GetMeta().GetRecordsCount();
+            const ui32 chunkStart = absoluteRow;
+            const ui32 chunkEnd = absoluteRow + chunkRows;
+
+            if (chunkEnd <= pageRange.Start) {
+                // Chunk is entirely before the page — skip (no blob needed).
+                absoluteRow = chunkEnd;
+                ++itCol;
+                continue;
+            }
+            if (chunkStart >= pageRange.End) {
+                // Chunk is entirely after the page — stop.
+                break;
+            }
+            // Chunk intersects [pageRange.Start, pageRange.End) — blob required.
+            auto itBlobs = blobsData.find(itCol->GetAddress());
+            AFL_VERIFY(itBlobs != blobsData.end())("size", blobsData.size())("address", itCol->GetAddress().DebugString())
+                ("chunk_start", chunkStart)("chunk_end", chunkEnd)
+                ("page_start", pageRange.Start)("page_end", pageRange.End);
+            TPortionDataAccessor::TAssembleBlobInfo blobInfo = MakeAssembleBlobInfoWithMeta(blobsData, itBlobs, *itCol);
+            columns.back().AddBlobInfo(chunkIdx, chunkRows, std::move(blobInfo));
+            blobsData.erase(itBlobs);
+            ++chunkIdx;
+            absoluteRow = chunkEnd;
+            ++itCol;
+        }
+
+        // Advance the main iterator past all chunks of this column.
+        while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() == i) {
+            ++it;
+        }
+    }
+
+    // Compile columns and set per-column slice parameters on present columns.
+    std::vector<TPortionDataAccessor::TPreparedColumn> preparedColumns;
+    preparedColumns.reserve(columns.size());
+    for (auto& c : columns) {
+        preparedColumns.emplace_back(c.Compile());
+    }
+    // Set per-column slice on each present column so that
+    // AssembleToGeneralContainer slices each column individually to produce
+    // exactly pageRecordsCount rows starting at colStartOffset.
+    for (auto& [idx, colOffset] : presentColumnSliceOffsets) {
+        preparedColumns[idx].SetColumnSlice(colOffset, pageRecordsCount);
+    }
+
+    // No batch-level SliceOffset/SliceRows needed — per-column slicing handles
+    // the different leading offsets.  maxAssembledRows is passed as RowsCount
+    // for metadata purposes only.
+    return TPortionDataAccessor::TPreparedBatchData(std::move(preparedColumns), maxAssembledRows);
+}
+
 }   // namespace
 
 TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
@@ -97,6 +291,18 @@ TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssembl
     const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot,
     const bool restoreAbsent) const {
     return PrepareForAssembleImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, defaultSnapshot, restoreAbsent);
+}
+
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
+    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData, const TPageRange& pageRange,
+    const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) const {
+    return PrepareForAssemblePageImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, pageRange, defaultSnapshot, restoreAbsent);
+}
+
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
+    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const TPageRange& pageRange,
+    const std::optional<TSnapshot>& defaultSnapshot, const bool restoreAbsent) const {
+    return PrepareForAssemblePageImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, pageRange, defaultSnapshot, restoreAbsent);
 }
 
 void TPortionDataAccessor::FillBlobRangesByStorage(
@@ -839,21 +1045,54 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TP
     const std::set<ui32>& sequentialColumnIds) const {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
+    // Track whether any column has per-column slice parameters.
+    bool hasPerColumnSlice = false;
     for (auto&& i : Columns) {
         //        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("column", i.GetField()->ToString())("column_id", i.GetColumnId());
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> colArray;
         if (sequentialColumnIds.contains(i.GetColumnId())) {
-            columns.emplace_back(i.AssembleForSeqAccess());
+            colArray = i.AssembleForSeqAccess();
         } else {
             auto conclusion = i.AssembleAccessor();
             if (conclusion.IsFail()) {
                 return TConclusionStatus::Fail(conclusion.GetErrorMessage() + ";" + i.GetName());
             }
-            columns.emplace_back(conclusion.DetachResult());
+            colArray = conclusion.DetachResult();
         }
+        // Apply per-column slicing if set.  This is used by the page-aware
+        // assembly path when columns have different chunk boundaries and
+        // therefore different assembled row counts / leading offsets.
+        if (i.GetColumnSliceRows()) {
+            hasPerColumnSlice = true;
+            const ui32 colOffset = i.GetColumnSliceOffset();
+            const ui32 colRows = *i.GetColumnSliceRows();
+            const ui64 available = colArray->GetRecordsCount();
+            AFL_VERIFY(colOffset + colRows <= available)
+                ("col_slice_offset", colOffset)("col_slice_rows", colRows)
+                ("available", available)("column_id", i.GetColumnId());
+            if (colOffset > 0 || colRows < available) {
+                colArray = colArray->ISlice(colOffset, colRows);
+            }
+        }
+        columns.emplace_back(std::move(colArray));
         fields.emplace_back(i.GetField());
     }
 
-    return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+    auto container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+
+    // If per-column slicing was used, all columns are already trimmed to the
+    // same row count — no batch-level slice is needed.
+    // Otherwise, apply the legacy batch-level Slice(SliceOffset, SliceRows).
+    if (!hasPerColumnSlice && SliceRows) {
+        const ui32 available = container->GetRecordsCount();
+        AFL_VERIFY(SliceOffset + *SliceRows <= available)
+            ("slice_offset", SliceOffset)("slice_rows", *SliceRows)("available", available);
+        if (SliceOffset > 0 || *SliceRows < available) {
+            return std::make_shared<NArrow::TGeneralContainer>(container->Slice(SliceOffset, *SliceRows));
+        }
+    }
+
+    return container;
 }
 
 }   // namespace NKikimr::NOlap

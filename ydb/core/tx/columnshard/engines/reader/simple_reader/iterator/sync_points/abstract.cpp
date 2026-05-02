@@ -86,11 +86,41 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceIdx() == continueAddress.GetSourceIdx())("first_source_idx", SourcesSequentially.front()->GetSourceIdx())(
-                                                   "continue_source_idx", continueAddress.GetSourceIdx());
+    // This early-return is valid in both modes.
+    // Streaming: old in-flight page acks may arrive after the source is popped.
+    // Non-streaming: async work may finish and pop the source before the previous
+    // page ack arrives.
+    if (SourcesSequentially.empty() || SourcesSequentially.front()->GetSourceIdx() != continueAddress.GetSourceIdx()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source_already_finished")
+            ("continue_source_idx", continueAddress.GetSourceIdx())
+            ("queue_empty", SourcesSequentially.empty())
+            ("front_source_idx", SourcesSequentially.empty() ? Max<ui32>() : SourcesSequentially.front()->GetSourceIdx());
+        return;
+    }
     const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "continue_source");
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx());
-    SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
+    auto* source = SourcesSequentially.front()->MutableAs<IDataSource>();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx())
+        ("has_cursor", source->HasCursor())("streaming", source->IsStreamingMode());
+    // HasCursor() is the single source of truth for whether we still need to advance.
+    //   HasCursor()==false: ContinueCursor() has already been invoked (e.g. by the
+    //     streaming prefetch path in TSyncPointResult::OnSourceReady), which extracts
+    //     ScriptCursor.  Nothing to do here.
+    //   HasCursor()==true:  prefetch was skipped (backpressure limit reached) or
+    //     streaming is disabled, so advance the cursor now in response to the ack.
+    // Note: PrefetchTriggered is intentionally not consulted here. The flag exists
+    // to prevent a re-entrant double-advance inside OnSourceReady when ContinueCursor
+    // completes synchronously; by the time this ack-driven Continue() runs, the
+    // synchronous-completion window has already closed and HasCursor() alone gives
+    // the correct answer.
+    if (source->HasCursor()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "call_continue_cursor")
+            ("source_idx", source->GetSourceIdx())
+            ("page_index", source->GetCurrentEarlyPageIndex())
+            ("total_pages", source->GetEarlyPages().size())
+            ("reverse", source->GetContext()->GetReadMetadata()->IsDescSorted())
+            ("has_more_pages", source->HasMorePages());
+        source->ContinueCursor(SourcesSequentially.front());
+    }
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {

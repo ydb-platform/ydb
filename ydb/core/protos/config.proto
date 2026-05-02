@@ -2610,6 +2610,13 @@ message TColumnShardConfig {
     optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
+
+    message TStreamingConfig {
+        optional bool Enabled = 1 [default = false];
+        optional uint32 MaxPagesInFlight = 2 [default = 8];
+    }
+    
+    optional TStreamingConfig StreamingConfig = 70;
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto

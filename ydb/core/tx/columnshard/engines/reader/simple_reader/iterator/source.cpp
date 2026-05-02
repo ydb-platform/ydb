@@ -26,6 +26,89 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
+bool IDataSource::HasMorePages() const {
+    if (!StreamingMode || EarlyPages.empty()) {
+        return false;
+    }
+    // Terminal sentinel: AdvanceEarlyPage() may set CurrentEarlyPageIndex to
+    // EarlyPages.size() when all pages are exhausted (reverse mode).  Guard
+    // against that before applying the direction-specific checks.
+    if (CurrentEarlyPageIndex >= EarlyPages.size()) {
+        return false;
+    }
+    // In reverse scan mode, there are more pages if we haven't reached the first page (index 0).
+    // In forward scan mode, there are more pages if we haven't reached the last page.
+    if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+        // Reverse scan: more pages if current index > 0 (we still need to process pages before reaching index 0)
+        // When CurrentEarlyPageIndex == 0, we're at the first page and should stop after processing it
+        const bool result = CurrentEarlyPageIndex > 0;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Reverse")
+            ("current_index", CurrentEarlyPageIndex)
+            ("total_pages", EarlyPages.size())
+            ("result", result);
+        return result;
+    } else {
+        // Forward scan: more pages if next index is still within bounds
+        const bool result = CurrentEarlyPageIndex + 1 < EarlyPages.size();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Forward")
+            ("current_index", CurrentEarlyPageIndex)
+            ("total_pages", EarlyPages.size())
+            ("result", result);
+        return result;
+    }
+}
+
+void IDataSource::SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode) {
+    AFL_VERIFY(EarlyPages.empty());
+    EarlyPages = std::move(pages);
+    // In reverse scan mode, start from the last page and work backward
+    CurrentEarlyPageIndex = GetContext()->GetReadMetadata()->IsDescSorted() ?
+        (EarlyPages.empty() ? 0 : EarlyPages.size() - 1) : 0;
+    StreamingMode = streamingMode;
+}
+
+std::optional<ui32> IDataSource::GetCurrentEarlyPageEndRow() const {
+    if (!StreamingMode || EarlyPages.empty()) {
+        return std::nullopt;
+    }
+    if (CurrentEarlyPageIndex >= EarlyPages.size()) {
+        return std::nullopt;
+    }
+    const auto& page = EarlyPages[CurrentEarlyPageIndex];
+    return page.GetIndexStart() + page.GetRecordsCount();
+}
+
+void IDataSource::AdvanceEarlyPage() {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Start")
+        ("current_index_before", CurrentEarlyPageIndex)
+        ("total_pages", EarlyPages.size())
+        ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+    AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size())
+        ("current_index", CurrentEarlyPageIndex)("total_pages", EarlyPages.size())
+        ("streaming", StreamingMode)("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+    if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+        // In reverse scan mode, move to the previous page (decrement index).
+        // When the current page is index 0, advancing means the source is fully
+        // exhausted. Move to a terminal sentinel just past the valid range so
+        // any accidental restart cannot re-read page 0.
+        if (CurrentEarlyPageIndex > 0) {
+            --CurrentEarlyPageIndex;
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse")
+                ("current_index_after", CurrentEarlyPageIndex);
+        } else {
+            CurrentEarlyPageIndex = EarlyPages.size();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse_Finished")
+                ("current_index_after", CurrentEarlyPageIndex)
+                ("total_pages", EarlyPages.size());
+        }
+    } else {
+        // In forward scan mode, move to the next page (increment index)
+        ++CurrentEarlyPageIndex;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Forward")
+            ("current_index_after", CurrentEarlyPageIndex);
+    }
+}
+
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
     //    AFL_VERIFY(!FetchingPlan);
@@ -61,6 +144,76 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
+
+    // In streaming mode, each page runs a fresh fetch+assemble cycle.
+    // Advance the page, reset stage state, and restart the original fetch script.
+    // Re-entering TDecideStreamingModeStep is safe because HasEarlyPages() guards it.
+    if (IsStreamingMode() && StreamingFetchScript) {
+        const bool hasMorePagesBeforeAdvance = HasMorePages();
+        if (hasMorePagesBeforeAdvance) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", "ContinueCursor_AdvanceEarlyPage")(
+                "page_index_before", GetCurrentEarlyPageIndex())(
+                "total_pages", GetEarlyPages().size())(
+                "reverse", GetContext()->GetReadMetadata()->IsDescSorted())(
+                "has_more_pages", hasMorePagesBeforeAdvance);
+            const ui32 pageIndexBefore = GetCurrentEarlyPageIndex();
+            AdvanceEarlyPage();
+            const ui32 pageIndexAfter = GetCurrentEarlyPageIndex();
+            NYDBTest::TControllers::GetColumnShardController()->OnStreamingPageAdvance(
+                GetSourceIdx(), pageIndexBefore, pageIndexAfter,
+                GetContext()->GetReadMetadata()->IsDescSorted());
+
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", GetContext()->GetReadMetadata()->IsDescSorted() ?
+                    "ContinueCursor_PrevPage_Refetch" : "ContinueCursor_NextPage_Refetch")(
+                "page_index_after", pageIndexAfter)(
+                "total_pages", GetEarlyPages().size())(
+                "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+
+            // Reset stage state for the next page, but keep EarlyPages and StreamingMode.
+            // Also reset the execution context so TProgramStep creates a fresh iterator;
+            // otherwise it may reuse an exhausted one and crash.
+            MutableExecutionContext().Stop();
+            ScriptCursor.reset();
+            ClearStageData();
+            ResetStageResultForNextPage();
+            // Clear ResourceGuards so that memory allocation guards from the previous page
+            // do not accumulate into the next page's fetch cycle.  Each page's
+            // TAllocateMemoryStep appends new guards via RegisterAllocationGuard(); without
+            // this clear the guard vector grows linearly with the page count, causing the
+            // memory limiter to over-account by a factor of N (where N is the page number).
+            ResourceGuards.clear();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", "ContinueCursor_ResetState")(
+                "page_index", GetCurrentEarlyPageIndex())(
+                "total_pages", GetEarlyPages().size());
+            InitStageData(std::make_unique<TFetchedData>(
+                GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                    GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
+                GetRecordsCountOptional()));
+
+            // New fetch cycle: reset the prefetch flag.
+            SetPrefetchTriggered(false);
+            // Reset the page-relative assembly flag for the new fetch cycle.
+            SetAssembledDataPageRelative(false);
+
+            // Restart from the original fetch script.
+            TFetchingScriptCursor cursor(StreamingFetchScript, 0);
+            const auto& commonContext = *GetContext()->GetCommonContext();
+            auto sourceCopy = sourcePtr;
+            auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+            NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+            return;
+        }
+
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())
+            ("event", "ContinueCursor_StreamingFinished")
+            ("page_index", GetCurrentEarlyPageIndex())
+            ("total_pages", GetEarlyPages().size())
+            ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+    }
+
     if (ScriptCursor->Next()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
@@ -77,6 +230,19 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
 void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
     auto sourceSimple = std::static_pointer_cast<IDataSource>(sourcePtr);
+
+    // In streaming mode, log page progress for debugging.
+    if (sourceSimple->IsStreamingMode() && sourceSimple->HasMorePages()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_page_fetched")(
+            "source_idx", sourceSimple->GetSourceIdx())(
+            "has_more_pages", sourceSimple->HasMorePages())(
+            "reverse", sourceSimple->GetContext()->GetReadMetadata()->IsDescSorted());
+    }
+
+    // Pass control to sync point which will:
+    // 1. Extract result chunk for current page (if available)
+    // 2. Emit partial result with partialSourceAddress if more pages exist
+    // 3. Continue to next page via ContinueCursor() if !isFinished
     plainReader->MutableScanner().GetSyncPoint(sourceSimple->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceSimple, *plainReader);
 }
 
@@ -102,14 +268,38 @@ void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!GetStageData().IsEmptyWithData());
-    if (memoryLimit && !IsSourceInMemory()) {
+
+    StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+
+    if (HasEarlyPages()) {
+        AFL_VERIFY(StreamingMode);
+        // Streaming pages were computed earlier. Build StageResult for the current
+        // page only; ContinueCursor() will reset it for the next page.
+        // Keep the absolute IndexStart for resumed-scan checks; TBuildResultStep
+        // uses StartIndex=0 for the emitted batch.
+        const auto& page = EarlyPages[CurrentEarlyPageIndex];
+        StageResult->SetPages({ page });
+        // StreamingMode was already set by SetEarlyPages().
+    } else if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
-        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        // Keep the legacy multi-page fallback non-streaming unless streaming was
+        // already decided by the early-page path above. This preserves the old
+        // page iteration behavior while preventing late activation from flipping
+        // the source into streaming mode independently.
+        StreamingMode = false;
     } else {
-        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
+        // No memory limit or in-memory source: one page for the whole portion.
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
+
+    if (StreamingMode) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_enabled")(
+            "source_idx", GetSourceIdx())("records", GetRecordsCount())(
+            "pages", StageResult->GetPagesToResultVerified().size())(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+    }
+
     if (StageResult->IsEmpty()) {
         StageResult = TFetchedResult::BuildEmpty();
         StageResult->SetPages({});
@@ -122,6 +312,30 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
+
+    // In streaming mode, only fetch/default chunks that intersect [pageStartRow, pageEndRow).
+    // PrepareForAssemblePageImpl (the page-aware assembly path) only requires blobs for
+    // chunks that intersect the page range — it skips chunks entirely before pageStartRow
+    // and stops at pageEndRow.  We must therefore populate blobsData with exactly those
+    // chunks.
+    //
+    // GetCurrentEarlyPageEndRow() returns a value when TDecideStreamingModeStep has
+    // already run (before any fetching), so this branch is now reachable during the
+    // column-fetching step.
+    std::optional<ui32> pageStartRow;
+    std::optional<ui32> pageEndRow;
+    if (IsStreamingMode() && HasEarlyPages()) {
+        const auto& page = GetEarlyPages()[GetCurrentEarlyPageIndex()];
+        pageStartRow = page.GetIndexStart();
+        pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_page_range")(
+            "page_index", GetCurrentEarlyPageIndex())(
+            "total_pages", GetEarlyPages().size())(
+            "start", *pageStartRow)(
+            "end", *pageEndRow)(
+            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+    }
+
     for (auto&& i : columnIds) {
         auto columnChunks = GetPortionAccessor().GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
@@ -129,24 +343,50 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         }
         auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
+        ui32 currentRowOffset = 0;
+
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
-                auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
-                reading->SetIsBackgroundProcess(false);
-                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
-                ++fetchedChunks;
-            } else {
-                defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                           Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
-                ++nullChunks;
+            const ui32 chunkStart = currentRowOffset;
+            const ui32 chunkEnd = currentRowOffset + c->GetMeta().GetRecordsCount();
+
+            // In streaming mode, fetch only chunks that intersect [pageStartRow, pageEndRow).
+            // A chunk intersects the page if chunkEnd > pageStartRow && chunkStart < pageEndRow.
+            // Chunks entirely before pageStartRow or entirely at/after pageEndRow are skipped.
+            bool chunkNeeded = true;
+            if (pageStartRow && pageEndRow) {
+                chunkNeeded = (chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow);
             }
+            if (chunkNeeded) {
+                if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
+                    auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
+                    reading->SetIsBackgroundProcess(false);
+                    reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
+                    ++fetchedChunks;
+                } else {
+                    // Chunk intersects the page but is skipped by filter: use default values.
+                    defaultBlocks.emplace(
+                        c->GetAddress(),
+                        TPortionDataAccessor::TAssembleBlobInfo(
+                            c->GetMeta().GetRecordsCount(),
+                            Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
+                    ++nullChunks;
+                }
+            }
+            // Chunks outside [pageStartRow, pageEndRow) are not needed for this page;
+            // they will be fetched when the corresponding future page is processed.
+            // We must still advance itFilter for every chunk so that the
+            // AFL_VERIFY(itFinished) below does not fire.
+
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
+            currentRowOffset = chunkEnd;
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
-        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
+        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size())(
+        "streaming", IsStreamingMode())("remaining_pages",
+        StageResult ? StageResult->GetPagesToResultVerified().size() : 0);
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(
@@ -401,10 +641,31 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         }
     }
 
-    auto batch = GetPortionAccessor()
-                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
-                     .DetachResult();
+    // In streaming mode the fetch step only populated blobsData for chunks that
+    // intersect the current page.  Use the page-aware PrepareForAssemble overload
+    // so that out-of-page chunks are silently skipped instead of triggering the
+    // AFL_VERIFY that requires every chunk to have an entry in blobsData.
+    //
+    // GetCurrentEarlyPageEndRow() is set by TDecideStreamingModeStep before any
+    // fetching, so this branch is now reachable during the assemble step.
+    std::shared_ptr<NArrow::TGeneralContainer> batch;
+    const auto earlyPageEndRow = GetCurrentEarlyPageEndRow();
+    if (earlyPageEndRow) {
+        const ui32 pageStart = GetEarlyPages()[GetCurrentEarlyPageIndex()].GetIndexStart();
+        const TPortionDataAccessor::TPageRange pageRange(pageStart, *earlyPageEndRow);
+        batch = GetPortionAccessor()
+                    .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), pageRange, ss)
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
+                    .DetachResult();
+        // The assembled batch contains only the current page's rows (page-relative,
+        // starting at row 0).  TBuildResultStep must use batchStartIndex=0 for this path.
+        SetAssembledDataPageRelative(true);
+    } else {
+        batch = GetPortionAccessor()
+                    .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
+                    .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
+                    .DetachResult();
+    }
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
@@ -463,12 +724,35 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
         }
     };
 
+    // In streaming mode, only account for chunks that intersect the current page.
+    // Without this restriction the memory reservation covers the entire portion
+    // (all N pages), which defeats the purpose of streaming and causes the memory
+    // limiter to over-account by a factor of N.
+    std::optional<ui32> pageStartRow;
+    std::optional<ui32> pageEndRow;
+    if (IsStreamingMode() && HasEarlyPages()) {
+        const auto& page = GetEarlyPages()[GetCurrentEarlyPageIndex()];
+        pageStartRow = page.GetIndexStart();
+        pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
+    }
+
     THashMap<ui32, TEntitySize> sizeByColumn;
     for (auto&& [_, info] : columns) {
         auto chunks = GetPortionAccessor().GetColumnChunksPointers(info.GetColumnId());
         auto& sizes = sizeByColumn[info.GetColumnId()];
+        ui32 currentRowOffset = 0;
         for (auto&& i : chunks) {
-            sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+            const ui32 chunkStart = currentRowOffset;
+            const ui32 chunkEnd = currentRowOffset + i->GetMeta().GetRecordsCount();
+            // In streaming mode, only include chunks that intersect [pageStartRow, pageEndRow).
+            if (pageStartRow && pageEndRow) {
+                if ((chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow)) {
+                    sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+                }
+            } else {
+                sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+            }
+            currentRowOffset = chunkEnd;
         }
     }
     TEntitySize result;
@@ -480,6 +764,11 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 
     const ui64 sizeToReserve = policy->GetReserveMemorySize(
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
+
+    // Notify test hooks so tests can verify that per-page reservations are bounded.
+    if (IsStreamingMode() && HasEarlyPages()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnStreamingMemoryReserved(sizeToReserve);
+    }
 
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);

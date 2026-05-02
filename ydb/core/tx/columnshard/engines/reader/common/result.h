@@ -11,6 +11,9 @@ namespace NKikimr::NOlap::NReader {
 
 class TReadContext;
 
+// Lightweight value identifying which sync-point + source a callback should be
+// routed back to.  Carries no semantics about *why* the callback is needed —
+// see TPartialReadResult::NotFinishedInterval / StreamingPageAck for that.
 class TPartialSourceAddress {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -34,7 +37,17 @@ private:
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<IScanCursor> ScanCursor;
+    // Set iff the source still has more chunks/pages to produce after this one,
+    // i.e. the sync point's Continue() callback must be invoked once this result
+    // has been delivered to the client.  Cleared on the final page of a source.
     YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, NotFinishedInterval);
+    // Set iff this page was tracked via ISourcesCollection::OnPageCreated()
+    // (streaming mode only).  OnPageSent() must be invoked once this result has
+    // been delivered to the client, regardless of whether more pages remain —
+    // the backpressure counter is per-page bookkeeping, not a continuation
+    // marker.  Both fields are independent: the last streaming page sets only
+    // StreamingPageAck, an early streaming page sets both.
+    YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, StreamingPageAck);
     YDB_READONLY(ui64, SourceId, 0);
     const NColumnShard::TCounterGuard Guard;
     bool Extracted = false;
@@ -73,14 +86,30 @@ public:
         return ScanCursor;
     }
 
+    // True iff the source has more chunks/pages to read after this result.
+    // Equivalent to NotFinishedInterval.has_value(); the helper exists for
+    // call-site readability only.  Note that in streaming mode the *last*
+    // page returns false here even though StreamingPageAck is set.
+    bool IsPartialResult() const {
+        return NotFinishedInterval.has_value();
+    }
+
+    // Get source address for continuing reading (only valid if IsPartialResult() == true)
+    const TPartialSourceAddress& GetSourceAddressForContinue() const {
+        AFL_VERIFY(NotFinishedInterval);
+        return *NotFinishedInterval;
+    }
+
     explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
         const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
         std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
-        const std::optional<TPartialSourceAddress> notFinishedInterval, const ui64 sourceId = 0);
+        const std::optional<TPartialSourceAddress> notFinishedInterval,
+        const std::optional<TPartialSourceAddress> streamingPageAck = std::nullopt, const ui64 sourceId = 0);
 
     explicit TPartialReadResult(NArrow::TShardedRecordBatch&& batch, std::shared_ptr<IScanCursor>&& scanCursor,
-        const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval, const ui64 sourceId = 0)
-        : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval, sourceId) {
+        const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval,
+        const std::optional<TPartialSourceAddress> streamingPageAck = std::nullopt, const ui64 sourceId = 0)
+        : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval, streamingPageAck, sourceId) {
     }
 };
 

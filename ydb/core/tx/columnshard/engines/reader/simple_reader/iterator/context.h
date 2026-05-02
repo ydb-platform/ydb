@@ -21,6 +21,17 @@ using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
+// Helper class to work with streaming configuration from AppData
+class TStreamingConfigHelper {
+public:
+    static bool ShouldUseStreamingMode();
+    static ui32 GetMaxPagesInFlight();
+
+    // Validates the streaming configuration. Returns an error if the config is
+    // invalid and streaming is explicitly enabled.
+    static TConclusionStatus Validate();
+};
+
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;

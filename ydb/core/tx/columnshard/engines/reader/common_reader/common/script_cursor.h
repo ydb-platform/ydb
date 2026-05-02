@@ -39,6 +39,10 @@ public:
         return CurrentStepIdx;
     }
 
+    const std::shared_ptr<TFetchingScript>& GetScript() const {
+        return Script;
+    }
+
     TString DebugString() const {
         return Script->GetStep(CurrentStepIdx)->DebugString();
     }

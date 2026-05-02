@@ -37,25 +37,26 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
         defaultSnapshotLocal = *defaultSnapshot;
     }
 
+    const ui32 recordsCount = column.GetRecordsCount();
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
-        column.AddBlobInfo(0, GetRecordsCount(),
+        column.AddBlobInfo(0, recordsCount,
             TPortionDataAccessor::TAssembleBlobInfo(
-                GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetPlanStep())));
+                recordsCount, std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetPlanStep())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
-        column.AddBlobInfo(0, GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetTxId())));
+        column.AddBlobInfo(0, recordsCount,
+            TPortionDataAccessor::TAssembleBlobInfo(recordsCount, std::make_shared<arrow::UInt64Scalar>(defaultSnapshotLocal.GetTxId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
-        column.AddBlobInfo(0, GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)GetInsertWriteId())));
+        column.AddBlobInfo(0, recordsCount,
+            TPortionDataAccessor::TAssembleBlobInfo(recordsCount, std::make_shared<arrow::UInt64Scalar>((ui64)GetInsertWriteId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
         AFL_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0)("deletes", GetMeta().GetDeletionsCount())(
                                                                          "count", GetRecordsCount());
-        column.AddBlobInfo(0, GetRecordsCount(),
+        column.AddBlobInfo(0, recordsCount,
             TPortionDataAccessor::TAssembleBlobInfo(
-                GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
+                recordsCount, std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
     }
 }
 

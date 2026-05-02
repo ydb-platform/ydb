@@ -401,9 +401,15 @@ public:
     {
     }
     virtual ~IOptimizerNew() = default;
+    enum class EJoinSearchStatus {
+        NotOptimized,
+        Optimized,
+    };
+
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}) = 0;
+        const TOptimizerHints& hints = {},
+        EJoinSearchStatus* status = nullptr) = 0;
 };
 
 struct TCBOSettings {

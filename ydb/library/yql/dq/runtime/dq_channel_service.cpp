@@ -1759,7 +1759,7 @@ void TNodeState::DoReconciliation() {
     }
     ReconciliationCount++;
 
-    auto reconciliationTimeout = ReconciliationTimeout * (1 << (ReconciliationCount - 1));
+    auto reconciliationTimeout = ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20));
     if (ReconciliationCount > 1) {
         LOG_W("RECONCILIATION x" << ReconciliationCount << ' ' << LogIdent()
             << ", Queue" << (Queue.empty() ? " IS EMPTY" : ".front().SeqNo=" + ToString(Queue.front()->SeqNo))

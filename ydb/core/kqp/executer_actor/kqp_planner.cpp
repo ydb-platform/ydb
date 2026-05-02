@@ -113,6 +113,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
+    , EnableStreamingPartitionBalancing(args.EnableStreamingPartitionBalancing)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -286,7 +287,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetUserToken(UserToken->SerializeAsString());
     }
 
-    request.SetEnableWatermarks(EnableWatermarks);
+    request.SetEnableStreamingPartitionBalancing(EnableStreamingPartitionBalancing);
 
     return result;
 }

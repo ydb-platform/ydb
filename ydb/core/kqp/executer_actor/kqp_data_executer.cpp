@@ -1,6 +1,5 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_locks_helper.h"
 #include "kqp_planner.h"
 #include "kqp_tasks_validate.h"
 
@@ -618,7 +617,16 @@ private:
                 }
 
                 for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
-                    YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = controlPlaneSettings.GetType(), .TxId = dqTxId}))).second);
+                    const auto& type = controlPlaneSettings.GetType();
+                    if (const auto enableStreamingPartitionBalancing = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableStreamingPartitionBalancing();
+                        "PqInfoAggregator" == type && !enableStreamingPartitionBalancing) {
+                        ReplyErrorAndDie(
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Streaming partition balancing is disabled. Please contact your system administrator to enable it")
+                        );
+                        return;
+                    }
+                    YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = type, .TxId = dqTxId}))).second);
                 }
             }
         }
@@ -1121,7 +1129,8 @@ private:
             (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
             (StreamingDisposition, streamingDisposition.ShortDebugString()),
             (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false),
+            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
+            (EnableStreamingPartitionBalancing, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableStreamingPartitionBalancing()),
             (trace_id, TraceId()));
     }
 

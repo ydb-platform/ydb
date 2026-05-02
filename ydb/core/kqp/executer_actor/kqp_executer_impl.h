@@ -1289,6 +1289,7 @@ protected:
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
+            .EnableStreamingPartitionBalancing = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableStreamingPartitionBalancing(),
         });
 
         auto err = Planner->PlanExecution();

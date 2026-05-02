@@ -650,6 +650,7 @@ message TEvStartKqpTasksRequest {
     optional string UserToken = 20 [(Ydb.sensitive) = true];
     optional bool SupportShuttingDown = 21 [default = true];
     optional bool EnableWatermarks = 22 [default = false];
+    optional bool EnableStreamingPartitionBalancing = 23 [default = false];
 
     reserved 15;
     reserved 16;

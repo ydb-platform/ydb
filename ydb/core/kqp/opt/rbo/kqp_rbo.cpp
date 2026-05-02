@@ -1,4 +1,5 @@
 #include "kqp_rbo.h"
+#include "kqp_html_log.h"
 #include "kqp_plan_conversion_utils.h"
 
 #include <yql/essentials/utils/log/log.h>
@@ -93,6 +94,10 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     }
 
                     ComputeRequiredProps(root, Props, ctx);
+                    if (ctx.HtmlTrace) {
+                        ctx.HtmlTrace->AddRule(rule->RuleName,
+                            root.PlanToString(ctx.ExprCtx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics));
+                    }
                     ++numMatches;
                     break;
                 }
@@ -110,12 +115,21 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
+    constexpr ui32 HtmlPlanOpts = EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics;
+
+    if (rboCtx.HtmlTrace) {
+        rboCtx.HtmlTrace->AddStage("Plan input");
+        rboCtx.HtmlTrace->AddRule("Original plan", root.PlanToString(ctx, HtmlPlanOpts));
+    }
 
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
     for (const auto& stage : Stages) {
+        if (rboCtx.HtmlTrace) {
+            rboCtx.HtmlTrace->AddStage(stage->StageName);
+        }
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, rboCtx);
         if (needToLog) {

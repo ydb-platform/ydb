@@ -3085,17 +3085,66 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         }
     } else {
         if (isStream) {
-            sort = ctx.Builder(node->Pos())
-                .Callable("OrderedFlatMap")
-                    .Callable(0, "SqueezeToDict")
-                        .Add(0, node->HeadPtr())
-                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
-                        .Add(2, MakeIdentityLambda(node->Pos(), ctx))
-                        .Add(3, std::move(settings))
+            if (haveSort) {
+                const auto sortDirsNode = node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections);
+                const auto partKeyLambda = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
+                const auto sortKeyLambda = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda);
+
+                TExprNode::TListType dirChildren;
+                dirChildren.push_back(ctx.Builder(node->Pos())
+                    .Callable("Bool")
+                        .Atom(0, "true", TNodeFlags::Default)
                     .Seal()
-                    .Add(1, std::move(flatten))
-                .Seal()
-                .Build();
+                    .Build());
+                if (sortDirsNode->IsList()) {
+                    for (ui32 i = 0; i < sortDirsNode->ChildrenSize(); ++i) {
+                        dirChildren.push_back(sortDirsNode->ChildPtr(i));
+                    }
+                } else {
+                    dirChildren.push_back(sortDirsNode);
+                }
+                auto combinedDirections = ctx.NewList(node->Pos(), std::move(dirChildren));
+
+                auto itemArg = ctx.NewArgument(node->Pos(), "item");
+
+                TExprNode::TListType keyChildren;
+
+                keyChildren.push_back(ctx.ReplaceNode(partKeyLambda->TailPtr(),
+                    partKeyLambda->Head().Head(), itemArg));
+
+                const auto& sortKeyBody = sortKeyLambda->Tail();
+                auto sortKeyWithItem = ctx.ReplaceNode(sortKeyLambda->TailPtr(),
+                    sortKeyLambda->Head().Head(), itemArg);
+                if (sortKeyBody.IsList()) {
+                    for (ui32 i = 0; i < sortKeyWithItem->ChildrenSize(); ++i) {
+                        keyChildren.push_back(sortKeyWithItem->ChildPtr(i));
+                    }
+                } else {
+                    keyChildren.push_back(sortKeyWithItem);
+                }
+
+                auto combinedKeyBody = ctx.NewList(node->Pos(), std::move(keyChildren));
+                auto combinedKeySelector = ctx.NewLambda(node->Pos(),
+                    ctx.NewArguments(node->Pos(), {itemArg}), std::move(combinedKeyBody));
+
+                sort = ctx.Builder(node->Pos())
+                    .Callable("Sort")
+                        .Add(0, node->HeadPtr())
+                        .Add(1, std::move(combinedDirections))
+                        .Add(2, std::move(combinedKeySelector))
+                    .Seal()
+                    .Build();
+            } else {
+                sort = ctx.Builder(node->Pos())
+                    .Callable("Sort")
+                        .Add(0, node->HeadPtr())
+                        .Callable(1, "Bool")
+                            .Atom(0, "true", TNodeFlags::Default)
+                        .Seal()
+                        .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                    .Seal()
+                    .Build();
+            }
         } else {
             sort = ctx.Builder(node->Pos())
                 .Apply(*flatten)

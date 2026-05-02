@@ -14,6 +14,7 @@
 #include <arrow/table.h>
 #include <library/cpp/string_utils/csv/csv.h>
 #include <util/string/builder.h>
+#include <util/string/strip.h>
 #include <util/stream/file.h>
 #include <regex>
 

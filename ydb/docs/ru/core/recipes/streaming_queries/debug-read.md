@@ -10,7 +10,10 @@
 
 {% note info %}
 
-В примерах `ydb_source` — это заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md), а `topic_name` / `input_topic` — топики, доступные через него.
+В примерах:
+
+- `ext_source` — заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — локальный или внешний топик (см. [локальные и внешние топики в потоковых запросах](../../dev/streaming-query/local-and-external-topics.md)).
 
 {% endnote %}
 
@@ -22,7 +25,7 @@
 SELECT
     Data
 FROM
-    ydb_source.topic_name
+    input_topic -- или внешний топик ext_source.input_topic
 WITH (
     FORMAT = raw,
     SCHEMA = (
@@ -43,7 +46,7 @@ LIMIT 1
 SELECT
     *
 FROM
-    ydb_source.topic_name
+    input_topic -- или внешний топик ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (

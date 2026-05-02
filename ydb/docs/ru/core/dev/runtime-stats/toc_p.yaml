@@ -1,0 +1,11 @@
+items:
+- name: Обзор
+  href: review.md
+- name: Как получить графическое представление плана
+  href: how-to-get.md
+- name: Расположение информации на плане
+  href: layout.md
+- name: Структура плана запроса
+  href: structure.md
+- name: Визуализация метрик
+  href: metrics.md

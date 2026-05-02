@@ -31,17 +31,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     };
 
     struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {
-        std::atomic<ui64> Usage = 0;
-        std::atomic<ui64> UsageExtra = 0;
-        std::atomic<ui64> Demand = 0;
-        std::atomic<ui64> Throttle = 0;
+        std::atomic<ui64> CpuUsage = 0;
+        std::atomic<ui64> CpuDemand = 0;
+        std::atomic<ui64> CpuThrottle = 0;
 
-        std::atomic<ui64> BurstUsage = 0;
-        std::atomic<ui64> BurstUsageResume = 0;
-        std::atomic<ui64> BurstUsageExtra = 0;
-        std::atomic<ui64> BurstThrottle = 0;
+        std::atomic<ui64> CpuBurstUsage = 0;
+        std::atomic<ui64> CpuBurstUsageResume = 0;
+        std::atomic<ui64> CpuBurstThrottle = 0;
+        std::atomic<ui64> ReadBurstUsage = 0;
 
-        std::atomic<ui64> ActualDemand = 0;
+        std::atomic<ui64> CpuActualDemand = 0;
+
+        // TODO: implement Read resource - for now it's only per datashard.
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
@@ -73,10 +74,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     private:
         // used to calculate adjusted satisfaction between snapshots
-        ui64 PrevBurstUsage = 0;
-        ui64 PrevBurstUsageResume = 0;
-        ui64 PrevBurstUsageExtra = 0;
-        ui64 PrevBurstThrottle = 0;
+        ui64 PrevCpuBurstUsage = 0;
+        ui64 PrevCpuBurstThrottle = 0;
 
         TMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
@@ -100,7 +99,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TRoot : public TPool, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
-        explicit TRoot(TIntrusivePtr<TKqpCounters> counters);
+        explicit TRoot(const TIntrusivePtr<TKqpCounters>& counters);
 
         void AddDatabase(const TDatabasePtr& database);
         void RemoveDatabase(const TDatabaseId& databaseId);

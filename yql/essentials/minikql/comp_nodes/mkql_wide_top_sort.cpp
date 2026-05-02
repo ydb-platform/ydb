@@ -740,7 +740,18 @@ public:
     }
 
     bool IsFinished() const {
-        return IsReadFromChannelFinished() && SpilledUnboxedValuesIterators.empty();
+        if (!IsReadFromChannelFinished()) {
+            return false;
+        }
+        // If we have spilled data that hasn't been read back yet, we're not finished
+        if (!SpilledStates.empty()) {
+            return false;
+        }
+        // If we're still in spilling or merging mode, we're not finished
+        if (Mode == EOperatingMode::Spilling || Mode == EOperatingMode::MergeSpilled) {
+            return false;
+        }
+        return SpilledUnboxedValuesIterators.empty();
     }
 
     NUdf::TUnboxedValue* const* GetFields() const {
@@ -992,7 +1003,7 @@ private:
     bool MergeHeapBuilt = false;
     bool MergeFinishWriteInProgress = false;
     static constexpr size_t MaxMergeWidth = 10;
-    static constexpr size_t MinSpillBatchRows = 1024;
+    static constexpr size_t MinSpillBatchRows = 2;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>

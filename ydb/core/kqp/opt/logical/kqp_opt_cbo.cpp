@@ -149,6 +149,10 @@ void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config)
     CONSTS_SHUFFLE_RIGHT_SIDE_MULT = config->OptCBOConstsShuffleRightSideMult.Get().GetOrElse(CONSTS_SHUFFLE_RIGHT_SIDE_MULT);
     CONSTS_SHUFFLE_RIGHT_SIDE_POW = config->OptCBOConstsShuffleRightSidePow.Get().GetOrElse(CONSTS_SHUFFLE_RIGHT_SIDE_POW);
 
+    CONSTS_LEFT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsLeftSideByteSizeFactor.Get().GetOrElse(CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
+    CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsRightSideByteSizeFactor.Get().GetOrElse(CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+    CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR = config->OptCBOConstsOutputSideByteSizeFactor.Get().GetOrElse(CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
+
     CONSTS_INTERACTION_MULT = config->OptCBOConstsInteractionsMult.Get().GetOrElse(CONSTS_INTERACTION_MULT);
     CONSTS_INTERACTION_POW = config->OptCBOConstsInteractionsPow.Get().GetOrElse(CONSTS_INTERACTION_POW);
 
@@ -201,6 +205,13 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
     }
 }
 
+double WeightedRowSize(const double rows, const double bytes, const double factor
+) {
+    double avgRowSize = rows ? (bytes / rows) : 0.0;
+    double rowSize = 1.0 + avgRowSize * factor;
+    return rowSize;
+}
+
 double TKqpProviderContext::ComputeJoinCost(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
@@ -208,32 +219,35 @@ double TKqpProviderContext::ComputeJoinCost(
     const double outputByteSize,
     EJoinAlgoType joinAlgo
 ) const  {
-    Y_UNUSED(outputByteSize);
-    double interactionPenalty = CONSTS_INTERACTION_MULT * std::pow(leftStats.Nrows * rightStats.Nrows, CONSTS_INTERACTION_POW);
+    // double interactionPenalty = CONSTS_INTERACTION_MULT * std::pow(leftStats.ByteSize * rightStats.ByteSize, CONSTS_INTERACTION_POW);
+
+    double leftSideByteSize = leftStats.Nrows * WeightedRowSize(leftStats.Nrows, leftStats.ByteSize, CONSTS_LEFT_SIDE_BYTESIZE_FACTOR);
+    double rightSideByteSize = rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+    double estimatedOutputByteSize = outputRows * WeightedRowSize(outputRows, outputByteSize, CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
 
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
             if (OptLevel == 3) {
                 return -1;
             }
-            return leftStats.Nrows + outputRows;
+            return leftStats.ByteSize + outputByteSize;
 
         case EJoinAlgoType::LookupJoinReverse:
             if (OptLevel == 3) {
                 return -1;
             }
-            return rightStats.Nrows + outputRows;
+            return rightStats.ByteSize + outputByteSize;
 
         case EJoinAlgoType::MapJoin:
-            return 1.5 * (CONSTS_MAPJOIN_LEFT_SIDE_MULT * std::pow(leftStats.Nrows, CONSTS_MAPJOIN_LEFT_SIDE_POW)
-                + CONSTS_MAPJOIN_RIGHT_SIDE_MULT * std::pow(rightStats.Nrows, CONSTS_MAPJOIN_RIGHT_SIDE_POW)
-                + CONSTS_MAPJOIN_OUTPUT_MULT * std::pow(outputRows, CONSTS_MAPJOIN_OUTPUT_POW) + interactionPenalty);
+            return 1.5 * (CONSTS_MAPJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_MAPJOIN_LEFT_SIDE_POW)
+                + CONSTS_MAPJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_MAPJOIN_RIGHT_SIDE_POW)
+                + CONSTS_MAPJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_MAPJOIN_OUTPUT_POW));
         case EJoinAlgoType::GraceJoin:
-            return 1.5 * (CONSTS_GRACEJOIN_LEFT_SIDE_MULT * std::pow(leftStats.Nrows, CONSTS_GRACEJOIN_LEFT_SIDE_POW)
-                + CONSTS_GRACEJOIN_RIGHT_SIDE_MULT * std::pow(rightStats.Nrows, CONSTS_GRACEJOIN_RIGHT_SIDE_POW)
-                + CONSTS_GRACEJOIN_OUTPUT_MULT * std::pow(outputRows, CONSTS_GRACEJOIN_OUTPUT_POW) + interactionPenalty);
+            return 1.5 * (CONSTS_GRACEJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_GRACEJOIN_LEFT_SIDE_POW)
+                + CONSTS_GRACEJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_GRACEJOIN_RIGHT_SIDE_POW)
+                + CONSTS_GRACEJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_GRACEJOIN_OUTPUT_POW));
         default:
-            return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+            return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
             // return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }
 }
@@ -556,8 +570,8 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
 
     if (isCrossJoin) {
         /* in case of cross join we broadcast the right part to the left */
-        // cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
-        cost += rightStats.Nrows * rightStats.Selectivity;
+        cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
+        // cost += rightStats.Nrows * rightStats.Selectivity;
     }
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,

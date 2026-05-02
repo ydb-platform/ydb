@@ -951,6 +951,9 @@ protected:
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
                 break;
+            case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::PESSIMISTIC_NONE);
+                break;
             default:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
                 break;

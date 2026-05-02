@@ -894,7 +894,7 @@ message TKqpStreamLookupSettings {
     optional TKqpSnapshot Snapshot = 4;
     optional uint64 LockTxId = 5;
     optional bool ImmediateTx = 6;
-    repeated string LookupKeyColumns = 7;
+    repeated TKqpColumnMetadataProto InputColumns = 22;
     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
     optional bool AllowInconsistentReads = 9 [default = false];
     optional uint32 LockNodeId = 10;

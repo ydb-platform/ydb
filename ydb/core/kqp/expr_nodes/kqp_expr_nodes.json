@@ -597,6 +597,16 @@
             "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
+            "Name": "TKqpLockAndCheck",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpLockAndCheck"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TKqpTableSinkSettings",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},

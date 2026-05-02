@@ -121,27 +121,39 @@ public:
     }
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
+        const size_t lookupKeySize = std::min(Settings.KeyColumns.size(), Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
-        std::vector<TCell> keyCells(Settings.LookupKeyColumns.size());
-        for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-            const auto* lookupKeyColumn = Settings.LookupKeyColumns[colId];
-            YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
-            // when making a cell we don't really need to make a copy of data, because
-            // TOwnedCellVec will make its' own copy.
-            keyCells[lookupKeyColumn->KeyOrder] = MakeCell(lookupKeyColumn->PType,
-                inputRow.GetElement(colId), backend, /* copy */ false);
+        std::vector<TCell> keyCells(lookupKeySize);
+
+        for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+            const auto& lookupKeyColumn = Settings.InputColumns[colId];
+            if (0 <= lookupKeyColumn.KeyOrder) {
+                AFL_ENSURE(lookupKeyColumn.KeyOrder < static_cast<i64>(keyCells.size()));
+                // when making a cell we don't really need to make a copy of data, because
+                // TOwnedCellVec will make its' own copy.
+                keyCells[lookupKeyColumn.KeyOrder] = MakeCell(lookupKeyColumn.PType,
+                    inputRow.GetElement(colId), backend, /* copy */ false);
+            } else {
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
+            }
         }
 
         AddInputRowImpl(std::move(keyCells));
     }
 
     void AddInputRow(TConstArrayRef<TCell> inputRow) final {
+        const i32 lookupKeySize = std::min(Settings.KeyColumns.size(), Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
-        std::vector<TCell> keyCells(Settings.LookupKeyColumns.size());
-        for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-            const auto* lookupKeyColumn = Settings.LookupKeyColumns[colId];
-            YQL_ENSURE(lookupKeyColumn->KeyOrder < static_cast<i64>(keyCells.size()));
-            keyCells[lookupKeyColumn->KeyOrder] = inputRow[colId];
+        std::vector<TCell> keyCells(lookupKeySize);
+        
+        for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+            const auto& lookupKeyColumn = Settings.InputColumns[colId];
+            if (0 <= lookupKeyColumn.KeyOrder) {
+                AFL_ENSURE(lookupKeyColumn.KeyOrder < static_cast<i64>(keyCells.size()));
+                keyCells[lookupKeyColumn.KeyOrder] = inputRow[colId];
+            } else {
+                AFL_ENSURE(Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP);
+            }
         }
 
         AddInputRowImpl(std::move(keyCells));
@@ -502,8 +514,8 @@ public:
     {
         YQL_ENSURE(taskId < MaxTaskId);
         // read columns should contain join key and result columns
-        for (auto joinKey : Settings.LookupKeyColumns) {
-            ReadColumns.emplace(joinKey->Name, *joinKey);
+        for (const auto& joinKey : Settings.InputColumns) {
+            ReadColumns.emplace(joinKey.Name, joinKey);
         }
 
         for (auto column : Settings.Columns) {
@@ -532,7 +544,7 @@ public:
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         auto joinKey = inputRow.GetElement(1);
-        std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
+        std::vector<TCell> joinKeyCells(Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
 
         ui64 rowSeqNo;
@@ -550,12 +562,12 @@ public:
         }
 
         if (joinKey.HasValue()) {
-            for (size_t colId = 0; colId < Settings.LookupKeyColumns.size(); ++colId) {
-                const auto* joinKeyColumn = Settings.LookupKeyColumns[colId];
-                YQL_ENSURE(joinKeyColumn->KeyOrder < static_cast<i64>(joinKeyCells.size()));
+            for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
+                const auto& joinKeyColumn = Settings.InputColumns[colId];
+                YQL_ENSURE(joinKeyColumn.KeyOrder < static_cast<i64>(joinKeyCells.size()));
                 // when making a cell we don't really need to make a copy of data, because
                 // TOwnedCellVec will make its' own copy.
-                joinKeyCells[joinKeyColumn->KeyOrder] = MakeCell(joinKeyColumn->PType,
+                joinKeyCells[joinKeyColumn.KeyOrder] = MakeCell(joinKeyColumn.PType,
                     joinKey.GetElement(colId), backend,  /* copy */ false);
             }
         }
@@ -815,11 +827,11 @@ public:
             // result can contain fewer columns because of system columns
             YQL_ENSURE(row.size() <= ReadColumns.size(), "Result columns mismatch");
 
-            std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
-            for (size_t joinKeyColumn = 0; joinKeyColumn < Settings.LookupKeyColumns.size(); ++joinKeyColumn) {
-                auto columnIt = ReadColumns.find(Settings.LookupKeyColumns[joinKeyColumn]->Name);
+            std::vector<TCell> joinKeyCells(Settings.InputColumns.size());
+            for (size_t joinKeyColumn = 0; joinKeyColumn < Settings.InputColumns.size(); ++joinKeyColumn) {
+                auto columnIt = ReadColumns.find(Settings.InputColumns[joinKeyColumn].Name);
                 YQL_ENSURE(columnIt != ReadColumns.end());
-                joinKeyCells[Settings.LookupKeyColumns[joinKeyColumn]->KeyOrder] = row[std::distance(ReadColumns.begin(), columnIt)];
+                joinKeyCells[Settings.InputColumns[joinKeyColumn].KeyOrder] = row[std::distance(ReadColumns.begin(), columnIt)];
             }
 
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
@@ -1152,12 +1164,12 @@ private:
         }
     }
 
-    TConstArrayRef<TCell> ExtractKeyPrefix(const TTableRange& range) {
-        if (range.From.size() == Settings.LookupKeyColumns.size()) {
+    TConstArrayRef<TCell> ExtractKeyPrefix(const TOwnedTableRange& range) {
+        if (range.From.size() == Settings.InputColumns.size()) {
             return range.From;
         }
 
-        return range.From.subspan(0, Settings.LookupKeyColumns.size());
+        return range.From.subspan(0, Settings.InputColumns.size());
     }
 
     bool IsInputTriplet() {
@@ -1250,11 +1262,20 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         );
     }
 
-    preparedSettings.LookupKeyColumns.reserve(settings.GetLookupKeyColumns().size());
-    for (const auto& lookupKey : settings.GetLookupKeyColumns()) {
-        auto columnIt = preparedSettings.KeyColumns.find(lookupKey);
-        YQL_ENSURE(columnIt != preparedSettings.KeyColumns.end());
-        preparedSettings.LookupKeyColumns.push_back(&columnIt->second);
+    preparedSettings.InputColumns.reserve(settings.GetInputColumns().size());
+    for (const auto& inputColumn : settings.GetInputColumns()) {
+        NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(inputColumn.GetTypeId(), inputColumn.GetTypeInfo());
+        auto itKey = preparedSettings.KeyColumns.find(inputColumn.GetName());
+        preparedSettings.InputColumns.emplace_back(TSysTables::TTableColumnInfo{
+            inputColumn.GetName(),
+            inputColumn.GetId(),
+            typeInfo,
+            inputColumn.GetTypeInfo().GetPgTypeMod(),
+            itKey == std::end(preparedSettings.KeyColumns) ? -1 : itKey->second.KeyOrder
+        });
+
+        AFL_ENSURE(preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP
+            || preparedSettings.KeyColumns.contains(inputColumn.GetName()));
     }
 
     preparedSettings.Columns.reserve(settings.GetColumns().size());
@@ -1268,6 +1289,31 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         });
     }
 
+    if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+        std::vector<TString> inputColNames;
+        inputColNames.reserve(preparedSettings.InputColumns.size());
+        for (const auto& col : preparedSettings.InputColumns) {
+            inputColNames.push_back(col.Name);
+        }
+        std::vector<TString> outputColNames;
+        outputColNames.reserve(preparedSettings.Columns.size());
+        for (const auto& col : preparedSettings.Columns) {
+            outputColNames.push_back(col.Name);
+        }
+        YQL_ENSURE(inputColNames == outputColNames, "InputColumns must equal Columns for LOCK_AND_LOOKUP strategy");
+    } else if (preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP ||
+               preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+        for (const auto& inputCol : preparedSettings.InputColumns) {
+            auto keyIt = preparedSettings.KeyColumns.find(inputCol.Name);
+            YQL_ENSURE(keyIt != preparedSettings.KeyColumns.end(),
+                "InputColumns must only contain key columns for LOOKUP/UNIQUE strategy, got: " << inputCol.Name);
+        }
+    }
+
+    if (preparedSettings.LookupStrategy != NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
+        AFL_ENSURE(preparedSettings.InputColumns.size() <= preparedSettings.KeyColumns.size());
+    }
+
     if (settings.HasVectorTopK()) {
         preparedSettings.VectorTopK = std::make_unique<NKikimrKqp::TReadVectorTopK>(settings.GetVectorTopK());
     }
@@ -1275,6 +1321,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
         case NKqpProto::EStreamLookupStrategy::UNIQUE:
+        case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
@@ -1290,7 +1337,8 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& set
             || settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE);
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
-    AFL_ENSURE(settings.LookupKeyColumns.size() <= settings.KeyColumns.size());
+    AFL_ENSURE(settings.InputColumns.size() <= settings.KeyColumns.size());
+    
     return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 

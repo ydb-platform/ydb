@@ -634,7 +634,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints,
     bool enableShuffleElimination,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TCBOOptimizerStats* cboStats
 ) {
     int dummyEquiJoinCounter = 0;
     return KqpOptimizeEquiJoinWithCosts(
@@ -648,7 +649,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
         dummyEquiJoinCounter,
         hints,
         enableShuffleElimination,
-        shufflingOrderingsByJoinLabels
+        shufflingOrderingsByJoinLabels,
+        cboStats
     );
 }
 
@@ -663,7 +665,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
+    TCBOOptimizerStats* cboStats
 ) {
     if (optLevel <= 1) {
         return node;
@@ -678,6 +681,10 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     auto stats = kqpStats.GetStats(equiJoin.Raw());
     if (stats && stats->CBOFired) {
         return node;
+    }
+
+    if (cboStats) {
+        ++cboStats->TreesTotal;
     }
 
     if (stats && stats->TableAliases) {
@@ -732,7 +739,11 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt.JoinSearch(joinTree, hints);
+        auto status = IOptimizerNew::EJoinSearchStatus::NotOptimized;
+        joinTree = opt.JoinSearch(joinTree, hints, &status);
+        if (cboStats && status == IOptimizerNew::EJoinSearchStatus::Optimized) {
+            ++cboStats->TreesOptimized;
+        }
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

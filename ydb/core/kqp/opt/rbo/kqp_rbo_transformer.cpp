@@ -11,7 +11,7 @@ using namespace NYql::NDq;
 namespace {
 
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
-    const auto& cboStats = kqpCtx.NewRBOCBOStats;
+    const auto& cboStats = kqpCtx.CBOStats;
 
     NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
     optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;

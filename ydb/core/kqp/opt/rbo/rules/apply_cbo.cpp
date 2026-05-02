@@ -317,7 +317,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     }
 
     auto cboTree = CastOperator<TOpCBOTree>(input);
-    auto& cboStats = ctx.KqpCtx.NewRBOCBOStats;
+    auto& cboStats = ctx.KqpCtx.CBOStats;
 
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
@@ -389,7 +389,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        IOptimizerNew::EJoinSearchStatus status;
+        auto status = IOptimizerNew::EJoinSearchStatus::NotOptimized;
         joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &status);
         if (status == IOptimizerNew::EJoinSearchStatus::Optimized) {
             ++cboStats.TreesOptimized;

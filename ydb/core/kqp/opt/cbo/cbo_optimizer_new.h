@@ -412,6 +412,13 @@ public:
         EJoinSearchStatus* status = nullptr) = 0;
 };
 
+struct TCBOOptimizerStats {
+    // TreesTotal counts CBO candidates that reached the CBO-enabled path.
+    // TreesOptimized counts candidates for which join enumeration completed.
+    ui64 TreesTotal = 0;
+    ui64 TreesOptimized = 0;
+};
+
 struct TCBOSettings {
     ui32 CBOTimeout = 1'000ULL; // 1s
     ui32 CBOHardTimeout = UINT32_MAX; // disabled by default

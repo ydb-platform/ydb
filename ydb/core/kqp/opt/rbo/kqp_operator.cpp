@@ -613,22 +613,42 @@ TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
     return result;
 }
 
-const THashMap<NKqp::EJoinAlgoType, TString> AlgoNames = {
-    {NKqp::EJoinAlgoType::Undefined, "Undefined"},
-    {NKqp::EJoinAlgoType::LookupJoin, "Lookup"},
-    {NKqp::EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
-    {NKqp::EJoinAlgoType::MapJoin, "Map"},
-    {NKqp::EJoinAlgoType::GraceJoin, "Shuffle"},
-    {NKqp::EJoinAlgoType::StreamLookupJoin, "StreamLookup"},
-    {NKqp::EJoinAlgoType::MergeJoin, "Merge"},
-};
+TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    switch (joinAlgo) {
+        case NKqp::EJoinAlgoType::Undefined:
+            return "Undefined";
+        case NKqp::EJoinAlgoType::LookupJoin:
+            return "Lookup";
+        case NKqp::EJoinAlgoType::LookupJoinReverse:
+            return "ReverseLookup";
+        case NKqp::EJoinAlgoType::MapJoin:
+            return "Map";
+        case NKqp::EJoinAlgoType::GraceJoin:
+            return "Shuffle";
+        case NKqp::EJoinAlgoType::ReverseBlockJoin:
+            return "ReverseBlock";
+        case NKqp::EJoinAlgoType::StreamLookupJoin:
+            return "StreamLookup";
+        case NKqp::EJoinAlgoType::MergeJoin:
+            return "Merge";
+    }
+    Y_ENSURE(false, "Unknown join algo type");
+    return "Unknown";
+}
+
+TString GetExplainJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
+    if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin) {
+        return "Grace";
+    }
+    return GetJoinAlgoName(joinAlgo);
+}
 
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder res;
     res << "Join, Kind: " << JoinKind;
     if (Props.JoinAlgo.has_value()) {
-        res << ", Algo: " << AlgoNames.at(*Props.JoinAlgo);
+        res << ", Algo: " << GetJoinAlgoName(*Props.JoinAlgo);
     }
     res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
@@ -646,6 +666,22 @@ TString TOpJoin::ToString(TExprContext& ctx) {
         }
     }
     res << "]";
+    return res;
+}
+
+NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
+    const auto joinAlgoName = GetExplainJoinAlgoName(joinAlgo);
+
+    if (JoinKind == "Cross") {
+        res["Name"] = "CrossJoin";
+    } else {
+        res["Name"] = TStringBuilder() << JoinKind << "Join (" << joinAlgoName << ")";
+    }
+    res["JoinKind"] = JoinKind;
+    res["JoinAlgo"] = joinAlgoName;
+
     return res;
 }
 

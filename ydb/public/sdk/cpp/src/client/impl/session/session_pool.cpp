@@ -202,6 +202,7 @@ void TSessionPool::ClearOldWaiters() {
 
     for (auto& waiter : oldWaiters) {
         FakeSessionsCounter_.Inc();
+        ExternalStatCollector_.IncConnectionTimeouts();
         waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
     }
 
@@ -353,6 +354,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
 
             for (auto& waiter : waitersToReplyError) {
                 FakeSessionsCounter_.Inc();
+                ExternalStatCollector_.IncConnectionTimeouts();
                 waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
             }
         }
@@ -407,12 +409,21 @@ void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatC
     InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
     FakeSessionsCounter_.Set(statCollector.FakeSessions);
     SessionWaiterCounter_.Set(statCollector.Waiters);
+    ExternalStatCollector_ = std::move(statCollector);
+    ExternalStatCollector_.UpdateConnectionCount(ActiveSessions_ + static_cast<std::int64_t>(Sessions_.size()));
+    ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
+}
+
+void TSessionPool::RecordConnectionCreateTime(double seconds) {
+    ExternalStatCollector_.RecordConnectionCreateTime(seconds);
 }
 
 void TSessionPool::UpdateStats() {
     ActiveSessionsCounter_.Apply(ActiveSessions_);
     InPoolSessionsCounter_.Apply(Sessions_.size());
     SessionWaiterCounter_.Apply(WaitersQueue_.Size());
+    ExternalStatCollector_.UpdateConnectionCount(ActiveSessions_ + static_cast<std::int64_t>(Sessions_.size()));
+    ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
 }
 
 }

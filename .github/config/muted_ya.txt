@@ -4,6 +4,7 @@ ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
+ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
@@ -11,6 +12,8 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
+ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
@@ -24,6 +27,7 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultichannel
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
+ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/fq/ut_integration PrivateApi.PingTask
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/ut YdbLogStore.AlterLogTable

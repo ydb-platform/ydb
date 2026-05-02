@@ -1,18 +1,42 @@
 import argparse
 import json
 import logging
+import os
 import sys
+import tempfile
 import warnings
 
 # Suppress noisy DeprecationWarnings from vendored Flask / Werkzeug / pkgutil
 # (pkgutil.find_loader, ast.Str, etc.) so they don't pollute --help and CLI output.
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+from library.python import resource  # noqa: E402
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster  # noqa: E402
 from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings  # noqa: E402
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services  # noqa: E402
 from ydb.tests.tools.nemesis.library import monitor  # noqa: E402
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch  # noqa: E402
+
+
+_STATIC_FILES = [
+    'index.html',
+    'HostProcessItem.js',
+    'HostStatusItem.js',
+    'NemesisGroupAccordion.js',
+    'ProcessCard.js',
+    'ProcessTypeGroup.js',
+    'WardenChecksCard.js',
+]
+
+
+def _extract_static() -> str:
+    """Extract bundled static files to a temp directory and return its path."""
+    tmpdir = tempfile.mkdtemp(prefix='nemesis_static_')
+    for filename in _STATIC_FILES:
+        data = resource.find(f'nemesis_static/{filename}')
+        with open(os.path.join(tmpdir, filename), 'wb') as f:
+            f.write(data)
+    return tmpdir
 
 
 _DESCRIPTION = """\
@@ -221,6 +245,13 @@ def run_liveness_checks(settings: Settings):
 
 def main():
     args = parse_args()
+
+    # Auto-extract static files before settings are loaded.
+    # TODO: use it by deafault in all cases 
+    if args.command == 'run':
+        static_path = args.static_location or os.environ.get('STATIC_LOCATION', 'static')
+        if not os.path.isdir(static_path):
+            os.environ['STATIC_LOCATION'] = _extract_static()
 
     # Build kwargs from argv (only include non-None values)
     argv_kwargs = {}

@@ -15,7 +15,11 @@ from ydb.tests.library.wardens.logs import (
     kikimr_start_logs_safety_warden_factory,
     kikimr_crit_and_alert_logs_safety_warden_factory,
 )
-from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
+from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
+from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
+    SafetyCheckSpec,
+    spec_supports_local,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -60,7 +64,7 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
     """
     local_executor = LocalCommandExecutor()
 
-    return [
+    specs = [
         SafetyCheckSpec(
             name="kikimr_start_logs",
             description="Check Kikimr start logs for errors",
@@ -101,3 +105,6 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
             build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
         ),
     ]
+    if get_orchestrator_settings().local_mode:
+        specs = [s for s in specs if spec_supports_local(s)]
+    return specs

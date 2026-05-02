@@ -4,6 +4,8 @@ from ydb.tests.library.wardens.base import LivenessWarden
 
 
 class TxCompleteLagLivenessWarden(LivenessWarden):
+    supports_local_mode = True
+
     def __init__(self, cluster):
         self._cluster = cluster
 

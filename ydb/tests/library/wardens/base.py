@@ -7,6 +7,10 @@ import abc
 class LivenessWarden(object):
     __metaclass__ = abc.ABCMeta
 
+    # True if the warden is meaningful against a single-host local cluster
+    # (e.g. ydb/tests/tools/local_cluster). Default False — opt-in only.
+    supports_local_mode = False
+
     @abc.abstractproperty
     def list_of_liveness_violations(self):
         pass

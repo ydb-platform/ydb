@@ -24,6 +24,10 @@ logger = logging.getLogger()
 class SafetyWarden(object):
     __metaclass__ = ABCMeta
 
+    # True if the warden is meaningful against a single-host local cluster
+    # (e.g. ydb/tests/tools/local_cluster). Default False — opt-in only.
+    supports_local_mode = False
+
     def __init__(self, name):
         super(SafetyWarden, self).__init__()
         self.__name = name

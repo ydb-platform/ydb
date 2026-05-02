@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Type
 
+from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_entries import all_nemesis_type_entries
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
@@ -54,6 +55,17 @@ NEMESIS_UI_GROUPS: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 NEMESIS_TYPES: dict[str, dict[str, Any]] = all_nemesis_type_entries()
+
+# In local mode (single-host harness via ydb/tests/tools/local_cluster) we
+# expose only runners that opt in via supports_local_mode=True.  Everything
+# else assumes systemd, /Berkanavt paths, multi-host networking, or destructive
+# system-wide operations that aren't safe on a developer's machine.
+if get_orchestrator_settings().local_mode:
+    NEMESIS_TYPES = {
+        key: spec
+        for key, spec in NEMESIS_TYPES.items()
+        if getattr(spec["runner"], "supports_local_mode", False)
+    }
 
 
 # ---------------------------------------------------------------------------

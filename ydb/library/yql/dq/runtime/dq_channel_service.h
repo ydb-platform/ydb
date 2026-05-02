@@ -123,6 +123,7 @@ struct TDqChannelLimits {
     ui64 LocalChannelInflightBytes  =  8_MB;    // max bytes per local channel
     ui64 RemoteChannelInflightBytes = 16_MB;    // max bytes per remote channel == output.push - input.pop
     ui64 NodeSessionIcInflightBytes = 64_MB;    // max bytes in network/IC per node-to-node session
+    ui64 ReconciliationCount = 3;    // number of retries before node session is completely destroyed
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

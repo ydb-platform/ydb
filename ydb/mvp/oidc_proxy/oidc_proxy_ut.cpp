@@ -13,6 +13,7 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
@@ -572,19 +573,21 @@ Y_UNIT_TEST_SUITE(Mvp) {
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
         UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
-        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
-        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
-        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
-        const TString state = urlParameters["state"];
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["response_type"], "code");
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["scope"], "openid");
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["client_id"], settings.ClientId);
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["redirect_uri"], "https://" + hostProxy + "/auth/callback");
+        const TString state = TString(urlParameters.Get("state"));
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(headers.Has("X-Request-Id"));
         UNIT_ASSERT(headers.Has("Set-Cookie"));
         TStringBuf setCookie = headers.Get("Set-Cookie");
-        UNIT_ASSERT_STRING_CONTAINS(setCookie, TOpenIdConnectSettings::YDB_OIDC_COOKIE);
+        UNIT_ASSERT_STRING_CONTAINS(
+            setCookie,
+            CreateNameYdbOidcCookie(redirectStrategy.IsNavigationRequest() ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX));
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -692,10 +695,15 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
-        UNIT_ASSERT(protectedPageHeaders.Has("Location"));
-        UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
+        if (redirectStrategy.IsNavigationRequest()) {
+            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+            UNIT_ASSERT(protectedPageHeaders.Has("Location"));
+            UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
+        } else {
+            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
+            UNIT_ASSERT(!protectedPageHeaders.Has("Location"));
+        }
     }
 
     Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlow) {
@@ -706,6 +714,22 @@ Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
         OidcWrongStateAuthorizationFlow(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectExpiredBackgroundStateKeepsCookieSuffix) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+        TState sourcePayload;
+        sourcePayload.AntiForgeryToken = "state";
+        sourcePayload.ExpirationTime = TInstant::Seconds(0);
+        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+
+        TCheckStateResult result = CheckState(EncodeState(sourcePayload, settings.ClientSecret), settings.ClientSecret);
+        const TString expectedCookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+
+        UNIT_ASSERT(!result.Ok);
+        UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, expectedCookieSuffix);
+        UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State life time expired");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
@@ -1411,17 +1435,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
 
         static TString GetViewerResponse200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_USER_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_USER_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_USER_ACCOUNT_ID;
+            json["OriginalUserToken"] = TProfileServiceMock::VALID_USER_TOKEN;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponseService200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_SERVICE_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_SERVICE_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_SERVICE_ACCOUNT_ID;
+            json["OriginalUserToken"] = TProfileServiceMock::VALID_SERVICE_TOKEN;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponse403() {
@@ -1607,6 +1631,28 @@ static void NavigationRequestTest(const TString& rawRequest, bool expectedNaviga
 }
 
 Y_UNIT_TEST_SUITE(Utils) {
+    Y_UNIT_TEST(OpenIdConnectStateRoundTrip) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+
+        TState sourcePayload;
+        sourcePayload.AntiForgeryToken = "state";
+        sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
+        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+
+        const TString state = EncodeState(sourcePayload, settings.ClientSecret);
+        const TCheckStateResult result = CheckState(state, settings.ClientSecret);
+        const TDecodeStateResult decodedResult = DecodeState(state);
+
+        UNIT_ASSERT(result.Ok);
+        UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, sourcePayload.CookieSuffix);
+        UNIT_ASSERT(result.ErrorMessage.empty());
+        UNIT_ASSERT(decodedResult.HasSignedStateJson);
+        UNIT_ASSERT(decodedResult.HasStateContainerJson);
+        UNIT_ASSERT(decodedResult.Payload == sourcePayload);
+        UNIT_ASSERT_STRINGS_EQUAL(EncodeState(decodedResult.Payload, settings.ClientSecret), state);
+    }
+
     Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
         THashSet<TString> seen;
         for (size_t i = 0; i < 100; ++i) {

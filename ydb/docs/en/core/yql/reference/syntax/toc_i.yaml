@@ -18,9 +18,16 @@ items:
 - { name: CREATE BACKUP COLLECTION,     href: create-backup-collection.md,   when: feature_backup_collections }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
+<<<<<<< HEAD
+=======
+- { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
+- { name: CREATE SECRET,                 href: create-secret.md}
+>>>>>>> 0f4522d11cf (DOCSUP-126511: [YDBDOCS-1921] Переводы Февраля - 11. Организация процесса перевода (1 архив) (0 шт.) (#37226))
 - { name: CREATE TABLE,                 include: { mode: link,               path: create_table/toc_p.yaml } }
 - { name: CREATE TRANSFER,              href: create-transfer.md}
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
+- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md }
+- { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
 - { name: COMMIT,                       href: commit.md }
@@ -30,6 +37,10 @@ items:
 - { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md,     when: feature_async_replication }
 - { name: DROP BACKUP COLLECTION,       href: drop-backup-collection.md,     when: feature_backup_collections }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
+- { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
+- { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TRANSFER,                href: drop-transfer.md}
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }

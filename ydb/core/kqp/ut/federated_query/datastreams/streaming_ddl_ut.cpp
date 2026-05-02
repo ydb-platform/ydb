@@ -144,6 +144,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(true);
+
         constexpr ui32 partitionCount = 10;
         constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
         constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
@@ -155,17 +157,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char queryName[] = "streamingQuery";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                PRAGMA pq.MaxPartitionReadSkew = "10s";
-                INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT time FROM `{pq_source}`.`{input_topic}` WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA (time String NOT NULL)
-                )
-                WHERE time LIKE "%lunch%";
-            END DO;)",
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT time
+                    FROM `{pq_source}`.`{input_topic}`
+                    WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (time String NOT NULL)
+                    )
+                    WHERE time LIKE "%lunch%";
+                END DO;
+            )sql",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -184,8 +191,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         Sleep(CheckpointPeriod * 3);
 
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
+            )sql",
             "query_name"_a = queryName
         ));
 
@@ -198,8 +207,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteTopicMessage(inputTopicName, fmt::format(R"({{"time": "next lunch time {}"}})", p), p);
         }
 
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);
+            )sql",
             "query_name"_a = queryName
         ));
 
@@ -215,6 +226,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
+        {
+            auto& appConfig = SetupAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableWatermarks(true);
+            appConfig.MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(true);
+        }
+
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
@@ -226,20 +243,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char queryName[] = "streamingQuery";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                PRAGMA pq.MaxPartitionReadSkew = "10s";
-                INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA (
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ),
-                    WATERMARK_IDLE_TIMEOUT = "PT5S"
-                );
-            END DO;)",
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value
+                    FROM `{pq_source}`.`{input_topic}`
+                    WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        ),
+                        WATERMARK_IDLE_TIMEOUT = "PT5S"
+                    );
+                END DO;
+            )sql",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -256,6 +278,35 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteTopicMessage(inputTopicName, fmt::format(R"({{"key": "k", "value": "{}"}})", value), 0);
             ReadTopicMessages(outputTopicName, expectedOutputs);
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingPartitionBalancingDisabled, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(false);
+
+        constexpr char inputTopicName[] = "streamingPartitionBalancingDisabledInputTopic";
+        constexpr char outputTopicName[] = "streamingPartitionBalancingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT * FROM `{pq_source}`.`{input_topic}`;
+                END DO;
+            )sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), NYdb::Dev::EStatus::PRECONDITION_FAILED, "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {

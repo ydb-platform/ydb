@@ -739,4 +739,5 @@ message TKqpPhyQuery {
     optional bool DisableCheckpoints = 17;
     optional bool EnableWatermarks = 18;
     optional EIsolationLevel DefaultTxMode = 19;
+    optional bool EnableStreamingPartitionBalancing = 20;
 }

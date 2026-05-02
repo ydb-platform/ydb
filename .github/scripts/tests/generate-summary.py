@@ -4,7 +4,6 @@ import dataclasses
 import json
 import math
 import os
-import re
 import sys
 import traceback
 from enum import Enum
@@ -12,6 +11,16 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
+from error_type_utils import (
+    is_sanitizer_issue,
+    is_timeout_issue,
+    is_xfailed_issue,
+    is_not_launched_issue,
+    is_verify_classification,
+    normalize_fetch_url,
+    prefetch_texts_by_urls,
+    should_prefetch_stderr_for_verify,
+)
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
@@ -30,39 +39,6 @@ def load_owner_area_mapping():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
         return {}
-
-
-def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
-    if not error_text:
-        return False
-    
-    # Sanitizer error patterns for comprehensive coverage
-    sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # UndefinedBehaviorSanitizer runtime errors
-        r'runtime error:',
-        r'==\d+==.*runtime error:',
-        
-        # Memory leak detection (specific LeakSanitizer output)
-        r'detected memory leaks',
-        r'==\d+==.*detected memory leaks',
-    ]
-    
-    for pattern in sanitizer_patterns:
-        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
-            return True
-    
-    return False
-
 
 class TestStatus(Enum):
     PASS = 0
@@ -89,9 +65,12 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    stderr_url: str = ""
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_xfailed_issue: bool = False
+    is_verify_issue: bool = False
     is_not_launched: bool = False
 
     @property
@@ -206,11 +185,14 @@ class TestResult:
             count_of_passed=0,
             owners='',
             status_description=status_description or '',
+            stderr_url=log_urls.get('stderr', ''),
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            is_timeout_issue=is_timeout_issue(error_type),
+            is_xfailed_issue=is_xfailed_issue(error_type),
+            is_verify_issue=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
-            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
+            is_not_launched=is_not_launched_issue(error_type, status.name)
         )
 
 
@@ -596,8 +578,61 @@ def iter_build_results_files(path):
             continue
 
 
+def _status_string_for_error_utils(st: TestStatus) -> str:
+    """Same status tokens as test_results / classify_error_type (failure|error|mute)."""
+    return {
+        TestStatus.FAIL: "failure",
+        TestStatus.ERROR: "error",
+        TestStatus.MUTE: "mute",
+    }.get(st, "")
+
+
+def _collect_stderr_urls_for_verify_badges(tests):
+    """stderr URLs only when VERIFY might depend on log text (aligned with test_history_fast)."""
+    urls = []
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            continue
+        raw = getattr(test, "stderr_url", None) or ""
+        if not normalize_fetch_url(raw):
+            continue
+        status_str = _status_string_for_error_utils(st)
+        if not status_str:
+            continue
+        if should_prefetch_stderr_for_verify(
+            status_str,
+            getattr(test, "status_description", None),
+            getattr(test, "error_type", None),
+        ):
+            urls.append(raw)
+    return urls
+
+
+def _apply_verify_badges(tests, stderr_fetch_cache):
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            test.is_verify_issue = False
+            continue
+        su = normalize_fetch_url(getattr(test, "stderr_url", None) or "")
+        status_str = _status_string_for_error_utils(st)
+        use_stderr = bool(su) and bool(status_str) and should_prefetch_stderr_for_verify(
+            status_str,
+            getattr(test, "status_description", None),
+            getattr(test, "error_type", None),
+        )
+        stderr_text = stderr_fetch_cache.get(su, "") if use_stderr else None
+        test.is_verify_issue = is_verify_classification(
+            getattr(test, "error_type", None),
+            getattr(test, "status_description", None),
+            error_file_text=stderr_text,
+        )
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
+    stderr_fetch_cache = {}
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -605,6 +640,10 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         for fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
+
+        urls_to_fetch = _collect_stderr_urls_for_verify_badges(summary_line.tests)
+        stderr_fetch_cache = prefetch_texts_by_urls(urls_to_fetch, existing_cache=stderr_fetch_cache)
+        _apply_verify_badges(summary_line.tests, stderr_fetch_cache)
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

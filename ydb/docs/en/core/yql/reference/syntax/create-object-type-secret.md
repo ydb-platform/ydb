@@ -1,20 +1,14 @@
 # CREATE OBJECT (TYPE SECRET)
 
-{% note warning %}
+{% include [deprecated_secrets_warning](./_includes/deprecated_secrets_warning.md) %}
 
-The syntax for managing secrets will change in future {{ ydb-full-name }} releases.
-
-{% endnote %}
-
-The `CREATE OBJECT (TYPE SECRET)` statement creates a [secret](../../../concepts/datamodel/secrets.md).
-
-## Syntax {#syntax}
+The following SQL statement creates a [secret](../../../concepts/datamodel/secrets.md):
 
 ```yql
-CREATE OBJECT <secret_name> (TYPE SECRET) WITH value="<secret_value>";
+CREATE OBJECT <secret_name> (TYPE SECRET) WITH value = "<secret_value>";
 ```
 
-### Parameters
+Where:
 
 * `secret_name` - the name of the secret.
 * `secret_value` - the contents of the secret.
@@ -24,5 +18,5 @@ CREATE OBJECT <secret_name> (TYPE SECRET) WITH value="<secret_value>";
 The following statement creates a secret named `MySecretName` with `MySecretData` as a value.
 
 ```yql
-CREATE OBJECT MySecretName (TYPE SECRET) WITH value="MySecretData";
+CREATE OBJECT MySecretName (TYPE SECRET) WITH value = "MySecretData";
 ```

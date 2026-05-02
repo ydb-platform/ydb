@@ -7,7 +7,7 @@ To work with an external MySQL database, you need to follow these steps:
 1. Create a [secret](../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
-    CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET mysql_datasource_user_password WITH (value = "<password>");
     ```
 
 2. Create an [external data source](../datamodel/external_data_source.md) that describes a specific MySQL database. The `LOCATION` parameter contains the network address of the MySQL instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `mysql`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
@@ -19,7 +19,7 @@ To work with an external MySQL database, you need to follow these steps:
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="mysql_datasource_user_password",
+        PASSWORD_SECRET_PATH="mysql_datasource_user_password",
         USE_TLS="TRUE"
     );
     ```

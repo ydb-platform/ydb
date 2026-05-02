@@ -16,6 +16,11 @@ items:
   include:
     mode: link
     path: primary-key/toc_p.yaml
+- name: Working with tables
+  href: tables/index.md
+  include:
+    mode: link
+    path: tables/toc_p.yaml
 - name: Secondary indexes
   href: secondary-indexes.md
 - name: Vector indexes

@@ -1,0 +1,15 @@
+items:
+- name: Как работает партицирование
+  href: index.md
+- name: Автоматическое партицирование
+  href: auto/index.md
+  include:
+    mode: link
+    path: auto/toc_p.yaml
+- name: Как выбрать количество партиций
+  href: choosing-partition-count.md
+- name: Анти-паттерны
+  href: anti-patterns/index.md
+  include:
+    mode: link
+    path: anti-patterns/toc_p.yaml

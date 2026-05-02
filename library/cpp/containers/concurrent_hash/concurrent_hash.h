@@ -69,6 +69,11 @@ public:
             return true;
         }
 
+        // Returns true if key was deleted from the hashmap
+        bool DropUnsafe(const K& key) {
+            return Map.erase(key) != 0;
+        }
+
         bool HasUnsafe(const K& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
             return (it != Map.end());
@@ -191,6 +196,13 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         return bucket.TryRemoveUnsafe(key, result);
+    }
+
+    // Returns true if key was deleted from the hashmap
+    bool Drop(const K& key) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        return bucket.DropUnsafe(key);
     }
 
     bool Has(const K& key) const {

@@ -452,7 +452,7 @@ int BuildAST(int argc, char** argv) {
                 (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
                  !res.Has("pg"));
 
-            bool hasError = !TestIssues(parseRes, flags.contains("StrictWarningAsError"));
+            bool hasError = !TestIssues(parseRes, /*isStrictWarningAsError=*/true);
 
             if (hasError || !noDebug) {
                 parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);

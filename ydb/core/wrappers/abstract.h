@@ -163,7 +163,7 @@ protected:
 public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
-    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
+    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = false) const;
     static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
 };
 } // NExternalStorage

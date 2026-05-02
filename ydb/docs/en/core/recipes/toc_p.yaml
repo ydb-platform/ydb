@@ -22,3 +22,8 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
+<<<<<<< HEAD
+=======
+- name: Import and export data to column tables
+  href: import-export-column-tables.md
+>>>>>>> 4a883929856 (DOCSUP-123457: Перевод секретов. Организация процесса перевода (1 архив) (1 шт.) (#34191))

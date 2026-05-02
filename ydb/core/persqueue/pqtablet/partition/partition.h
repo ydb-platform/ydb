@@ -391,7 +391,7 @@ private:
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event);
 
-    void RequestWriteInfoIfRequired();
+    void RequestWriteInfoIfRequired(bool skipSrcIdInfo);
 
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);

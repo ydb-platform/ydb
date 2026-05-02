@@ -5,6 +5,8 @@
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
+#include <string>
+
 namespace NYdb::NConsoleClient {
 
 TTopicWorkloadKeyedWriterWorker::TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params)
@@ -145,6 +147,10 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     settings.EventHandlers(eventHandlers);
 
     settings.DirectWriteToPartition(Params.Direct);
+
+    if (Params.UseTransactions) {
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
+    }
 
     producer->SetWriteSession(topicClient.CreateKeyedWriteSession(settings));
     return producer;

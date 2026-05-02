@@ -189,6 +189,11 @@ protected:
     void WriteMessagesInTx(std::size_t big, size_t small);
 
     const TDriver& GetDriver() const;
+    /// Topic path for SDK: `TTopicSdkTestSetup::GetTopicPath(name)` (typically `TopicPrefix_ + name`; prefix is empty by default),
+    /// i.e. relative to the driver database, not a cluster-absolute path. For use outside TFixture members without `Setup` access.
+    std::string GetTopicUtPath(const std::string& name) const {
+        return Setup->GetTopicPath(name);
+    }
     NTable::TTableClient& GetTableClient();
 
     void CheckTabletKeys(const std::string& topicName);
@@ -272,6 +277,11 @@ protected:
     virtual bool GetEnableOlapSink() const;
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
+
+    /// Called from SetUp after TTopicSdkTestSetup::MakeServerSettings() and HTAP-related setters.
+    virtual void AugmentServerSettings(NKikimr::Tests::TServerSettings& settings);
+    /// Called from CreateTopicWriteSession before CreateWriteSession (Topic API write_session_meta).
+    virtual void AugmentWriteSessionSettings(NTopic::TWriteSessionSettings& settings);
 
     size_t GetPQCacheRenameKeysCount();
 

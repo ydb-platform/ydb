@@ -1037,6 +1037,7 @@ message TPartitionOperation {
     optional string ReadSessionId = 10;
     optional bool KafkaTransaction = 11 [default = false];
     optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
+    optional bool SkipConflictCheck = 13;
 };
 
 message TWriteId {

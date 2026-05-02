@@ -66,6 +66,7 @@ message TTopicOperationsRequest {
     repeated TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
     optional uint64 TabletId = 4;
+    optional bool TrackProducerId = 5 [default = true];
 
     message TopicOffsets {
         // Topic path.

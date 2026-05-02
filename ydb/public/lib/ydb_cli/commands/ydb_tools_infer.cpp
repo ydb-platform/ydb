@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -11,8 +12,9 @@
 #include <arrow/io/file.h>
 #include <arrow/io/stdio.h>
 #include <arrow/table.h>
-#include <util/string/builder.h>
 #include <library/cpp/string_utils/csv/csv.h>
+#include <util/string/builder.h>
+#include <util/string/strip.h>
 #include <util/stream/file.h>
 #include <regex>
 
@@ -60,12 +62,14 @@ void TCommandToolsInferCsv::Config(TConfig& config) {
     config.Opts->MutuallyExclusiveOpt(columnsOption, genColumnsOption);
     config.Opts->MutuallyExclusiveOpt(columnsOption, headerOption);
     config.Opts->MutuallyExclusiveOpt(genColumnsOption, headerOption);
-
-    config.NeedToConnect = false;
 }
 
 void TCommandToolsInferCsv::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+
+    if (!Execute) {
+        config.NeedToConnect = false;
+    }
 
     for (const auto& filePath : config.ParseResult->GetFreeArgs()) {
         FilePaths.push_back(filePath);
@@ -87,6 +91,10 @@ void TCommandToolsInferCsv::Parse(TConfig& config) {
 
 namespace {
     std::string GetRelativePath(const std::string& fullPath, TClientCommand::TConfig& config) {
+        if (!config.Database) {
+            return fullPath;
+        }
+
         std::string databasePath = config.Database;
         if (databasePath.back() != '/' && databasePath.back() != '\\') {
             databasePath += '/';
@@ -98,11 +106,13 @@ namespace {
     }
 
     void PrintStringQuotedIfNeeded(TStringBuilder& builder, const std::string& str) {
-        if (str.find_first_of(" \t\n\r\v\f/") != TString::npos) {
-            builder << '`' << str << '`';
-        } else {
-            builder << str;
+        for (size_t i = 0; i < str.size(); ++i) {
+            if (!((str[i] >= '0' && str[i] <= '9' && i > 0) || (str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z') || str[i] == '_')) {
+                builder << '`' << str << '`';
+                return;
+            }
         }
+        builder << str;
     }
 
     bool IsValidColumnName(const std::string& name) {
@@ -114,10 +124,9 @@ namespace {
         static const std::regex namePattern("^[a-zA-Z_][a-zA-Z0-9_]*$");
         return std::regex_match(name, namePattern);
     }
-}
+} // anonymous namespace
 
 int TCommandToolsInferCsv::Run(TConfig& config) {
-    Y_UNUSED(config);
     std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
     if (ReadingFromStdin) {
         inputs.push_back(std::make_shared<arrow::io::StdinStream>());
@@ -347,20 +356,19 @@ WITH (
 );)";
 
     if (Execute) {
-        Cerr << "Executing request: " << Endl << Endl << query << Endl << Endl;
+        const auto& colors = NConsoleClient::AutoColors(Cerr);
+        Cerr << colors.Green() << "Executing request:" << colors.OldColor() << Endl << Endl << query << Endl << Endl;
         TDriver driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
-        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Zero(), true)
+        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Max(), /* isIdempotent */ false)
             .GetValueSync();
         if (result.IsSuccess()) {
-            Cerr << "Query executed successfully." << Endl;
+            Cerr << colors.Green() << "Query executed successfully." << colors.OldColor() << Endl;
             if (!result.GetIssues().Empty()) {
-                Cerr << "Issues: " << result.GetIssues().ToString() << Endl;
+                Cerr << colors.Yellow() << "Issues: " << colors.OldColor() << result.GetIssues().ToString() << Endl;
             }
         } else {
-            Cerr << "Failed to create a table." << Endl;
-            result.Out(Cerr);
-            Cerr << Endl;
+            Cerr << colors.Red() << "Failed to create a table:" << colors.OldColor() << Endl << "Status: " << result.GetStatus() << Endl << "Issues:" << Endl << Strip(result.GetIssues().ToString()) << Endl;
             return EXIT_FAILURE;
         }
         driver.Stop(true);

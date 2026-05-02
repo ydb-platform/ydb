@@ -2,6 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
 #include <cstring>
 
@@ -777,6 +778,140 @@ Y_UNIT_TEST_LLVM(SortByExtDateTypeAsc) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest)
+
+Y_UNIT_TEST_SUITE(TMiniKQLWideSortSpillingTest) {
+Y_UNIT_TEST_LLVM_SPILLING(SortByFirstKeyAsc) {
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
+
+    const auto longKeyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key one");
+    const auto longKeyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key two");
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 2");
+    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 3");
+    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 4");
+    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 5");
+    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 6");
+    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 7");
+    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 8");
+    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 9");
+
+    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
+
+    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
+    const auto data3 = pb.NewTuple(tupleType, {keyTwo, value3});
+
+    const auto data4 = pb.NewTuple(tupleType, {longKeyOne, value4});
+
+    const auto data5 = pb.NewTuple(tupleType, {longKeyTwo, value5});
+    const auto data6 = pb.NewTuple(tupleType, {longKeyTwo, value6});
+    const auto data7 = pb.NewTuple(tupleType, {longKeyTwo, value7});
+    const auto data8 = pb.NewTuple(tupleType, {longKeyTwo, value8});
+    const auto data9 = pb.NewTuple(tupleType, {longKeyTwo, value9});
+
+    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                                {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    }
+
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+    NUdf::EFetchStatus fetchStatus;
+
+    std::vector<std::pair<TString, TString>> expected = {
+        {"key one", "very long value 1"},
+        {"key two", "very long value 3"},
+        {"key two", "very long value 2"},
+        {"very long key one", "very long value 4"},
+        {"very long key two", "very long value 9"},
+        {"very long key two", "very long value 8"},
+        {"very long key two", "very long value 7"},
+        {"very long key two", "very long value 6"},
+        {"very long key two", "very long value 5"},
+    };
+
+    size_t idx = 0;
+    while (idx < expected.size()) {
+        fetchStatus = streamVal.Fetch(item);
+        UNIT_ASSERT_UNEQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+        if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        const auto el0 = item.GetElement(0);
+        const auto el1 = item.GetElement(1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(el0.AsStringRef()), expected[idx].first);
+        UNIT_ASSERT_VALUES_EQUAL(TString(el1.AsStringRef()), expected[idx].second);
+        ++idx;
+    }
+    fetchStatus = streamVal.Fetch(item);
+    UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+}
+
+Y_UNIT_TEST_LLVM_SPILLING(SortByUi64Asc) {
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto strType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type, strType});
+
+    std::vector<TRuntimeNode> items;
+    std::vector<std::pair<ui64, TString>> expected;
+    for (ui64 i = 0; i < 50; ++i) {
+        auto val = 50 - i;
+        auto str = TString("value_") + ToString(val);
+        items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(val), pb.NewDataLiteral<NUdf::EDataSlot::String>(str)}));
+        expected.push_back({val, str});
+    }
+    std::sort(expected.begin(), expected.end());
+
+    const auto list = pb.NewList(tupleType, items);
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                                {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    }
+
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+    NUdf::EFetchStatus fetchStatus;
+
+    size_t idx = 0;
+    while (idx < expected.size()) {
+        fetchStatus = streamVal.Fetch(item);
+        UNIT_ASSERT_UNEQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+        if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        const auto el0 = item.GetElement(0);
+        const auto el1 = item.GetElement(1);
+        UNIT_ASSERT_VALUES_EQUAL(el0.Get<ui64>(), expected[idx].first);
+        UNIT_ASSERT_VALUES_EQUAL(TString(el1.AsStringRef()), expected[idx].second);
+        ++idx;
+    }
+    fetchStatus = streamVal.Fetch(item);
+    UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+}
+} // Y_UNIT_TEST_SUITE(TMiniKQLWideSortSpillingTest)
 
 } // namespace NMiniKQL
 } // namespace NKikimr

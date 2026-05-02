@@ -661,6 +661,7 @@ private:
     enum class EOperatingMode {
         InMemory,
         Spilling,
+        MergeSpilled,
         ProcessSpilled
     };
 
@@ -673,7 +674,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -681,8 +682,6 @@ public:
         , Fields(Indexes.size(), nullptr)
         , TupleMultiType(tupleMultiType)
         , Ctx(ctx)
-        , Logger(logger)
-        , LogComponent(logComponent)
     {
         if (Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -699,10 +698,29 @@ public:
                     return false;
                 }
                 ResetFields();
-                auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
-
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
-
+                EOperatingMode nextMode;
+                if (SpilledStates.size() > MaxMergeWidth) {
+                    nextMode = EOperatingMode::MergeSpilled;
+                } else if (IsReadFromChannelFinished()) {
+                    nextMode = EOperatingMode::ProcessSpilled;
+                } else {
+                    nextMode = EOperatingMode::InMemory;
+                }
+                SwitchMode(nextMode);
+                return IsReadyToContinue();
+            }
+            case EOperatingMode::MergeSpilled: {
+                if (!MergeStep()) {
+                    return false;
+                }
+                EOperatingMode nextMode;
+                if (SpilledStates.size() > MaxMergeWidth) {
+                    nextMode = EOperatingMode::MergeSpilled;
+                } else if (IsReadFromChannelFinished()) {
+                    nextMode = EOperatingMode::ProcessSpilled;
+                } else {
+                    nextMode = EOperatingMode::InMemory;
+                }
                 SwitchMode(nextMode);
                 return IsReadyToContinue();
             }
@@ -797,6 +815,10 @@ private:
                 SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
                 break;
             }
+            case EOperatingMode::MergeSpilled: {
+                StartMerge();
+                break;
+            }
             case EOperatingMode::ProcessSpilled: {
                 SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
                 for (auto& state : SpilledStates) {
@@ -852,6 +874,81 @@ private:
         return true;
     }
 
+    void StartMerge() {
+        MergeSourceCount = std::min(MaxMergeWidth, SpilledStates.size());
+        MergeIterators.clear();
+        MergeIterators.reserve(MergeSourceCount);
+        for (size_t i = 0; i < MergeSourceCount; ++i) {
+            MergeIterators.emplace_back(LessFunc, &SpilledStates[i], Indexes.size(), &Ctx);
+        }
+        const size_t PACK_SIZE = 5_MB;
+        MergeTarget = std::make_unique<TSpilledData>(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
+        MergeHeapBuilt = false;
+        MergeFinishWriteInProgress = false;
+    }
+
+    bool MergeStep() {
+        if (MergeTarget->AsyncWriteOperation.has_value()) {
+            if (!MergeTarget->AsyncWriteOperation->HasValue()) {
+                return false;
+            }
+            MergeTarget->Spiller->AsyncWriteCompleted(MergeTarget->AsyncWriteOperation->ExtractValue());
+            MergeTarget->AsyncWriteOperation = std::nullopt;
+            if (MergeFinishWriteInProgress) {
+                MergeFinishWriteInProgress = false;
+                FinishMerge();
+                return true;
+            }
+        }
+
+        for (auto& it : MergeIterators) {
+            if (!it.CheckForInit()) {
+                return false;
+            }
+        }
+
+        if (!MergeHeapBuilt) {
+            auto end = std::remove_if(MergeIterators.begin(), MergeIterators.end(),
+                [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+            MergeIterators.erase(end, MergeIterators.end());
+            std::make_heap(MergeIterators.begin(), MergeIterators.end());
+            MergeHeapBuilt = true;
+        }
+
+        while (!MergeIterators.empty()) {
+            std::pop_heap(MergeIterators.begin(), MergeIterators.end());
+            auto& currentIt = MergeIterators.back();
+            auto row = currentIt.Pop();
+            bool finished = currentIt.IsFinished();
+            if (finished) {
+                MergeIterators.pop_back();
+            } else {
+                std::push_heap(MergeIterators.begin(), MergeIterators.end());
+            }
+
+            auto writeOp = MergeTarget->Write(row.data(), Indexes.size());
+            if (writeOp) {
+                return false;
+            }
+        }
+
+        auto writeFinishOp = MergeTarget->FinishWrite();
+        if (writeFinishOp) {
+            MergeFinishWriteInProgress = true;
+            return false;
+        }
+        FinishMerge();
+        return true;
+    }
+
+    void FinishMerge() {
+        SpilledStates.erase(SpilledStates.begin(), SpilledStates.begin() + MergeSourceCount);
+        SpilledStates.emplace_back(std::move(*MergeTarget));
+        MergeTarget.reset();
+        MergeIterators.clear();
+        MergeSourceCount = 0;
+    }
+
     NUdf::TUnboxedValue* ExtractInMemory() {
         if (Full.empty()) {
             return nullptr;
@@ -893,9 +990,13 @@ private:
     ISpiller::TPtr Spiller = nullptr;
     bool IsHeapBuilt = false;
     bool IsFinishWriteInProgress = false;
+    std::vector<TSpilledUnboxedValuesIterator> MergeIterators;
+    std::unique_ptr<TSpilledData> MergeTarget;
+    size_t MergeSourceCount = 0;
+    bool MergeHeapBuilt = false;
+    bool MergeFinishWriteInProgress = false;
+    static constexpr size_t MaxMergeWidth = 10;
     static constexpr size_t MinSpillBatchRows = 64 * 1024;
-    const NYql::NUdf::TLoggerPtr Logger;
-    const NYql::NUdf::TLogComponentId LogComponent;
 };
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
@@ -1130,13 +1231,10 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions) const {
-        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
-        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideSort");
-        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), TMyValueCompare(Keys), Indexes, TupleMultiType, ctx);
 #else
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx, logger, logComponent);
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes, TupleMultiType, ctx);
 #endif
     }
 

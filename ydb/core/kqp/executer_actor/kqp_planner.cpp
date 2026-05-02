@@ -570,12 +570,38 @@ ui32 TKqpPlanner::GetnComputeTasks() {
 }
 
 std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
+
+    // propagate map connection locality
+    for (auto& task : TasksGraph.GetTasks()) {
+        if (task.Meta.NodeId) {
+            for (auto& output : task.Outputs) {
+                if (output.Type == TTaskOutputType::Map) {
+                    for (auto& channelId : output.Channels) {
+                        auto& channel = TasksGraph.GetChannel(channelId);
+                        Y_ENSURE(channel.SrcTask == task.Id);
+                        if (channel.DstTask) {
+                            auto& mappedTask = TasksGraph.GetTask(channel.DstTask);
+                            if (!mappedTask.Meta.NodeId) {
+                                mappedTask.Meta.NodeId = task.Meta.NodeId;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     nScanTasks = 0;
 
     for (auto& task : TasksGraph.GetTasks()) {
         switch (task.Meta.Type) {
             case TTaskMeta::ETaskType::Compute:
-                ComputeTasks.emplace_back(task.Id);
+                if (task.Meta.NodeId) {
+                    TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
+                    nScanTasks++;
+                } else {
+                    ComputeTasks.emplace_back(task.Id);
+                }
                 break;
             case TTaskMeta::ETaskType::Scan:
                 TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);

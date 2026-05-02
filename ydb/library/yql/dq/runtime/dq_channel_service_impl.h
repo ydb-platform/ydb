@@ -578,6 +578,7 @@ public:
     void StartReconciliation(bool major);
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
+    TString LogIdent();
 
     NActors::TActorId NodeActorId;
     mutable std::mutex Mutex;
@@ -624,7 +625,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
-    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(250);
+    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(250);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;

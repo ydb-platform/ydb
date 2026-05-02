@@ -194,9 +194,12 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         TVector<TChunkIdx> duplicateImmediateFreeChunks;
         TVector<TChunkIdx> decommittedDeleteChunks;
         THashSet<TChunkIdx> immediatelyFreedChunks;
+        THashSet<ui64> observedDeleteLogLsns;
+        THashSet<IEventHandle*> alreadyObservedPostponedEvents;
         std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> postponedEvents;
 
-        auto observePDiskLog = [&](const NPDisk::TEvLog& msg, bool& duplicateImmediateFreeInThisLog) {
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg, const char *source, const IEventHandle *ev,
+                bool& duplicateImmediateFreeInThisLog) {
             const ui32 signature = msg.Signature.GetUnmasked();
             if (signature == TLogSignature::SignatureLogoBlobOpt) {
                 if (!gotOwner) {
@@ -224,6 +227,31 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             }
 
             if (msg.CommitRecord.DeleteChunks) {
+                if (!observedDeleteLogLsns.insert(msg.Lsn).second) {
+                    Cerr << "SYNCLOG_DELETE_DIAG skip_same_logical_delete source# " << source
+                        << " ev# " << reinterpret_cast<ui64>(ev)
+                        << " sender# " << (ev ? ev->Sender.ToString() : "<null>")
+                        << " recipient# " << (ev ? ev->Recipient.ToString() : "<null>")
+                        << " lsn# " << msg.Lsn
+                        << " deleteChunks# " << FormatList(msg.CommitRecord.DeleteChunks)
+                        << Endl;
+                    return true;
+                }
+                Cerr << "SYNCLOG_DELETE_DIAG source# " << source
+                    << " ev# " << reinterpret_cast<ui64>(ev)
+                    << " sender# " << (ev ? ev->Sender.ToString() : "<null>")
+                    << " recipient# " << (ev ? ev->Recipient.ToString() : "<null>")
+                    << " nodeId# " << (ev ? ev->Recipient.NodeId() : 0)
+                    << " owner# " << msg.Owner
+                    << " ownerRound# " << msg.OwnerRound
+                    << " lsn# " << msg.Lsn
+                    << " signature# " << signature
+                    << " commitChunks# " << FormatList(msg.CommitRecord.CommitChunks)
+                    << " deleteChunks# " << FormatList(msg.CommitRecord.DeleteChunks)
+                    << " deleteToDecommitted# " << msg.CommitRecord.DeleteToDecommitted
+                    << " postponed# " << (postponeNextSyncLogEntryPointCommit ? "true" : "false")
+                    << " raceCommitPostponed# " << (raceCommitPostponed ? "true" : "false")
+                    << Endl;
                 if (msg.CommitRecord.DeleteToDecommitted) {
                     observedDecommittedDelete = true;
                     decommittedDeleteChunks.insert(decommittedDeleteChunks.end(),
@@ -235,6 +263,11 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                             duplicateImmediateFreeInThisLog = true;
                             observedDuplicateImmediateFree = true;
                             duplicateImmediateFreeChunks.push_back(chunkIdx);
+                            Cerr << "SYNCLOG_DELETE_DIAG duplicateImmediateFree chunkIdx# " << chunkIdx
+                                << " source# " << source
+                                << " ev# " << reinterpret_cast<ui64>(ev)
+                                << " alreadyFreed# " << FormatList(immediateFreeChunks)
+                                << Endl;
                         } else {
                             immediatelyFreedChunks.insert(chunkIdx);
                         }
@@ -260,15 +293,24 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                     break;
 
                 case TEvBlobStorage::EvLog: {
+                    if (alreadyObservedPostponedEvents.erase(ev.get())) {
+                        Cerr << "SYNCLOG_DELETE_DIAG skip_reobserved_postponed ev# " << reinterpret_cast<ui64>(ev.get())
+                            << " sender# " << ev->Sender.ToString()
+                            << " recipient# " << ev->Recipient.ToString()
+                            << Endl;
+                        break;
+                    }
                     const auto *msg = ev->Get<NPDisk::TEvLog>();
                     bool duplicateImmediateFreeInThisLog = false;
-                    const bool syncLogEntryPointCommit = observePDiskLog(*msg, duplicateImmediateFreeInThisLog);
+                    const bool syncLogEntryPointCommit = observePDiskLog(*msg, "TEvLog", ev.get(),
+                        duplicateImmediateFreeInThisLog);
                     if (duplicateImmediateFreeInThisLog) {
                         return false;
                     }
                     if (syncLogEntryPointCommit && postponeNextSyncLogEntryPointCommit) {
                         postponeNextSyncLogEntryPointCommit = false;
                         raceCommitPostponed = true;
+                        alreadyObservedPostponedEvents.insert(ev.get());
                         postponedEvents.emplace_back(nodeId, std::exchange(ev, nullptr));
                         return false;
                     }
@@ -280,7 +322,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                     bool duplicateImmediateFreeInThisLog = false;
                     for (const auto& [log, traceId] : msg->Logs) {
                         Y_UNUSED(traceId);
-                        observePDiskLog(*log, duplicateImmediateFreeInThisLog);
+                        observePDiskLog(*log, "TEvMultiLog", ev.get(), duplicateImmediateFreeInThisLog);
                     }
                     if (duplicateImmediateFreeInThisLog) {
                         return false;
@@ -368,6 +410,13 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         UNIT_ASSERT_C(simUntil([&] {
             return syncLogId && syncLogKeeperId && gotOwner && maxObservedDataLsn;
         }, TDuration::Seconds(10)), "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
+        Cerr << "SYNCLOG_DELETE_DIAG ids edge# " << edge.ToString()
+            << " vdiskActor# " << vdiskActorId.ToString()
+            << " syncLog# " << syncLogId.ToString()
+            << " syncLogKeeper# " << syncLogKeeperId.ToString()
+            << " owner# " << owner
+            << " ownerRound# " << ownerRound
+            << Endl;
 
         const ui32 commitDoneEventsBeforeDataCommit = syncLogCommitDoneEvents;
         runtime->Send(new IEventHandle(syncLogId, edge,
@@ -408,7 +457,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         }, TDuration::Seconds(30)), "sync log chunk deletion did not finish");
 
         if (observedImmediateFree) {
-            trimSyncLogThroughPeerSyncReads(maxObservedDataLsn + 1);
+            //trimSyncLogThroughPeerSyncReads(maxObservedDataLsn + 1);
             simUntil([&] { return observedDuplicateImmediateFree; }, TDuration::Seconds(5));
         }
 

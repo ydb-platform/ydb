@@ -316,6 +316,9 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
+    auto cboTree = CastOperator<TOpCBOTree>(input);
+    auto& cboStats = ctx.KqpCtx.NewRBOCBOStats;
+
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
     auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
@@ -324,7 +327,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
-    auto cboTree = CastOperator<TOpCBOTree>(input);
+    ++cboStats.TreesTotal;
 
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
@@ -387,6 +390,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
         joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints());
+        ++cboStats.TreesOptimized;
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

@@ -12,6 +12,11 @@
 namespace NKikimr::NKqp::NOpt {
 
 struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
+    struct TNewRBOCBOStats {
+        ui64 TreesTotal = 0;
+        ui64 TreesOptimized = 0;
+    };
+
     TKqpOptimizeContext(const TString& cluster, const NYql::TKikimrConfiguration::TPtr& config,
         const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
         const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
@@ -39,6 +44,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
+    TNewRBOCBOStats NewRBOCBOStats;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

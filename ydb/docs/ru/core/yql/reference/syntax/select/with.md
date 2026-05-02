@@ -24,6 +24,9 @@
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
+* `WATERMARK` - выражение для вычисления [водяного знака](../../../../dev/streaming-query/watermarks.md). Сейчас поддерживается только время записи в [топик](../../../../concepts/datamodel/topic.md) с константной задержкой
+* `WATERMARK_GRANULARITY` - периодичность генерации водяных знаков. Чем она меньше, тем больше потребление CPU запросом и тем меньше задержка ответа, и наоборот. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Значение по умолчанию - 1 секунда;
+* `WATERMARK_IDLE_TIMEOUT` - период, после которого партиция без данных будет исключена из вычисления объединенного водяного знака. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Значение по умолчанию - 5 секунд.
 
 {% endif %}
 
@@ -59,4 +62,20 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 
 ```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
+```
+
+```yql
+SELECT
+    *
+FROM
+    my_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        ts String
+    ),
+    WATERMARK = SystemMetadata("write_time") - Interval("PT5S"),
+    WATERMARK_GRANULARITY = "PT1S",
+    WATERMARK_IDLE_TIMEOUT = "PT5S"
+);
 ```

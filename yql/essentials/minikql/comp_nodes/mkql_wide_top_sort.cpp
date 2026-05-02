@@ -773,23 +773,19 @@ public:
         }
 
         if (SpilledUnboxedValuesIterators.empty()) {
-            // No spilled data
             return ExtractInMemory();
         }
 
-        if (!IsHeapBuilt) {
-            std::make_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-            IsHeapBuilt = true;
-        } else {
-            std::push_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
+        auto end = std::remove_if(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end(),
+            [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
+        SpilledUnboxedValuesIterators.erase(end, SpilledUnboxedValuesIterators.end());
+        if (SpilledUnboxedValuesIterators.empty()) {
+            return nullptr;
         }
 
-        std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-        auto& currentIt = SpilledUnboxedValuesIterators.back();
-        Storage = currentIt.Pop();
-        if (currentIt.IsFinished()) {
-            SpilledUnboxedValuesIterators.pop_back();
-        }
+        auto minIt = std::min_element(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end(),
+            [](const TSpilledUnboxedValuesIterator& a, const TSpilledUnboxedValuesIterator& b) { return b < a; });
+        Storage = minIt->Pop();
         return Storage.data();
     }
 
@@ -988,7 +984,6 @@ private:
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
-    bool IsHeapBuilt = false;
     bool IsFinishWriteInProgress = false;
     std::vector<TSpilledUnboxedValuesIterator> MergeIterators;
     std::unique_ptr<TSpilledData> MergeTarget;

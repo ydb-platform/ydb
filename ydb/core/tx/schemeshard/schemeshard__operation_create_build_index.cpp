@@ -165,7 +165,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
-        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
+            context.SS->EnableOnlineAddUniqueIndex) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
 

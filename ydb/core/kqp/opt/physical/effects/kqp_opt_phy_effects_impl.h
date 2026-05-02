@@ -70,7 +70,7 @@ NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompu
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
     const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumn, bool abortOnError,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 enum class TKqpPhyUpsertIndexMode {
     Upsert,

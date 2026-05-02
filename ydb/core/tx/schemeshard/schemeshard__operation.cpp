@@ -1108,6 +1108,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropKesus(NextPartId(), txState);
     case TTxState::ETxType::TxInitializeBuildIndex:
         return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
+    case TTxState::ETxType::TxPrepareIndexValidation:
+        return CreatePrepareIndexValidation(NextPartId(), txState);
     case TTxState::ETxType::TxFinalizeBuildIndex:
         return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropTableIndexAtMainTable:
@@ -1487,6 +1489,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return CancelBuildIndex(op.NextPartId(), tx, context);

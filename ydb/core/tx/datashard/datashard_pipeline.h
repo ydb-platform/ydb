@@ -165,6 +165,7 @@ public:
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
     bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }
+    bool HasPrepareIndexValidation() const { return SchemaTx && SchemaTx->IsPrepareIndexValidation(); }
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }

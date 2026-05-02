@@ -70,6 +70,7 @@ enum class EExecutionUnitKind: ui32 {
     CreateVolatileSnapshot,
     DropVolatileSnapshot,
     InitiateBuildIndex,
+    PrepareIndexValidation,
     FinalizeBuildIndex,
     DropIndexNotice,
     MoveTable,

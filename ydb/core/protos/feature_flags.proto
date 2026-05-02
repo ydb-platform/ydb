@@ -274,7 +274,7 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramSorting = 244 [default = false];
     optional bool EnableDataShardSplitKeySelection = 245 [default = false];
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
-
+    optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];

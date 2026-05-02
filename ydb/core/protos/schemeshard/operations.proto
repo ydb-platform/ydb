@@ -211,5 +211,8 @@ enum EOperationType {
     // Truncate table
     ESchemeOpTruncateTable = 133;
 
+    // Publish shadow data and take snapshot in one step
+    ESchemeOpPrepareIndexValidation = 134;
+
     // Some entries are grouped by semantics, so are out of order
 }

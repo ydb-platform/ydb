@@ -409,6 +409,7 @@ public:
     bool EnableResourcePoolsOnServerless = false;
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
+    bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;

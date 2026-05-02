@@ -119,11 +119,32 @@
 
   - JDBC
 
-    На стороне JDBC неявный режим связан с авто-коммитом (`Connection.setAutoCommit(true)` по умолчанию): каждый отдельный запрос оформляется как отдельная транзакция и фиксируется автоматически. При `setAutoCommit(false)` границы задаются явными `commit`/`rollback`.
+    В JDBC-драйвере этот режим нельзя выбрать явно через настройки `Connection`. Он используется драйвером для отдельных операций, которые не выполняются как интерактивная пользовательская транзакция.
 
-    В **текущей реализации** {{ ydb-short-name }} JDBC-драйвера для **одиночных** вызовов при **чтении** режим **snapshot** включается, если на `Connection` вызван **`setReadOnly(true)`**. Для запросов **с записью** применяется **Serializable Read/Write** (на соединении не должен быть включён режим только чтения).
+    {% note info %}
 
-    В **Spring** атрибут **`@Transactional(readOnly = true)`** при старте транзакции приводит к вызову `Connection.setReadOnly(true)` на соединении, поэтому для read-only-сценариев snapshot выбирается автоматически. Hibernate, JOOQ и другие обёртки над JDBC используют то же соединение — флаг read-only нужно выставлять так же явно (или через транзакционные настройки фреймворка, если они прокидывают его в `Connection`).
+    Некоторые операции YDB не являются транзакционными и не выполняются как интерактивная пользовательская транзакция:
+
+    * DDL
+    * BATCH UPDATE/DELETE
+    * BulkUpsert
+    * ScanQuery
+
+    Такие операции нельзя откатить через JDBC `rollback()`. Если приложение уже открыло интерактивную транзакцию, а потом пытается выполнить такую операцию, поведение по умолчанию — ошибка. Это отличается от `MySQL`/`Oracle`, где нетранзакционные DDL часто ведут себя как implicit commit.
+
+    Поведение для таких операций настраивается опциями драйвера:
+
+    * `schemeQueryTxMode` — для scheme query;
+    * `scanQueryTxMode` — для scan query;
+    * `bulkUpsertTxMode` — для bulk upsert.
+
+    Возможные значения этих опций:
+
+    * `ERROR` — вернуть ошибку при попытке выполнить операцию внутри интерактивной транзакции;
+    * `FAKE_TX` — выполнить операцию без участия в пользовательской транзакции;
+    * `SHADOW_COMMIT` — применить поведение, близкое к implicit commit.
+
+    {% endnote %}
 
   {% endlist %}
 
@@ -372,7 +393,11 @@
 
   - JDBC
 
-    Для **одиночных** вызовов через JDBC в текущей реализации драйвера используется **Serializable Read/Write** — в том числе при работе из Spring Boot, ORM и других обёрток над JDBC. Режим **snapshot** для чтений задаётся через **`setReadOnly(true)`** (см. [ImplicitTx](#implicittx)). Семантика авто-коммита и явных транзакций описана там же.
+    ```java
+    connection.setAutoCommit(false);
+    connection.setReadOnly(false);
+    connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    ```
 
   {% endlist %}
 
@@ -701,7 +726,13 @@
 
   - JDBC
 
-    Режим Online Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+    ```java
+    connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+    connection.setReadOnly(true);
+    connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+    ```
+
+    Важно: данный режим не поддерживает интерактивные транзакции.
 
   {% endlist %}
 
@@ -969,7 +1000,13 @@
 
   - JDBC
 
-    Режим Stale Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+    ```java
+    connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+    connection.setReadOnly(true);
+    connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
+    ```
+
+    Важно: данный режим не поддерживает интерактивные транзакции.
 
   {% endlist %}
 
@@ -1218,7 +1255,10 @@
 
   - JDBC
 
-    Для **одиночных** вызовов **только на чтение** через JDBC режим **snapshot** включается, когда на соединении выставлен **`Connection.setReadOnly(true)`** (в Spring — **`@Transactional(readOnly = true)`** прокидывает это в драйвер при открытии транзакции). Подробнее — в разделе [ImplicitTx](#implicittx).
+    ```java
+    connection.setReadOnly(true);
+    connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    ```
 
   {% endlist %}
 
@@ -1469,7 +1509,12 @@
 
   - JDBC
 
-    Режим Snapshot Read-Write из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**; для запросов с записью в текущей реализации драйвера используется **Serializable Read/Write** (см. [ImplicitTx](#implicittx) и [Serializable](#serializable)).
+    ```java
+    connection.setReadOnly(false);
+    connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+    ```
+
+    Данный режим поддерживается начиная с версии JDBC-драйвера 2.3.23 и может потребовать включения опции `repeatableReadEnabled=true`.
 
   {% endlist %}
 

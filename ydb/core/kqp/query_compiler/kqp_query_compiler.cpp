@@ -758,6 +758,7 @@ public:
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
+        queryProto.SetEnableStreamingPartitionBalancing(Config->GetEnableStreamingPartitionBalancing());
 
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
@@ -1125,7 +1126,7 @@ private:
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
-                    
+
                     NKikimrKqp::TKqpTableSinkSettings settingsProto;
                     auto settings = transformNode.Settings().Maybe<TKqpTableSinkSettings>();
                     YQL_ENSURE(settings, "Unsupported sink type");

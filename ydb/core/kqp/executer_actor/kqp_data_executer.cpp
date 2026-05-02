@@ -624,6 +624,7 @@ private:
                             Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Streaming partition balancing is disabled. Please contact your system administrator to enable it")
                         );
+                        return;
                     }
                     YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = type, .TxId = dqTxId}))).second);
                 }

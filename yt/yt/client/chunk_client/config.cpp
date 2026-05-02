@@ -446,7 +446,7 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
 
-    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+    registrar.Parameter("testing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
         .Default()
         .DontSerializeDefault();
 }

@@ -1,4 +1,6 @@
 items:
+- name: Локальные и внешние топики
+  href: local-and-external-topics.md
 - name: Типичные шаблоны
   href: patterns.md
 - name: Запись в таблицы

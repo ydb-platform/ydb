@@ -10,28 +10,13 @@
 
 {% endnote %}
 
-## Подготовка источника данных для работы с топиками
+Возможно обогащение данных из [локальных и внешних топиков](./local-and-external-topics.md).
 
-Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+В примерах ниже:
 
-```yql
--- Секрет с токеном для подключения к YDB
-CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
+- `ext_source` — заранее созданный [внешний источник данных](../../concepts/datamodel/external_data_source.md) для топиков в другой базе {{ ydb-short-name }};
+- `input_topic` и `output_topic` — топики в текущей или внешней базе {{ ydb-short-name }}
 
--- Источник данных YDB для чтения/записи топиков
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "<ydb_endpoint>",
-    DATABASE_NAME = "<db_name>",
-    AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_PATH = "secrets/ydb_token"
-);
-```
-
-Где:
-
-- `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135`.
-- `<db_name>` — путь к базе данных {{ ydb-short-name }}, например `/Root/database`.
 
 ## Потоковые запросы для обогащения данных
 
@@ -59,7 +44,7 @@ DO BEGIN
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- или локальный топик input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -82,7 +67,7 @@ ON
 
 -- Запись в выходной топик (JSON)
 INSERT INTO
-    ydb_source.output_topic
+    output_topic -- или внешний топик ext_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -120,7 +105,7 @@ DO BEGIN
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    input_topic -- или внешний топик ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -156,7 +141,7 @@ ON
 
 -- Запись результата в выходной топик в формате JSON
 INSERT INTO
-    ydb_source.output_topic
+    ext_source.output_topic -- или локальный топик output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM

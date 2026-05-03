@@ -140,11 +140,6 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
         userPoolSize = Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
     }
 
-    if (!userPoolSize) {
-        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool possible max limit is undefined for executer tasks construction";
-        userPoolSize = NSystemInfo::NumberOfCpus();
-    }
-
     return Max<ui32>(1, *userPoolSize);
 }
 

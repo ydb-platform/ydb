@@ -438,6 +438,35 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--exclude", "skip",
             }
         );
+
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectCommonSourcePrefix("source/prefix")
+            .ExpectItem("", "", "keep");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", s3Endpoint,
+                "--scheme", "http",
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--use-virtual-addressing", "false",
+                "--source-prefix", "source/prefix",
+                "--include", "keep",
+                "--include", "skip",
+                "--exclude", "skip",
+            }
+        );
     }
 
     Y_UNIT_TEST_F(ExcludeClientFilterFailsWhenAllItemsFilteredOut, TImportFixture) {
@@ -463,6 +492,29 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--secret-key", "test-access-key",
                 "--use-virtual-addressing", "false",
                 "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--exclude", "skip",
+            }
+        );
+
+        Service<TImportImpl>()
+            .ExpectNoImportCall();
+
+        ExpectFail();
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", s3Endpoint,
+                "--scheme", "http",
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--use-virtual-addressing", "false",
+                "--source-prefix", "source/prefix",
+                "--include", "skip1",
+                "--include", "skip2",
                 "--exclude", "skip",
             }
         );

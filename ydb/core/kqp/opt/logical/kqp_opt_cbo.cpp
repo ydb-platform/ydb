@@ -238,14 +238,16 @@ double TKqpProviderContext::ComputeJoinCost(
             }
             return rightStats.ByteSize + outputByteSize;
 
-        case EJoinAlgoType::MapJoin:
+        case EJoinAlgoType::MapJoin: {
             return 1.5 * (CONSTS_MAPJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_MAPJOIN_LEFT_SIDE_POW)
                 + CONSTS_MAPJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_MAPJOIN_RIGHT_SIDE_POW)
                 + CONSTS_MAPJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_MAPJOIN_OUTPUT_POW));
-        case EJoinAlgoType::GraceJoin:
+        }
+        case EJoinAlgoType::GraceJoin: {
             return 1.5 * (CONSTS_GRACEJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_GRACEJOIN_LEFT_SIDE_POW)
                 + CONSTS_GRACEJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_GRACEJOIN_RIGHT_SIDE_POW)
                 + CONSTS_GRACEJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_GRACEJOIN_OUTPUT_POW));
+        }
         default:
             return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
             // return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
@@ -264,10 +266,10 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStatsV1(
     bool shuffleRightSide) const {
     auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
     if (shuffleLeftSide) {
-        stats.Cost += CONSTS_SHUFFLE_LEFT_SIDE_MULT * std::pow(leftStats.Nrows, CONSTS_SHUFFLE_LEFT_SIDE_POW);
+        stats.Cost += CONSTS_SHUFFLE_LEFT_SIDE_MULT * std::pow(leftStats.ByteSize, CONSTS_SHUFFLE_LEFT_SIDE_POW);
     }
     if (shuffleRightSide) {
-        stats.Cost += CONSTS_SHUFFLE_RIGHT_SIDE_MULT * std::pow(rightStats.Nrows, CONSTS_SHUFFLE_RIGHT_SIDE_POW);
+        stats.Cost += CONSTS_SHUFFLE_RIGHT_SIDE_MULT * std::pow(rightStats.ByteSize, CONSTS_SHUFFLE_RIGHT_SIDE_POW);
     }
 
     return stats;
@@ -515,8 +517,7 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
-    } 
-    else if (isAntiOrSemiJoin) {
+    } else if (isAntiOrSemiJoin) {
         if (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly) {
             selectivity = leftStats.Selectivity;
             newCard = leftStats.Nrows * selectivity;

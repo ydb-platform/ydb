@@ -15,6 +15,7 @@
 #include <library/cpp/string_utils/csv/csv.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
+#include <util/string/subst.h>
 #include <util/stream/file.h>
 #include <regex>
 
@@ -105,10 +106,13 @@ namespace {
         return fullPath;
     }
 
-    void PrintStringQuotedIfNeeded(TStringBuilder& builder, const std::string& str) {
+    void PrintStringQuotedIfNeeded(TStringBuilder& builder, const TString& str) {
         for (size_t i = 0; i < str.size(); ++i) {
             if (!((str[i] >= '0' && str[i] <= '9' && i > 0) || (str[i] >= 'a' && str[i] <= 'z') || (str[i] >= 'A' && str[i] <= 'Z') || str[i] == '_')) {
-                builder << '`' << str << '`';
+                TString escapedStr = str;
+                SubstGlobal(escapedStr, "\\", "\\\\");
+                SubstGlobal(escapedStr, "`", "\\`");
+                builder << '`' << escapedStr << '`';
                 return;
             }
         }
@@ -297,7 +301,7 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
     std::string firstColumnName;
     for (const auto& field : arrowFields) {
         ++columnIndex;
-        std::string columnName;
+        TString columnName;
         if (useFirstRowAsColumnNames)  {
             columnName = firstRowValues[columnIndex];
         } else if (generateColumnNames) {

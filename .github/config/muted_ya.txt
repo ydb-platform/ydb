@@ -1,3 +1,4 @@
+ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
@@ -9,9 +10,9 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,false,0,0,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
-ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle

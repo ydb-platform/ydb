@@ -53,6 +53,7 @@ public:
     TRequestSpan& operator=(const TRequestSpan&) = delete;
 
     void SetPeerEndpoint(const std::string& endpoint) noexcept;
+    void SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept;
     void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) noexcept;
     void RecordException(const std::string& type, const std::string& message, const std::string& stacktrace = {}) noexcept;
     std::unique_ptr<NTrace::IScope> Activate() noexcept;

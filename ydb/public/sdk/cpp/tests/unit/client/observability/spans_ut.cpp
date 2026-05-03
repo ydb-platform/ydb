@@ -173,7 +173,7 @@ TEST_P(SpanTest, SuccessStatusDoesNotSetErrorAttrs) {
 
     auto fakeSpan = Tracer->GetLastSpan();
     ASSERT_NE(fakeSpan, nullptr);
-    EXPECT_EQ(fakeSpan->GetStringAttribute("db.response.status_code"), ToString(EStatus::SUCCESS));
+    EXPECT_FALSE(fakeSpan->HasStringAttribute("db.response.status_code"));
     EXPECT_FALSE(fakeSpan->HasStringAttribute("error.type"));
 }
 
@@ -265,6 +265,46 @@ TEST_P(SpanTest, EmptyPeerEndpointIgnored) {
     ASSERT_NE(fakeSpan, nullptr);
     EXPECT_FALSE(fakeSpan->HasStringAttribute("network.peer.address"));
     EXPECT_FALSE(fakeSpan->HasIntAttribute("network.peer.port"));
+}
+
+TEST_P(SpanTest, PeerEndpointWithNodeIdAndLocation) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/42, /*location=*/"vla");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("network.peer.address"), "10.0.0.1");
+    EXPECT_EQ(fakeSpan->GetIntAttribute("network.peer.port"), 2136);
+    EXPECT_EQ(fakeSpan->GetIntAttribute("ydb.node.id"), 42);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("ydb.node.dc"), "vla");
+}
+
+TEST_P(SpanTest, PeerEndpointMissingNodeMetadataIsOmitted) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/0, /*location=*/"");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("network.peer.address"), "10.0.0.1");
+    EXPECT_EQ(fakeSpan->GetIntAttribute("network.peer.port"), 2136);
+    EXPECT_FALSE(fakeSpan->HasIntAttribute("ydb.node.id"));
+    EXPECT_FALSE(fakeSpan->HasStringAttribute("ydb.node.dc"));
+}
+
+TEST_P(SpanTest, PeerEndpointSetsOnlyKnownNodeMetadata) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/0, /*location=*/"sas");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("ydb.node.dc"), "sas");
+    EXPECT_FALSE(fakeSpan->HasIntAttribute("ydb.node.id"));
 }
 
 TEST_P(SpanTest, OperationNamesAreNormalized) {

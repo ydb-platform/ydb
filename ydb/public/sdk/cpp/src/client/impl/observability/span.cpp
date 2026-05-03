@@ -192,15 +192,27 @@ TRequestSpan::~TRequestSpan() noexcept {
 }
 
 void TRequestSpan::SetPeerEndpoint(const std::string& endpoint) noexcept {
-    if (!Span_ || endpoint.empty()) {
+    SetPeerEndpoint(endpoint, /*nodeId=*/0, /*location=*/"");
+}
+
+void TRequestSpan::SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept {
+    if (!Span_) {
         return;
     }
     try {
-        std::string host;
-        int port;
-        ParseEndpoint(endpoint, host, port);
-        Span_->SetAttribute("network.peer.address", host);
-        Span_->SetAttribute("network.peer.port", static_cast<int64_t>(port));
+        if (!endpoint.empty()) {
+            std::string host;
+            int port;
+            ParseEndpoint(endpoint, host, port);
+            Span_->SetAttribute("network.peer.address", host);
+            Span_->SetAttribute("network.peer.port", static_cast<int64_t>(port));
+        }
+        if (nodeId != 0) {
+            Span_->SetAttribute("ydb.node.id", static_cast<int64_t>(nodeId));
+        }
+        if (!location.empty()) {
+            Span_->SetAttribute("ydb.node.dc", location);
+        }
     } catch (...) {
         SafeLogRequestSpanError(Log_, "failed to set peer endpoint", std::current_exception());
     }
@@ -243,10 +255,10 @@ std::unique_ptr<NTrace::IScope> TRequestSpan::Activate() noexcept {
 void TRequestSpan::End(EStatus status) noexcept {
     if (Span_) {
         try {
-            const auto statusName = ToString(status);
-            Span_->SetAttribute("db.response.status_code", statusName);
             if (status != EStatus::SUCCESS) {
+                const auto statusName = ToString(status);
                 const auto errorType = CategorizeErrorType(status);
+                Span_->SetAttribute("db.response.status_code", statusName);
                 Span_->SetAttribute("error.type", std::string(errorType));
                 EmitExceptionEvent(*Span_, std::string(errorType), statusName, /*stacktrace=*/"");
                 Span_->SetStatus(NTrace::ESpanStatus::Error, statusName);

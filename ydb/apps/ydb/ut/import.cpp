@@ -192,6 +192,11 @@ public:
         return *this;
     }
 
+    TImportImpl& ExpectNoImportCall() {
+        ExpectedImportCalls = 0;
+        return *this;
+    }
+
     TImportImpl& ExpectBucket(TString bucket) {
         Bucket = std::move(bucket);
         return *this;
@@ -417,6 +422,34 @@ Y_UNIT_TEST_SUITE(ImportTest) {
             .ExpectDisableVirtualAddressing(true)
             .ExpectItem("source/prefix/keep", "/test_database/import-root/keep");
 
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", s3Endpoint,
+                "--scheme", "http",
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--use-virtual-addressing", "false",
+                "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--exclude", "skip",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(ExcludeClientFilterFailsWhenAllItemsFilteredOut, TImportFixture) {
+        PutS3TableExport("source/prefix/skip1");
+        PutS3TableExport("source/prefix/skip2");
+
+        const TString s3Endpoint = GetS3Endpoint();
+
+        Service<TImportImpl>()
+            .ExpectNoImportCall();
+
+        ExpectFail();
         RunCli(
             {
                 "-v",

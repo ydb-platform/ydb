@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <memory>
 #include <thread>
+#include <typeindex>
 #include <typeinfo>
 #include <unordered_map>
 

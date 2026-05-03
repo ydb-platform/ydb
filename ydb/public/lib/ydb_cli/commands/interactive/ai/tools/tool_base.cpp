@@ -34,7 +34,7 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
     }
 
     if (AutoAction == TInteractiveConfigurationManager::EToolAutoAction::Reject) {
-        return TResponse::Error(TString("Tool execution is not allowed, try to use another tools"));
+        return TResponse::Error(TString("Tool execution is not allowed, try to use other tools"));
     }
 
     if (AutoAction != TInteractiveConfigurationManager::EToolAutoAction::Execute && !AskPermissions()) {

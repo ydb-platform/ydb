@@ -11,6 +11,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <atomic>
+#include <thread>
+
 namespace NKikimr::Tests::NCommon {
 
 const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::KqpServices = {
@@ -53,58 +56,120 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 }
 
 void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
-    NYdb::NTable::TTableClient tClient(*Driver,
-        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(AuthToken));
-    auto expectation = expectSuccess;
-    bool resultReady = false;
-    TVector<THashMap<TString, NYdb::TValue>> rows;
-    std::optional<NYdb::NTable::TScanQueryPartIterator> scanIterator;
-    tClient.StreamExecuteScanQuery(request).Subscribe([&scanIterator](NThreading::TFuture<NYdb::NTable::TScanQueryPartIterator> f) {
-        scanIterator = f.GetValueSync();
-    });
-    const TInstant start = TInstant::Now();
-    while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
-        Cerr << "START_SLEEP" << Endl;
-        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
-        Cerr << "FINISHED_SLEEP" << Endl;
-        if (scanIterator && !resultReady) {
-            scanIterator->ReadNext().Subscribe([&](NThreading::TFuture<NYdb::NTable::TScanQueryPart> streamPartFuture) {
-                NYdb::NTable::TScanQueryPart streamPart = streamPartFuture.GetValueSync();
-                if (!streamPart.IsSuccess()) {
-                    resultReady = true;
-                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                } else {
-                    UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
+    struct TScanOutcome {
+        std::atomic<bool> Finished = false;
+        bool IteratorSuccess = false;
+        TString IteratorIssues;
+        bool StreamOk = false;
+        TString StreamIssues;
+        TVector<THashMap<TString, NYdb::TValue>> Rows;
+    };
 
-                    if (streamPart.HasQueryStats()) {
-                        auto plan = streamPart.GetQueryStats().GetPlan();
-                        NJson::TJsonValue jsonValue;
-                        if (plan) {
-                            UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, &jsonValue));
-                            Cerr << jsonValue << Endl;
-                        }
+    NYdb::TDriver* rawDriver = Driver.Get();
+    const TString authToken = GetAuthToken();
+    const bool expectation = expectSuccess;
+    auto outcome = std::make_shared<TScanOutcome>();
+
+    std::thread worker([rawDriver, authToken, request, expectation, outcome]() {
+        NYdb::NTable::TTableClient tClient(*rawDriver,
+            NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken(authToken));
+        try {
+            NYdb::NTable::TScanQueryPartIterator it = tClient.StreamExecuteScanQuery(request).GetValueSync();
+            outcome->IteratorSuccess = it.IsSuccess();
+            outcome->IteratorIssues = it.GetIssues().ToString();
+            if (it.IsSuccess() != expectation) {
+                outcome->StreamOk = false;
+                outcome->StreamIssues = TStringBuilder() << "iterator success mismatch; issues=" << outcome->IteratorIssues;
+                outcome->Finished.store(true, std::memory_order_release);
+                return;
+            }
+
+            if (!it.IsSuccess()) {
+                outcome->StreamOk = true;
+                outcome->Finished.store(true, std::memory_order_release);
+                return;
+            }
+
+            TVector<THashMap<TString, NYdb::TValue>> rows;
+            for (;;) {
+                NYdb::NTable::TScanQueryPart streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    if (!streamPart.EOS()) {
+                        outcome->StreamOk = false;
+                        outcome->StreamIssues = streamPart.GetIssues().ToString();
+                    } else {
+                        outcome->StreamOk = true;
+                        outcome->Rows = std::move(rows);
                     }
 
-                    if (streamPart.HasResultSet()) {
-                        auto resultSet = streamPart.ExtractResultSet();
-                        NYdb::TResultSetParser rsParser(resultSet);
-                        while (rsParser.TryNextRow()) {
-                            THashMap<TString, NYdb::TValue> row;
-                            for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
-                                row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
-                                Cerr << resultSet.GetColumnsMeta()[ci].Name << "/" << rsParser.GetValue(ci).GetProto().DebugString() << Endl;
-                            }
-                            rows.emplace_back(std::move(row));
+                    outcome->Finished.store(true, std::memory_order_release);
+                    return;
+                }
+
+                if (!streamPart.HasResultSet() && !streamPart.HasQueryStats()) {
+                    outcome->StreamOk = false;
+                    outcome->StreamIssues = "Unexpected empty scan query response.";
+                    outcome->Finished.store(true, std::memory_order_release);
+                    return;
+                }
+
+                if (streamPart.HasQueryStats()) {
+                    auto plan = streamPart.GetQueryStats().GetPlan();
+                    NJson::TJsonValue jsonValue;
+                    if (plan) {
+                        if (!NJson::ReadJsonFastTree(*plan, &jsonValue)) {
+                            outcome->StreamOk = false;
+                            outcome->StreamIssues = "ReadJsonFastTree failed for query stats plan";
+                            outcome->Finished.store(true, std::memory_order_release);
+                            return;
                         }
+
+                        Cerr << jsonValue << Endl;
                     }
                 }
-            });
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+                    NYdb::TResultSetParser rsParser(resultSet);
+                    while (rsParser.TryNextRow()) {
+                        THashMap<TString, NYdb::TValue> row;
+                        for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
+                            row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
+                        }
+
+                        rows.emplace_back(std::move(row));
+                    }
+                }
+            }
+        } catch (const std::exception& ex) {
+            outcome->StreamOk = false;
+            outcome->StreamIssues = TString(ex.what());
+            outcome->Finished.store(true, std::memory_order_release);
         }
+    });
+
+    const TInstant wallDeadline = TInstant::Now() + TDuration::Seconds(900);
+    while (!outcome->Finished.load(std::memory_order_acquire)) {
+        UNIT_ASSERT_C(TInstant::Now() < wallDeadline,
+            "StartScanRequest: timed out waiting for scan worker (pump actor runtime / check for deadlock)");
+        Server.GetRuntime()->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
     }
+
+    worker.join();
+
     Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
+    UNIT_ASSERT_VALUES_EQUAL_C(outcome->IteratorSuccess, expectation, outcome->IteratorIssues);
+    if (!outcome->IteratorSuccess) {
+        if (result) {
+            *result = std::move(outcome->Rows);
+        }
+
+        return;
+    }
+
+    UNIT_ASSERT_C(outcome->StreamOk, outcome->StreamIssues);
     if (result) {
-        *result = rows;
+        *result = std::move(outcome->Rows);
     }
 }
 

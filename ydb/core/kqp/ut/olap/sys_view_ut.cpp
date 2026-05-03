@@ -689,8 +689,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_GE(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
             UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[0].at("Kind"))), GetUtf8(rows[0].at("Kind")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[numExpected - 1].at("Kind"))), GetUtf8(rows[numExpected - 1].at("Kind")));
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), tablePathId1);
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows.back().at("Kind"))), GetUtf8(rows.back().at("Kind")));
         }
 
         {
@@ -712,8 +712,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_GE(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
             UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[0].at("Kind"))), GetUtf8(rows[0].at("Kind")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[numExpected - 1].at("Kind"))), GetUtf8(rows[numExpected - 1].at("Kind")));
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), tablePathId1);
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows.back().at("Kind"))), GetUtf8(rows.back().at("Kind")));
         }
     }
 

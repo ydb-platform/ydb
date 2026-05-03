@@ -316,6 +316,10 @@ public:
         S3Mock().GetData()[key] = value;
     }
 
+    void PutS3TableExport(const TString& prefix) {
+        PutS3Object("/" + TEST_BUCKET + "/" + prefix + "/scheme.pb");
+    }
+
 private:
     TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
     ui16 S3Port_ = 0;
@@ -394,6 +398,39 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--source-prefix", "source/prefix",
                 "--include", "src/path",
                 "--include", "another/path",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(ApplyExcludeClientFilter, TImportFixture) {
+        PutS3TableExport("source/prefix/keep");
+        PutS3TableExport("source/prefix/skip");
+
+        const TString s3Endpoint = GetS3Endpoint();
+
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(s3Endpoint)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectItem("source/prefix/keep", "/test_database/import-root/keep");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", s3Endpoint,
+                "--scheme", "http",
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--use-virtual-addressing", "false",
+                "--item", "src=source/prefix,dst=/test_database/import-root",
+                "--exclude", "skip",
             }
         );
     }

@@ -16,6 +16,7 @@
 #include <grpcpp/server_builder.h>
 
 #include <util/stream/file.h>
+#include <util/generic/hash.h>
 #include <util/system/env.h>
 #include <util/folder/tempdir.h>
 #include <util/system/tempfile.h>
@@ -108,8 +109,12 @@ private:
 
 class TSchemeImpl : public TMockGrpcServiceBase<Ydb::Scheme::V1::SchemeService::Service> {
 public:
+    struct TDirectory {
+        Ydb::Scheme::Entry::Type SelfType = Ydb::Scheme::Entry::DIRECTORY;
+        std::vector<std::pair<TString, Ydb::Scheme::Entry::Type>> Children;
+    };
+
     grpc::Status ListDirectory(grpc::ServerContext* context, const Ydb::Scheme::ListDirectoryRequest* request, Ydb::Scheme::ListDirectoryResponse* response) {
-        Y_UNUSED(request);
         CheckClientMetadata(context, "x-ydb-database", TEST_DATABASE);
         if (Token) {
             CheckClientMetadata(context, "x-ydb-auth-ticket", Token);
@@ -118,14 +123,38 @@ public:
         }
         CheckAuthContext(context);
         Ydb::Scheme::ListDirectoryResult res;
-        auto* self = res.mutable_self();
-        self->set_name(TEST_DATABASE);
-        self->set_type(Ydb::Scheme::Entry::DATABASE);
+        auto directory = Directories.find(request->path());
+        if (directory == Directories.end()) {
+            CHECK_EXP(Directories.empty(), "Unexpected ListDirectory path: \"" << request->path() << "\"");
+            auto* self = res.mutable_self();
+            self->set_name(TEST_DATABASE);
+            self->set_type(Ydb::Scheme::Entry::DATABASE);
+        } else {
+            auto* self = res.mutable_self();
+            self->set_name(TStringBuf(request->path()).RNextTok('/'));
+            self->set_type(directory->second.SelfType);
+            for (const auto& [name, type] : directory->second.Children) {
+                auto* child = res.add_children();
+                child->set_name(name);
+                child->set_type(type);
+            }
+        }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
         operation->set_status(Ydb::StatusIds::SUCCESS);
         operation->mutable_result()->PackFrom(res);
         return grpc::Status();
+    }
+
+    TSchemeImpl& ExpectListDirectory(TString path, Ydb::Scheme::Entry::Type selfType = Ydb::Scheme::Entry::DIRECTORY) {
+        Directories[std::move(path)].SelfType = selfType;
+        return *this;
+    }
+
+    TSchemeImpl& ExpectChild(TString path, TString name, Ydb::Scheme::Entry::Type type) {
+        auto& directory = Directories[std::move(path)];
+        directory.Children.emplace_back(std::move(name), type);
+        return *this;
     }
 
     void CheckClientMetadata(grpc::ServerContext* context, const TString& name, const TString& value) {
@@ -159,6 +188,7 @@ public:
 
     void ClearExpectations() {
         ExpectedClientCert = Token = {};
+        Directories.clear();
     }
 
     void ExpectClientCert(const TString& cert) {
@@ -167,6 +197,7 @@ public:
 
     TString Token;
     TString ExpectedClientCert;
+    THashMap<TString, TDirectory> Directories;
 };
 
 class TAuthImpl : public TMockGrpcServiceBase<Ydb::Auth::V1::AuthService::Service> {

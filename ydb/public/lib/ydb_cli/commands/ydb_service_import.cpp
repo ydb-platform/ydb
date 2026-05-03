@@ -202,7 +202,12 @@ void TCommandImportBase::FillItems(TSettings& settings) const {
         FillItemsFromIncludeParam(settings);
     }
 
+    const bool hadItemsSpecified = !Items.empty() || !IncludePaths.empty(); // Two ways of setting items explicitly
     ExcludeItems(settings, ExclusionPatterns);
+
+    if (hadItemsSpecified && settings.Item_.empty()) {
+        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
+    }
 }
 
 template <typename TSettings>

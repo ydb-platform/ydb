@@ -160,11 +160,9 @@ public:
     EFetchResult Read() {
         if (!HasValue) {
             if (SpilledData->Read(Data, *Ctx)) {
-                Cerr << "[WideSort] Iterator::Read: async pending, returning Yield" << Endl;
                 return EFetchResult::Yield;
             }
             if (SpilledData->Empty()) {
-                Cerr << "[WideSort] Iterator::Read: spilled data empty, returning Finish" << Endl;
                 return EFetchResult::Finish;
             }
         }
@@ -175,8 +173,6 @@ public:
     bool CheckForInit() {
         auto readResult = Read();
         bool result = HasValue || IsFinished();
-        Cerr << "[WideSort] Iterator::CheckForInit: readResult=" << (int)readResult
-             << " HasValue=" << HasValue << " IsFinished=" << IsFinished() << " result=" << result << Endl;
         return result;
     }
 
@@ -696,13 +692,11 @@ public:
     }
 
     bool IsReadyToContinue() {
-        Cerr << "[WideSort] IsReadyToContinue: mode=" << (int)GetMode() << Endl;
         switch (GetMode()) {
             case EOperatingMode::InMemory:
                 return true;
             case EOperatingMode::Spilling: {
                 if (!SpillState()) {
-                    Cerr << "[WideSort] IsReadyToContinue: SpillState not ready" << Endl;
                     return false;
                 }
                 ResetFields();
@@ -714,8 +708,6 @@ public:
                 } else {
                     nextMode = EOperatingMode::InMemory;
                 }
-                Cerr << "[WideSort] IsReadyToContinue: Spilling done, switching to mode=" << (int)nextMode
-                     << " spilledStates=" << SpilledStates.size() << Endl;
                 SwitchMode(nextMode);
                 return IsReadyToContinue();
             }
@@ -735,17 +727,14 @@ public:
                 return IsReadyToContinue();
             }
             case EOperatingMode::ProcessSpilled: {
-                Cerr << "[WideSort] IsReadyToContinue(ProcessSpilled): iterators=" << SpilledUnboxedValuesIterators.size() << Endl;
                 if (SpilledUnboxedValuesIterators.empty()) {
                     return true;
                 }
                 for (size_t i = 0; i < SpilledUnboxedValuesIterators.size(); ++i) {
                     if (!SpilledUnboxedValuesIterators[i].CheckForInit()) {
-                        Cerr << "[WideSort] IsReadyToContinue(ProcessSpilled): iterator " << i << " not ready" << Endl;
                         return false;
                     }
                 }
-                Cerr << "[WideSort] IsReadyToContinue(ProcessSpilled): all iterators ready" << Endl;
                 return true;
             }
         }
@@ -797,23 +786,18 @@ public:
     }
 
     NUdf::TUnboxedValue* Extract() {
-        Cerr << "[WideSort] Extract: mode=" << (int)GetMode() << " iterators=" << SpilledUnboxedValuesIterators.size() << Endl;
         if (!IsReadyToContinue()) {
-            Cerr << "[WideSort] Extract: IsReadyToContinue=false, returning nullptr" << Endl;
             return nullptr;
         }
 
         if (SpilledUnboxedValuesIterators.empty()) {
-            Cerr << "[WideSort] Extract: no iterators, calling ExtractInMemory" << Endl;
             return ExtractInMemory();
         }
 
         auto end = std::remove_if(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end(),
             [](const TSpilledUnboxedValuesIterator& it) { return it.IsFinished(); });
         SpilledUnboxedValuesIterators.erase(end, SpilledUnboxedValuesIterators.end());
-        Cerr << "[WideSort] Extract: after removing finished, iterators=" << SpilledUnboxedValuesIterators.size() << Endl;
         if (SpilledUnboxedValuesIterators.empty()) {
-            Cerr << "[WideSort] Extract: all iterators finished, returning nullptr" << Endl;
             return nullptr;
         }
 
@@ -1067,9 +1051,7 @@ public:
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
             while (EFetchResult::Finish != ptr->InputStatus) {
-                Cerr << "[WideSort] DoCalculate: in while loop, mode=" << (int)ptr->GetModeDbg() << " inputStatus=" << (int)ptr->InputStatus << Endl;
                 if (!ptr->IsReadyToContinue()) {
-                    Cerr << "[WideSort] DoCalculate: IsReadyToContinue=false, returning Yield" << Endl;
                     return EFetchResult::Yield;
                 }
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
@@ -1077,21 +1059,15 @@ public:
                         ptr->Put();
                         continue;
                     case EFetchResult::Finish:
-                        Cerr << "[WideSort] DoCalculate: input Finish, calling Seal" << Endl;
                         if (ptr->Seal()) {
-                            Cerr << "[WideSort] DoCalculate: Seal returned true" << Endl;
                             break;
                         }
-                        Cerr << "[WideSort] DoCalculate: Seal returned false, returning Yield" << Endl;
                         [[fallthrough]];
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
                 }
             }
 
-            Cerr << "[WideSort] DoCalculate: after while loop, calling Extract, mode=" << (int)ptr->GetModeDbg()
-                 << " spilledStates=" << ptr->GetSpilledStatesCountDbg()
-                 << " iterators=" << ptr->GetIteratorsCountDbg() << Endl;
             if (auto extract = ptr->Extract()) {
                 for (const auto index : Indexes) {
                     if (const auto to = output[index]) {
@@ -1100,13 +1076,10 @@ public:
                         ++extract;
                     }
                 }
-                Cerr << "[WideSort] DoCalculate: Extract returned data, returning One" << Endl;
                 return EFetchResult::One;
             }
 
             auto finished = ptr->IsFinished();
-            Cerr << "[WideSort] DoCalculate: Extract returned nullptr, IsFinished=" << finished
-                 << " mode=" << (int)ptr->GetModeDbg() << Endl;
             return finished ? EFetchResult::Finish : EFetchResult::Yield;
         }
 

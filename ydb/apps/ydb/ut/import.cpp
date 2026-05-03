@@ -61,25 +61,23 @@ public:
 
     void CheckS3Params(const Ydb::Import::ImportFromS3Request* request) {
         const auto& settings = request->settings();
-        CHECK_EXP(settings.bucket() == Bucket, "Incorrect bucket: \"" << settings.bucket() << "\" instead of \"" << Bucket << "\"");
-        CHECK_EXP(settings.endpoint() == S3Endpoint, "Incorrect S3 endpoint: \"" << settings.endpoint() << "\" instead of \"" << S3Endpoint << "\"");
-        CHECK_EXP(settings.scheme() == Scheme, "Incorrect scheme: \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(settings.scheme()) << "\" instead of \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(Scheme) << "\"");
-        CHECK_EXP(settings.access_key() == S3AccessKey, "Incorrect S3 access key: \"" << settings.access_key() << "\" instead of \"" << S3AccessKey << "\"");
-        CHECK_EXP(settings.secret_key() == S3SecretKey, "Incorrect S3 secret key: \"" << settings.secret_key() << "\" instead of \"" << S3SecretKey << "\"");
+        CheckCommonS3Params(settings);
         CHECK_EXP(settings.description() == Description, "Incorrect description: \"" << settings.description() << "\" instead of \"" << Description << "\"");
-        CHECK_EXP(settings.number_of_retries() == NumberOfRetries, "Incorrect number of retries: " << settings.number_of_retries() << " instead of " << NumberOfRetries);
-        CHECK_EXP(settings.disable_virtual_addressing() == DisableVirtualAddressing, "Incorrect disable virtual addressing: " << settings.disable_virtual_addressing() << " instead of " << DisableVirtualAddressing);
         CHECK_EXP(settings.source_prefix() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.source_prefix() << "\" instead of \"" << CommonSourcePrefix << "\"");
         CHECK_EXP(settings.destination_path() == CommonDestinationPath, "Incorrect common destination path: \"" << settings.destination_path() << "\" instead of \"" << CommonDestinationPath << "\"");
         CHECK_EXP(settings.no_acl() == NoACL, "Incorrect no acl: " << settings.no_acl() << " instead of " << NoACL);
         CHECK_EXP(settings.skip_checksum_validation() == SkipChecksumValidation, "Incorrect skip checksum validation: " << settings.skip_checksum_validation() << " instead of " << SkipChecksumValidation);
         CHECK_EXP(settings.index_population_mode() == IndexPopulationMode, "Incorrect index population mode: \"" << Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(settings.index_population_mode()) << "\" instead of \"" << Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(IndexPopulationMode) << "\"");
-        CheckEncryptionSettings(settings);
-        CheckExcludeRegexps(settings);
     }
 
     void CheckListS3Params(const Ydb::Import::ListObjectsInS3ExportRequest* request) {
         const auto& settings = request->settings();
+        CheckCommonS3Params(settings);
+        CHECK_EXP(settings.prefix() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.prefix() << "\" instead of \"" << CommonSourcePrefix << "\"");
+    }
+
+    template <typename TSettings>
+    void CheckCommonS3Params(const TSettings& settings) {
         CHECK_EXP(settings.bucket() == Bucket, "Incorrect bucket: \"" << settings.bucket() << "\" instead of \"" << Bucket << "\"");
         CHECK_EXP(settings.endpoint() == S3Endpoint, "Incorrect S3 endpoint: \"" << settings.endpoint() << "\" instead of \"" << S3Endpoint << "\"");
         CHECK_EXP(settings.scheme() == Scheme, "Incorrect scheme: \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(settings.scheme()) << "\" instead of \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(Scheme) << "\"");
@@ -87,9 +85,8 @@ public:
         CHECK_EXP(settings.secret_key() == S3SecretKey, "Incorrect S3 secret key: \"" << settings.secret_key() << "\" instead of \"" << S3SecretKey << "\"");
         CHECK_EXP(settings.number_of_retries() == NumberOfRetries, "Incorrect number of retries: " << settings.number_of_retries() << " instead of " << NumberOfRetries);
         CHECK_EXP(settings.disable_virtual_addressing() == DisableVirtualAddressing, "Incorrect disable virtual addressing: " << settings.disable_virtual_addressing() << " instead of " << DisableVirtualAddressing);
-        CHECK_EXP(settings.prefix() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.prefix() << "\" instead of \"" << CommonSourcePrefix << "\"");
-        CheckListEncryptionSettings(settings);
-        CheckListExcludeRegexps(settings);
+        CheckEncryptionSettings(settings);
+        CheckExcludeRegexps(settings);
     }
 
     void CheckItems(const Ydb::Import::ImportFromS3Request* request) {
@@ -118,28 +115,15 @@ public:
         }
     }
 
-    void CheckEncryptionSettings(const Ydb::Import::ImportFromS3Settings& settings) {
+    template <typename TSettings>
+    void CheckEncryptionSettings(const TSettings& settings) {
         const auto& encryptionSettings = settings.encryption_settings();
         CHECK_EXP(encryptionSettings.symmetric_key().key() == SymmetricKey,
             "Incorrect symmetric encryption key: \"" << encryptionSettings.symmetric_key().key() << "\" instead of \"" << SymmetricKey << "\"");
     }
 
-    void CheckListEncryptionSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
-        const auto& encryptionSettings = settings.encryption_settings();
-        CHECK_EXP(encryptionSettings.symmetric_key().key() == SymmetricKey,
-            "Incorrect symmetric encryption key: \"" << encryptionSettings.symmetric_key().key() << "\" instead of \"" << SymmetricKey << "\"");
-    }
-
-    void CheckExcludeRegexps(const Ydb::Import::ImportFromS3Settings& settings) {
-        CHECK_EXP(settings.exclude_regexps_size() == static_cast<int>(ExcludeRegexps.size()),
-            "Exclude regexps size does not match. settings.exclude_regexps_size(): " << settings.exclude_regexps_size() << ". ExcludeRegexps.size(): " << ExcludeRegexps.size());
-        for (int i = 0; i < settings.exclude_regexps_size() && i < static_cast<int>(ExcludeRegexps.size()); ++i) {
-            CHECK_EXP(settings.exclude_regexps(i) == ExcludeRegexps[i],
-                "Incorrect exclude regexp at " << i << ": \"" << settings.exclude_regexps(i) << "\" instead of \"" << ExcludeRegexps[i] << "\"");
-        }
-    }
-
-    void CheckListExcludeRegexps(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
+    template <typename TSettings>
+    void CheckExcludeRegexps(const TSettings& settings) {
         CHECK_EXP(settings.exclude_regexps_size() == static_cast<int>(ExcludeRegexps.size()),
             "Exclude regexps size does not match. settings.exclude_regexps_size(): " << settings.exclude_regexps_size() << ". ExcludeRegexps.size(): " << ExcludeRegexps.size());
         for (int i = 0; i < settings.exclude_regexps_size() && i < static_cast<int>(ExcludeRegexps.size()); ++i) {

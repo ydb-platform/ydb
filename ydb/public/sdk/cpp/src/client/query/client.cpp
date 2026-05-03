@@ -280,7 +280,9 @@ public:
 
         auto promise = NThreading::NewPromise<TBeginTransactionResult>();
 
-        auto responseCb = [promise, session]
+        auto obs = MakeObservation("BeginTransaction");
+
+        auto responseCb = [promise, session, obs]
             (Ydb::Query::BeginTransactionResponse* response, TPlainStatus status) mutable {
                 try {
                     if (response) {
@@ -289,14 +291,18 @@ public:
                         TStatus beginTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
 
+                        obs->End(beginTxStatus.GetStatus(), beginTxStatus.GetEndpoint());
+
                         TBeginTransactionResult beginTxResult(std::move(beginTxStatus),
                             TTransaction(session, response->tx_meta().id()));
                         promise.SetValue(std::move(beginTxResult));
                     } else {
+                        obs->End(status.Status, status.Endpoint);
                         promise.SetValue(TBeginTransactionResult(
                             TStatus(std::move(status)), TTransaction(session, "")));
                     }
                 } catch (...) {
+                    obs->EndWithClientInternalError();
                     promise.SetException(std::current_exception());
                 }
             };

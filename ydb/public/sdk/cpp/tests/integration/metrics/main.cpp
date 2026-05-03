@@ -216,6 +216,34 @@ TEST(QueryMetricsIntegration, CommitTransactionRecordsDuration) {
     args.Driver.Stop(true);
 }
 
+TEST(QueryMetricsIntegration, BeginTransactionRecordsDuration) {
+    SkipQueryMetricsIntegrationIfNoEnv();
+    auto args = MakeRunArgs();
+    TQueryClient client(args.Driver, TClientSettings().Database(args.Database));
+
+    auto sessionResult = client.GetSession().ExtractValueSync();
+    ASSERT_TRUE(sessionResult.IsSuccess()) << sessionResult.GetIssues().ToString();
+    auto session = sessionResult.GetSession();
+
+    auto beginResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+    ASSERT_TRUE(beginResult.IsSuccess()) << beginResult.GetIssues().ToString();
+
+    auto beginDuration = args.Registry->GetHistogram(
+        "db.client.operation.duration",
+        DurationLabels(args.Database, "ydb.BeginTransaction", args.ServerAddress, args.ServerPort));
+    ASSERT_NE(beginDuration, nullptr) << "BeginTransaction duration histogram not created";
+    EXPECT_GE(beginDuration->Count(), 1u);
+
+    auto beginFailed = args.Registry->GetCounter(
+        "db.client.operation.failed",
+        FailedLabels(args.Database, "ydb.BeginTransaction"));
+    if (beginFailed) {
+        EXPECT_EQ(beginFailed->Get(), 0);
+    }
+
+    args.Driver.Stop(true);
+}
+
 TEST(QueryMetricsIntegration, RollbackTransactionRecordsDuration) {
     SkipQueryMetricsIntegrationIfNoEnv();
     auto args = MakeRunArgs();

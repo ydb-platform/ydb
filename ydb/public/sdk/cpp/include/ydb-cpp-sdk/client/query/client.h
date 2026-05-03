@@ -102,7 +102,7 @@ public:
     TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     TAsyncExecuteQueryResult RetryQuery(const std::string& query, const TTxControl& txControl,
-        TDuration timeout, bool isIndempotent);
+        TDuration timeout, bool isIdempotent);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());

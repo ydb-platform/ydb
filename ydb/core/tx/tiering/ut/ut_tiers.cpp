@@ -708,6 +708,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         csCfg->SetWritingInFlightRequestsCountLimit(1000000);
         appConfig.MutableInsertConveyorConfig()->SetWorkersCount(32);
         appConfig.MutableCompConveyorConfig()->SetWorkersCount(24);
+        appConfig.MutableScanConveyorConfig()->SetWorkersCount(32);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -732,7 +733,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         server->SetupRootStoragePools(sender);
 
 //        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_NOTICE);
 //        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
@@ -741,13 +742,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        // Keep TTL/GC assertions the same shape as the original 600k-row case, but use a smaller row count so
-        // full-table OLAP aggregates finish within default scan/query limits under SetUseRealThreads(false).
+        // Smaller row count than the historical 600k case keeps the UT fast.
         const ui32 numRecords = 100000;
         const ui64 tsStepUs = 1000000;
         auto batch = lHelper.TestArrowBatch(0, TInstant::Zero().GetValue(), numRecords, tsStepUs);
 
-        ui32 gcCounter = 0;
         TBSDataCollector bsCollector;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -770,10 +769,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 Y_ABORT_UNLESS(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;
                 } else {
                     gcSourceData.RefreshBarrier();
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
                 }
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -781,7 +778,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 auto& gcSourceData = bsCollector.GetData(gcSource);
                 gcSourceData.AddBlob(msg->Id);
                 gcSourceData.AddSize(msg->Id.BlobSize());
-                Cerr << "TEvBlobStorage::TEvPut " << gcSource.DebugString() << ":" << gcCounter << "/" << bsCollector.StatusString() << Endl;
             }
             return false;
         };

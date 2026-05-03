@@ -1781,11 +1781,13 @@ void TNodeState::DoReconciliation() {
         auto& item = Queue.front();
 
         if (item->Data.Leading) {
-            item->Descriptor->GenMajor.store(GenMajor);
-            LOG_W("CHANGE GenMajor to " << GenMajor << " by RECONCILIATION for OutputDescriptor "
-                << "Channel: " << item->Descriptor->Info.ChannelId
-                << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
-                << ", DstStageId: " << item->Descriptor->Info.DstStageId);
+            auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
+            if (prevGenMajor != GenMajor) {
+                LOG_W("CHANGE GenMajor from " << prevGenMajor << " to " << GenMajor << " by RECONCILIATION for OutputDescriptor "
+                    << "Channel: " << item->Descriptor->Info.ChannelId
+                    << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
+                    << ", DstStageId: " << item->Descriptor->Info.DstStageId);
+            }
         }
 
         if (Queue.front()->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {

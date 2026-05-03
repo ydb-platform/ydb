@@ -397,7 +397,6 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     const auto isolationLevel = GetIsolationLevel();
-    AFL_ENSURE(isolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED);
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:

@@ -212,9 +212,12 @@ class BenchmarkRunner:
         self.config = config
         self.database = database
         self.endpoint = endpoint
-        self.concurrency = concurrency
         self.ydb_cli_binary = ydb_cli_binary
         self.dry_run = dry_run
+
+        self.concurrency = concurrency
+        if self.concurrency <= 0:
+            raise ValueError(f"Concurrency must be greater than 0, got: {self.concurrency}")
 
         if not self.database or self.database[0] != "/":
             raise ValueError(f"Database path must start with '/', got: {self.database}")
@@ -271,12 +274,12 @@ class BenchmarkRunner:
 
             if self.dry_run:
                 tool_auto_action = {
-                    "list_directory": 2,  # Reject
-                    "exec_query": 2,  # Reject
-                    "explain_query": 2,  # Reject
-                    "describe": 2,  # Reject
-                    "ydb_help": 2,  # Reject
-                    "exec_shell": 2,  # Reject
+                    "list_directory": 3,  # Hide
+                    "exec_query": 3,  # Hide
+                    "explain_query": 3,  # Hide
+                    "describe": 3,  # Hide
+                    "ydb_help": 3,  # Hide
+                    "exec_shell": 3,  # Hide
                 }
             else:
                 tool_auto_action = {
@@ -469,8 +472,8 @@ class BenchmarkRunner:
             self.cms_client.remove_database(name)
 
     def cleanup(self, remove_databases: bool):
+        if remove_databases:
+            self.__remove_serverless_databases()
         if self.driver is not None:
             self.driver.stop()
             self.driver = None
-        if remove_databases:
-            self.__remove_serverless_databases()

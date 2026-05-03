@@ -59,12 +59,14 @@ def main():
         config = json.load(f)
     logging.info(f"Starting benchmark with config:\n{config}")
 
-    runner = BenchmarkRunner(
-        config, args.database, args.endpoint, args.concurrency, args.ydb_cli_binary, dry_run=args.dry_run
-    )
-    runner.init()
-    runner.run()
-    runner.cleanup(remove_databases=args.cleanup)
+    try:
+        runner = BenchmarkRunner(
+            config, args.database, args.endpoint, args.concurrency, args.ydb_cli_binary, dry_run=args.dry_run
+        )
+        runner.init()
+        runner.run()
+    finally:
+        runner.cleanup(remove_databases=args.cleanup)
 
 
 if __name__ == "__main__":

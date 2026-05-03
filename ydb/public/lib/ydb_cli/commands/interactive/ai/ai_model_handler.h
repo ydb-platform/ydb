@@ -42,6 +42,7 @@ private:
 
 private:
     TInteractiveConfigurationManager::TPtr ConfigurationManager;
+    bool AuditEnabled = false;
     IModel::TPtr Model;
     std::unordered_map<TString, ITool::TPtr> Tools;
     ui64 AuditSeq = 0;

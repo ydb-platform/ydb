@@ -83,6 +83,7 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
 
 TModelHandler::TModelHandler(const TSettings& settings)
     : ConfigurationManager(settings.ConfigurationManager)
+    , AuditEnabled(TryGetEnv("YDB_CLI_AI_AUDIT_LOG").Defined())
 {
     SetupModel(settings.Profile, settings);
     SetupTools(settings);
@@ -123,7 +124,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
 
-            if (TryGetEnv("YDB_CLI_AI_AUDIT_LOG").Defined()) {
+            if (AuditEnabled) {
                 NJson::TJsonValue auditInfo;
                 auditInfo["seq"] = AuditSeq++;
                 auditInfo["text"] = StripStringRight(output.Text);
@@ -191,7 +192,7 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
         YDB_CLI_LOG(Notice, "Tool call failed: " << result->ToolResult);
     }
 
-    if (TryGetEnv("YDB_CLI_AI_AUDIT_LOG").Defined()) {
+    if (AuditEnabled) {
         NJson::TJsonValue auditInfo;
         auditInfo["seq"] = AuditSeq++;
         auditInfo["name"] = toolCall.Name;
@@ -262,8 +263,8 @@ void TModelHandler::SetupTools(const TSettings& settings) {
         {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt, .Driver = settings.Driver})},
     }) {
         const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
-        if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Reject) {
-            YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is rejected by configuration");
+        if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {
+            YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is hidden by configuration");
             continue;
         }
 

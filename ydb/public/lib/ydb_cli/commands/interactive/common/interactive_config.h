@@ -242,7 +242,8 @@ public:
     enum class EToolAutoAction {
         Ask,
         Execute,
-        Reject,
+        Reject, // Reject tool execution when it called by agent
+        Hide, // Do not register tool in model
         Max, // Last value, do not use
     };
 

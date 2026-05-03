@@ -349,6 +349,61 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         );
     }
 
+    Y_UNIT_TEST_F(CommonDestinationPrefixWithoutItems, TExportFixture) {
+        // The main use case: export the whole database recursively
+        {
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("dst");
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "export", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--destination-prefix", "dst",
+                }
+            );
+        }
+
+        const TString encryptionKey = "test-encryption-key";
+        const TString encryptionKeyFile = EnvFile(encryptionKey, "encryption.key");
+
+        {
+            Service<TExportImpl>()
+                .ExpectBucket(TEST_BUCKET)
+                .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+                .ExpectS3AccessKey("test-key")
+                .ExpectS3SecretKey("test-access-key")
+                .ExpectCommonDstPrefix("dst")
+                .ExpectSymmetricEncryption("AES-128-GCM", encryptionKey);
+
+            RunCli(
+                {
+                    "-v",
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "export", "s3",
+                    "--bucket", TEST_BUCKET,
+                    "--s3-endpoint", TEST_S3_ENDPOINT,
+                    "--access-key", "test-key",
+                    "--secret-key", "test-access-key",
+                    "--destination-prefix", "dst",
+                    "--encryption-algorithm", "AES-128-GCM",
+                    "--encryption-key-file", encryptionKeyFile,
+                }
+            );
+        }
+    }
+
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TExportFixture) {
         Service<TSchemeImpl>()
             .ExpectListDirectory("/test_database/export-root")

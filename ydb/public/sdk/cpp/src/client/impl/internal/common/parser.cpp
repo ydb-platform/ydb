@@ -77,6 +77,9 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
             connectionInfo.Database = queryParams.Get("database");
             hasQueryDatabase = true;
         }
+        if (queryParams.Has("pool_name")) {
+            connectionInfo.PoolName = queryParams.Get("pool_name");
+        }
     }
 
     if (!path.empty() && path != "/") {

@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/metrics.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 
 #include <opentelemetry/common/key_value_iterable_view.h>
 #include <opentelemetry/context/runtime_context.h>
@@ -89,7 +90,7 @@ class TOtelMetricRegistry : public IMetricRegistry {
 public:
     TOtelMetricRegistry(nostd::shared_ptr<metrics::MeterProvider> meterProvider)
         : MeterProvider_(std::move(meterProvider))
-        , Meter_(MeterProvider_->GetMeter("ydb-cpp-sdk", GetSdkSemver()))
+        , Meter_(MeterProvider_->GetMeter(std::string(NObservability::Meter::kSdkName), GetSdkSemver()))
     {}
 
     std::shared_ptr<ICounter> Counter(const std::string& name
@@ -177,7 +178,7 @@ private:
             unit
         );
         auto meterSelector = std::make_unique<sdk::metrics::MeterSelector>(
-            "ydb-cpp-sdk",
+            std::string(NObservability::Meter::kSdkName),
             GetSdkSemver(),
             std::string{}
         );

@@ -58,6 +58,10 @@ public:
         (void)parent;
         return StartSpan(name, kind);
     }
+
+    virtual std::string GetCurrentTraceparent() const {
+        return {};
+    }
 };
 
 class ITraceProvider {

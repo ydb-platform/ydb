@@ -10,6 +10,7 @@ struct TConnectionInfo {
     std::string Endpoint = "";
     std::string Database = "";
     bool EnableSsl = false;
+    std::string PoolName = "";
 };
 
 TConnectionInfo ParseConnectionString(const std::string& connectionString);

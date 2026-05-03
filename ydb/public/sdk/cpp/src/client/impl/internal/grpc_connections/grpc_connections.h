@@ -595,6 +595,7 @@ public:
     void RegisterExtensionApi(IExtensionApi* api);
     std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override;
     std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const;
+    std::string GetDefaultPoolName() const override;
 
     void SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb);
     const TLog& GetLog() const override;
@@ -734,6 +735,7 @@ private:
     std::vector<std::unique_ptr<IExtensionApi>> ExtensionApis_;
     std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry_;
     std::shared_ptr<NTrace::ITraceProvider> TraceProvider_;
+    std::string DefaultPoolName_;
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 

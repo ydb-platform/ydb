@@ -2,6 +2,9 @@
 #include "grpc_connections.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
+
+#include <string>
 
 
 namespace NYdb::inline Dev {
@@ -182,6 +185,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
+    , DefaultPoolName_(params->GetPoolName())
     , BuildInfo_(BuildFullBuildInfo(*params))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
@@ -473,6 +477,10 @@ std::shared_ptr<NTrace::ITraceProvider> TGRpcConnectionsImpl::GetTraceProvider()
     return TraceProvider_;
 }
 
+std::string TGRpcConnectionsImpl::GetDefaultPoolName() const {
+    return DefaultPoolName_;
+}
+
 void TGRpcConnectionsImpl::SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb) {
     std::lock_guard lock(ExtensionsLock_);
     DiscoveryMutatorCb = std::move(cb);
@@ -508,6 +516,13 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     if (!requestSettings.TraceParent.empty()) {
         meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.TraceParent});
+    } else if (TraceProvider_) {
+        if (auto tracer = TraceProvider_->GetTracer(std::string(NObservability::Tracer::kSdkName))) {
+            auto traceParent = tracer->GetCurrentTraceparent();
+            if (!traceParent.empty()) {
+                meta.Aux.push_back({OTEL_TRACE_HEADER, std::move(traceParent)});
+            }
+        }
     }
 
     if (!dbState->Database.empty()) {

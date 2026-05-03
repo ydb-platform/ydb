@@ -55,11 +55,12 @@ public:
     void SetPeerEndpoint(const std::string& endpoint) noexcept;
     void SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept;
     void AddEvent(const std::string& name, const std::map<std::string, std::string>& attributes = {}) noexcept;
-    void RecordException(const std::string& type, const std::string& message, const std::string& stacktrace = {}) noexcept;
     std::unique_ptr<NTrace::IScope> Activate() noexcept;
     void SetRetryCount(std::uint32_t count) noexcept;
+    void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;
 
     void End(EStatus status) noexcept;
+    void EndWithException(const std::string& exceptionType, const std::string& message) noexcept;
 
 private:
     TRequestSpan(const std::string& ydbClientType
@@ -71,8 +72,6 @@ private:
         , NTrace::ESpanKind kind
         , NTrace::ISpan* parent
     );
-
-    void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;
 
     TLog Log_;
     std::shared_ptr<NTrace::ISpan> Span_;

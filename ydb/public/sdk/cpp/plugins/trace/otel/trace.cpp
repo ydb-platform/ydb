@@ -2,11 +2,15 @@
 
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/context/runtime_context.h>
+#include <opentelemetry/nostd/span.h>
 #include <opentelemetry/trace/context.h>
 #include <opentelemetry/trace/scope.h>
 #include <opentelemetry/trace/span.h>
+#include <opentelemetry/trace/span_context.h>
 #include <opentelemetry/trace/tracer.h>
 #include <opentelemetry/trace/tracer_provider.h>
+
+#include <cstdio>
 
 namespace NYdb::inline Dev::NTrace {
 
@@ -93,6 +97,30 @@ private:
     otel_nostd::shared_ptr<otel_trace::Span> Span_;
 };
 
+std::string FormatTraceparent(const otel_trace::SpanContext& ctx) {
+    if (!ctx.IsValid()) {
+        return {};
+    }
+    constexpr int kTraceIdHexLen = 32;
+    constexpr int kSpanIdHexLen = 16;
+    char traceIdHex[kTraceIdHexLen];
+    char spanIdHex[kSpanIdHexLen];
+    ctx.trace_id().ToLowerBase16(otel_nostd::span<char, kTraceIdHexLen>(traceIdHex, kTraceIdHexLen));
+    ctx.span_id().ToLowerBase16(otel_nostd::span<char, kSpanIdHexLen>(spanIdHex, kSpanIdHexLen));
+
+    std::string out;
+    out.reserve(2 + 1 + kTraceIdHexLen + 1 + kSpanIdHexLen + 1 + 2);
+    out.append("00-");
+    out.append(traceIdHex, kTraceIdHexLen);
+    out.append("-");
+    out.append(spanIdHex, kSpanIdHexLen);
+    char flags[3];
+    std::snprintf(flags, sizeof(flags), "%02x", static_cast<unsigned>(ctx.trace_flags().flags()));
+    out.append("-");
+    out.append(flags, 2);
+    return out;
+}
+
 class TOtelTracer : public ITracer {
 public:
     TOtelTracer(otel_nostd::shared_ptr<otel_trace::Tracer> tracer)
@@ -111,6 +139,15 @@ public:
             options.parent = otel_trace::SetSpan(context, otelParent->RawSpan());
         }
         return std::make_shared<TOtelSpan>(Tracer_->StartSpan(name, options));
+    }
+
+    std::string GetCurrentTraceparent() const override {
+        auto ctx = opentelemetry::context::RuntimeContext::GetCurrent();
+        auto span = otel_trace::GetSpan(ctx);
+        if (!span) {
+            return {};
+        }
+        return FormatTraceparent(span->GetContext());
     }
 
 private:

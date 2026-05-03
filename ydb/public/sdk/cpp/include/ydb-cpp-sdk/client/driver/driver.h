@@ -189,6 +189,12 @@ public:
     //! Set external trace provider implementation.
     TDriverConfig& SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider);
 
+    //! Default pool name for session-pool metrics (ydb.{query,table}.session.pool.name).
+    //! When empty, the SDK falls back to "<database>@<endpoint>".
+    //! Can also be supplied through the connection string as `?pool_name=<name>`.
+    TDriverConfig& SetPoolName(const std::string& poolName);
+    const std::string& GetPoolName() const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

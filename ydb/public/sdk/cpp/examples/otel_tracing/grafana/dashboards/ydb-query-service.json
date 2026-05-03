@@ -6,9 +6,8 @@
   "links": [],
   "panels": [
     {
-      "title": "Request Rate by Operation",
+      "title": "Operation Rate (ydb.client.operation.duration count)",
       "type": "timeseries",
-      "description": "Rate of finished operations per second, grouped by db.operation.name. Derived from db.client.operation.duration histogram observations (every End() increments _count).",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
@@ -19,15 +18,14 @@
       },
       "targets": [
         {
-          "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count[1m]))",
+          "expr": "sum by (db_operation_name) (rate(ydb_client_operation_duration_seconds_count[$__rate_interval]))",
           "legendFormat": "{{db_operation_name}}"
         }
       ]
     },
     {
-      "title": "Error Rate by Operation",
+      "title": "Failed Operations Rate by status_code",
       "type": "timeseries",
-      "description": "Rate of failed operations per second (db.client.operation.failed).",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
@@ -39,13 +37,13 @@
       },
       "targets": [
         {
-          "expr": "sum by (db_operation_name) (rate(db_client_operation_failed_total[1m]))",
-          "legendFormat": "{{db_operation_name}}"
+          "expr": "sum by (db_operation_name, db_response_status_code) (rate(ydb_client_operation_failed_total[$__rate_interval]))",
+          "legendFormat": "{{db_operation_name}} / {{db_response_status_code}}"
         }
       ]
     },
     {
-      "title": "Duration p50 / p95 / p99 (s)",
+      "title": "Operation Duration p50 / p95 / p99 (s)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
@@ -57,23 +55,22 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p50 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p95 {{db_operation_name}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, db_operation_name) (rate(ydb_client_operation_duration_seconds_bucket[1m])))",
           "legendFormat": "p99 {{db_operation_name}}"
         }
       ]
     },
     {
-      "title": "Error Ratio (%)",
-      "type": "timeseries",
-      "description": "failed / total per operation. Total is taken from db.client.operation.duration _count (one observation per finished call).",
+      "title": "Error Ratio (%) [cumulative]",
+      "type": "stat",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
@@ -81,7 +78,6 @@
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "custom": { "drawStyle": "line", "fillOpacity": 5 },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -92,56 +88,41 @@
           }
         }
       },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
       "targets": [
         {
-          "expr": "sum by (db_operation_name) (rate(db_client_operation_failed_total[5m])) / clamp_min(sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count[5m])), 1e-9)",
+          "expr": "sum by (db_operation_name) (ydb_client_operation_failed_total) / on (db_operation_name) group_left sum by (db_operation_name) (ydb_client_operation_duration_seconds_count)",
           "legendFormat": "{{db_operation_name}}"
         }
       ]
     },
     {
-      "title": "Connections by State",
+      "title": "Query Session Pool: count by state",
       "type": "timeseries",
-      "description": "db.client.connection.count split by db.client.connection.state (idle / used). For YDB session == connection.",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "drawStyle": "line", "fillOpacity": 30, "stacking": { "mode": "normal" } }
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
         }
       },
       "targets": [
         {
-          "expr": "sum by (db_client_connection_pool_name, db_client_connection_state) (db_client_connection_count)",
-          "legendFormat": "{{db_client_connection_pool_name}} / {{db_client_connection_state}}"
+          "expr": "sum by (ydb_query_session_state, ydb_query_session_pool_name) (ydb_query_session_count)",
+          "legendFormat": "{{ydb_query_session_pool_name}} / {{ydb_query_session_state}}"
         }
       ]
     },
     {
-      "title": "Pending Session Requests",
+      "title": "Query Session Pool: pending requests rate / timeouts rate",
       "type": "timeseries",
-      "description": "db.client.connection.pending_requests — current waiters for a session.",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": { "drawStyle": "line", "fillOpacity": 10 }
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (db_client_connection_pool_name) (db_client_connection_pending_requests)",
-          "legendFormat": "{{db_client_connection_pool_name}}"
-        }
-      ]
-    },
-    {
-      "title": "Session Acquire Timeouts /s",
-      "type": "timeseries",
-      "description": "db.client.connection.timeouts — rate of waiters whose deadline expired before a session was available.",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
         "defaults": {
@@ -151,16 +132,38 @@
       },
       "targets": [
         {
-          "expr": "sum by (db_client_connection_pool_name) (rate(db_client_connection_timeouts_total[1m]))",
-          "legendFormat": "{{db_client_connection_pool_name}}"
+          "expr": "sum by (ydb_query_session_pool_name) (rate(ydb_query_session_pending_requests_total[$__rate_interval]))",
+          "legendFormat": "pending {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "sum by (ydb_query_session_pool_name) (rate(ydb_query_session_timeouts_total[$__rate_interval]))",
+          "legendFormat": "timeouts {{ydb_query_session_pool_name}}"
         }
       ]
     },
     {
-      "title": "Session Create Time p50 / p95 / p99 (s)",
+      "title": "Query Session Pool: configured min / max",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "targets": [
+        {
+          "expr": "ydb_query_session_min",
+          "legendFormat": "min {{ydb_query_session_pool_name}}"
+        },
+        {
+          "expr": "ydb_query_session_max",
+          "legendFormat": "max {{ydb_query_session_pool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Query Session create_time p50/p95/p99",
       "type": "timeseries",
-      "description": "db.client.connection.create_time — distribution of CreateSession latencies.",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
         "defaults": {
@@ -170,16 +173,16 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
-          "legendFormat": "p50 {{db_client_connection_pool_name}}"
+          "expr": "histogram_quantile(0.50, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{ydb_query_session_pool_name}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
-          "legendFormat": "p95 {{db_client_connection_pool_name}}"
+          "expr": "histogram_quantile(0.95, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{ydb_query_session_pool_name}}"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
-          "legendFormat": "p99 {{db_client_connection_pool_name}}"
+          "expr": "histogram_quantile(0.99, sum by (le, ydb_query_session_pool_name) (rate(ydb_query_session_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{ydb_query_session_pool_name}}"
         }
       ]
     },

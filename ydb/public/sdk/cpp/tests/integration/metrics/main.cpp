@@ -23,6 +23,7 @@ struct TRunArgs {
     TDriver Driver;
     std::shared_ptr<TFakeMetricRegistry> Registry;
     std::string Database;
+    std::string Endpoint;
     std::string ServerAddress;
     std::uint16_t ServerPort = 0;
 };
@@ -45,22 +46,35 @@ TRunArgs MakeRunArgs() {
     std::uint16_t port = 0;
     NSdkStats::TStatCollector::ParseDiscoveryEndpoint(endpoint, host, port);
 
-    return {std::move(driver), registry, std::move(database), std::move(host), port};
+    return {std::move(driver), registry, std::move(database), endpoint, std::move(host), port};
 }
 
-NMetrics::TLabels FailedLabels(const std::string& dbNamespace,
-                               const std::string& operation) {
-    return {
+NMetrics::TLabels FailedLabels(const std::string& dbNamespace
+    , const std::string& operation
+    , EStatus status
+    , const std::string& serverAddress
+    , std::uint16_t serverPort
+) {
+    NMetrics::TLabels labels = {
         {"db.system.name", "ydb"},
         {"db.namespace", dbNamespace},
         {"db.operation.name", operation},
+        {"db.response.status_code", ToString(status)},
     };
+    if (!serverAddress.empty()) {
+        labels["server.address"] = serverAddress;
+    }
+    if (serverPort != 0) {
+        labels["server.port"] = ToString(serverPort);
+    }
+    return labels;
 }
 
-NMetrics::TLabels DurationLabels(const std::string& dbNamespace,
-                                 const std::string& operation,
-                                 const std::string& serverAddress,
-                                 std::uint16_t serverPort) {
+NMetrics::TLabels DurationLabels(const std::string& dbNamespace
+    , const std::string& operation
+    , const std::string& serverAddress
+    , std::uint16_t serverPort
+) {
     NMetrics::TLabels labels = {
         {"db.system.name", "ydb"},
         {"db.namespace", dbNamespace},
@@ -75,20 +89,22 @@ NMetrics::TLabels DurationLabels(const std::string& dbNamespace,
     return labels;
 }
 
-NMetrics::TLabels PoolLabels(const std::string& dbNamespace,
-                             const std::string& clientApi) {
+NMetrics::TLabels QueryPoolLabels(
+    const std::string& database
+    , const std::string& endpoint
+) {
     return {
-        {"db.system.name", "ydb"},
-        {"db.namespace", dbNamespace},
-        {"db.client.connection.pool.name", clientApi},
+        {"ydb.query.session.pool.name", database + "@" + endpoint},
     };
 }
 
-NMetrics::TLabels CountLabels(const std::string& dbNamespace,
-                              const std::string& clientApi,
-                              const std::string& state) {
-    auto labels = PoolLabels(dbNamespace, clientApi);
-    labels["db.client.connection.state"] = state;
+NMetrics::TLabels QueryCountLabels(
+    const std::string& database
+    , const std::string& endpoint
+    , const std::string& state
+) {
+    auto labels = QueryPoolLabels(database, endpoint);
+    labels["ydb.query.session.state"] = state;
     return labels;
 }
 
@@ -101,7 +117,7 @@ void SkipQueryMetricsIntegrationIfNoEnv() {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// db.client.operation.duration / db.client.operation.failed
+// ydb.client.operation.duration / ydb.client.operation.failed
 // ---------------------------------------------------------------------------
 
 TEST(QueryMetricsIntegration, ExecuteQuerySuccessRecordsDurationOnly) {
@@ -119,19 +135,13 @@ TEST(QueryMetricsIntegration, ExecuteQuerySuccessRecordsDurationOnly) {
     ASSERT_EQ(result.GetStatus(), EStatus::SUCCESS) << result.GetIssues().ToString();
 
     auto duration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.ExecuteQuery", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "ExecuteQuery", args.ServerAddress, args.ServerPort)
+    );
     ASSERT_NE(duration, nullptr) << "ExecuteQuery duration histogram not created";
     EXPECT_GE(duration->Count(), 1u);
     for (double v : duration->GetValues()) {
         EXPECT_GE(v, 0.0);
-    }
-
-    auto failed = args.Registry->GetCounter(
-        "db.client.operation.failed",
-        FailedLabels(args.Database, "ydb.ExecuteQuery"));
-    if (failed) {
-        EXPECT_EQ(failed->Get(), 0);
     }
 
     args.Driver.Stop(true);
@@ -152,14 +162,21 @@ TEST(QueryMetricsIntegration, ExecuteQueryErrorIncrementsFailed) {
     EXPECT_NE(result.GetStatus(), EStatus::SUCCESS);
 
     auto failed = args.Registry->GetCounter(
-        "db.client.operation.failed",
-        FailedLabels(args.Database, "ydb.ExecuteQuery"));
+        "ydb.client.operation.failed",
+        FailedLabels(
+            args.Database,
+            "ExecuteQuery",
+            result.GetStatus(),
+            args.ServerAddress,
+            args.ServerPort
+        )
+    );
     ASSERT_NE(failed, nullptr);
     EXPECT_GE(failed->Get(), 1);
 
     auto duration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.ExecuteQuery", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "ExecuteQuery", args.ServerAddress, args.ServerPort));
     ASSERT_NE(duration, nullptr);
     EXPECT_GE(duration->Count(), 1u);
 
@@ -175,8 +192,8 @@ TEST(QueryMetricsIntegration, CreateSessionRecordsDuration) {
     ASSERT_TRUE(session.IsSuccess()) << session.GetIssues().ToString();
 
     auto duration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.CreateSession", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "CreateSession", args.ServerAddress, args.ServerPort));
     ASSERT_NE(duration, nullptr) << "CreateSession duration histogram not created";
     EXPECT_GE(duration->Count(), 1u);
 
@@ -207,8 +224,9 @@ TEST(QueryMetricsIntegration, CommitTransactionRecordsDuration) {
         ASSERT_TRUE(commitResult.IsSuccess()) << commitResult.GetIssues().ToString();
 
         auto commitDuration = args.Registry->GetHistogram(
-            "db.client.operation.duration",
-            DurationLabels(args.Database, "ydb.Commit", args.ServerAddress, args.ServerPort));
+            "ydb.client.operation.duration",
+            DurationLabels(args.Database, "Commit", args.ServerAddress, args.ServerPort)
+        );
         ASSERT_NE(commitDuration, nullptr);
         EXPECT_GE(commitDuration->Count(), 1u);
     }
@@ -229,17 +247,11 @@ TEST(QueryMetricsIntegration, BeginTransactionRecordsDuration) {
     ASSERT_TRUE(beginResult.IsSuccess()) << beginResult.GetIssues().ToString();
 
     auto beginDuration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.BeginTransaction", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "BeginTransaction", args.ServerAddress, args.ServerPort)
+    );
     ASSERT_NE(beginDuration, nullptr) << "BeginTransaction duration histogram not created";
     EXPECT_GE(beginDuration->Count(), 1u);
-
-    auto beginFailed = args.Registry->GetCounter(
-        "db.client.operation.failed",
-        FailedLabels(args.Database, "ydb.BeginTransaction"));
-    if (beginFailed) {
-        EXPECT_EQ(beginFailed->Get(), 0);
-    }
 
     args.Driver.Stop(true);
 }
@@ -261,17 +273,11 @@ TEST(QueryMetricsIntegration, RollbackTransactionRecordsDuration) {
     ASSERT_TRUE(rollbackResult.IsSuccess()) << rollbackResult.GetIssues().ToString();
 
     auto rollbackDuration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.Rollback", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "Rollback", args.ServerAddress, args.ServerPort)
+    );
     ASSERT_NE(rollbackDuration, nullptr);
     EXPECT_GE(rollbackDuration->Count(), 1u);
-
-    auto rollbackFailed = args.Registry->GetCounter(
-        "db.client.operation.failed",
-        FailedLabels(args.Database, "ydb.Rollback"));
-    if (rollbackFailed) {
-        EXPECT_EQ(rollbackFailed->Get(), 0);
-    }
 
     args.Driver.Stop(true);
 }
@@ -295,17 +301,11 @@ TEST(QueryMetricsIntegration, MultipleQueriesAccumulateDuration) {
     }
 
     auto duration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.ExecuteQuery", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "ExecuteQuery", args.ServerAddress, args.ServerPort)
+    );
     ASSERT_NE(duration, nullptr);
     EXPECT_GE(duration->Count(), static_cast<size_t>(numQueries));
-
-    auto failed = args.Registry->GetCounter(
-        "db.client.operation.failed",
-        FailedLabels(args.Database, "ydb.ExecuteQuery"));
-    if (failed) {
-        EXPECT_EQ(failed->Get(), 0);
-    }
 
     args.Driver.Stop(true);
 }
@@ -351,8 +351,9 @@ TEST(QueryMetricsIntegration, DurationValuesAreRealistic) {
     ASSERT_EQ(result.GetStatus(), EStatus::SUCCESS) << result.GetIssues().ToString();
 
     auto duration = args.Registry->GetHistogram(
-        "db.client.operation.duration",
-        DurationLabels(args.Database, "ydb.ExecuteQuery", args.ServerAddress, args.ServerPort));
+        "ydb.client.operation.duration",
+        DurationLabels(args.Database, "ExecuteQuery", args.ServerAddress, args.ServerPort)
+    );
     ASSERT_NE(duration, nullptr);
     ASSERT_GE(duration->Count(), 1u);
 
@@ -365,10 +366,10 @@ TEST(QueryMetricsIntegration, DurationValuesAreRealistic) {
 }
 
 // ---------------------------------------------------------------------------
-// db.client.connection.* (pool metrics)
+// ydb.query.session.* (pool metrics)
 // ---------------------------------------------------------------------------
 
-TEST(QueryMetricsIntegration, ConnectionCreateTimeRecorded) {
+TEST(QueryMetricsIntegration, SessionCreateTimeRecorded) {
     SkipQueryMetricsIntegrationIfNoEnv();
     auto args = MakeRunArgs();
     TQueryClient client(args.Driver, TClientSettings().Database(args.Database));
@@ -377,9 +378,10 @@ TEST(QueryMetricsIntegration, ConnectionCreateTimeRecorded) {
     ASSERT_TRUE(session.IsSuccess()) << session.GetIssues().ToString();
 
     auto hist = args.Registry->GetHistogram(
-        "db.client.connection.create_time",
-        PoolLabels(args.Database, "Query"));
-    ASSERT_NE(hist, nullptr) << "create_time histogram was not created";
+        "ydb.query.session.create_time",
+        QueryPoolLabels(args.Database, args.Endpoint)
+    );
+    ASSERT_NE(hist, nullptr) << "ydb.query.session.create_time histogram was not created";
     EXPECT_GE(hist->Count(), 1u);
     for (double v : hist->GetValues()) {
         EXPECT_GE(v, 0.0);
@@ -388,7 +390,7 @@ TEST(QueryMetricsIntegration, ConnectionCreateTimeRecorded) {
     args.Driver.Stop(true);
 }
 
-TEST(QueryMetricsIntegration, ConnectionCountIsSplitByState) {
+TEST(QueryMetricsIntegration, SessionCountIsSplitByState) {
     SkipQueryMetricsIntegrationIfNoEnv();
     auto args = MakeRunArgs();
     TQueryClient client(args.Driver, TClientSettings().Database(args.Database));
@@ -397,31 +399,46 @@ TEST(QueryMetricsIntegration, ConnectionCountIsSplitByState) {
     ASSERT_TRUE(sessionResult.IsSuccess()) << sessionResult.GetIssues().ToString();
 
     auto used = args.Registry->GetGauge(
-        "db.client.connection.count",
-        CountLabels(args.Database, "Query", "used"));
-    ASSERT_NE(used, nullptr) << "connection.count gauge with state=used not created";
+        "ydb.query.session.count",
+        QueryCountLabels(args.Database, args.Endpoint, "used")
+    );
+    ASSERT_NE(used, nullptr) << "ydb.query.session.count gauge with state=used not created";
     EXPECT_GE(used->Get(), 1.0);
 
     auto idle = args.Registry->GetGauge(
-        "db.client.connection.count",
-        CountLabels(args.Database, "Query", "idle"));
-    ASSERT_NE(idle, nullptr) << "connection.count gauge with state=idle not created";
+        "ydb.query.session.count",
+        QueryCountLabels(args.Database, args.Endpoint, "idle"));
+    ASSERT_NE(idle, nullptr) << "ydb.query.session.count gauge with state=idle not created";
 
     args.Driver.Stop(true);
 }
 
-TEST(QueryMetricsIntegration, ConnectionPendingRequestsGaugeExists) {
+TEST(QueryMetricsIntegration, MaxAndMinSessionGaugesAreEmitted) {
     SkipQueryMetricsIntegrationIfNoEnv();
     auto args = MakeRunArgs();
-    TQueryClient client(args.Driver, TClientSettings().Database(args.Database));
+    auto settings = TClientSettings()
+        .Database(args.Database)
+        .SessionPoolSettings(TSessionPoolSettings()
+            .MaxActiveSessions(50)
+            .MinPoolSize(10)
+        );
+    TQueryClient client(args.Driver, settings);
 
     auto session = client.GetSession().ExtractValueSync();
     ASSERT_TRUE(session.IsSuccess()) << session.GetIssues().ToString();
 
-    auto gauge = args.Registry->GetGauge(
-        "db.client.connection.pending_requests",
-        PoolLabels(args.Database, "Query"));
-    ASSERT_NE(gauge, nullptr) << "pending_requests gauge not created";
+    auto maxGauge = args.Registry->GetGauge(
+        "ydb.query.session.max",
+        QueryPoolLabels(args.Database, args.Endpoint)
+    );
+    auto minGauge = args.Registry->GetGauge(
+        "ydb.query.session.min",
+        QueryPoolLabels(args.Database, args.Endpoint)
+    );
+    ASSERT_NE(maxGauge, nullptr) << "ydb.query.session.max gauge not created";
+    ASSERT_NE(minGauge, nullptr) << "ydb.query.session.min gauge not created";
+    EXPECT_DOUBLE_EQ(maxGauge->Get(), 50.0);
+    EXPECT_DOUBLE_EQ(minGauge->Get(), 10.0);
 
     args.Driver.Stop(true);
 }

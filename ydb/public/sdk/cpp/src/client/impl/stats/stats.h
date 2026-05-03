@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
@@ -10,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 namespace NYdb::inline Dev {
@@ -189,15 +191,17 @@ public:
         , ::NMonitoring::TIntGauge* waiters = nullptr
         , std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {}
         , std::string database = {}
-        , std::string clientType = {})
-        : ActiveSessions(activeSessions)
+        , std::string clientType = {}
+        , std::string poolName = {}
+    ) : ActiveSessions(activeSessions)
         , InPoolSessions(inPoolSessions)
         , FakeSessions(fakeSessions)
         , Waiters(waiters)
         , ExternalRegistry_(std::move(externalRegistry))
         , Database_(std::move(database))
         , ClientType_(std::move(clientType))
-        { }
+        , PoolName_(std::move(poolName)
+    ) {}
 
         ::NMonitoring::TIntGauge* ActiveSessions;
         ::NMonitoring::TIntGauge* InPoolSessions;
@@ -208,20 +212,20 @@ public:
             if (!ExternalRegistry_) {
                 return;
             }
-            EmitConnectionCount("idle", idleCount);
-            EmitConnectionCount("used", usedCount);
+            EmitSessionCount(NObservability::MetricValue::kSessionStateIdle, idleCount);
+            EmitSessionCount(NObservability::MetricValue::kSessionStateUsed, usedCount);
         }
 
-        void UpdatePendingRequests(std::int64_t value) {
+        void IncPendingRequests() {
             if (!ExternalRegistry_) {
                 return;
             }
-            ExternalRegistry_->Gauge(
-                "db.client.connection.pending_requests",
+            ExternalRegistry_->Counter(
+                MetricName(NObservability::MetricName::kSessionLeafPendingRequests),
                 BasePoolLabels(),
-                "The number of current pending requests for an open connection.",
-                "{request}"
-            )->Set(static_cast<double>(value));
+                "Number of times a caller has started waiting for an open session.",
+                std::string(NObservability::MetricUnit::kRequest)
+            )->Inc();
         }
 
         void IncConnectionTimeouts() {
@@ -229,10 +233,10 @@ public:
                 return;
             }
             ExternalRegistry_->Counter(
-                "db.client.connection.timeouts",
+                MetricName(NObservability::MetricName::kSessionLeafTimeouts),
                 BasePoolLabels(),
-                "The number of connection timeouts that have occurred trying to obtain a connection from the pool.",
-                "{timeout}"
+                "Session-acquisition timeouts.",
+                std::string(NObservability::MetricUnit::kTimeout)
             )->Inc();
         }
 
@@ -241,41 +245,95 @@ public:
                 return;
             }
             ExternalRegistry_->Histogram(
-                "db.client.connection.create_time",
+                MetricName(NObservability::MetricName::kSessionLeafCreateTime),
                 {0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10},
                 BasePoolLabels(),
-                "The time it took to create a new connection.",
-                "s"
+                "Time spent on creating a new session (CreateSession + first AttachStream message).",
+                std::string(NObservability::MetricUnit::kSeconds)
             )->Record(seconds);
+        }
+
+        void RecordPoolLimits(std::int64_t minPoolSize, std::int64_t maxPoolSize) {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            ExternalRegistry_->Gauge(
+                MetricName(NObservability::MetricName::kSessionLeafMin),
+                BasePoolLabels(),
+                "Configured MinPoolSize.",
+                std::string(NObservability::MetricUnit::kSession)
+            )->Set(static_cast<double>(minPoolSize));
+            ExternalRegistry_->Gauge(
+                MetricName(NObservability::MetricName::kSessionLeafMax),
+                BasePoolLabels(),
+                "Configured MaxPoolSize.",
+                std::string(NObservability::MetricUnit::kSession)
+            )->Set(static_cast<double>(maxPoolSize));
         }
 
         bool HasExternalRegistry() const {
             return static_cast<bool>(ExternalRegistry_);
         }
 
+        const std::string& GetClientType() const {
+            return ClientType_;
+        }
+
+        std::string MetricNamespace() const {
+            return PoolMetricNamespace(ClientType_);
+        }
+
     private:
+        static std::string PoolMetricNamespace(const std::string& clientType) {
+            if (clientType == "Query") {
+                return std::string(NObservability::MetricName::kSessionPrefixQuery);
+            }
+            if (clientType == "Table") {
+                return std::string(NObservability::MetricName::kSessionPrefixTable);
+            }
+            return std::string(NObservability::MetricName::kSessionPrefixGeneric);
+        }
+
+        std::string MetricName(std::string_view leaf) const {
+            std::string out = PoolMetricNamespace(ClientType_);
+            out.push_back('.');
+            out.append(leaf);
+            return out;
+        }
+
+        std::string PoolNameTagKey() const {
+            return MetricName(NObservability::MetricName::kSessionTagPoolNameSuffix);
+        }
+
+        std::string StateTagKey() const {
+            return MetricName(NObservability::MetricName::kSessionTagStateSuffix);
+        }
+
+        std::string EffectivePoolName() const {
+            return PoolName_;
+        }
+
         NMetrics::TLabels BasePoolLabels() const {
             return {
-                {"db.system.name", "ydb"},
-                {"db.namespace", Database_},
-                {"db.client.connection.pool.name", YdbClientApiAttributeValue(ClientType_)},
+                {PoolNameTagKey(), EffectivePoolName()},
             };
         }
 
-        void EmitConnectionCount(const char* state, std::int64_t value) {
+        void EmitSessionCount(std::string_view state, std::int64_t value) {
             auto labels = BasePoolLabels();
-            labels["db.client.connection.state"] = state;
+            labels[StateTagKey()] = std::string(state);
             ExternalRegistry_->Gauge(
-                "db.client.connection.count",
+                MetricName(NObservability::MetricName::kSessionLeafCount),
                 labels,
-                "The number of connections that are currently in state described by the state attribute.",
-                "{connection}"
+                "Current pool session count for the given state.",
+                std::string(NObservability::MetricUnit::kSession)
             )->Set(static_cast<double>(value));
         }
 
         std::shared_ptr<NMetrics::IMetricRegistry> ExternalRegistry_;
         std::string Database_;
         std::string ClientType_;
+        std::string PoolName_;
     };
 
     struct TClientRetryOperationStatCollector {
@@ -356,16 +414,24 @@ public:
                 })->Inc();
             }
             if (ExternalRegistry_) {
+                using namespace NObservability;
                 NMetrics::TLabels labels = {
-                    {"db.system.name", "ydb"},
-                    {"db.namespace", Database_},
-                    {"db.operation.name", operationName},
+                    {std::string(MetricLabel::kDbSystemName), std::string(MetricValue::kDbSystemYdb)},
+                    {std::string(MetricLabel::kDbNamespace), Database_},
+                    {std::string(MetricLabel::kDbOperationName), operationName},
+                    {std::string(MetricLabel::kDbResponseStatusCode), TStringBuilder() << status},
                 };
+                if (!ServerAddress_.empty()) {
+                    labels[std::string(MetricLabel::kServerAddress)] = ServerAddress_;
+                }
+                if (ServerPort_ != 0) {
+                    labels[std::string(MetricLabel::kServerPort)] = TStringBuilder() << ServerPort_;
+                }
                 ExternalRegistry_->Counter(
-                    "db.client.operation.failed",
+                    std::string(MetricName::kOperationFailed),
                     labels,
-                    "Number of database client operations that failed.",
-                    "{operation}"
+                    "Number of unsuccessful database client operation attempts.",
+                    std::string(MetricUnit::kOperation)
                 )->Inc();
             }
         }
@@ -382,23 +448,24 @@ public:
                     static_cast<i64>(durationSeconds * 1000.0));
             }
             if (ExternalRegistry_) {
+                using namespace NObservability;
                 NMetrics::TLabels labels = {
-                    {"db.system.name", "ydb"},
-                    {"db.namespace", Database_},
-                    {"db.operation.name", operationName},
+                    {std::string(MetricLabel::kDbSystemName), std::string(MetricValue::kDbSystemYdb)},
+                    {std::string(MetricLabel::kDbNamespace), Database_},
+                    {std::string(MetricLabel::kDbOperationName), operationName},
                 };
                 if (!ServerAddress_.empty()) {
-                    labels["server.address"] = ServerAddress_;
+                    labels[std::string(MetricLabel::kServerAddress)] = ServerAddress_;
                 }
                 if (ServerPort_ != 0) {
-                    labels["server.port"] = TStringBuilder() << ServerPort_;
+                    labels[std::string(MetricLabel::kServerPort)] = TStringBuilder() << ServerPort_;
                 }
                 ExternalRegistry_->Histogram(
-                    "db.client.operation.duration",
+                    std::string(MetricName::kOperationDuration),
                     {0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10},
                     labels,
-                    "Duration of database client operations.",
-                    "s"
+                    "Latency of each actual operation attempt (e.g. ExecuteQuery / Commit / Rollback).",
+                    std::string(MetricUnit::kSeconds)
                 )->Record(durationSeconds);
             }
         }
@@ -443,14 +510,35 @@ public:
         , TMetricRegistry* sensorsRegistry
         , std::shared_ptr<NMetrics::IMetricRegistry> externalMetricRegistry = {}
         , const std::string& discoveryEndpoint = {}
+        , const std::string& defaultPoolName = {}
     ) : Database_(database)
         , DatabaseLabel_({"database", database})
         , ExternalMetricRegistry_(std::move(externalMetricRegistry))
+        , DiscoveryEndpoint_(discoveryEndpoint)
+        , DefaultPoolName_(defaultPoolName)
     {
         ParseDiscoveryEndpoint(discoveryEndpoint, ServerAddress_, ServerPort_);
         if (sensorsRegistry) {
             SetMetricRegistry(sensorsRegistry);
         }
+    }
+
+    static std::string ResolvePoolName(const std::string& explicitPoolName,
+                                       const std::string& driverDefault,
+                                       const std::string& database,
+                                       const std::string& discoveryEndpoint) {
+        if (!explicitPoolName.empty()) {
+            return explicitPoolName;
+        }
+        if (!driverDefault.empty()) {
+            return driverDefault;
+        }
+        std::string out;
+        out.reserve(database.size() + discoveryEndpoint.size() + 1);
+        out.append(database);
+        out.push_back('@');
+        out.append(discoveryEndpoint);
+        return out;
     }
 
     static void ParseDiscoveryEndpoint(const std::string& endpoint,
@@ -581,7 +669,11 @@ public:
         return TEndpointElectorStatCollector();
     }
 
-    TSessionPoolStatCollector GetSessionPoolStatCollector(const std::string& clientType) {
+    TSessionPoolStatCollector GetSessionPoolStatCollector(const std::string& clientType
+        , const std::string& explicitPoolName = {}
+    ) {
+        const std::string poolName = ResolvePoolName(explicitPoolName, DefaultPoolName_, Database_, DiscoveryEndpoint_);
+
         if (auto registry = MetricRegistryPtr_.Get()) {
             auto activeSessions = registry->IntGauge({ DatabaseLabel_, {"ydb_client", clientType},
                 {"sensor", "Sessions/InUse"} });
@@ -593,11 +685,11 @@ public:
                 {"sensor", "Sessions/WaitForReturn"} });
 
             return TSessionPoolStatCollector(activeSessions, inPoolSessions, fakeSessions, waiters,
-                ExternalMetricRegistry_, Database_, clientType);
+                ExternalMetricRegistry_, Database_, clientType, poolName);
         }
 
         return TSessionPoolStatCollector(nullptr, nullptr, nullptr, nullptr,
-            ExternalMetricRegistry_, Database_, clientType);
+            ExternalMetricRegistry_, Database_, clientType, poolName);
     }
 
     TClientStatCollector GetClientStatCollector(const std::string& clientType) {
@@ -648,6 +740,8 @@ private:
     const std::string Database_;
     const ::NMonitoring::TLabel DatabaseLabel_;
     std::shared_ptr<NMetrics::IMetricRegistry> ExternalMetricRegistry_;
+    std::string DiscoveryEndpoint_;
+    std::string DefaultPoolName_;
     std::string ServerAddress_;
     std::uint16_t ServerPort_ = 0;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;

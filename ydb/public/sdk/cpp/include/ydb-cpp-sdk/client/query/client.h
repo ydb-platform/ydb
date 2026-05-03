@@ -57,6 +57,7 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+    FLUENT_SETTING(std::string, PoolName);
 };
 
 class TQueryClient {

@@ -94,11 +94,12 @@ std::uint32_t TSessionPool::TWaitersQueue::Size() const {
 }
 
 
-TSessionPool::TSessionPool(std::uint32_t maxActiveSessions)
+TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoolSize)
     : Closed_(false)
     , WaitersQueue_(maxActiveSessions * 10)
     , ActiveSessions_(0)
     , MaxActiveSessions_(maxActiveSessions)
+    , MinPoolSize_(minPoolSize)
 {}
 
 static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
@@ -136,6 +137,7 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
         } else if (auto* ctxPtr = WaitersQueue_.TryPush(ctx)) {
             sessionSource = TSessionSource::Waiter;
             ctxPtr->ScheduleOnDeadlineWaiterCleanup();
+            ExternalStatCollector_.IncPendingRequests();
         } else {
             sessionSource = TSessionSource::Error;
         }
@@ -414,7 +416,10 @@ void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatC
         /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
         /*used=*/ActiveSessions_
     );
-    ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
+    ExternalStatCollector_.RecordPoolLimits(
+        /*minPoolSize=*/static_cast<std::int64_t>(MinPoolSize_),
+        /*maxPoolSize=*/static_cast<std::int64_t>(MaxActiveSessions_)
+    );
 }
 
 void TSessionPool::RecordConnectionCreateTime(double seconds) {
@@ -429,7 +434,6 @@ void TSessionPool::UpdateStats() {
         /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
         /*used=*/ActiveSessions_
     );
-    ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
 }
 
 }

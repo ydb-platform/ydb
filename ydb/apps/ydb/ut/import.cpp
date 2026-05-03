@@ -14,8 +14,14 @@ public:
         TString SourcePath;
     };
 
+    struct TExpectedListResultItem {
+        TString Prefix;
+        TString Path;
+    };
+
     grpc::Status ImportFromS3(grpc::ServerContext* context, const Ydb::Import::ImportFromS3Request* request, Ydb::Import::ImportFromS3Response* response) override {
         Y_UNUSED(context);
+        ++ImportCalls;
         CheckS3Params(request);
         CheckItems(request);
         return FillImportResponse(response);
@@ -23,7 +29,9 @@ public:
 
     grpc::Status ListObjectsInS3Export(grpc::ServerContext* context, const Ydb::Import::ListObjectsInS3ExportRequest* request, Ydb::Import::ListObjectsInS3ExportResponse* response) override {
         Y_UNUSED(context);
-        Y_UNUSED(request);
+        ++ListCalls;
+        CheckListS3Params(request);
+        CheckListItems(request);
         return FillListResponse(response);
     }
 
@@ -39,6 +47,11 @@ public:
 
     grpc::Status FillListResponse(Ydb::Import::ListObjectsInS3ExportResponse* response) {
         Ydb::Import::ListObjectsInS3ExportResult res;
+        for (const auto& item : ListResultItems) {
+            auto* resultItem = res.add_items();
+            resultItem->set_prefix(item.Prefix);
+            resultItem->set_path(item.Path);
+        }
         auto* operation = response->mutable_operation();
         operation->set_ready(true);
         operation->set_status(Ydb::StatusIds::SUCCESS);
@@ -65,6 +78,20 @@ public:
         CheckExcludeRegexps(settings);
     }
 
+    void CheckListS3Params(const Ydb::Import::ListObjectsInS3ExportRequest* request) {
+        const auto& settings = request->settings();
+        CHECK_EXP(settings.bucket() == Bucket, "Incorrect bucket: \"" << settings.bucket() << "\" instead of \"" << Bucket << "\"");
+        CHECK_EXP(settings.endpoint() == S3Endpoint, "Incorrect S3 endpoint: \"" << settings.endpoint() << "\" instead of \"" << S3Endpoint << "\"");
+        CHECK_EXP(settings.scheme() == Scheme, "Incorrect scheme: \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(settings.scheme()) << "\" instead of \"" << Ydb::Import::ImportFromS3Settings::Scheme_Name(Scheme) << "\"");
+        CHECK_EXP(settings.access_key() == S3AccessKey, "Incorrect S3 access key: \"" << settings.access_key() << "\" instead of \"" << S3AccessKey << "\"");
+        CHECK_EXP(settings.secret_key() == S3SecretKey, "Incorrect S3 secret key: \"" << settings.secret_key() << "\" instead of \"" << S3SecretKey << "\"");
+        CHECK_EXP(settings.number_of_retries() == NumberOfRetries, "Incorrect number of retries: " << settings.number_of_retries() << " instead of " << NumberOfRetries);
+        CHECK_EXP(settings.disable_virtual_addressing() == DisableVirtualAddressing, "Incorrect disable virtual addressing: " << settings.disable_virtual_addressing() << " instead of " << DisableVirtualAddressing);
+        CHECK_EXP(settings.prefix() == CommonSourcePrefix, "Incorrect common source prefix: \"" << settings.prefix() << "\" instead of \"" << CommonSourcePrefix << "\"");
+        CheckListEncryptionSettings(settings);
+        CheckListExcludeRegexps(settings);
+    }
+
     void CheckItems(const Ydb::Import::ImportFromS3Request* request) {
         const auto& settings = request->settings();
         CHECK_EXP(settings.items_size() == static_cast<int>(Items.size()),
@@ -81,7 +108,23 @@ public:
         }
     }
 
+    void CheckListItems(const Ydb::Import::ListObjectsInS3ExportRequest* request) {
+        const auto& settings = request->settings();
+        CHECK_EXP(settings.items_size() == static_cast<int>(ListItems.size()),
+            "List items size does not match. settings.items_size(): " << settings.items_size() << ". ListItems.size(): " << ListItems.size());
+        for (int i = 0; i < settings.items_size() && i < static_cast<int>(ListItems.size()); ++i) {
+            CHECK_EXP(settings.items(i).path() == ListItems[i],
+                "Incorrect list item path at " << i << ": \"" << settings.items(i).path() << "\" instead of \"" << ListItems[i] << "\"");
+        }
+    }
+
     void CheckEncryptionSettings(const Ydb::Import::ImportFromS3Settings& settings) {
+        const auto& encryptionSettings = settings.encryption_settings();
+        CHECK_EXP(encryptionSettings.symmetric_key().key() == SymmetricKey,
+            "Incorrect symmetric encryption key: \"" << encryptionSettings.symmetric_key().key() << "\" instead of \"" << SymmetricKey << "\"");
+    }
+
+    void CheckListEncryptionSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
         const auto& encryptionSettings = settings.encryption_settings();
         CHECK_EXP(encryptionSettings.symmetric_key().key() == SymmetricKey,
             "Incorrect symmetric encryption key: \"" << encryptionSettings.symmetric_key().key() << "\" instead of \"" << SymmetricKey << "\"");
@@ -96,8 +139,25 @@ public:
         }
     }
 
+    void CheckListExcludeRegexps(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
+        CHECK_EXP(settings.exclude_regexps_size() == static_cast<int>(ExcludeRegexps.size()),
+            "Exclude regexps size does not match. settings.exclude_regexps_size(): " << settings.exclude_regexps_size() << ". ExcludeRegexps.size(): " << ExcludeRegexps.size());
+        for (int i = 0; i < settings.exclude_regexps_size() && i < static_cast<int>(ExcludeRegexps.size()); ++i) {
+            CHECK_EXP(settings.exclude_regexps(i) == ExcludeRegexps[i],
+                "Incorrect exclude regexp at " << i << ": \"" << settings.exclude_regexps(i) << "\" instead of \"" << ExcludeRegexps[i] << "\"");
+        }
+    }
+
+    void CheckExpectations() override {
+        CHECK_EXP(ImportCalls == ExpectedImportCalls, "Incorrect ImportFromS3 calls count: " << ImportCalls << " instead of " << ExpectedImportCalls);
+        CHECK_EXP(ListCalls == ExpectedListCalls, "Incorrect ListObjectsInS3Export calls count: " << ListCalls << " instead of " << ExpectedListCalls);
+        TChecker::CheckExpectations();
+    }
+
     void ClearExpectations() override {
         Items.clear();
+        ListItems.clear();
+        ListResultItems.clear();
         Bucket.clear();
         S3Endpoint.clear();
         Scheme = Ydb::Import::ImportFromS3Settings::HTTPS;
@@ -113,6 +173,10 @@ public:
         SkipChecksumValidation = false;
         IndexPopulationMode = Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
         ExcludeRegexps.clear();
+        ExpectedImportCalls = 1;
+        ExpectedListCalls = 0;
+        ImportCalls = 0;
+        ListCalls = 0;
     }
 
     TImportImpl& ExpectItem(TString sourcePrefix, TString destinationPath, TString sourcePath = {}) {
@@ -121,6 +185,25 @@ public:
             .DestinationPath = std::move(destinationPath),
             .SourcePath = std::move(sourcePath),
         });
+        return *this;
+    }
+
+    TImportImpl& ExpectListItem(TString path) {
+        ListItems.emplace_back(std::move(path));
+        return *this;
+    }
+
+    TImportImpl& AddListResultItem(TString prefix, TString path) {
+        ListResultItems.push_back({
+            .Prefix = std::move(prefix),
+            .Path = std::move(path),
+        });
+        return *this;
+    }
+
+    TImportImpl& ExpectListCall() {
+        ExpectedImportCalls = 0;
+        ExpectedListCalls = 1;
         return *this;
     }
 
@@ -200,6 +283,8 @@ public:
     }
 
     std::vector<TExpectedItem> Items;
+    std::vector<TString> ListItems;
+    std::vector<TExpectedListResultItem> ListResultItems;
     TString Bucket;
     TString S3Endpoint;
     Ydb::Import::ImportFromS3Settings::Scheme Scheme = Ydb::Import::ImportFromS3Settings::HTTPS;
@@ -215,6 +300,10 @@ public:
     bool SkipChecksumValidation = false;
     Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode = Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
     std::vector<TString> ExcludeRegexps;
+    int ExpectedImportCalls = 1;
+    int ExpectedListCalls = 0;
+    int ImportCalls = 0;
+    int ListCalls = 0;
 };
 
 class TImportFixture : public TCliTestFixture {
@@ -299,6 +388,53 @@ Y_UNIT_TEST_SUITE(ImportTest) {
                 "--include", "another/path",
             }
         );
+    }
+
+    Y_UNIT_TEST_F(ListObjects, TImportFixture) {
+        const TString encryptionKey = "test-encryption-key";
+        const TString encryptionKeyFile = EnvFile(encryptionKey, "import_list_encryption.key");
+
+        Service<TImportImpl>()
+            .ExpectListCall()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectScheme(Ydb::Import::ImportFromS3Settings::HTTP)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectNumberOfRetries(42)
+            .ExpectDisableVirtualAddressing(true)
+            .ExpectCommonSourcePrefix("source/prefix")
+            .ExpectSymmetricKey(encryptionKey)
+            .ExpectListItem("src/path")
+            .ExpectListItem("another/path")
+            .AddListResultItem("source/prefix/src/path", "src/path")
+            .AddListResultItem("source/prefix/another/path", "another/path");
+
+        const TString output = RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--list",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--scheme", "http",
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--source-prefix", "source/prefix",
+                "--include", "src/path",
+                "--include", "another/path",
+                "--retries", "42",
+                "--use-virtual-addressing", "false",
+                "--encryption-key-file", encryptionKeyFile,
+            }
+        );
+
+        UNIT_ASSERT_STRING_CONTAINS(output, "src/path");
+        UNIT_ASSERT_STRING_CONTAINS(output, "source/prefix/src/path");
+        UNIT_ASSERT_STRING_CONTAINS(output, "another/path");
+        UNIT_ASSERT_STRING_CONTAINS(output, "source/prefix/another/path");
     }
 
     Y_UNIT_TEST_F(PassEncryptionKey, TImportFixture) {

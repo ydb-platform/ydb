@@ -555,6 +555,11 @@ public:
         return static_cast<TService&>(*serviceIter->second);
     }
 
+protected:
+    TPortManager& GetPortManager() {
+        return PortManager;
+    }
+
 private:
     TPortManager PortManager;
     TString ConnectSchema = "grpc";

@@ -1,5 +1,6 @@
 #include "mock_env.h"
 
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/grpc/ydb_import_v1.grpc.pb.h>
 
 const TString TEST_BUCKET = "test-bucket";
@@ -295,6 +296,29 @@ class TImportFixture : public TCliTestFixture {
         TCliTestFixture::AddServices();
         AddService<TImportImpl>();
     }
+
+public:
+    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
+        if (!S3Mock_) {
+            S3Port_ = GetPortManager().GetPort();
+            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
+            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
+        }
+        return *S3Mock_;
+    }
+
+    TString GetS3Endpoint() {
+        S3Mock();
+        return TStringBuilder() << "localhost:" << S3Port_;
+    }
+
+    void PutS3Object(const TString& key, const TString& value = {}) {
+        S3Mock().GetData()[key] = value;
+    }
+
+private:
+    TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
+    ui16 S3Port_ = 0;
 };
 
 Y_UNIT_TEST_SUITE(ImportTest) {

@@ -390,6 +390,7 @@ NImport::TListObjectsInS3ExportSettings TCommandImportFromS3::MakeListObjectsSet
     auto settings = FillSettings<NImport::TListObjectsInS3ExportSettings>(NImport::TListObjectsInS3ExportSettings());
 
     FillS3Settings(settings);
+    settings.NumberOfRetries(NumberOfRetries);
 
     const bool encryption = !EncryptionKey.empty();
     if (encryption) {

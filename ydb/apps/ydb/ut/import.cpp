@@ -407,6 +407,56 @@ Y_UNIT_TEST_SUITE(ImportTest) {
         );
     }
 
+    Y_UNIT_TEST_F(CommonSourcePrefixWithoutItems, TImportFixture) {
+        // The main use case: import the whole database recursively
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonSourcePrefix("source/prefix");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--source-prefix", "source/prefix",
+            }
+        );
+
+        const TString encryptionKey = "test-encryption-key";
+        const TString encryptionKeyFile = EnvFile(encryptionKey, "import_whole_database_encryption.key");
+
+        Service<TImportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonSourcePrefix("source/prefix")
+            .ExpectSymmetricKey(encryptionKey);
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "import", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--source-prefix", "source/prefix",
+                "--encryption-key-file", encryptionKeyFile,
+            }
+        );
+    }
+
     Y_UNIT_TEST_F(ApplyExcludeClientFilter, TImportFixture) {
         PutS3TableExport("source/prefix/keep");
         PutS3TableExport("source/prefix/skip");

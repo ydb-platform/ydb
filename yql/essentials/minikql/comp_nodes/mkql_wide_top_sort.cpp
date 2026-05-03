@@ -165,15 +165,18 @@ public:
             if (SpilledData->Empty()) {
                 return EFetchResult::Finish;
             }
+            HasValue = true;
         }
-        HasValue = true;
         return EFetchResult::One;
     }
 
     bool CheckForInit() {
-        auto readResult = Read();
-        bool result = HasValue || IsFinished();
-        return result;
+        if (HasValue || IsFinished()) {
+            return true;
+        }
+        // Try to read the first value
+        EFetchResult result = Read();
+        return result != EFetchResult::Yield;
     }
 
     bool IsFinished() const {
@@ -936,8 +939,19 @@ private:
             bool finished = currentIt.IsFinished();
             if (finished) {
                 MergeIterators.pop_back();
-            } else {
+            } else if (currentIt.CheckForInit()) {
+                // Next value is already available, safe to restore heap
                 std::push_heap(MergeIterators.begin(), MergeIterators.end());
+            } else {
+                // Async read in progress — need to wait before restoring heap
+                // Write current row first, then return to wait
+                auto writeOp = MergeTarget->Write(row.data(), Indexes.size());
+                if (writeOp) {
+                    MergeHeapBuilt = false;
+                    return false;
+                }
+                MergeHeapBuilt = false;
+                return false;
             }
 
             auto writeOp = MergeTarget->Write(row.data(), Indexes.size());

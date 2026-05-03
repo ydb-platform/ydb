@@ -13,6 +13,8 @@ using namespace NYdb::NSdkStats;
 
 namespace {
     constexpr const char kTestDbNamespace[] = "/Root/testdb";
+    constexpr const char kTestServerAddress[] = "ydb.example.com";
+    constexpr std::uint16_t kTestServerPort = 2135;
 
     std::string YdbOp(const std::string& op) {
         return op.rfind("ydb.", 0) == 0 ? op : "ydb." + op;
@@ -20,7 +22,7 @@ namespace {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// TRequestMetrics (shared logic)
+// TRequestMetrics (db.client.operation.* — strict OTel-style label set)
 // ---------------------------------------------------------------------------
 
 class RequestMetricsTest : public ::testing::Test {
@@ -28,33 +30,33 @@ protected:
     void SetUp() override {
         Registry = std::make_shared<TFakeMetricRegistry>();
         OpCollector = TStatCollector::TClientOperationStatCollector(
-            nullptr, kTestDbNamespace, "", Registry);
+            nullptr, kTestDbNamespace, "", Registry, kTestServerAddress, kTestServerPort);
     }
 
-    std::shared_ptr<TFakeCounter> FailedCounter(const std::string& op, EStatus status) {
-        const std::string statusName = ToString(status);
-        return Registry->GetCounter("db.client.operation.failed", {
+    static TLabels FailedLabels(const std::string& op) {
+        return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
             {"db.operation.name", YdbOp(op)},
-            {"ydb.client.api", "Unspecified"},
-            {"db.response.status_code", statusName},
-            {"error.type", statusName},
-        });
-    }
-
-    std::shared_ptr<TFakeHistogram> DurationHistogram(const std::string& op, EStatus status) {
-        TLabels labels = {
-            {"db.system.name", "ydb"},
-            {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", YdbOp(op)},
-            {"ydb.client.api", "Unspecified"},
         };
-        if (status != EStatus::SUCCESS) {
-            labels["db.response.status_code"] = ToString(status);
-            labels["error.type"] = ToString(status);
-        }
-        return Registry->GetHistogram("db.client.operation.duration", labels);
+    }
+
+    static TLabels DurationLabels(const std::string& op) {
+        return {
+            {"db.system.name", "ydb"},
+            {"db.namespace", kTestDbNamespace},
+            {"db.operation.name", YdbOp(op)},
+            {"server.address", kTestServerAddress},
+            {"server.port", ToString(kTestServerPort)},
+        };
+    }
+
+    std::shared_ptr<TFakeCounter> FailedCounter(const std::string& op) {
+        return Registry->GetCounter("db.client.operation.failed", FailedLabels(op));
+    }
+
+    std::shared_ptr<TFakeHistogram> DurationHistogram(const std::string& op) {
+        return Registry->GetHistogram("db.client.operation.duration", DurationLabels(op));
     }
 
     TStatCollector::TClientOperationStatCollector OpCollector;
@@ -67,7 +69,7 @@ TEST_F(RequestMetricsTest, SuccessDoesNotIncrementFailedCounter) {
         metrics.End(EStatus::SUCCESS);
     }
 
-    auto failed = FailedCounter("DoSomething", EStatus::UNAVAILABLE);
+    auto failed = FailedCounter("DoSomething");
     if (failed) {
         EXPECT_EQ(failed->Get(), 0);
     }
@@ -79,7 +81,7 @@ TEST_F(RequestMetricsTest, FailureIncrementsFailedCounter) {
         metrics.End(EStatus::UNAVAILABLE);
     }
 
-    auto failed = FailedCounter("DoSomething", EStatus::UNAVAILABLE);
+    auto failed = FailedCounter("DoSomething");
     ASSERT_NE(failed, nullptr);
     EXPECT_EQ(failed->Get(), 1);
 }
@@ -90,7 +92,7 @@ TEST_F(RequestMetricsTest, DurationRecordedOnEnd) {
         metrics.End(EStatus::SUCCESS);
     }
 
-    auto hist = DurationHistogram("DoSomething", EStatus::SUCCESS);
+    auto hist = DurationHistogram("DoSomething");
     ASSERT_NE(hist, nullptr);
     EXPECT_EQ(hist->Count(), 1u);
     EXPECT_GE(hist->GetValues()[0], 0.0);
@@ -102,9 +104,24 @@ TEST_F(RequestMetricsTest, DurationIsInSeconds) {
         metrics.End(EStatus::SUCCESS);
     }
 
-    auto hist = DurationHistogram("DoSomething", EStatus::SUCCESS);
+    auto hist = DurationHistogram("DoSomething");
     ASSERT_NE(hist, nullptr);
     EXPECT_LT(hist->GetValues()[0], 1.0);
+}
+
+TEST_F(RequestMetricsTest, DurationDoesNotSplitBySuccessOrError) {
+    {
+        TRequestMetrics m(&OpCollector, "Op", TLog());
+        m.End(EStatus::SUCCESS);
+    }
+    {
+        TRequestMetrics m(&OpCollector, "Op", TLog());
+        m.End(EStatus::OVERLOADED);
+    }
+
+    auto hist = DurationHistogram("Op");
+    ASSERT_NE(hist, nullptr);
+    EXPECT_EQ(hist->Count(), 2u);
 }
 
 TEST_F(RequestMetricsTest, DoubleEndIsIdempotent) {
@@ -112,12 +129,12 @@ TEST_F(RequestMetricsTest, DoubleEndIsIdempotent) {
     metrics.End(EStatus::SUCCESS);
     metrics.End(EStatus::INTERNAL_ERROR);
 
-    auto failed = FailedCounter("DoSomething", EStatus::INTERNAL_ERROR);
+    auto failed = FailedCounter("DoSomething");
     if (failed) {
         EXPECT_EQ(failed->Get(), 0);
     }
 
-    auto hist = DurationHistogram("DoSomething", EStatus::SUCCESS);
+    auto hist = DurationHistogram("DoSomething");
     ASSERT_NE(hist, nullptr);
     EXPECT_EQ(hist->Count(), 1u);
 }
@@ -127,11 +144,11 @@ TEST_F(RequestMetricsTest, DestructorCallsEndWithClientInternalError) {
         TRequestMetrics metrics(&OpCollector, "DoSomething", TLog());
     }
 
-    auto failed = FailedCounter("DoSomething", EStatus::CLIENT_INTERNAL_ERROR);
+    auto failed = FailedCounter("DoSomething");
     ASSERT_NE(failed, nullptr);
     EXPECT_EQ(failed->Get(), 1);
 
-    auto hist = DurationHistogram("DoSomething", EStatus::CLIENT_INTERNAL_ERROR);
+    auto hist = DurationHistogram("DoSomething");
     ASSERT_NE(hist, nullptr);
     EXPECT_EQ(hist->Count(), 1u);
 }
@@ -154,15 +171,15 @@ TEST_F(RequestMetricsTest, DifferentOperationsHaveSeparateMetrics) {
         m2.End(EStatus::OVERLOADED);
     }
 
-    auto failedA = FailedCounter("OpA", EStatus::SUCCESS);
+    auto failedA = FailedCounter("OpA");
     if (failedA) {
         EXPECT_EQ(failedA->Get(), 0);
     }
-    auto failedB = FailedCounter("OpB", EStatus::OVERLOADED);
+    auto failedB = FailedCounter("OpB");
     ASSERT_NE(failedB, nullptr);
     EXPECT_EQ(failedB->Get(), 1);
-    EXPECT_EQ(DurationHistogram("OpA", EStatus::SUCCESS)->Count(), 1u);
-    EXPECT_EQ(DurationHistogram("OpB", EStatus::OVERLOADED)->Count(), 1u);
+    EXPECT_EQ(DurationHistogram("OpA")->Count(), 1u);
+    EXPECT_EQ(DurationHistogram("OpB")->Count(), 1u);
 }
 
 TEST_F(RequestMetricsTest, MultipleRequestsAccumulate) {
@@ -171,11 +188,10 @@ TEST_F(RequestMetricsTest, MultipleRequestsAccumulate) {
         metrics.End(i % 2 == 0 ? EStatus::SUCCESS : EStatus::TIMEOUT);
     }
 
-    auto failed = FailedCounter("Op", EStatus::TIMEOUT);
+    auto failed = FailedCounter("Op");
     ASSERT_NE(failed, nullptr);
     EXPECT_EQ(failed->Get(), 2);
-    EXPECT_EQ(DurationHistogram("Op", EStatus::SUCCESS)->Count(), 3u);
-    EXPECT_EQ(DurationHistogram("Op", EStatus::TIMEOUT)->Count(), 2u);
+    EXPECT_EQ(DurationHistogram("Op")->Count(), 5u);
 }
 
 TEST_F(RequestMetricsTest, AllErrorStatusesIncrementFailedCounter) {
@@ -195,33 +211,39 @@ TEST_F(RequestMetricsTest, AllErrorStatusesIncrementFailedCounter) {
         metrics.End(status);
     }
 
-    for (auto status : errorStatuses) {
-        auto failed = FailedCounter("Op", status);
-        ASSERT_NE(failed, nullptr);
-        EXPECT_EQ(failed->Get(), 1) << "status " << ToString(status);
-    }
+    auto failed = FailedCounter("Op");
+    ASSERT_NE(failed, nullptr);
+    EXPECT_EQ(failed->Get(), static_cast<int64_t>(errorStatuses.size()));
 }
 
-TEST_F(RequestMetricsTest, DeprecatedRequestAndErrorCountersAreNotEmitted) {
+TEST_F(RequestMetricsTest, DeprecatedAndNonSpecLabelsAreNotEmitted) {
     {
         TRequestMetrics metrics(&OpCollector, "Op", TLog());
         metrics.End(EStatus::UNAVAILABLE);
     }
 
-    TLabels baseLabels = {
-        {"db.system.name", "ydb"},
-        {"db.namespace", kTestDbNamespace},
-        {"db.operation.name", "ydb.Op"},
-        {"ydb.client.api", "Unspecified"},
-    };
-    EXPECT_EQ(Registry->GetCounter("db.client.operation.requests", baseLabels), nullptr);
-    EXPECT_EQ(Registry->GetCounter("db.client.operation.errors", baseLabels), nullptr);
+    EXPECT_EQ(Registry->GetCounter("db.client.operation.requests", FailedLabels("Op")), nullptr);
+    EXPECT_EQ(Registry->GetCounter("db.client.operation.errors", FailedLabels("Op")), nullptr);
+
+    auto withExtraLabel = FailedLabels("Op");
+    withExtraLabel["ydb.client.api"] = "Unspecified";
+    EXPECT_EQ(Registry->GetCounter("db.client.operation.failed", withExtraLabel), nullptr);
+
+    auto withStatusLabel = FailedLabels("Op");
+    withStatusLabel["db.response.status_code"] = ToString(EStatus::UNAVAILABLE);
+    EXPECT_EQ(Registry->GetCounter("db.client.operation.failed", withStatusLabel), nullptr);
+
+    auto durLabelsWithExtras = DurationLabels("Op");
+    durLabelsWithExtras["ydb.client.api"] = "Unspecified";
+    EXPECT_EQ(Registry->GetHistogram("db.client.operation.duration", durLabelsWithExtras), nullptr);
 }
 
 TEST(RequestMetricsDbNamespaceTest, DifferentNamespacesAreSeparateMetricSeries) {
     auto registry = std::make_shared<TFakeMetricRegistry>();
-    TStatCollector::TClientOperationStatCollector collectorA(nullptr, "/db/alpha", "", registry);
-    TStatCollector::TClientOperationStatCollector collectorB(nullptr, "/db/beta", "", registry);
+    TStatCollector::TClientOperationStatCollector collectorA(
+        nullptr, "/db/alpha", "", registry, kTestServerAddress, kTestServerPort);
+    TStatCollector::TClientOperationStatCollector collectorB(
+        nullptr, "/db/beta", "", registry, kTestServerAddress, kTestServerPort);
 
     {
         TRequestMetrics m(&collectorA, "GetSession", TLog());
@@ -232,121 +254,142 @@ TEST(RequestMetricsDbNamespaceTest, DifferentNamespacesAreSeparateMetricSeries) 
         m.End(EStatus::SUCCESS);
     }
 
-    auto labelsAlpha = NMetrics::TLabels{
-        {"db.system.name", "ydb"},
-        {"db.namespace", "/db/alpha"},
-        {"db.operation.name", "ydb.GetSession"},
-        {"ydb.client.api", "Unspecified"},
-    };
-    auto labelsBeta = NMetrics::TLabels{
-        {"db.system.name", "ydb"},
-        {"db.namespace", "/db/beta"},
-        {"db.operation.name", "ydb.GetSession"},
-        {"ydb.client.api", "Unspecified"},
+    auto durLabels = [](const char* db) {
+        return TLabels{
+            {"db.system.name", "ydb"},
+            {"db.namespace", db},
+            {"db.operation.name", "ydb.GetSession"},
+            {"server.address", kTestServerAddress},
+            {"server.port", ToString(kTestServerPort)},
+        };
     };
 
-    auto reqAlpha = registry->GetCounter("db.client.operation.requests", labelsAlpha("ydb.GetSession"));
-    auto reqBeta = registry->GetCounter("db.client.operation.requests", labelsBeta("ydb.GetSession"));
-    ASSERT_NE(reqAlpha, nullptr);
-    ASSERT_NE(reqBeta, nullptr);
-    EXPECT_EQ(reqAlpha->Get(), 1);
-    EXPECT_EQ(reqBeta->Get(), 1);
-
-    auto durLabels = [&](auto base, const char* op) {
-        auto labels = base(op);
-        labels["db.response.status_code"] = ToString(EStatus::SUCCESS);
-        return labels;
-    };
-    auto durAlpha = registry->GetHistogram(
-        "db.client.operation.duration",
-        durLabels(labelsAlpha, "ydb.GetSession"));
-    auto durBeta = registry->GetHistogram(
-        "db.client.operation.duration",
-        durLabels(labelsBeta, "ydb.GetSession"));
+    auto durAlpha = registry->GetHistogram("db.client.operation.duration", durLabels("/db/alpha"));
+    auto durBeta = registry->GetHistogram("db.client.operation.duration", durLabels("/db/beta"));
     ASSERT_NE(durAlpha, nullptr);
     ASSERT_NE(durBeta, nullptr);
     EXPECT_EQ(durAlpha->Count(), 1u);
     EXPECT_EQ(durBeta->Count(), 1u);
 }
 
-TEST(RequestMetricsClientAliasesTest, QueryOperationsUseOtelStandardMetrics) {
+TEST(RequestMetricsServerAddressTest, DifferentEndpointsAreSeparateSeries) {
     auto registry = std::make_shared<TFakeMetricRegistry>();
-    TStatCollector::TClientOperationStatCollector collector(nullptr, "", "Query", registry);
+    TStatCollector::TClientOperationStatCollector collectorA(
+        nullptr, kTestDbNamespace, "", registry, "host-a", 2135);
+    TStatCollector::TClientOperationStatCollector collectorB(
+        nullptr, kTestDbNamespace, "", registry, "host-b", 2135);
 
-    NObservability::TRequestMetrics metrics(&collector, "ydb.ExecuteQuery", TLog());
-    metrics.End(EStatus::SUCCESS);
+    {
+        TRequestMetrics m(&collectorA, "Op", TLog());
+        m.End(EStatus::SUCCESS);
+    }
+    {
+        TRequestMetrics m(&collectorB, "Op", TLog());
+        m.End(EStatus::SUCCESS);
+    }
 
-    EXPECT_NE(
-        registry->GetCounter(
-            "db.client.operation.requests",
-            {
-                {"db.system.name", "ydb"},
-                {"db.namespace", ""},
-                {"db.operation.name", "ydb.ExecuteQuery"},
-                {"ydb.client.api", "Query"},
-            }
-        ),
-        nullptr
-    );
-    EXPECT_NE(
-        registry->GetCounter(
-            "db.client.operation.errors",
-            {
-                {"db.system.name", "ydb"},
-                {"db.namespace", ""},
-                {"db.operation.name", "ydb.ExecuteQuery"},
-                {"ydb.client.api", "Query"},
-            }
-        ),
-        nullptr
-    );
-    EXPECT_NE(
-        registry->GetHistogram(
-            "db.client.operation.duration",
-            {
-                {"db.system.name", "ydb"},
-                {"db.namespace", ""},
-                {"db.operation.name", "ydb.ExecuteQuery"},
-                {"ydb.client.api", "Query"},
-            }
-        ),
-        nullptr
-    );
+    auto labels = [](const char* host) {
+        return TLabels{
+            {"db.system.name", "ydb"},
+            {"db.namespace", kTestDbNamespace},
+            {"db.operation.name", "ydb.Op"},
+            {"server.address", host},
+            {"server.port", "2135"},
+        };
+    };
+    EXPECT_NE(registry->GetHistogram("db.client.operation.duration", labels("host-a")), nullptr);
+    EXPECT_NE(registry->GetHistogram("db.client.operation.duration", labels("host-b")), nullptr);
 }
 
-TEST(RequestMetricsClientAliasesTest, TableOperationsUseOtelStandardMetrics) {
+TEST(RequestMetricsEmptyServerTest, OmitsServerLabelsWhenAddressUnset) {
     auto registry = std::make_shared<TFakeMetricRegistry>();
-    TStatCollector::TClientOperationStatCollector collector(nullptr, "", "Table", registry);
+    TStatCollector::TClientOperationStatCollector collector(
+        nullptr, kTestDbNamespace, "", registry);
 
-    NObservability::TRequestMetrics metrics(&collector, "ExecuteDataQuery", TLog());
-    metrics.End(EStatus::SUCCESS);
+    {
+        TRequestMetrics m(&collector, "Op", TLog());
+        m.End(EStatus::SUCCESS);
+    }
 
-    EXPECT_NE(
-        registry->GetHistogram(
-            "db.client.operation.duration",
-            {
-                {"db.system.name", "ydb"},
-                {"db.namespace", ""},
-                {"db.operation.name", "ydb.ExecuteDataQuery"},
-                {"ydb.client.api", "Table"},
-            }
-        ),
-        nullptr
-    );
+    TLabels labels = {
+        {"db.system.name", "ydb"},
+        {"db.namespace", kTestDbNamespace},
+        {"db.operation.name", "ydb.Op"},
+    };
+    EXPECT_NE(registry->GetHistogram("db.client.operation.duration", labels), nullptr);
 }
 
 // ---------------------------------------------------------------------------
-// Session pool / connection metrics
+// Discovery endpoint parsing
+// ---------------------------------------------------------------------------
+
+TEST(DiscoveryEndpointParserTest, ParsesHostPort) {
+    std::string host;
+    std::uint16_t port = 0;
+    TStatCollector::ParseDiscoveryEndpoint("ydb.example.com:2135", host, port);
+    EXPECT_EQ(host, "ydb.example.com");
+    EXPECT_EQ(port, 2135);
+}
+
+TEST(DiscoveryEndpointParserTest, StripsGrpcScheme) {
+    std::string host;
+    std::uint16_t port = 0;
+    TStatCollector::ParseDiscoveryEndpoint("grpc://h:1234", host, port);
+    EXPECT_EQ(host, "h");
+    EXPECT_EQ(port, 1234);
+
+    TStatCollector::ParseDiscoveryEndpoint("grpcs://h.example:443", host, port);
+    EXPECT_EQ(host, "h.example");
+    EXPECT_EQ(port, 443);
+}
+
+TEST(DiscoveryEndpointParserTest, ParsesIpv6) {
+    std::string host;
+    std::uint16_t port = 0;
+    TStatCollector::ParseDiscoveryEndpoint("[::1]:2135", host, port);
+    EXPECT_EQ(host, "::1");
+    EXPECT_EQ(port, 2135);
+}
+
+TEST(DiscoveryEndpointParserTest, RejectsBadInput) {
+    std::string host = "stale";
+    std::uint16_t port = 99;
+    TStatCollector::ParseDiscoveryEndpoint("", host, port);
+    EXPECT_TRUE(host.empty());
+    EXPECT_EQ(port, 0);
+
+    TStatCollector::ParseDiscoveryEndpoint("no-port-here", host, port);
+    EXPECT_TRUE(host.empty());
+    EXPECT_EQ(port, 0);
+
+    TStatCollector::ParseDiscoveryEndpoint("h:abc", host, port);
+    EXPECT_TRUE(host.empty());
+    EXPECT_EQ(port, 0);
+
+    TStatCollector::ParseDiscoveryEndpoint("h:99999", host, port);
+    EXPECT_TRUE(host.empty());
+    EXPECT_EQ(port, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Session pool / connection metrics (db.client.connection.*)
 // ---------------------------------------------------------------------------
 
 namespace {
-    NMetrics::TLabels PoolLabels(const std::string& database, const std::string& clientType) {
+    NMetrics::TLabels BasePoolLabels(const std::string& database, const std::string& clientType) {
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", database},
             {"db.client.connection.pool.name", clientType.empty() ? std::string("Unspecified") : clientType},
-            {"ydb.client.api", clientType.empty() ? std::string("Unspecified") : clientType},
         };
+    }
+
+    NMetrics::TLabels CountLabels(const std::string& database,
+                                  const std::string& clientType,
+                                  const std::string& state) {
+        auto labels = BasePoolLabels(database, clientType);
+        labels["db.client.connection.state"] = state;
+        return labels;
     }
 } // namespace
 
@@ -374,7 +417,7 @@ TEST_F(ConnectionPoolMetricsTest, CreateTimeRecorded) {
 
     auto hist = Registry->GetHistogram(
         "db.client.connection.create_time",
-        PoolLabels(kTestDbNamespace, "Query"));
+        BasePoolLabels(kTestDbNamespace, "Query"));
     ASSERT_NE(hist, nullptr);
     EXPECT_EQ(hist->Count(), 2u);
     EXPECT_DOUBLE_EQ(hist->GetValues()[0], 0.002);
@@ -388,27 +431,72 @@ TEST_F(ConnectionPoolMetricsTest, TimeoutsIncrement) {
 
     auto counter = Registry->GetCounter(
         "db.client.connection.timeouts",
-        PoolLabels(kTestDbNamespace, "Query"));
+        BasePoolLabels(kTestDbNamespace, "Query"));
     ASSERT_NE(counter, nullptr);
     EXPECT_EQ(counter->Get(), 3);
 }
 
-TEST_F(ConnectionPoolMetricsTest, ConnectionCountGauge) {
-    Collector.UpdateConnectionCount(5);
-    Collector.UpdateConnectionCount(10);
-    Collector.UpdateConnectionCount(2);
+TEST_F(ConnectionPoolMetricsTest, ConnectionCountSplitsByState) {
+    Collector.UpdateConnectionCount(/*idle=*/8, /*used=*/3);
 
-    auto hist = Registry->GetHistogram(
-        "db.client.connection.create_time",
-        PoolLabels(kTestDbNamespace, "Query"));
-    EXPECT_EQ(hist, nullptr); // was never recorded
+    auto idle = Registry->GetGauge(
+        "db.client.connection.count",
+        CountLabels(kTestDbNamespace, "Query", "idle"));
+    auto used = Registry->GetGauge(
+        "db.client.connection.count",
+        CountLabels(kTestDbNamespace, "Query", "used"));
+    ASSERT_NE(idle, nullptr);
+    ASSERT_NE(used, nullptr);
+    EXPECT_DOUBLE_EQ(idle->Get(), 8.0);
+    EXPECT_DOUBLE_EQ(used->Get(), 3.0);
+}
+
+TEST_F(ConnectionPoolMetricsTest, ConnectionCountUpdates) {
+    Collector.UpdateConnectionCount(5, 1);
+    Collector.UpdateConnectionCount(2, 4);
+
+    auto idle = Registry->GetGauge(
+        "db.client.connection.count",
+        CountLabels(kTestDbNamespace, "Query", "idle"));
+    auto used = Registry->GetGauge(
+        "db.client.connection.count",
+        CountLabels(kTestDbNamespace, "Query", "used"));
+    ASSERT_NE(idle, nullptr);
+    ASSERT_NE(used, nullptr);
+    EXPECT_DOUBLE_EQ(idle->Get(), 2.0);
+    EXPECT_DOUBLE_EQ(used->Get(), 4.0);
+}
+
+TEST_F(ConnectionPoolMetricsTest, ConnectionCountWithoutStateLabelIsNotEmitted) {
+    Collector.UpdateConnectionCount(5, 3);
+
+    EXPECT_EQ(Registry->GetGauge(
+        "db.client.connection.count",
+        BasePoolLabels(kTestDbNamespace, "Query")), nullptr);
 }
 
 TEST_F(ConnectionPoolMetricsTest, PendingRequestsGauge) {
-    Collector.UpdatePendingRequests(0);
     Collector.UpdatePendingRequests(7);
 
-    SUCCEED();
+    auto gauge = Registry->GetGauge(
+        "db.client.connection.pending_requests",
+        BasePoolLabels(kTestDbNamespace, "Query"));
+    ASSERT_NE(gauge, nullptr);
+    EXPECT_DOUBLE_EQ(gauge->Get(), 7.0);
+}
+
+TEST_F(ConnectionPoolMetricsTest, PoolMetricsHaveNoYdbClientApiLabel) {
+    Collector.IncConnectionTimeouts();
+    Collector.RecordConnectionCreateTime(0.01);
+    Collector.UpdatePendingRequests(1);
+    Collector.UpdateConnectionCount(1, 1);
+
+    auto withExtra = BasePoolLabels(kTestDbNamespace, "Query");
+    withExtra["ydb.client.api"] = "Query";
+
+    EXPECT_EQ(Registry->GetCounter("db.client.connection.timeouts", withExtra), nullptr);
+    EXPECT_EQ(Registry->GetHistogram("db.client.connection.create_time", withExtra), nullptr);
+    EXPECT_EQ(Registry->GetGauge("db.client.connection.pending_requests", withExtra), nullptr);
 }
 
 TEST(ConnectionPoolMetricsNoRegistryTest, NullRegistryIsSafe) {
@@ -417,7 +505,7 @@ TEST(ConnectionPoolMetricsNoRegistryTest, NullRegistryIsSafe) {
     EXPECT_NO_THROW({
         collector.RecordConnectionCreateTime(1.0);
         collector.IncConnectionTimeouts();
-        collector.UpdateConnectionCount(3);
+        collector.UpdateConnectionCount(3, 1);
         collector.UpdatePendingRequests(1);
     });
 }
@@ -435,10 +523,10 @@ TEST(ConnectionPoolMetricsPoolNameTest, DifferentPoolsHaveSeparateMetrics) {
 
     auto queryCounter = registry->GetCounter(
         "db.client.connection.timeouts",
-        PoolLabels(kTestDbNamespace, "Query"));
+        BasePoolLabels(kTestDbNamespace, "Query"));
     auto tableCounter = registry->GetCounter(
         "db.client.connection.timeouts",
-        PoolLabels(kTestDbNamespace, "Table"));
+        BasePoolLabels(kTestDbNamespace, "Table"));
 
     ASSERT_NE(queryCounter, nullptr);
     ASSERT_NE(tableCounter, nullptr);

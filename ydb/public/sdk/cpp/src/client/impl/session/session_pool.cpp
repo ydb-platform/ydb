@@ -410,7 +410,10 @@ void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatC
     FakeSessionsCounter_.Set(statCollector.FakeSessions);
     SessionWaiterCounter_.Set(statCollector.Waiters);
     ExternalStatCollector_ = std::move(statCollector);
-    ExternalStatCollector_.UpdateConnectionCount(ActiveSessions_ + static_cast<std::int64_t>(Sessions_.size()));
+    ExternalStatCollector_.UpdateConnectionCount(
+        /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
+        /*used=*/ActiveSessions_
+    );
     ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
 }
 
@@ -422,7 +425,10 @@ void TSessionPool::UpdateStats() {
     ActiveSessionsCounter_.Apply(ActiveSessions_);
     InPoolSessionsCounter_.Apply(Sessions_.size());
     SessionWaiterCounter_.Apply(WaitersQueue_.Size());
-    ExternalStatCollector_.UpdateConnectionCount(ActiveSessions_ + static_cast<std::int64_t>(Sessions_.size()));
+    ExternalStatCollector_.UpdateConnectionCount(
+        /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
+        /*used=*/ActiveSessions_
+    );
     ExternalStatCollector_.UpdatePendingRequests(WaitersQueue_.Size());
 }
 

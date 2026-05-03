@@ -44,7 +44,7 @@ TDbDriverState::TDbDriverState(
         auto self = shared_from_this();
         return client->GetEndpoints(self);
     }, client)
-    , StatCollector(database, client->GetMetricRegistry(), client->GetExternalMetricRegistry())
+    , StatCollector(database, client->GetMetricRegistry(), client->GetExternalMetricRegistry(), discoveryEndpoint)
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {

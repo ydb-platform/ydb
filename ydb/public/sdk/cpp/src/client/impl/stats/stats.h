@@ -3,7 +3,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 
-#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category/error_category.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
@@ -205,16 +204,12 @@ public:
         ::NMonitoring::TRate* FakeSessions;
         ::NMonitoring::TIntGauge* Waiters;
 
-        void UpdateConnectionCount(std::int64_t value) {
+        void UpdateConnectionCount(std::int64_t idleCount, std::int64_t usedCount) {
             if (!ExternalRegistry_) {
                 return;
             }
-            ExternalRegistry_->Gauge(
-                "db.client.connection.count",
-                ConnectionPoolLabels(),
-                "The number of connections that are currently in state described by the state attribute.",
-                "{connection}"
-            )->Set(static_cast<double>(value));
+            EmitConnectionCount("idle", idleCount);
+            EmitConnectionCount("used", usedCount);
         }
 
         void UpdatePendingRequests(std::int64_t value) {
@@ -223,7 +218,7 @@ public:
             }
             ExternalRegistry_->Gauge(
                 "db.client.connection.pending_requests",
-                ConnectionPoolLabels(),
+                BasePoolLabels(),
                 "The number of current pending requests for an open connection.",
                 "{request}"
             )->Set(static_cast<double>(value));
@@ -235,7 +230,7 @@ public:
             }
             ExternalRegistry_->Counter(
                 "db.client.connection.timeouts",
-                ConnectionPoolLabels(),
+                BasePoolLabels(),
                 "The number of connection timeouts that have occurred trying to obtain a connection from the pool.",
                 "{timeout}"
             )->Inc();
@@ -248,7 +243,7 @@ public:
             ExternalRegistry_->Histogram(
                 "db.client.connection.create_time",
                 {0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10},
-                ConnectionPoolLabels(),
+                BasePoolLabels(),
                 "The time it took to create a new connection.",
                 "s"
             )->Record(seconds);
@@ -259,13 +254,23 @@ public:
         }
 
     private:
-        NMetrics::TLabels ConnectionPoolLabels() const {
+        NMetrics::TLabels BasePoolLabels() const {
             return {
                 {"db.system.name", "ydb"},
                 {"db.namespace", Database_},
                 {"db.client.connection.pool.name", YdbClientApiAttributeValue(ClientType_)},
-                {"ydb.client.api", YdbClientApiAttributeValue(ClientType_)},
             };
+        }
+
+        void EmitConnectionCount(const char* state, std::int64_t value) {
+            auto labels = BasePoolLabels();
+            labels["db.client.connection.state"] = state;
+            ExternalRegistry_->Gauge(
+                "db.client.connection.count",
+                labels,
+                "The number of connections that are currently in state described by the state attribute.",
+                "{connection}"
+            )->Set(static_cast<double>(value));
         }
 
         std::shared_ptr<NMetrics::IMetricRegistry> ExternalRegistry_;
@@ -315,11 +320,15 @@ public:
         TClientOperationStatCollector(::NMonitoring::TMetricRegistry* registry,
                                       const std::string& database,
                                       const std::string& clientType,
-                                      std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {})
+                                      std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {},
+                                      std::string serverAddress = {},
+                                      std::uint16_t serverPort = 0)
             : MetricRegistry_(registry)
             , ExternalRegistry_(std::move(externalRegistry))
             , Database_(database)
             , ClientType_(clientType)
+            , ServerAddress_(std::move(serverAddress))
+            , ServerPort_(serverPort)
         {}
 
         void IncRequestCount(const std::string& operationName) {
@@ -347,15 +356,10 @@ public:
                 })->Inc();
             }
             if (ExternalRegistry_) {
-                const std::string clientApi = YdbClientApiAttributeValue(ClientType_);
-                const std::string statusName = TStringBuilder() << status;
                 NMetrics::TLabels labels = {
                     {"db.system.name", "ydb"},
                     {"db.namespace", Database_},
                     {"db.operation.name", operationName},
-                    {"ydb.client.api", clientApi},
-                    {"db.response.status_code", statusName},
-                    {"error.type", statusName},
                 };
                 ExternalRegistry_->Counter(
                     "db.client.operation.failed",
@@ -367,6 +371,7 @@ public:
         }
 
         void RecordLatency(const std::string& operationName, double durationSeconds, EStatus status) {
+            (void)status;
             if (auto registry = MetricRegistry_.Get()) {
                 registry->HistogramRate({
                     {"database", Database_},
@@ -381,11 +386,12 @@ public:
                     {"db.system.name", "ydb"},
                     {"db.namespace", Database_},
                     {"db.operation.name", operationName},
-                    {"ydb.client.api", YdbClientApiAttributeValue(ClientType_)},
-                    {"db.response.status_code", TStringBuilder() << status},
                 };
-                if (status != EStatus::SUCCESS) {
-                    labels["error.type"] = std::string(NObservability::CategorizeErrorType(status));
+                if (!ServerAddress_.empty()) {
+                    labels["server.address"] = ServerAddress_;
+                }
+                if (ServerPort_ != 0) {
+                    labels["server.port"] = TStringBuilder() << ServerPort_;
                 }
                 ExternalRegistry_->Histogram(
                     "db.client.operation.duration",
@@ -402,6 +408,8 @@ public:
         std::shared_ptr<NMetrics::IMetricRegistry> ExternalRegistry_;
         std::string Database_;
         std::string ClientType_;
+        std::string ServerAddress_;
+        std::uint16_t ServerPort_ = 0;
     };
 
     struct TClientStatCollector {
@@ -434,13 +442,64 @@ public:
     TStatCollector(const std::string& database
         , TMetricRegistry* sensorsRegistry
         , std::shared_ptr<NMetrics::IMetricRegistry> externalMetricRegistry = {}
+        , const std::string& discoveryEndpoint = {}
     ) : Database_(database)
         , DatabaseLabel_({"database", database})
         , ExternalMetricRegistry_(std::move(externalMetricRegistry))
     {
+        ParseDiscoveryEndpoint(discoveryEndpoint, ServerAddress_, ServerPort_);
         if (sensorsRegistry) {
             SetMetricRegistry(sensorsRegistry);
         }
+    }
+
+    static void ParseDiscoveryEndpoint(const std::string& endpoint,
+                                       std::string& outHost,
+                                       std::uint16_t& outPort) noexcept {
+        outHost.clear();
+        outPort = 0;
+        if (endpoint.empty()) {
+            return;
+        }
+        std::string_view view(endpoint);
+        for (std::string_view scheme : {"grpcs://", "grpc://"}) {
+            if (view.substr(0, scheme.size()) == scheme) {
+                view.remove_prefix(scheme.size());
+                break;
+            }
+        }
+        std::string_view host;
+        std::string_view portStr;
+        if (!view.empty() && view.front() == '[') {
+            const auto end = view.find(']');
+            if (end == std::string_view::npos || end + 1 >= view.size() || view[end + 1] != ':') {
+                return;
+            }
+            host = view.substr(1, end - 1);
+            portStr = view.substr(end + 2);
+        } else {
+            const auto colon = view.rfind(':');
+            if (colon == std::string_view::npos) {
+                return;
+            }
+            host = view.substr(0, colon);
+            portStr = view.substr(colon + 1);
+        }
+        std::uint32_t port = 0;
+        for (char c : portStr) {
+            if (c < '0' || c > '9') {
+                return;
+            }
+            port = port * 10 + static_cast<std::uint32_t>(c - '0');
+            if (port > 65535) {
+                return;
+            }
+        }
+        if (port == 0 || host.empty()) {
+            return;
+        }
+        outHost.assign(host);
+        outPort = static_cast<std::uint16_t>(port);
     }
 
     void SetMetricRegistry(TMetricRegistry* sensorsRegistry) {
@@ -563,12 +622,14 @@ public:
 
             return TClientStatCollector(cacheMiss, querySize, paramsSize, sessionRemovedDueBalancing, requestMigrated,
                 TClientRetryOperationStatCollector(MetricRegistryPtr_.Get(), Database_, clientType),
-                TClientOperationStatCollector(MetricRegistryPtr_.Get(), Database_, clientType, ExternalMetricRegistry_));
+                TClientOperationStatCollector(MetricRegistryPtr_.Get(), Database_, clientType,
+                    ExternalMetricRegistry_, ServerAddress_, ServerPort_));
         }
 
         return TClientStatCollector(nullptr, nullptr, nullptr, nullptr, nullptr,
             TClientRetryOperationStatCollector(nullptr, Database_, clientType),
-            TClientOperationStatCollector(nullptr, Database_, clientType, ExternalMetricRegistry_));
+            TClientOperationStatCollector(nullptr, Database_, clientType,
+                ExternalMetricRegistry_, ServerAddress_, ServerPort_));
     }
 
     bool IsCollecting() {
@@ -587,6 +648,8 @@ private:
     const std::string Database_;
     const ::NMonitoring::TLabel DatabaseLabel_;
     std::shared_ptr<NMetrics::IMetricRegistry> ExternalMetricRegistry_;
+    std::string ServerAddress_;
+    std::uint16_t ServerPort_ = 0;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;
     TAtomicCounter<::NMonitoring::TRate> DiscoveryDuePessimization_;
     TAtomicCounter<::NMonitoring::TRate> DiscoveryDueExpiration_;

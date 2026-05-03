@@ -8,6 +8,7 @@
     {
       "title": "Request Rate by Operation",
       "type": "timeseries",
+      "description": "Rate of finished operations per second, grouped by db.operation.name. Derived from db.client.operation.duration histogram observations (every End() increments _count).",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
@@ -18,7 +19,7 @@
       },
       "targets": [
         {
-          "expr": "rate(db_client_operation_requests_total[1m])",
+          "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count[1m]))",
           "legendFormat": "{{db_operation_name}}"
         }
       ]
@@ -26,6 +27,7 @@
     {
       "title": "Error Rate by Operation",
       "type": "timeseries",
+      "description": "Rate of failed operations per second (db.client.operation.failed).",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
@@ -37,7 +39,7 @@
       },
       "targets": [
         {
-          "expr": "rate(db_client_operation_errors_total[1m])",
+          "expr": "sum by (db_operation_name) (rate(db_client_operation_failed_total[1m]))",
           "legendFormat": "{{db_operation_name}}"
         }
       ]
@@ -70,13 +72,18 @@
     },
     {
       "title": "Error Ratio (%)",
-      "type": "stat",
+      "type": "timeseries",
+      "description": "failed / total per operation. Total is taken from db.client.operation.duration _count (one observation per finished call).",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "drawStyle": "line", "fillOpacity": 5 },
           "thresholds": {
+            "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
               { "color": "yellow", "value": 0.01 },
@@ -87,15 +94,99 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(db_client_operation_errors_total[5m])) by (db_operation_name) / sum(rate(db_client_operation_requests_total[5m])) by (db_operation_name)",
+          "expr": "sum by (db_operation_name) (rate(db_client_operation_failed_total[5m])) / clamp_min(sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count[5m])), 1e-9)",
           "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Connections by State",
+      "type": "timeseries",
+      "description": "db.client.connection.count split by db.client.connection.state (idle / used). For YDB session == connection.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 30, "stacking": { "mode": "normal" } }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (db_client_connection_pool_name, db_client_connection_state) (db_client_connection_count)",
+          "legendFormat": "{{db_client_connection_pool_name}} / {{db_client_connection_state}}"
+        }
+      ]
+    },
+    {
+      "title": "Pending Session Requests",
+      "type": "timeseries",
+      "description": "db.client.connection.pending_requests — current waiters for a session.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (db_client_connection_pool_name) (db_client_connection_pending_requests)",
+          "legendFormat": "{{db_client_connection_pool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Session Acquire Timeouts /s",
+      "type": "timeseries",
+      "description": "db.client.connection.timeouts — rate of waiters whose deadline expired before a session was available.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (db_client_connection_pool_name) (rate(db_client_connection_timeouts_total[1m]))",
+          "legendFormat": "{{db_client_connection_pool_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Session Create Time p50 / p95 / p99 (s)",
+      "type": "timeseries",
+      "description": "db.client.connection.create_time — distribution of CreateSession latencies.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus_ds}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{db_client_connection_pool_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{db_client_connection_pool_name}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, db_client_connection_pool_name) (rate(db_client_connection_create_time_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{db_client_connection_pool_name}}"
         }
       ]
     },
     {
       "title": "Recent Traces",
       "type": "table",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 32 },
       "datasource": { "type": "jaeger", "uid": "${jaeger_ds}" },
       "targets": [
         {

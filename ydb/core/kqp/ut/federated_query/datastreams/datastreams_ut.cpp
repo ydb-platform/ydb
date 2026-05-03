@@ -4661,8 +4661,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionOutputTopic";
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
@@ -5166,6 +5168,31 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ReadTopicMessage(outputTopicName1, "B-k1-2025-08-25T00:00:00.000000Z-1", disposition);
         ReadTopicMessage(outputTopicName2, "Y-k2-2025-08-25T00:00:00.000000Z-1", disposition);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryDispositionDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(false);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionDisabledInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `my_query` WITH (
+                STREAMING_DISPOSITION = OLDEST
+            ) AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
     }
 }
 

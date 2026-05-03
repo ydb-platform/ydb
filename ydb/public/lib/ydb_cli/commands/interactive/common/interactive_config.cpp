@@ -230,6 +230,16 @@ std::optional<EEnum> EnumFromYaml(const YAML::Node& config, const TString& key) 
     return std::nullopt;
 }
 
+bool BoolFromYaml(const YAML::Node& config, const TString& key, bool defaultValue) {
+    if (auto keyNode = config[key]) {
+        auto keyValue = keyNode.as<bool>(defaultValue);
+        return keyValue;
+    }
+
+    YDB_CLI_LOG(Debug, "YAML config has no bool key: " << key);
+    return defaultValue;
+}
+
 template <typename TValue>
 TString JoinOptionDesc(const TString& info, const TValue& currentValue) {
     if (const TString valueStr = ToString(currentValue)) {
@@ -344,7 +354,7 @@ std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) {
             YDB_CLI_LOG(Debug, "Fetched token from env: " << BlurSecret(token));
             return token;
         }
-    
+
         YDB_CLI_LOG(Debug, "No token found");
         return "";
     }
@@ -778,6 +788,18 @@ TInteractiveConfigurationManager::~TInteractiveConfigurationManager() {
     Flush();
 }
 
+bool TInteractiveConfigurationManager::IsSystemPromptEnabled() const {
+    return BoolFromYaml(Config, SYSTEM_PROMPT_ENABLED_PROPERTY, /* defaultValue */ true);
+}
+
+TInteractiveConfigurationManager::EToolAutoAction TInteractiveConfigurationManager::GetToolAutoAction(const TString& toolName) {
+    const auto& tools = Config[TOOL_AUTO_ACTION_PROPERTY];
+    if (!tools) {
+        return EToolAutoAction::Ask;
+    }
+    return EnumFromYaml<EToolAutoAction>(tools, toolName).value_or(EToolAutoAction::Ask);
+}
+
 TString TInteractiveConfigurationManager::GetActiveAiProfileId() const {
     return StringFromYaml(Config, CURRENT_PROFILE_PROPERTY);
 }
@@ -1016,6 +1038,14 @@ void TInteractiveConfigurationManager::LoadProfile() {
         Config[AI_PROFILES_PROPERTY] = YAML::Node();
         OnConfigChanged();
     }
+
+    if (auto tools = Config[TOOL_AUTO_ACTION_PROPERTY]; tools && !tools.IsMap()) {
+        YDB_CLI_LOG(Notice, "$.tool_auto_action section has unexpected type " << static_cast<ui64>(tools.Type()) << ", changed to map and cleared");
+        Config[TOOL_AUTO_ACTION_PROPERTY] = YAML::Node();
+        OnConfigChanged();
+    }
+
+    Flush();
 }
 
 } // namespace NYdb::NConsoleClient

@@ -1,0 +1,7 @@
+*.json
+*.yaml
+*.log
+
+configs/
+statistics/
+wiki_sql_data/

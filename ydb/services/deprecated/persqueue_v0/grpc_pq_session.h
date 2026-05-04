@@ -307,8 +307,8 @@ protected:
             }
         }
 
-        auto read = new TReadDone(this);
         if (!NYdbGrpc::GrpcDead) {
+            auto read = new TReadDone(this);
             Stream.Read(&read->Request, read);
         }
     }

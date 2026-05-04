@@ -1,5 +1,6 @@
 #include "ut_helpers.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
@@ -181,7 +182,11 @@ TKesusProxyTestSetup::TKesusProxyTestSetup() {
 }
 
 TTestActorRuntime::TEgg MakeEgg() {
-    return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
+    auto* appData = new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr);
+    auto icb = MakeIntrusive<TControlBoard>();
+    icb->CreateConfigControls(true);
+    appData->Icb = icb;
+    return { appData, nullptr, nullptr, {} };
 }
 
 void TKesusProxyTestSetup::Start() {
@@ -372,15 +377,20 @@ bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration 
                     found = true;
                     UNIT_ASSERT_VALUES_EQUAL(res.ResourceState, TEvQuota::EUpdateState::Normal);
 
-                    UNIT_ASSERT_VALUES_EQUAL(res.Update.size(), 1);
-                    const auto& updateTick = res.Update.front();
-                    UNIT_ASSERT_VALUES_EQUAL(updateTick.Channel, 0);
-                    UNIT_ASSERT_VALUES_EQUAL(updateTick.Policy, TEvQuota::ETickPolicy::Front);
-                    const bool noAmount = updateTick.Rate <= 0.0;
-                    if (noAmount) {
-                        // Zero-rate channel (keep-alive with Ticks > 0) — no quota available yet, keep trying
+                    UNIT_ASSERT_GT(res.Update.size(), 0);
+                    // Find the burst channel (Front policy with positive rate).
+                    const TEvQuota::TUpdateTick* burstTick = nullptr;
+                    for (const auto& tick : res.Update) {
+                        if (tick.Policy == TEvQuota::ETickPolicy::Front && tick.Rate > 0.0) {
+                            burstTick = &tick;
+                            break;
+                        }
+                    }
+                    if (!burstTick) {
+                        // No burst channel with positive rate — no Available quota yet, keep trying
                         continue;
                     }
+                    const auto& updateTick = *burstTick;
 
                     UNIT_ASSERT(res.SustainedRate > 0);
                     UNIT_ASSERT_VALUES_EQUAL(updateTick.Ticks, 2);

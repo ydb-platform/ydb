@@ -96,6 +96,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
+    REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -295,6 +296,10 @@ bool TKikimrConfiguration::GetUseDqHashAggregate() const {
 
 bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
     return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
+}
+
+bool TKikimrConfiguration::GetUseBlockHashJoin() const {
+    return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
 }

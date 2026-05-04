@@ -1,17 +1,20 @@
 """
 Test failure classification for CI analytics.
 
-Pipeline (same for ``test_history_fast`` and ``generate-summary``):
+In each **test run row** (``test_results``), ``error_type`` may already be e.g. ``TIMEOUT``,
+``XFAILED``, ``NOT_LAUNCHED`` — but **not** ``VERIFY``. ``VERIFY`` is detected only from text
+(snippet, stderr, log) and written when we classify for storage / summaries.
 
-1. Build a :class:`FailureRow` (status + snippet + ``error_type`` from the run + stderr/log URLs).
-2. Collect stderr/log URLs per row (only where prefetch can change classification), then
+Pipeline (shared by ``test_history_fast`` and ``generate-summary``):
+
+1. Build a :class:`FailureRow` (status, snippet, ``error_type`` from the run row, stderr/log URLs).
+2. Prefetch stderr/log only where :func:`should_prefetch_debug_files_for_verify` is true, via
    :func:`prefetch_text_cache_and_urls_for_failure_rows` or :func:`prefetch_texts_by_urls`.
-3. Run :func:`classify_failure_row` → tag such as ``TIMEOUT``, ``VERIFY``, ``SANITIZER``, or ``""``.
-4. For storage, :func:`merge_classified_error_type` combines with the source row; upstream ``VERIFY``
-   is dropped if the classifier did not infer it from text.
+3. :func:`classify_failure_row` → ``TIMEOUT`` | ``XFAILED`` | ``VERIFY`` | ``SANITIZER`` | ``""``.
+4. :func:`merge_classified_error_type`: if the classifier returned a tag, use it; otherwise keep
+   ``error_type`` from the run row (and drop blacklisted values such as ``REGULAR``).
 
-Low-level helpers (:func:`classify_error_type`, fetch helpers) stay available for tests or callers
-that need finer control.
+Low-level helpers (:func:`classify_error_type`, HTTP helpers) remain for tests or custom callers.
 """
 
 # ---------------------------------------------------------------------------
@@ -60,7 +63,7 @@ def normalize_fetch_url(url):
 
 
 # ---------------------------------------------------------------------------
-# Merge with upstream ``error_type`` (storage policy)
+# Merge classifier output with ``error_type`` from the test run row (storage policy)
 # ---------------------------------------------------------------------------
 
 
@@ -74,13 +77,17 @@ def _apply_error_type_blacklist(merged_error_type):
 
 
 def merge_classified_error_type(classified, source_error_type):
-    """Classifier tag wins; else keep upstream (e.g. NOT_LAUNCHED). Blacklisted upstream values become empty."""
+    """
+    Persisted ``error_type``: non-empty classifier result wins; else ``error_type`` from the
+    test run row (``test_results``). That column does not carry VERIFY (VERIFY comes only from
+    :func:`classify_failure_row`). Values in :data:`_ERROR_TYPE_BLACKLIST` are stored as empty.
+
+    ``source_error_type`` is the run row's ``error_type`` before merge.
+    """
     if classified:
         merged = classified
     else:
         merged = _normalize_text(source_error_type).strip()
-        if merged.upper() == "VERIFY":
-            merged = ""
     return _apply_error_type_blacklist(merged)
 
 
@@ -163,7 +170,7 @@ def _failure_like_status(status):
 
 
 def _classify_failure_branch(status, status_description, source_error_type, stderr_text=None, log_text=None):
-    """TIMEOUT/XFAILED from ``error_type``; VERIFY from snippet then stderr/log; SANITIZER on snippet."""
+    """TIMEOUT/XFAILED from the run row's ``error_type``; VERIFY only from text; SANITIZER heuristic on snippet."""
     if is_timeout_issue(source_error_type):
         return "TIMEOUT"
     if is_xfailed_issue(source_error_type):
@@ -285,6 +292,7 @@ class FailureRow:
 
     status: Any
     status_description: Any
+    # error_type from test_results / report row (TIMEOUT, XFAILED, …); VERIFY is inferred from text only
     source_error_type: Any
     stderr_url: Any
     log_url: Any

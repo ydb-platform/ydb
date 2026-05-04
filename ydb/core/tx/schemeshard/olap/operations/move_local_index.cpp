@@ -216,7 +216,28 @@ public:
             }
         }
 
-        TPath srcPath = mainTablePath.Child(srcName);
+        // Try to find the source index
+        TPath srcPath(context.SS);
+        bool srcIndexInMainTable = false;
+
+        if (srcName.Contains('/')) {
+            // Full path (for moving parent table case)
+            srcPath = TPath::Resolve(srcName, context.SS);
+        } else {
+            // Index name only - try main table first, then parent directory
+            srcPath = mainTablePath.Child(srcName);
+            srcIndexInMainTable = srcPath.IsResolved() && !srcPath.IsDeleted();
+            if (!srcIndexInMainTable) {
+                srcPath = mainTablePath.Parent().Child(srcName);
+            }
+        }
+
+        if (!srcPath.IsResolved() || srcPath.IsDeleted()) {
+            result->SetError(NKikimrScheme::StatusPathDoesNotExist,
+                TStringBuilder() << "Source index '" << srcName << "' not found");
+            return result;
+        }
+
         {
             TPath::TChecker checks = srcPath.Check();
             checks
@@ -239,22 +260,27 @@ public:
         // Verify the column table's schema proto and the scheme tree agree that srcName exists.
         // The TPropose state operation relies on this invariant when renaming the index in schema,
         // and a state operation must not refuse the operation.
-        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(mainTablePath.Base()->PathId));
-        {
-            const auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(mainTablePath.Base()->PathId);
-            const auto& schema = tableInfo->Description.GetSchema();
-            bool foundInSchema = false;
-            for (const auto& indexProto : schema.GetIndexes()) {
-                if (indexProto.GetName() == srcName) {
-                    foundInSchema = true;
-                    break;
+        //
+        // When the source index is in the main table (renaming within the same table), verify it exists in the schema.
+        // When the source index is in a different table (moving the parent table), skip this check.
+        if (srcIndexInMainTable) {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(mainTablePath.Base()->PathId));
+            {
+                const auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(mainTablePath.Base()->PathId);
+                const auto& schema = tableInfo->Description.GetSchema();
+                bool foundInSchema = false;
+                for (const auto& indexProto : schema.GetIndexes()) {
+                    if (indexProto.GetName() == srcName) {
+                        foundInSchema = true;
+                        break;
+                    }
                 }
-            }
-            if (!foundInSchema) {
-                result->SetError(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Index '" << srcName << "' is not present in column table schema "
-                    << "(scheme tree and column table schema are out of sync)");
-                return result;
+                if (!foundInSchema) {
+                    result->SetError(NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "Index '" << srcName << "' is not present in column table schema "
+                        << "(scheme tree and column table schema are out of sync)");
+                    return result;
+                }
             }
         }
 

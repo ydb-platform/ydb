@@ -385,14 +385,10 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath();
-
-            if (!srcParentPath.Base()->IsColumnTable()) {
-                checks
-                    .IsTable()
-                    .NotAsyncReplicaTable();
-            }
-            checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                .IsCommonSensePath()
+                .IsTable()
+                .NotAsyncReplicaTable()
+                .IsUnderTheSameOperation(OperationId.GetTxId());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

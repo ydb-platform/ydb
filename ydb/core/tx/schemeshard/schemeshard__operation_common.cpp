@@ -1341,6 +1341,19 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
     return scheme;
 }
 
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(tablePath);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+    auto operation = scheme.MutableMoveIndex();
+    operation->SetTablePath(tablePath);
+    operation->SetSrcPath(srcIndexPath);
+    operation->SetDstPath(dstIndexName);
+
+    return scheme;
+}
+
 void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOperationContext& context) {
     TTxState* txState = context.SS->FindTx(opId);
     Y_ABORT_UNLESS(txState);

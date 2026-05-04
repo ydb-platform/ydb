@@ -499,5 +499,5 @@ message TTableServiceConfig {
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 
-    optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000, (InvalidateCompileCache) = true];
+    optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
 };

@@ -78,6 +78,7 @@ namespace NKikimr::NDDisk {
         TVDiskConfig::TBaseInfo BaseInfo;
         TDDiskConfig Config;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        TIntrusivePtr<NMonitoring::TDynamicCounters> CountersParent;
         TIntrusivePtr<NMonitoring::TDynamicCounters> CountersBase;
         std::vector<std::pair<TString, TString>> CountersChain;
         ui64 DDiskInstanceGuid = RandomNumber<ui64>();

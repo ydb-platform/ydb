@@ -59,7 +59,8 @@ namespace {
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
         , Info(std::move(info))
-        , CountersBase(GetServiceCounters(counters, "ddisks"))
+        , CountersParent(std::move(counters))
+        , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
         , PersistentBufferFormat(std::move(pbFormat))
     {

@@ -10,8 +10,6 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
-#include <util/stream/output.h>
-
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
@@ -442,114 +440,6 @@ namespace NKikimr::NStorage {
                 << " new version# " << *MainYamlVersion
                 << " expected version# " << expectedMainYamlVersion;
         }
-
-        auto dumpNodes = [](const NKikimrBlobStorage::TStorageConfig& config) {
-            TStringStream s;
-            s << '[';
-            bool first = true;
-            for (const auto& node : config.GetAllNodes()) {
-                if (!std::exchange(first, false)) {
-                    s << ' ';
-                }
-                s << node.GetNodeId() << '@' << node.GetHost() << ':' << node.GetPort();
-            }
-            s << ']';
-            return s.Str();
-        };
-
-        THashSet<ui32> proposedNodeIds;
-        for (const auto& node : ProposedStorageConfig.GetAllNodes()) {
-            proposedNodeIds.insert(node.GetNodeId());
-        }
-
-        THashSet<ui32> removedNodeIds;
-        for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-            if (!proposedNodeIds.contains(node.GetNodeId())) {
-                removedNodeIds.insert(node.GetNodeId());
-            }
-        }
-
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig validation context"
-            << " CurrentGeneration# " << Self->StorageConfig->GetGeneration()
-            << " ProposedGeneration# " << ProposedStorageConfig.GetGeneration()
-            << " CurrentNodes# " << dumpNodes(*Self->StorageConfig)
-            << " ProposedNodes# " << dumpNodes(ProposedStorageConfig)
-            << " RemovedNodes# [";
-        bool firstRemovedNode = true;
-        for (ui32 nodeId : removedNodeIds) {
-            if (!std::exchange(firstRemovedNode, false)) {
-                Cerr << ' ';
-            }
-            Cerr << nodeId;
-        }
-        Cerr << ']' << Endl;
-
-        auto dumpServiceSetForRemovedNodes = [&](const char *label, const NKikimrBlobStorage::TStorageConfig& config) {
-            if (!config.HasBlobStorageConfig() || !config.GetBlobStorageConfig().HasServiceSet()) {
-                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig " << label
-                    << " no ServiceSet" << Endl;
-                return;
-            }
-
-            const auto& ss = config.GetBlobStorageConfig().GetServiceSet();
-            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig " << label
-                << " ServiceSet sizes"
-                << " PDisks# " << ss.PDisksSize()
-                << " VDisks# " << ss.VDisksSize()
-                << " Groups# " << ss.GroupsSize()
-                << Endl;
-
-            for (const auto& pdisk : ss.GetPDisks()) {
-                if (removedNodeIds.contains(pdisk.GetNodeID())) {
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig " << label
-                        << " removed-node PDisk"
-                        << " PDisk# [" << pdisk.GetNodeID() << ':' << pdisk.GetPDiskID() << ']'
-                        << " Path# " << pdisk.GetPath()
-                        << " Guid# " << pdisk.GetPDiskGuid()
-                        << " EntityStatus# " << static_cast<int>(pdisk.GetEntityStatus())
-                        << Endl;
-                }
-            }
-
-            for (const auto& vdisk : ss.GetVDisks()) {
-                if (!vdisk.HasVDiskLocation()) {
-                    continue;
-                }
-                const auto& loc = vdisk.GetVDiskLocation();
-                if (removedNodeIds.contains(loc.GetNodeID())) {
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig " << label
-                        << " removed-node VDisk"
-                        << " VDiskId# " << VDiskIDFromVDiskID(vdisk.GetVDiskID())
-                        << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                        << " PDiskGuid# " << loc.GetPDiskGuid()
-                        << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
-                        << " HasDonorMode# " << vdisk.HasDonorMode()
-                        << " Donors# " << vdisk.DonorsSize()
-                        << Endl;
-                }
-            }
-
-            for (const auto& group : ss.GetGroups()) {
-                for (const auto& ring : group.GetRings()) {
-                    for (const auto& failDomain : ring.GetFailDomains()) {
-                        for (const auto& loc : failDomain.GetVDiskLocations()) {
-                            if (removedNodeIds.contains(loc.GetNodeID())) {
-                                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReplaceStorageConfig " << label
-                                    << " removed-node group location"
-                                    << " GroupId# " << group.GetGroupID()
-                                    << " Generation# " << group.GetGroupGeneration()
-                                    << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                                    << " PDiskGuid# " << loc.GetPDiskGuid()
-                                    << Endl;
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        dumpServiceSetForRemovedNodes("current", *Self->StorageConfig);
-        dumpServiceSetForRemovedNodes("proposed", ProposedStorageConfig);
 
         if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "ReplaceStorageConfig current config validation failed: " << *error;

@@ -1,7 +1,5 @@
 #include "distconf_invoke.h"
 
-#include <util/stream/output.h>
-
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
@@ -15,25 +13,8 @@ namespace NKikimr::NStorage {
 
         bool found = false;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDisk request"
-            << " SelfId# " << SelfId()
-            << " VDiskId# " << vdiskId
-            << " FromSelfHeal# " << cmd.GetFromSelfHeal()
-            << " ConvertToDonor# " << cmd.GetConvertToDonor()
-            << " IsSelfHealReasonDecommit# " << cmd.GetIsSelfHealReasonDecommit()
-            << " IgnoreVSlotQuotaCheck# " << cmd.GetIgnoreVSlotQuotaCheck()
-            << " HasTargetPDisk# " << cmd.HasPDiskId();
-        if (cmd.HasPDiskId()) {
-            Cerr << " TargetPDisk# [" << cmd.GetPDiskId().GetNodeId() << ':' << cmd.GetPDiskId().GetPDiskId() << ']';
-        }
-        Cerr << Endl;
         for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
-                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDisk group found"
-                    << " GroupId# " << group.GetGroupID()
-                    << " GroupGeneration# " << group.GetGroupGeneration()
-                    << " RequestedVDisk# " << vdiskId
-                    << Endl;
                 if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
                     throw TExError() << "Group generation mismatch"
                         << " GroupId# " << group.GetGroupID()
@@ -130,13 +111,6 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
 
         const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute begin"
-            << " SelfId# " << SelfId()
-            << " VDiskId# " << vdiskId
-            << " FromSelfHeal# " << cmd.GetFromSelfHeal()
-            << " ConvertToDonor# " << cmd.GetConvertToDonor()
-            << " IsSelfHealReasonDecommit# " << cmd.GetIsSelfHealReasonDecommit()
-            << Endl;
 
         ui64 maxSlotSize = 0;
 
@@ -192,11 +166,6 @@ namespace NKikimr::NStorage {
         const auto& ss = bsConfig.GetServiceSet();
 
         const auto& smConfig = config.GetSelfManagementConfig();
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute serviceset"
-            << " Groups# " << ss.GroupsSize()
-            << " VDisks# " << ss.VDisksSize()
-            << " PDisks# " << ss.PDisksSize()
-            << Endl;
 
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         NBsController::TGroupMapper::TForbiddenPDisks forbid;
@@ -205,14 +174,6 @@ namespace NKikimr::NStorage {
             if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
                 continue;
             }
-            const auto& loc = vdisk.GetVDiskLocation();
-            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute matching VDisk"
-                << " CurrentVDiskId# " << currentVDiskId
-                << " TargetVDiskId# " << vdiskId
-                << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
-                << " HasDonorMode# " << vdisk.HasDonorMode()
-                << Endl;
             if (currentVDiskId == vdiskId) {
                 NBsController::TPDiskId pdiskId;
                 if (cmd.HasPDiskId()) {
@@ -220,18 +181,11 @@ namespace NKikimr::NStorage {
                     pdiskId = {target.GetNodeId(), target.GetPDiskId()};
                 }
                 replacedDisks.emplace(vdiskId, pdiskId);
-                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute replaced disk"
-                    << " VDiskId# " << vdiskId
-                    << " TargetPDisk# " << pdiskId
-                    << Endl;
             } else {
                 Y_DEBUG_ABORT_UNLESS(vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY ||
                     vdisk.HasDonorMode());
+                const auto& loc = vdisk.GetVDiskLocation();
                 forbid.emplace(loc.GetNodeID(), loc.GetPDiskID());
-                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute forbid obsolete disk"
-                    << " VDiskId# " << currentVDiskId
-                    << " PDisk# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ']'
-                    << Endl;
             }
         }
 
@@ -249,11 +203,6 @@ namespace NKikimr::NStorage {
                         replacedDisks, forbid, maxSlotSize,
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW ReassignGroupDiskExecute allocated"
-                        << " GroupId# " << vdiskId.GroupID
-                        << " OldGeneration# " << vdiskId.GroupGeneration
-                        << " NewGeneration# " << vdiskId.GroupGeneration + 1
-                        << Endl;
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                         (Config, config),
@@ -270,33 +219,15 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd) {
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW StaticVDiskSlain"
-            << " SelfId# " << SelfId()
-            << " VDiskId# " << VDiskIDFromVDiskID(cmd.GetVDiskId())
-            << " VSlot# [" << cmd.GetVSlotId().GetNodeId() << ':' << cmd.GetVSlotId().GetPDiskId()
-            << ':' << cmd.GetVSlotId().GetVSlotId() << ']'
-            << Endl;
         HandleDropDonorAndSlain(VDiskIDFromVDiskID(cmd.GetVDiskId()), cmd.GetVSlotId(), false);
     }
 
     void TInvokeRequestHandlerActor::DropDonor(const TQuery::TDropDonor& cmd) {
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW DropDonor"
-            << " SelfId# " << SelfId()
-            << " VDiskId# " << VDiskIDFromVDiskID(cmd.GetVDiskId())
-            << " VSlot# [" << cmd.GetVSlotId().GetNodeId() << ':' << cmd.GetVSlotId().GetPDiskId()
-            << ':' << cmd.GetVSlotId().GetVSlotId() << ']'
-            << Endl;
         HandleDropDonorAndSlain(VDiskIDFromVDiskID(cmd.GetVDiskId()), cmd.GetVSlotId(), true);
     }
 
     void TInvokeRequestHandlerActor::HandleDropDonorAndSlain(TVDiskID vdiskId, const NKikimrBlobStorage::TVSlotId& vslotId, bool isDropDonor) {
         RunCommonChecks();
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain begin"
-            << " SelfId# " << SelfId()
-            << " VDiskId# " << vdiskId
-            << " VSlot# [" << vslotId.GetNodeId() << ':' << vslotId.GetPDiskId() << ':' << vslotId.GetVSlotId() << ']'
-            << " IsDropDonor# " << isDropDonor
-            << Endl;
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
@@ -319,10 +250,6 @@ namespace NKikimr::NStorage {
                 break;
             }
         }
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain group generation"
-            << " VDiskId# " << vdiskId
-            << " ActualGroupGeneration# " << actualGroupGeneration
-            << Endl;
         Y_ABORT_UNLESS(0 < actualGroupGeneration && vdiskId.GroupGeneration < actualGroupGeneration);
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
@@ -358,17 +285,8 @@ namespace NKikimr::NStorage {
                 }
 
                 const auto& loc = vdisk.GetVDiskLocation();
-                Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain candidate"
-                    << " CurrentVDiskId# " << currentVDiskId
-                    << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                    << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
-                    << " HasDonorMode# " << vdisk.HasDonorMode()
-                    << Endl;
                 if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
                         loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain skip candidate location mismatch"
-                        << " CurrentVDiskId# " << currentVDiskId
-                        << Endl;
                     continue; // doesn't match our pdisk
                 }
 
@@ -377,20 +295,12 @@ namespace NKikimr::NStorage {
 
                 if (!isDropDonor) {
                     // destroying slot on this disk
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain delete VDisk"
-                        << " CurrentVDiskId# " << currentVDiskId
-                        << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                        << Endl;
                     ss->MutableVDisks()->DeleteSubrange(i--, 1);
                     changes = true;
                 } else {
                     Y_ABORT_UNLESS(vdisk.HasDonorMode()); // we have already checked this case by now
                     if (vdiskId.GroupGeneration == 0 || vdiskId.GroupGeneration == currentVDiskId.GroupGeneration) {
                         // sign up this entity for destruction
-                        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain mark donor DESTROY"
-                            << " CurrentVDiskId# " << currentVDiskId
-                            << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                            << Endl;
                         auto *m = ss->MutableVDisks(i);
                         m->ClearDonorMode();
                         m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
@@ -406,12 +316,6 @@ namespace NKikimr::NStorage {
                 const auto& loc = vdisk.GetVDiskLocation();
                 if (loc.GetNodeID() == vslotId.GetNodeId() && loc.GetPDiskID() == vslotId.GetPDiskId()) {
                     unusedPDisk = false;
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain PDisk still used"
-                        << " BlockingVDiskId# " << VDiskIDFromVDiskID(vdisk.GetVDiskID())
-                        << " Location# [" << loc.GetNodeID() << ':' << loc.GetPDiskID() << ':' << loc.GetVDiskSlotID() << ']'
-                        << " EntityStatus# " << static_cast<int>(vdisk.GetEntityStatus())
-                        << " HasDonorMode# " << vdisk.HasDonorMode()
-                        << Endl;
                     break;
                 }
             }
@@ -421,10 +325,6 @@ namespace NKikimr::NStorage {
                 if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                         pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
                     Y_ABORT_UNLESS(changes);
-                    Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain delete PDisk"
-                        << " PDisk# [" << pdisk.GetNodeID() << ':' << pdisk.GetPDiskID() << ']'
-                        << " Path# " << pdisk.GetPath()
-                        << Endl;
                     ss->MutablePDisks()->DeleteSubrange(i, 1);
                     break;
                 }
@@ -432,18 +332,9 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
-            Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain no changes"
-                << " VDiskId# " << vdiskId
-                << " IsDropDonor# " << isDropDonor
-                << Endl;
             return Finish(TResult::OK, std::nullopt);
         }
 
-        Cerr << "DISTCONF_STATIC_SELFHEAL_DEBUG NW HandleDropDonorAndSlain propose changes"
-            << " VDiskId# " << vdiskId
-            << " IsDropDonor# " << isDropDonor
-            << " UnusedPDisk# " << unusedPDisk
-            << Endl;
         StartProposition(&config);
     }
 

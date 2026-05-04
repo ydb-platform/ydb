@@ -11,6 +11,7 @@ TEST_SRCS(
     test_generate_dynamic_config.py
     test_module_parameter.py
     test_pdisk_metadata_cli.py
+    test_distconf_faulty_pdisk_remove_host.py
 )
 
 SPLIT_FACTOR(10)

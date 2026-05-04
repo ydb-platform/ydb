@@ -3493,6 +3493,132 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     }
 
+    void CollectHashShuffleFuncs(const NJson::TJsonValue& planNode, TVector<TString>& hashFuncs) {
+        if (!planNode.IsMap()) {
+            return;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type");
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
+            hashFuncs.push_back(planMap.at("HashFunc").GetStringSafe());
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                CollectHashShuffleFuncs(child, hashFuncs);
+            }
+        }
+    }
+
+    TVector<TString> CollectHashShuffleFuncs(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+
+        TVector<TString> hashFuncs;
+        CollectHashShuffleFuncs(planRoot.GetMapSafe().at("SimplifiedPlan"), hashFuncs);
+        return hashFuncs;
+    }
+
+    void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<TString>& hashShuffles) {
+        if (!planNode.IsMap()) {
+            return;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto nodeType = planMap.find("Node Type");
+                nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
+            TVector<TString> keyColumns;
+            for (const auto& key : planMap.at("KeyColumns").GetArraySafe()) {
+                keyColumns.push_back(key.GetStringSafe());
+            }
+
+            hashShuffles.push_back(TStringBuilder()
+                << planMap.at("HashFunc").GetStringSafe()
+                << "(" << JoinSeq(", ", keyColumns) << ")");
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                CollectHashShuffleDescriptions(child, hashShuffles);
+            }
+        }
+    }
+
+    TVector<TString> CollectHashShuffleDescriptions(const TString& plan) {
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+
+        TVector<TString> hashShuffles;
+        CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
+        return hashShuffles;
+    }
+
+    NKikimrKqp::TKqpSetting MakeHashCompatibilityStatsSetting(const TVector<TString>& tables) {
+        TStringBuilder stats;
+        stats << "{";
+        for (size_t i = 0; i < tables.size(); ++i) {
+            if (i) {
+                stats << ",";
+            }
+            stats << "\"/Root/" << tables[i] << "\": {\"n_rows\": 1000000, \"byte_size\": 16000000}";
+        }
+        stats << "}";
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(stats);
+        return statsSetting;
+    }
+
+    void CreateHashCompatibilityTables(TSession& tableSession, const TVector<TString>& tables) {
+        for (const auto& table : tables) {
+            auto result = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `/Root/%s` (
+                    id Int32 NOT NULL,
+                    k Int32,
+                    payload Int32,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+            )", table.c_str())).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
+            NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeHashCompatibilityStatsSetting(tables)});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateHashCompatibilityTables(tableSession, tables);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        return TString{*result.GetStats()->GetPlan()};
+    }
+
     // A flat 3-way join on TPCH tables with overridden statistics and fixed
     // join order & type to only test SE, not anything around it
     Y_UNIT_TEST(ShuffleEliminationSimpleJoin) {
@@ -3570,6 +3696,225 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // I.e. shuffles for customer table and orders table should be eliminated
         // leaving us with only two:
         UNIT_ASSERT_VALUES_EQUAL(CountOperators(detailedPlan, "HashShuffle"), 2u);
+    }
+
+    // Minimal HashV2 compatibility regression.
+    // Regression test for hash-function compatibility across two GraceJoins:
+    // the second join may reuse the first join's output shuffling, so the
+    // remaining input must be shuffled with the same hash function.
+    Y_UNIT_TEST(ShuffleEliminationTwoJoinsHashFuncCompatibility) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(
+            NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/a": {"n_rows": 1000000, "byte_size": 16000000},
+            "/Root/b": {"n_rows": 1000000, "byte_size": 16000000},
+            "/Root/c": {"n_rows": 1000000, "byte_size": 16000000}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        for (const TString& table : {"a", "b", "c"}) {
+            auto result = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `/Root/%s` (
+                    id Int32 NOT NULL,
+                    k Int32,
+                    payload Int32,
+                    PRIMARY KEY (id)
+                )
+                PARTITION BY HASH(id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+            )", table.c_str())).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinOrder((a b) c)
+            ';
+
+            SELECT a.k, b.payload, c.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.k = b.k
+            JOIN `/Root/c` AS c ON a.k = c.k
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        // First join shuffles both sides with the default hash. The second join
+        // should reuse that shuffling on the left and shuffle the right side
+        // with the same hash function, not ColumnShardHashV1.
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 3u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("ColumnShardHashV1")),
+            0,
+            TStringBuilder() << "Hash shuffles use incompatible functions: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // Minimal ColumnShardHashV1 preserved-partitioning case.
+    Y_UNIT_TEST(ShuffleEliminationSingleJoinColumnShardHashCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinOrder(a b)
+            ';
+
+            SELECT a.id, b.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 1u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            hashFuncs.front(),
+            TString("ColumnShardHashV1"),
+            TStringBuilder() << "The remaining shuffle must match the preserved source hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // All-ColumnShardHashV1 chain: no accidental HashV2 transition.
+    Y_UNIT_TEST(ShuffleEliminationThreeJoinsColumnShardHashCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "d"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c d Shuffle)
+                JoinOrder(((a b) c) d)
+            ';
+
+            SELECT a.id, b.payload, c.payload, d.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+            JOIN `/Root/c` AS c ON a.id = c.k
+            JOIN `/Root/d` AS d ON a.id = d.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 3u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("ColumnShardHashV1")),
+            3,
+            TStringBuilder() << "All shuffles must match the preserved source hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // All-HashV2 chain: no accidental ColumnShardHashV1 propagation.
+    Y_UNIT_TEST(ShuffleEliminationThreeJoinsHashFuncCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "d"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c d Shuffle)
+                JoinOrder(((a b) c) d)
+            ';
+
+            SELECT a.k, b.payload, c.payload, d.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.k = b.k
+            JOIN `/Root/c` AS c ON a.k = c.k
+            JOIN `/Root/d` AS d ON a.k = d.k
+        )");
+
+        const auto hashFuncs = CollectHashShuffleFuncs(plan);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(hashFuncs.size(), 4u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            std::count(hashFuncs.begin(), hashFuncs.end(), TString("HashV2")),
+            4,
+            TStringBuilder() << "All shuffles must stay compatible with the first join hash: "
+                             << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    // General mixed case: both hash domains and transitions in one plan.
+    Y_UNIT_TEST(ShuffleEliminationMixedHashFuncCompatibility) {
+        const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "i", "d", "e", "f", "g", "h"}, R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = "4";
+            PRAGMA ydb.OptShuffleElimination = "true";
+            PRAGMA ydb.OptimizerHints = '
+                JoinType(a b Shuffle)
+                JoinType(a b c Shuffle)
+                JoinType(a b c i Shuffle)
+                JoinType(a b c i d Shuffle)
+                JoinType(e f Shuffle)
+                JoinType(e f g Shuffle)
+                JoinType(e f g h Shuffle)
+                JoinType(a b c i d e f g h Shuffle)
+                JoinOrder(((((a b) c) i) d) (((e f) g) h))
+            ';
+
+            SELECT a.id, b.payload, c.payload, i.payload, d.payload, e.id, f.payload, g.payload, h.payload
+            FROM `/Root/a` AS a
+            JOIN `/Root/b` AS b ON a.id = b.k
+            JOIN `/Root/c` AS c ON a.id = c.k
+            JOIN `/Root/i` AS i ON a.id = i.k
+            JOIN `/Root/d` AS d ON a.k = d.k
+            JOIN `/Root/e` AS e ON a.k = e.k
+            JOIN `/Root/f` AS f ON e.id = f.k
+            JOIN `/Root/g` AS g ON e.k = g.k
+            JOIN `/Root/h` AS h ON e.k = h.k
+        )");
+
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        // Preorder traversal: the left subtree keeps ColumnShard-preserved
+        // id=k joins for several levels, then switches to default HashV2 k=k joins.
+        // The final join re-shuffles the whole right subtree on e.k.
+        const TVector<TString> expectedHashShuffles = {
+            "HashV2(a.k)",
+            "ColumnShardHashV1(b.k)",
+            "ColumnShardHashV1(c.k)",
+            "ColumnShardHashV1(i.k)",
+            "HashV2(d.k)",
+            "HashV2(e.k)",
+            "HashV2(e.k)",
+            "ColumnShardHashV1(f.k)",
+            "HashV2(g.k)",
+            "HashV2(h.k)",
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            hashShuffles,
+            expectedHashShuffles,
+            TStringBuilder() << "Unexpected mixed hash propagation plan: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 
     /*

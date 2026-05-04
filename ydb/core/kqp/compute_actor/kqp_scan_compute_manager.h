@@ -69,7 +69,15 @@ public:
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
-        const auto& ranges = state.Ranges;
+        // Trim the head range to LastKey on retry, except when a ColumnShard
+        // cursor is present - those scans handle resume via the cursor and
+        // their reads are not necessarily sorted by key, so a LastKey-based
+        // trim is meaningless. The optional is populated unconditionally by
+        // the fetcher even when the proto carries no cursor, so check the
+        // oneof variant rather than has_value().
+        const bool hasCursor = state.LastCursorProto && state.LastCursorProto->Implementation_case()
+            != NKikimrKqp::TEvKqpScanCursor::IMPLEMENTATION_NOT_SET;
+        const auto ranges = state.GetScanRanges(keyColumnTypes, /* allRanges = */ hasCursor);
         auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)(

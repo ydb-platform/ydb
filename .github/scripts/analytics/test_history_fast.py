@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
-import ydb
 import os
 import sys
+import time
+
+import ydb
 from ydb_wrapper import YDBWrapper
 
 TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
 if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
 from error_type_utils import (  # noqa: E402
+    DEFAULT_PREFETCH_MAX_WORKERS,
     build_error_type_csv_for_storage,
     debug_file_texts_from_cache,
     failure_row_from_ydb,
@@ -18,6 +21,10 @@ from error_type_utils import (  # noqa: E402
     should_prefetch_debug_files,
     source_has_tag,
 )
+
+# stderr/log HTTP prefetch parallelism (same numbers as error_type_utils.DEFAULT_PREFETCH_MAX_WORKERS).
+_DEFAULT_PREFETCH_WORKERS = DEFAULT_PREFETCH_MAX_WORKERS
+_FULL_DAY_REFRESH_PREFETCH_WORKERS = 200
 
 
 def create_test_history_fast_table(ydb_wrapper, table_path):
@@ -55,7 +62,13 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table, full_day_refresh=False):
+def get_missed_data_for_upload(
+    ydb_wrapper,
+    test_runs_table,
+    test_history_fast_table,
+    full_day_refresh=False,
+    prefetch_max_workers=None,
+):
     join_clause = ""
     dedup_where_clause = ""
     if not full_day_refresh:
@@ -103,28 +116,45 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
             ELSE FALSE
             END) = FALSE
         and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
+        and status in ("failure")
+        and build_type = 'release-asan'
         {dedup_where_clause}
     """
 
     print(f'missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
 
+    print(f"scan done: {len(results)} rows; building failure rows for stderr/log prefetch...", flush=True)
     failure_rows = [failure_row_from_ydb(row) for row in results if is_failure_like_status(row.get("status"))]
     fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(
-        failure_rows
+        failure_rows,
+        max_workers=prefetch_max_workers,
     )
     if prefetch_debug_file_urls:
         norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
         total_urls = len(norm)
         failed_count = sum(1 for u in norm if fetch_cache.get(u) is None)
         print(
-            f"debug file prefetch: total={total_urls}, fetch_failed={failed_count}"
+            f"debug file prefetch: unique_urls={total_urls}, fetch_failed={failed_count}",
+            flush=True,
         )
     else:
-        print("debug file prefetch: no urls to download")
+        print("debug file prefetch: no urls to download", flush=True)
 
+    nrows = len(results)
+    print(
+        f"[classify] building comma-separated error_type for {nrows} rows (CPU, no network)...",
+        flush=True,
+    )
     verify_count = 0
-    for row in results:
+    t_classify = time.time()
+    if nrows > 5000:
+        progress_step = max(5000, nrows // 20)
+    elif nrows > 200:
+        progress_step = max(200, nrows // 5)
+    else:
+        progress_step = 0
+    for i, row in enumerate(results, 1):
         need = should_prefetch_debug_files(row.get("status"), row.get("stderr"), row.get("log"))
         stderr_text, log_text = debug_file_texts_from_cache(
             need, row.get("stderr"), row.get("log"), fetch_cache
@@ -139,7 +169,15 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         )
         if source_has_tag(row["error_type"], "VERIFY"):
             verify_count += 1
-    print(f"classification summary: rows={len(results)}, verify={verify_count}")
+        if i < nrows and progress_step > 0 and i % progress_step == 0:
+            print(
+                f"[classify] progress {i}/{nrows} rows ({time.time() - t_classify:.1f}s elapsed)",
+                flush=True,
+            )
+    print(
+        f"[classify] done {nrows} rows in {time.time() - t_classify:.1f}s, verify_tag={verify_count}",
+        flush=True,
+    )
     return results
 
 
@@ -149,7 +187,11 @@ def main():
     parser.add_argument(
         "--full-day-refresh",
         action="store_true",
-        help="Re-upload all data for the last day (disable dedup by existing test_id in fast table)",
+        help=(
+            "Re-upload all data for the last day (disable dedup by existing test_id in fast table). "
+            f"Uses {_FULL_DAY_REFRESH_PREFETCH_WORKERS} parallel workers for stderr/log prefetch "
+            f"(default run uses {_DEFAULT_PREFETCH_WORKERS})."
+        ),
     )
     args = parser.parse_args()
 
@@ -170,11 +212,15 @@ def main():
         create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
+        prefetch_max_workers = (
+            _FULL_DAY_REFRESH_PREFETCH_WORKERS if args.full_day_refresh else _DEFAULT_PREFETCH_WORKERS
+        )
         prepared_for_upload_rows = get_missed_data_for_upload(
             ydb_wrapper,
             test_runs_table,
             test_history_fast_table,
             full_day_refresh=args.full_day_refresh,
+            prefetch_max_workers=prefetch_max_workers,
         )
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         

@@ -32,8 +32,8 @@ from urllib import request as urllib_request
 
 DEFAULT_FETCH_TIMEOUT_SEC = 5
 DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
-_DEFAULT_FETCH_MAX_WORKERS = 30
-DEFAULT_FETCH_MAX_ATTEMPTS = 3
+DEFAULT_PREFETCH_MAX_WORKERS = 30
+DEFAULT_FETCH_MAX_ATTEMPTS = 10
 DEFAULT_FETCH_RETRY_DELAY_SEC = 0.5
 
 # After classify+merge: drop these tags from stored error_type (case-insensitive). Keep NOT_LAUNCHED etc.
@@ -288,7 +288,7 @@ def fetch_text_by_url(
     return None
 
 
-def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=_DEFAULT_FETCH_MAX_WORKERS):
+def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_PREFETCH_MAX_WORKERS):
     cache = existing_cache if existing_cache is not None else {}
     seen = set()
     unique_urls = []
@@ -301,7 +301,16 @@ def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=_DEFAULT_FETCH
     if not unique_urls:
         return cache
 
-    workers = min(max_workers, len(unique_urls))
+    total = len(unique_urls)
+    workers = min(max_workers, total)
+    step = max(500, total // 20) if total > 500 else total
+    print(
+        f"[prefetch] {total} unique stderr/log URL(s), {workers} workers "
+        f"(timeout {DEFAULT_FETCH_TIMEOUT_SEC}s each, retries {DEFAULT_FETCH_MAX_ATTEMPTS})...",
+        flush=True,
+    )
+    t0 = time.time()
+    done = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_url = {pool.submit(fetch_text_by_url, url): url for url in unique_urls}
         for future in as_completed(future_to_url):
@@ -310,6 +319,10 @@ def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=_DEFAULT_FETCH
                 cache[url] = future.result()
             except Exception:
                 cache[url] = None
+            done += 1
+            if done < total and step > 0 and done % step == 0:
+                print(f"[prefetch] progress {done}/{total}", flush=True)
+    print(f"[prefetch] finished {total} URL(s) in {time.time() - t0:.1f}s", flush=True)
     return cache
 
 
@@ -359,10 +372,12 @@ def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
 def prefetch_text_cache_and_urls_for_failure_rows(
     failure_rows: Sequence[FailureRow],
     existing_cache: Optional[Dict[str, Any]] = None,
+    max_workers: Optional[int] = None,
 ) -> Tuple[Dict[str, Any], List[Any]]:
     """
     Merge stderr/log URLs for all rows, run :func:`prefetch_texts_by_urls`, return ``(cache, url_list)``.
     Ignore ``url_list`` if you only need the cache: ``cache, _ = prefetch_text_cache_and_urls_for_failure_rows(...)``.
+    ``max_workers``: optional override for parallel HTTP (default :data:`DEFAULT_PREFETCH_MAX_WORKERS`).
     """
     urls = []
     for fr in failure_rows:
@@ -373,4 +388,7 @@ def prefetch_text_cache_and_urls_for_failure_rows(
                 fr.log_url,
             )
         )
-    return prefetch_texts_by_urls(urls, existing_cache=existing_cache), urls
+    fetch_kw: Dict[str, Any] = {"existing_cache": existing_cache}
+    if max_workers is not None:
+        fetch_kw["max_workers"] = max_workers
+    return prefetch_texts_by_urls(urls, **fetch_kw), urls

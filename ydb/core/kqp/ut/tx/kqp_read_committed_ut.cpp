@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 auto result = session1.ExecuteQuery(Q_(R"(
                     PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
                     SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
-                )"), TTxControl::BeginTx()).ExtractValueSync();
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
                 auto tx1 = result.GetTransaction();
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                     auto result2 = session2.ExecuteQuery(Q_(R"(
                         UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
                         VALUES (1U, "Paul", "First Change", 100u);
-                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
                     UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
                 }
 
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 auto result = session1.ExecuteQuery(Q_(R"(
                     PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
                     SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
-                )"), TTxControl::BeginTx()).ExtractValueSync();
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
                 auto tx1 = result.GetTransaction();
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
                 auto result2 = session2.ExecuteQuery(Q_(R"(
                     UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
                     VALUES (1U, "Paul", "Uncommitted Change", 100u);
-                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
                 auto tx2 = result2.GetTransaction();
                 UNIT_ASSERT(tx2);
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
             {
                 auto result = session1.ExecuteQuery(Q_(R"(
                     SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
-                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([[[100u];["Uncommitted Change"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
             }

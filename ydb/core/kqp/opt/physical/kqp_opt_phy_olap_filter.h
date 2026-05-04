@@ -45,5 +45,6 @@ bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& a
                                        THashSet<TString>& projectionMembers,
                                        TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,
                                        ui32& nextMemberId, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
+TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
 
 } // namespace NKikimr::NKqp::NOpt

@@ -1354,16 +1354,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto resultUpsert = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
-        std::vector<TString> results = {R"([[1;[2]]])", R"([[0;[1]];[1;[2]]])"};
+        const std::vector<TString> results = {R"([[1;[2]]])", R"([[0;[1]];[1;[2]]])", R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]]])"};
 
-        std::vector<std::string> queries = {
+        const std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.b == 2 order by t1.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT a, b FROM `/Root/t1` WHERE b <= 2 order by a;
+            )",
+            R"(
+                SELECT a, b FROM `/Root/t1` WHERE coalesce(b, 11) < 10 order by a;
             )",
         };
 
@@ -1386,6 +1387,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }

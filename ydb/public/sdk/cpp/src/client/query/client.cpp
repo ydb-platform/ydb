@@ -447,9 +447,6 @@ public:
         const auto createStartTime = std::chrono::steady_clock::now();
 
         auto extractor = [promise, self, createStartTime] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
-            const double elapsedSec =
-                std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
-            self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             if (resp) {
                 if (resp->status() != Ydb::StatusIds::SUCCESS) {
                     NYdb::NIssue::TIssues opIssues;
@@ -457,6 +454,8 @@ public:
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
                     promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
+                    const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                    self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
                     self->DoAttachSession(resp, promise, status.Endpoint, self);
                 }
             } else {

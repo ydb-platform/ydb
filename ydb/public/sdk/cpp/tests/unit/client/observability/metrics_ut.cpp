@@ -417,7 +417,6 @@ protected:
             /*fakeSessions=*/nullptr,
             /*waiters=*/nullptr,
             Registry,
-            kTestDbNamespace,
             /*clientType=*/"Query",
             /*poolName=*/kTestPoolName);
     }
@@ -535,8 +534,14 @@ TEST_F(QueryPoolMetricsTest, LegacyDbClientConnectionMetricsAreNotEmitted) {
 TEST(TablePoolMetricsTest, UsesYdbTableSessionNamespace) {
     auto registry = std::make_shared<TFakeMetricRegistry>();
     TStatCollector::TSessionPoolStatCollector collector(
-        nullptr, nullptr, nullptr, nullptr, registry, kTestDbNamespace,
-        /*clientType=*/"Table", /*poolName=*/kTestPoolName);
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        registry,
+        /*clientType=*/"Table",
+        /*poolName=*/kTestPoolName
+    );
 
     collector.IncConnectionTimeouts();
     collector.RecordPoolLimits(7, 70);
@@ -570,8 +575,8 @@ TEST(QueryPoolMetricsNoRegistryTest, NullRegistryIsSafe) {
 
 TEST(QueryPoolMetricsPoolNameTest, DifferentPoolNamesAreSeparateSeries) {
     auto registry = std::make_shared<TFakeMetricRegistry>();
-    TStatCollector::TSessionPoolStatCollector poolA(nullptr, nullptr, nullptr, nullptr, registry, kTestDbNamespace, "Query", "alpha");
-    TStatCollector::TSessionPoolStatCollector poolB(nullptr, nullptr, nullptr, nullptr, registry, kTestDbNamespace, "Query", "beta");
+    TStatCollector::TSessionPoolStatCollector poolA(nullptr, nullptr, nullptr, nullptr, registry, "Query", "alpha");
+    TStatCollector::TSessionPoolStatCollector poolB(nullptr, nullptr, nullptr, nullptr, registry, "Query", "beta");
 
     poolA.IncConnectionTimeouts();
     poolB.IncConnectionTimeouts();

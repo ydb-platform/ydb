@@ -421,9 +421,6 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
     auto createSessionExtractor = [createSessionPromise, self, standalone, obs, createStartTime]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-            const double elapsedSec =
-                std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
-            self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             Ydb::Table::CreateSessionResult result;
             if (any) {
                 any->UnpackTo(&result);
@@ -434,6 +431,9 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
+                const double elapsedSec =
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             } else {
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();

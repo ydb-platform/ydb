@@ -190,7 +190,6 @@ public:
         , ::NMonitoring::TRate* fakeSessions = nullptr
         , ::NMonitoring::TIntGauge* waiters = nullptr
         , std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {}
-        , std::string database = {}
         , std::string clientType = {}
         , std::string poolName = {}
     ) : ActiveSessions(activeSessions)
@@ -198,10 +197,9 @@ public:
         , FakeSessions(fakeSessions)
         , Waiters(waiters)
         , ExternalRegistry_(std::move(externalRegistry))
-        , Database_(std::move(database))
         , ClientType_(std::move(clientType))
-        , PoolName_(std::move(poolName)
-    ) {}
+        , PoolName_(std::move(poolName))
+    {}
 
         ::NMonitoring::TIntGauge* ActiveSessions;
         ::NMonitoring::TIntGauge* InPoolSessions;
@@ -331,7 +329,6 @@ public:
         }
 
         std::shared_ptr<NMetrics::IMetricRegistry> ExternalRegistry_;
-        std::string Database_;
         std::string ClientType_;
         std::string PoolName_;
     };
@@ -685,11 +682,11 @@ public:
                 {"sensor", "Sessions/WaitForReturn"} });
 
             return TSessionPoolStatCollector(activeSessions, inPoolSessions, fakeSessions, waiters,
-                ExternalMetricRegistry_, Database_, clientType, poolName);
+                ExternalMetricRegistry_, clientType, poolName);
         }
 
         return TSessionPoolStatCollector(nullptr, nullptr, nullptr, nullptr,
-            ExternalMetricRegistry_, Database_, clientType, poolName);
+            ExternalMetricRegistry_, clientType, poolName);
     }
 
     TClientStatCollector GetClientStatCollector(const std::string& clientType) {

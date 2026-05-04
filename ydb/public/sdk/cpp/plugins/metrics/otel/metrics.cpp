@@ -48,9 +48,11 @@ public:
     {}
 
     void Add(double delta) override {
+        {
+            std::lock_guard lock(Mutex_);
+            Value_ += delta;
+        }
         Counter_->Add(delta, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
-        std::lock_guard lock(Mutex_);
-        Value_ += delta;
     }
 
     void Set(double value) override {

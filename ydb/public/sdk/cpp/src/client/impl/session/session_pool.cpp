@@ -407,16 +407,22 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
 }
 
 void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector statCollector) {
-    ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
-    InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
-    FakeSessionsCounter_.Set(statCollector.FakeSessions);
-    SessionWaiterCounter_.Set(statCollector.Waiters);
-    ExternalStatCollector_ = std::move(statCollector);
-    ExternalStatCollector_.UpdateConnectionCount(
-        /*idle=*/static_cast<std::int64_t>(Sessions_.size()),
-        /*used=*/ActiveSessions_
-    );
-    ExternalStatCollector_.RecordPoolLimits(
+    NSdkStats::TStatCollector::TSessionPoolStatCollector snapshot;
+    std::int64_t idleCount = 0;
+    std::int64_t usedCount = 0;
+    {
+        std::lock_guard guard(Mtx_);
+        ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
+        InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
+        FakeSessionsCounter_.Set(statCollector.FakeSessions);
+        SessionWaiterCounter_.Set(statCollector.Waiters);
+        ExternalStatCollector_ = std::move(statCollector);
+        snapshot = ExternalStatCollector_;
+        idleCount = static_cast<std::int64_t>(Sessions_.size());
+        usedCount = ActiveSessions_;
+    }
+    snapshot.UpdateConnectionCount(idleCount, usedCount);
+    snapshot.RecordPoolLimits(
         /*minPoolSize=*/static_cast<std::int64_t>(MinPoolSize_),
         /*maxPoolSize=*/static_cast<std::int64_t>(MaxActiveSessions_)
     );

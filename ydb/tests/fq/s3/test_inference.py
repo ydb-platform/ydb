@@ -147,28 +147,36 @@ Pear,15,33,2024-05-06'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        # (name, pyarrow_array, expected_ydb_type, expected_optional)
-        # Reflects current kPrimitiveTypeTable in arrow_inferencinator.cpp.
-        # ShouldBeOptional() returns false for STRING / BINARY / LARGE_BINARY / NA,
-        # and true for everything else. DATE64, LARGE_*, and unsigned integer
-        # types are excluded because they don't survive a parquet round-trip
-        # cleanly (parquet's default reader widens unsigned ints to signed int64).
+        # (name, pyarrow_array, expected_ydb_type, nullable)
+        # `nullable` is the parquet-schema nullability (REQUIRED vs OPTIONAL):
+        # parquet inference takes it as-is from arrow::Field::nullable(), so it
+        # also drives whether the resulting YDB type is wrapped in Optional<>.
+        # We deliberately mix required and optional columns of identical types
+        # (e.g. c08_string_req vs c13_string_opt, c11_timestamp_req vs
+        # c14_timestamp_opt) to guard against the regression from the bug
+        # report where required parquet columns were inferred as Optional.
+        # DATE64, LARGE_*, and unsigned integer types are excluded because
+        # they don't survive a parquet round-trip cleanly (parquet's default
+        # reader widens unsigned ints to signed int64).
         columns = [
-            ("c01_bool",       pa.array([True],                          type=pa.bool_()),                          ydb.Type.BOOL,      True),
-            ("c02_int8",       pa.array([1],                             type=pa.int8()),                           ydb.Type.INT8,      True),
-            ("c03_int16",      pa.array([1],                             type=pa.int16()),                          ydb.Type.INT16,     True),
-            ("c04_int32",      pa.array([1],                             type=pa.int32()),                          ydb.Type.INT32,     True),
-            ("c05_int64",      pa.array([1],                             type=pa.int64()),                          ydb.Type.INT64,     True),
-            ("c06_float",      pa.array([1.0],                           type=pa.float32()),                        ydb.Type.FLOAT,     True),
-            ("c07_double",     pa.array([1.0],                           type=pa.float64()),                        ydb.Type.DOUBLE,    True),
-            ("c08_string",     pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      False),
-            ("c09_binary",     pa.array([b"b"],                          type=pa.binary()),                         ydb.Type.STRING,    False),
-            ("c10_date32",     pa.array([date(2024, 1, 2)],              type=pa.date32()),                         ydb.Type.DATE,      True),
-            ("c11_timestamp",  pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, True),
-            ("c12_decimal",    pa.array([decimal.Decimal("1.5")],        type=pa.decimal128(precision=5, scale=2)), ydb.Type.DOUBLE,    True),
+            ("c01_bool",          pa.array([True],                          type=pa.bool_()),                          ydb.Type.BOOL,      False),
+            ("c02_int8",          pa.array([1],                             type=pa.int8()),                           ydb.Type.INT8,      False),
+            ("c03_int16",         pa.array([1],                             type=pa.int16()),                          ydb.Type.INT16,     False),
+            ("c04_int32",         pa.array([1],                             type=pa.int32()),                          ydb.Type.INT32,     False),
+            ("c05_int64",         pa.array([1],                             type=pa.int64()),                          ydb.Type.INT64,     False),
+            ("c06_float",         pa.array([1.0],                           type=pa.float32()),                        ydb.Type.FLOAT,     False),
+            ("c07_double",        pa.array([1.0],                           type=pa.float64()),                        ydb.Type.DOUBLE,    False),
+            ("c08_string_req",    pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      False),
+            ("c09_binary_req",    pa.array([b"b"],                          type=pa.binary()),                         ydb.Type.STRING,    False),
+            ("c10_date32",        pa.array([date(2024, 1, 2)],              type=pa.date32()),                         ydb.Type.DATE,      False),
+            ("c11_timestamp_req", pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, False),
+            ("c12_decimal",       pa.array([decimal.Decimal("1.5")],        type=pa.decimal128(precision=5, scale=2)), ydb.Type.DOUBLE,    False),
+            ("c13_string_opt",    pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      True),
+            ("c14_timestamp_opt", pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, True),
         ]
 
-        table = pa.table([col[1] for col in columns], names=[col[0] for col in columns])
+        schema = pa.schema([pa.field(name, arr.type, nullable=nullable) for name, arr, _t, nullable in columns])
+        table = pa.Table.from_arrays([arr for _n, arr, _t, _o in columns], schema=schema)
         buf = io.BytesIO()
         pq.write_table(table, buf)
         s3_client.put_object(
@@ -203,7 +211,7 @@ Pear,15,33,2024-05-06'''
                     f"column {name}: got {actual.type}, want Optional<{expected_type}>"
             else:
                 assert actual.type.type_id == expected_type, \
-                    f"column {name}: got {actual.type}, want {expected_type}"
+                    f"column {name}: got {actual.type}, want {expected_type} (non-Optional)"
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

@@ -1233,7 +1233,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl) { //} && QueryState->TxId.GetValue() != TTxId()) {
+                    if (hasTxControl && QueryState->TxId.GetValue() != TTxId()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

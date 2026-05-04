@@ -36,6 +36,7 @@ SRCS(
     defs.h
     event.cpp
     event.h
+    event_flat.h
     event_load.cpp
     event_local.h
     event_pb.cpp

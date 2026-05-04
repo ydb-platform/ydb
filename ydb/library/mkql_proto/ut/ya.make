@@ -13,7 +13,6 @@ SRCS(
 PEERDIR(
     ydb/library/mkql_proto/ut/helpers
     yql/essentials/public/udf/service/exception_policy
-    ydb/core/yql_testlib
 )
 
 YQL_LAST_ABI_VERSION()

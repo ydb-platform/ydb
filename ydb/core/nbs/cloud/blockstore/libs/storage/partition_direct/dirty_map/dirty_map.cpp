@@ -1,7 +1,11 @@
 #include "dirty_map.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -262,78 +266,70 @@ void TBlocksDirtyMap::RestorePBuffer(
     }
 }
 
+// Create multiple readRangeHints for specified range with possible overlapping
+// with inflight requests
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
-
-    auto makeDefaultHint = [this](TBlockRange64 range)
-    {
-        // Filter out disabled locations.
-        auto locationMask = FilterLocations(DesiredDDisks, range);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            0,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            TRangeLock(this, range, locationMask));
-    };
-
-    auto makeHint =
-        [this](TLocationMask locationMask, ui64 lsn, TBlockRange64 range)
-    {
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        // Filter out disabled locations.
-        if (locationMask.HasDDisk()) {
-            locationMask = locationMask.LogicalAnd(DesiredDDisks);
-        }
-        locationMask = locationMask.Exclude(DisabledLocations);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            lsn,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            locationMask.OnlyDDiskAndNotEmpty()
-                ? TRangeLock(this, range, locationMask)
-                : TRangeLock(this, lsn));
-    };
-
-    if (!Inflight.HasOverlaps(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
+    if (!Inflight.HasOverlaps(range)) {   // read from ddisk
+        result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
         return result;
     }
 
-    ui64 maxLsn = 0;
+    bool shouldWaitQuorum = false;
+    TStackVec<TWeightedRange> ranges;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
-            const ui64 lsn = item.Key;
-            maxLsn = std::max(maxLsn, lsn);
+            const auto readMask = item.Value.ReadMask();
+            if (readMask.Empty()) {
+                shouldWaitQuorum = true;
+                result.WaitReady = item.Value.GetQuorumReadyFuture();
+                result.RangeHints.clear();
+                return TInflightMap::EEnumerateContinuation::Stop;
+            }
 
+            if (!readMask.OnlyDDisk()) {
+                ranges.push_back({.Key = item.Key, .Range = item.Range});
+            }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
-
-    const auto item = Inflight.GetValue(maxLsn);
-
-    // Read from DDisk if the range is not covered by the inflight range.
-    if (!item->Range.Contains(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
+    if (shouldWaitQuorum) {
         return result;
     }
 
-    if (item->Value.ReadMask().Empty()) {
-        // Reading from range without quorum is forbidden.
-        // Caller should wait until PBuffers quorum will be made.
-        result.WaitReady = item->Value.GetQuorumReadyFuture();
-        Y_ABORT_UNLESS(result.RangeHints.empty());
-    } else {
-        result.RangeHints.push_back(
-            makeHint(item->Value.ReadMask(), item->Key, item->Range));
+    auto nonOverlappingRanges = SplitOnNonOverlappingContinuousRanges(
+        TBlockRange64::MakeClosedInterval(range.Start, range.End),
+        ranges);
+    result.RangeHints.reserve(nonOverlappingRanges.size());
+
+    ui64 offsetBlocks{};
+    for (auto& nonOverlappingRange: nonOverlappingRanges) {
+        auto lsn = nonOverlappingRange.Key;
+
+        if (lsn == 0) {
+            auto hint = MakeReadRangeHint(
+                {},
+                0,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
+        } else {
+            auto item = Inflight.GetValue(lsn);
+            Y_ABORT_UNLESS(item);
+            const auto readMask = item->Value.ReadMask();
+            Y_DEBUG_ABORT_UNLESS(!readMask.Empty());
+
+            auto hint = MakeReadRangeHint(
+                readMask,
+                lsn,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
+        }
+
+        offsetBlocks += nonOverlappingRange.Range.Size();
     }
 
     return result;
@@ -720,6 +716,15 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
     return result;
 }
 
+TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
+{
+    TStringBuilder result;
+    for (auto lsn: ReadyToFlush) {
+        result << ToString(lsn) << "; ";
+    }
+    return result;
+}
+
 TLocationMask TBlocksDirtyMap::FilterLocations(
     TLocationMask mask,
     TBlockRange64 range) const
@@ -737,6 +742,31 @@ TLocationMask TBlocksDirtyMap::FilterLocations(
         }
     }
     return result;
+}
+
+TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
+    TLocationMask locationMask,
+    ui64 lsn,
+    TBlockRange64 range,
+    ui64 offsetBlocks)
+{
+    if (locationMask.Empty()) {
+        locationMask = FilterLocations(DesiredDDisks, range);
+    } else if (locationMask.HasDDisk()) {
+        locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        locationMask = FilterLocations(locationMask, range);
+    }
+
+    locationMask = locationMask.Exclude(DisabledLocations);
+    Y_ABORT_UNLESS(!locationMask.Empty());
+
+    return {
+        locationMask,
+        lsn,
+        TBlockRange64::WithLength(offsetBlocks, range.Size()),
+        range,
+        locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
+                                 : TRangeLock(this, lsn)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -334,6 +334,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
     };
 
+    // Note: this does not store groups with active status
+    struct Group : Table<23> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct StoragePool : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EGroupState; static constexpr auto Default = EGroupState::Active; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, StoragePool, Status>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -351,7 +361,8 @@ struct Schema : NIceDb::Schema {
                                 TabletOwners,
                                 TabletAvailabilityRestrictions,
                                 OperationsLog,
-                                BridgePile
+                                BridgePile,
+                                Group
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

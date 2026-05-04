@@ -393,6 +393,7 @@ struct TComputeMemoryLimits {
     TMaybe<size_t> BufferPageAllocSize;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 using TTaskRunnerFactory = std::function<

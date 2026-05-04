@@ -10,10 +10,11 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 TotalLimit = Infinity();
         ui64 FairShare = 0;
 
-        ui64 CpuDemand = 0;
+        std::atomic<ui64> CpuDemand = 0;
         ui64 CpuUsage = 0;
         ui64 CpuBurstUsage = 0;
         ui64 CpuBurstThrottle = 0;
+        ui64 ReadBurstUsage = 0;
         std::optional<float> Satisfaction;
 
         const TMonotonic Timestamp = TMonotonic::Now();

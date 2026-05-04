@@ -344,9 +344,9 @@
     ],
     "test.test[blocks-agg_all-default.txt-Peephole]": [
         {
-            "checksum": "2cac52d94b0a135a77295a6d724119ab",
-            "size": 969,
-            "uri": "https://{canondata_backend}/995452/f6090e3537b6ac5af6bbff66cd67f657f1cc30b8/resource.tar.gz#test.test_blocks-agg_all-default.txt-Peephole_/opt.yql"
+            "checksum": "88ea0d1bf4b242f8d925a79410a09dd8",
+            "size": 1042,
+            "uri": "https://{canondata_backend}/1923547/cd77133e0f65dd44aea9c69fca50f22d31cde97e/resource.tar.gz#test.test_blocks-agg_all-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_all-default.txt-Results]": [
@@ -1232,9 +1232,6 @@
             "checksum": "67d3d621bb4b9e3207fb9e5b73532ef0",
             "size": 7788,
             "uri": "https://{canondata_backend}/1847551/378b3bd63cdb48c05228707db1486e34df62729c/resource.tar.gz#test.test_params-primitives--Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_params-primitives--Results_/extracted"
         }
     ],
     "test.test[pg-YQL_20895_projection_depth_2-default.txt-Debug]": [
@@ -1783,6 +1780,34 @@
             "uri": "https://{canondata_backend}/1937492/605eaa68c39ca4bb3a8a098de75adad14cc178b5/resource.tar.gz#test.test_select_yql-uncorrelated_where_in-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-window_fn_ntile_2-default.txt-Debug]": [
+        {
+            "checksum": "e02315206e77c68a8e24a4b2c3b3a67c",
+            "size": 1078,
+            "uri": "https://{canondata_backend}/1942100/d363f3f837304b546a31c2019295ba18d7ee606d/resource.tar.gz#test.test_select_yql-window_fn_ntile_2-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_fn_ntile_2-default.txt-Results]": [
+        {
+            "checksum": "80e6978371d56733826828558e651511",
+            "size": 1289,
+            "uri": "https://{canondata_backend}/1942100/d363f3f837304b546a31c2019295ba18d7ee606d/resource.tar.gz#test.test_select_yql-window_fn_ntile_2-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-window_pg_tutorial_1-default.txt-Debug]": [
+        {
+            "checksum": "2f6c64b7ff78c5a8f41503dd00e38585",
+            "size": 1879,
+            "uri": "https://{canondata_backend}/1777230/086d52f16d5636cda753c93a6d77da88187a7f3f/resource.tar.gz#test.test_select_yql-window_pg_tutorial_1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_pg_tutorial_1-default.txt-Results]": [
+        {
+            "checksum": "3ffe99e00271c076224c1d7fa2e3c4fc",
+            "size": 3170,
+            "uri": "https://{canondata_backend}/1777230/086d52f16d5636cda753c93a6d77da88187a7f3f/resource.tar.gz#test.test_select_yql-window_pg_tutorial_1-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[seq_mode-shared_named_expr-default.txt-Debug]": [
         {
             "checksum": "6de9752b20a85eb7d5c4b1508dfd607d",
@@ -1893,6 +1918,20 @@
             "checksum": "e6fa6c1cd5fcb0365c8d37188d57098a",
             "size": 762,
             "uri": "https://{canondata_backend}/1784117/c1c7de2cd671e324140e51d7eda942f845f3a5be/resource.tar.gz#test.test_union_all-error_second_field-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[window-fuse_filter_field_subset-default.txt-Debug]": [
+        {
+            "checksum": "886a4080f3e17e7b98be0340e1490adc",
+            "size": 2148,
+            "uri": "https://{canondata_backend}/1903885/03285fc07e0d7ed757d008d5b800e168e6d187de/resource.tar.gz#test.test_window-fuse_filter_field_subset-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-fuse_filter_field_subset-default.txt-Results]": [
+        {
+            "checksum": "9a69f5c2601f615180a5319b466f0447",
+            "size": 5449,
+            "uri": "https://{canondata_backend}/1775319/a59505eafec9f112aa0bdb590ea40e3b40c6b1b9/resource.tar.gz#test.test_window-fuse_filter_field_subset-default.txt-Results_/results.txt"
         }
     ],
     "test.test[window-fuse_with_rename_session_start_last-default.txt-Debug]": [

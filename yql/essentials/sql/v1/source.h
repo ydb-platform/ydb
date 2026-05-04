@@ -121,7 +121,7 @@ protected:
     explicit ISource(TPosition pos);
     TAstNode* Translate(TContext& ctx) const override;
 
-    void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
+    void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortDirection, TNodePtr& sortKeySelector);
 
     TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
     TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);

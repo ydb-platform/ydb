@@ -171,7 +171,8 @@ class ArrayLoader {
         metadata_version_(metadata_version),
         file_(file),
         file_offset_(0),
-        max_recursion_depth_(options.max_recursion_depth) {}
+        max_recursion_depth_(options.max_recursion_depth),
+        max_variadic_buffer_count_(options.max_variadic_buffer_count) {}
 
   explicit ArrayLoader(const flatbuf::RecordBatch* metadata,
                        MetadataVersion metadata_version, const IpcReadOptions& options,
@@ -180,7 +181,8 @@ class ArrayLoader {
         metadata_version_(metadata_version),
         file_(nullptr),
         file_offset_(file_offset),
-        max_recursion_depth_(options.max_recursion_depth) {}
+        max_recursion_depth_(options.max_recursion_depth),
+        max_variadic_buffer_count_(options.max_variadic_buffer_count) {}
 
   Status ReadBuffer(int64_t offset, int64_t length, std::shared_ptr<Buffer>* out) {
     if (skip_io_) {
@@ -255,9 +257,9 @@ class ArrayLoader {
       return Status::IOError("variadic_count_index out of range.");
     }
     int64_t count = variadic_counts->Get(i);
-    if (count < 0 || count > std::numeric_limits<int32_t>::max()) {
-      return Status::IOError(
-          "variadic_count must be representable as a positive int32_t, got ", count, ".");
+    if (count < 0 || count > max_variadic_buffer_count_) {
+      return Status::IOError("variadic_count ", count,
+                             " exceeds limit of ", max_variadic_buffer_count_, ".");
     }
     return static_cast<size_t>(count);
   }
@@ -496,6 +498,7 @@ class ArrayLoader {
   io::RandomAccessFile* file_;
   int64_t file_offset_;
   int max_recursion_depth_;
+  int64_t max_variadic_buffer_count_;
   int buffer_index_ = 0;
   int field_index_ = 0;
   bool skip_io_ = false;

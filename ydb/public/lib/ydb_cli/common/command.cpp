@@ -310,8 +310,7 @@ int TClientCommand::Process(TConfig& config) {
         return e.GetCode();
     } catch (const TNeedToExitWithCode& e) {
         return e.GetCode();
-    }
-    catch (const NYdb::NConsoleClient::TMisuseException& e) {
+    } catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;

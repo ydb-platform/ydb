@@ -11,6 +11,12 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
 
 TExprNodeList ExtractCalcsOverWindow(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx);
+TExprNode::TPtr BuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx);
+
+// Create frame spec for ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW frame
+TExprNode::TPtr MakeRowsUPCRFrameSpec(TPositionHandle pos, const TExprNode::TPtr& sortSpec, TExprContext& ctx, TTypeAnnotationContext& types);
+bool HasWinFilters(const NNodes::TCoCalcOverWindowTuple& calc);
+TVector<TExprNodeList> SplitByWinFilter(const TExprNodeList& framesOrCalcs);
 
 using NNodes::TCoWinOnBase;
 using NNodes::TCoFrameBound;

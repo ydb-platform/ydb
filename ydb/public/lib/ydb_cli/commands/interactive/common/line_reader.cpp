@@ -23,6 +23,12 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
+// Time window during which a second Ctrl+C after the first is treated as "exit" rather
+// than "cancel current input". Must be large enough to tolerate slow builds (debug /
+// sanitizers), where each cancel round-trip — read → disable raw mode → enable raw mode
+// → redraw prompt → next read — can take up to a second on its own.
+constexpr auto DoubleCtrlCWindow = TDuration::Seconds(3);
+
 class TLineReader final : public ILineReader {
     inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
@@ -137,7 +143,7 @@ public:
 
             if (input == nullptr) {
                 const auto now = TInstant::Now();
-                if (errno != EAGAIN || !ContinueAfterCancel || (LastCtrlCTime && (now - LastCtrlCTime) <= TDuration::Seconds(1))) {
+                if (errno != EAGAIN || !ContinueAfterCancel || (LastCtrlCTime && (now - LastCtrlCTime) <= DoubleCtrlCWindow)) {
                     break;
                 }
 

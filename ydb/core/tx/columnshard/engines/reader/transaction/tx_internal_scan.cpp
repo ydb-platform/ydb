@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
@@ -66,7 +67,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             request.GetReadOnlyConflicts()
         );
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
-        std::unique_ptr<IScannerConstructor> scannerConstructor(new NSimple::TIndexScannerConstructor(context));
+        std::unique_ptr<IScannerConstructor> scannerConstructor(new NTrivial::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.SetScanCursor(nullptr);
         if (request.RangesFilter) {

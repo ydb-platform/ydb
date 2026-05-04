@@ -127,6 +127,12 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-pool-name", "Fmr pool name")
             .Optional()
             .StoreResult(&FmrPoolName_);
+        opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
+        });
+        opts.AddLongOption("yt-access-provider-cfg", "YT access provider configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &AccessProviderConfig_);
+        });
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -190,8 +196,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
-    services.TvmClient = CreateTvmClient(GetRunOptions().GatewaysConfig->GetYt());
-    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, GetRunOptions().GatewaysConfig->GetYt());
+    services.TvmClient = CreateTvmClient(TvmConfig_);
+    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, AccessProviderConfig_);
     auto ytGateway = CreateYtNativeGateway(services);
     if (!GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
         return ytGateway;

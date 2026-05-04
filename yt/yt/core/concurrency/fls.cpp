@@ -17,7 +17,7 @@ namespace NDetail {
 constexpr int MaxFlsSize = 256;
 std::atomic<int> FlsSize;
 
-NThreading::TForkAwareSpinLock FlsLock;
+YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, FlsLock);
 std::array<TFlsSlotDtor, MaxFlsSize> FlsDtors;
 
 YT_DEFINE_THREAD_LOCAL(TFls*, PerThreadFls);
@@ -85,4 +85,3 @@ TFls* SwapCurrentFls(TFls* newFls)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

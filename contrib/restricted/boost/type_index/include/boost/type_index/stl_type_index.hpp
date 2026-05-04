@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -117,9 +117,9 @@ class stl_type_index
 {
 public:
 #ifdef BOOST_NO_STD_TYPEINFO
-    typedef type_info type_info_t;
+    using type_info_t = type_info;
 #else
-    typedef std::type_info type_info_t;
+    using type_info_t = std::type_info;
 #endif
 
 private:
@@ -175,7 +175,7 @@ inline const char* stl_type_index::name() const noexcept {
 
 inline std::string stl_type_index::pretty_name() const {
     static const char cvr_saver_name[] = "boost::typeindex::detail::cvr_saver";
-    static BOOST_CONSTEXPR_OR_CONST std::string::size_type cvr_saver_name_len = sizeof(cvr_saver_name) - 1;
+    constexpr std::string::size_type cvr_saver_name_len = sizeof(cvr_saver_name) - 1;
 
     // In case of MSVC demangle() is a no-op, and name() already returns demangled name.
     // In case of GCC and Clang (on non-Windows systems) name() returns mangled name and demangle() undecorates it.
@@ -270,8 +270,8 @@ inline bool stl_type_index::before(const stl_type_index& rhs) const noexcept {
 
 template <class T>
 inline stl_type_index stl_type_index::type_id() noexcept {
-    typedef typename std::remove_reference<T>::type no_ref_t;
-    typedef typename std::remove_cv<no_ref_t>::type no_cvr_t;
+    using no_ref_t = typename std::remove_reference<T>::type;
+    using no_cvr_t = typename std::remove_cv<no_ref_t>::type;
     return typeid(no_cvr_t);
 }
 
@@ -281,11 +281,11 @@ namespace detail {
 
 template <class T>
 inline stl_type_index stl_type_index::type_id_with_cvr() noexcept {
-    typedef typename std::conditional<
+    using type = typename std::conditional<
         std::is_reference<T>::value ||  std::is_const<T>::value || std::is_volatile<T>::value,
         detail::cvr_saver<T>,
         T
-    >::type type;
+    >::type;
 
     return typeid(type);
 }

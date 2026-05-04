@@ -7,15 +7,20 @@ namespace NYql::NDom {
 namespace {
 
 inline bool StringLess(const TPair& x, const TPair& y) {
-    return x.first.AsStringRef() < y.first.AsStringRef();
+    const auto cleanX = ClearUtf8Mark(x.first);
+    const auto cleanY = ClearUtf8Mark(y.first);
+    return cleanX.AsStringRef() < cleanY.AsStringRef();
 }
 
 inline bool StringRefLess(const TPair& x, const TStringRef& y) {
-    return x.first.AsStringRef() < y;
+    const auto cleanX = ClearUtf8Mark(x.first);
+    return cleanX.AsStringRef() < y;
 }
 
 inline bool StringEquals(const TPair& x, const TPair& y) {
-    return x.first.AsStringRef() == y.first.AsStringRef();
+    const auto cleanX = ClearUtf8Mark(x.first);
+    const auto cleanY = ClearUtf8Mark(y.first);
+    return cleanX.AsStringRef() == cleanY.AsStringRef();
 }
 
 } // namespace
@@ -43,7 +48,7 @@ bool TMapNode::TIterator<NoSwap>::Next(TUnboxedValue& key) {
         return false;
     }
     if constexpr (NoSwap) {
-        key = Parent_->Items_[Index_].first;
+        key = ClearUtf8Mark(Parent_->Items_[Index_].first);
     } else {
         key = Parent_->Items_[Index_].second;
     }
@@ -58,7 +63,7 @@ bool TMapNode::TIterator<NoSwap>::NextPair(TUnboxedValue& key, TUnboxedValue& pa
     if constexpr (NoSwap) {
         payload = Parent_->Items_[Index_].second;
     } else {
-        payload = Parent_->Items_[Index_].first;
+        payload = ClearUtf8Mark(Parent_->Items_[Index_].first);
     }
     return true;
 }
@@ -123,7 +128,12 @@ TUnboxedValue TMapNode::Lookup(const TUnboxedValuePod& key) const {
 
 TUnboxedValue TMapNode::Lookup(const TStringRef& key) const {
     const auto it = LowerBound(Items_, Items_ + UniqueCount_, key, StringRefLess);
-    if (it == Items_ + UniqueCount_ || static_cast<TStringBuf>(it->first.AsStringRef()) != static_cast<TStringBuf>(key)) {
+    if (it == Items_ + UniqueCount_) {
+        return {};
+    }
+
+    const auto cleanKey = ClearUtf8Mark(it->first);
+    if (static_cast<TStringBuf>(cleanKey.AsStringRef()) != static_cast<TStringBuf>(key)) {
         return {};
     }
 
@@ -184,15 +194,20 @@ IOutputStream& TDebugPrinter::Out(IOutputStream& o) const {
         case ENodeType::Double:
             o << "floating point (" << Node.Get<double>() << ") value";
             break;
-        case ENodeType::String:
-            if (const std::string_view str(Node.AsStringRef()); str.empty()) {
+        case ENodeType::String: {
+            auto cleanNode = ClearUtf8Mark(Node);
+            if (const std::string_view str(cleanNode.AsStringRef()); str.empty()) {
                 o << "empty string";
-            } else if (Node.IsEmbedded() && str.cend() == std::find_if(str.cbegin(), str.cend(), [](char c) { return !std::isprint(c); })) {
+            } else if (cleanNode.IsEmbedded() && str.cend() == std::find_if(str.cbegin(), str.cend(), [](char c) { return !std::isprint(c); })) {
                 o << "string '" << str << "' value";
             } else {
                 o << "string value of size " << str.size();
             }
+            if (IsUtf8Node(Node)) {
+                o << " (utf8)";
+            }
             break;
+        }
         case ENodeType::List:
             if (Node.IsBoxed()) {
                 o << "list of size " << Node.GetListLength();

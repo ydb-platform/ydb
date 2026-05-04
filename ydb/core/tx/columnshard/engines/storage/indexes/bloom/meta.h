@@ -1,4 +1,7 @@
 #pragma once
+
+#include "const.h"
+
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
@@ -14,10 +17,12 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
-    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    ui32 HashesCount = 0;
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
-    void Initialize();
+    TConclusionStatus ValidateRequest() const {
+        return NIndexes::ValidateRequest(Request);
+    }
+    [[nodiscard]] bool Initialize();
 
     virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
@@ -39,12 +44,12 @@ protected:
 public:
     TBloomIndexMeta() = default;
     TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage,
-        const ui32 columnId, const double fpProbability, const TReadDataExtractorContainer& dataExtractor,
+        const ui32 columnId, const TRequestSettings& request, const TReadDataExtractorContainer& dataExtractor,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
-        , FalsePositiveProbability(fpProbability)
+        , Request(request)
     {
-        Initialize();
+        AFL_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

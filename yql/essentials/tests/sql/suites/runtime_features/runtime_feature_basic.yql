@@ -1,0 +1,1 @@
+select YQL::HostRuntimeSetting("TestHostSetting"), YQL::UdfRuntimeSetting("TestModule", "TestUdfSetting");

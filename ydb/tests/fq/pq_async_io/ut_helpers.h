@@ -117,6 +117,10 @@ void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
 
+void ChangePartitionCount(
+    const TString& streamName,
+    ui32 partitionCount);
+
 std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);
 

@@ -77,6 +77,7 @@
 #include "mkql_nop.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
+#include "mkql_runtime_feature.h"
 #include "mkql_pickle.h"
 #include "mkql_prepend.h"
 #include "mkql_queue.h"
@@ -256,6 +257,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},
         {"Now", &WrapNow},
+        {"HostRuntimeSetting", &WrapHostRuntimeSetting},
+        {"UdfRuntimeSetting", &WrapUdfRuntimeSetting},
         {"Pickle", &WrapPickle},
         {"StablePickle", &WrapStablePickle},
         {"Unpickle", &WrapUnpickle},

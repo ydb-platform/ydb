@@ -1028,18 +1028,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore27: {
-            // create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? name (TYPE type [WITH k=v,...]);
+            // create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? object_ref
+            //     LPAREN TYPE object_type_ref RPAREN
+            //     create_object_features?;
             auto& node = core.GetAlt_sql_stmt_core27().GetRule_create_object_stmt1();
 
             Token(node.GetToken1());
             const TPosition pos = Ctx_.Pos();
 
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
             bool existingOk = false;
@@ -1051,7 +1051,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     IS_TOKEN(node.GetBlock3().GetToken3().GetId(), EXISTS));
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref7().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock9()) {
@@ -1060,39 +1059,38 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(pos, objectId, typeId, existingOk, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(pos, *objectId, typeId, existingOk, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore28: {
-            // alter_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
+            // alter_object_stmt: ALTER OBJECT object_ref
+            //     LPAREN TYPE object_type_ref RPAREN
+            //     alter_object_features;
             auto& node = core.GetAlt_sql_stmt_core28().GetRule_alter_object_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref3(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features8().GetRule_object_features2())) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore29: {
-            // drop_object_stmt: DROP OBJECT (IF EXISTS)? name (TYPE type [WITH k=v,...]);
+            // drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
+            //     LPAREN TYPE object_type_ref RPAREN
+            //     drop_object_features?;
             auto& node = core.GetAlt_sql_stmt_core29().GetRule_drop_object_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
             bool missingOk = false;
@@ -1103,7 +1101,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     IS_TOKEN(node.GetBlock3().GetToken2().GetId(), EXISTS));
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref7().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock9()) {
@@ -1112,18 +1109,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectId, typeId, missingOk, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, typeId, missingOk, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore30: {
-            // create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? name WITH (k=v,...);
+            // create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
+            //     with_table_settings;
             auto& node = core.GetAlt_sql_stmt_core30().GetRule_create_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref7().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref7().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref7(), context, /* useTablePrefix = */ true);
+            if (!objectId) {
+                return false;
             }
 
             bool replaceIfExists = false;
@@ -1143,30 +1139,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     IS_TOKEN(node.GetBlock6().GetToken3().GetId(), EXISTS));
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref7().GetRule_id_or_at2(), *this).second;
+            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
             std::map<TString, TDeferredAtom> kv;
             if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings8())) {
                 return false;
             }
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
             AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore31: {
-            // alter_external_data_source_stmt: ALTER EXTERNAL DATA SOURCE object_ref alter_external_data_source_action (COMMA alter_external_data_source_action)*
+            // alter_external_data_source_stmt: ALTER EXTERNAL DATA SOURCE object_ref
+            //     alter_external_data_source_action (COMMA alter_external_data_source_action)*;
             Ctx_.BodyPart();
             const auto& node = core.GetAlt_sql_stmt_core31().GetRule_alter_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref5().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ true);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
             if (!ParseExternalDataSourceSettings(kv, toReset, node.GetRule_alter_external_data_source_action6())) {
@@ -1183,20 +1176,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
 
             auto operation = BuildAlterObjectOperation(
-                Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE",
+                Ctx_.Pos(), *objectId, "EXTERNAL_DATA_SOURCE",
                 /* missingOk = */ false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context);
             AddStatementToBlocks(blocks, std::move(operation));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore32: {
-            // drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? name;
+            // drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
             auto& node = core.GetAlt_sql_stmt_core32().GetRule_drop_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref6().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref6().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref6(), context, /* useTablePrefix = */ true);
+            if (!objectId) {
+                return false;
             }
 
             bool missingOk = false;
@@ -1207,8 +1198,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     IS_TOKEN(node.GetBlock5().GetToken2().GetId(), EXISTS));
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref6().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", missingOk, {}, context));
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "EXTERNAL_DATA_SOURCE", missingOk, {}, context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore33: {
@@ -1433,39 +1423,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore40: {
-            // ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
+            // alter_table_store_stmt: ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
             auto& node = core.GetAlt_sql_stmt_core40().GetRule_alter_table_store_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-
-            if (node.GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref3(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = "TABLESTORE";
             std::map<TString, TDeferredAtom> kv;
             if (!ParseTableStoreFeatures(kv, node.GetRule_alter_table_store_action4())) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore41: {
-            // create_object_stmt: UPSERT OBJECT name (TYPE type [WITH k=v,...]);
+            // upsert_object_stmt: UPSERT OBJECT object_ref
+            //     LPAREN TYPE object_type_ref RPAREN
+            //     create_object_features?;
             auto& node = core.GetAlt_sql_stmt_core41().GetRule_upsert_object_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref3().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref3(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
-
-            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock8()) {
@@ -1474,31 +1458,24 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx_.Pos(), objectId, typeId, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx_.Pos(), *objectId, typeId, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore42: {
-            // create_view_stmt: CREATE VIEW (IF NOT EXISTS)? name (WITH (k = v, ...))? AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
+            // create_view_stmt: CREATE VIEW (IF NOT EXISTS)? simple_table_ref_core create_object_features?
+            //                   AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
             auto& node = core.GetAlt_sql_stmt_core42().GetRule_create_view_stmt1();
             Token(node.GetToken1());
+            const TPosition stmtPos = Ctx_.Pos();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false,
-                                 context.ServiceId,
-                                 context.Cluster)) {
-                    return false;
-                }
-            }
-
-            if (context.Cluster.Empty()) {
-                Error() << "No cluster name given and no default cluster is selected";
+            auto objectId = ParseObjectPath(node.GetRule_simple_table_ref_core4(), context);
+            if (!objectId) {
                 return false;
             }
 
             if (context.ServiceId == YtProviderName) {
                 if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                        Ctx_.Pos(), "CREATE VIEW", MakeLangVersion(2025, 5))) {
+                        stmtPos, "CREATE VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -1515,8 +1492,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             switch (node.GetBlock7().GetAltCase()) {
                 case TRule_create_view_stmt_TBlock7::AltCase::kAlt1: {
                     if (context.ServiceId == YtProviderName) {
-                        Error() << "CREATE VIEW ... AS SELECT syntax is not supported for " << context.ServiceId << " provider. "
-                                << "Please use CREATE VIEW ... AS DO BEGIN ... END DO";
+                        Ctx_.Error(stmtPos) << "CREATE VIEW ... AS SELECT syntax is not supported for " << context.ServiceId << " provider. "
+                                            << "Please use CREATE VIEW ... AS DO BEGIN ... END DO";
                         return false;
                     }
                     if (!ParseViewQuery(features, node.GetBlock7().GetAlt1().GetRule_select_stmt1())) {
@@ -1526,8 +1503,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
                 case TRule_create_view_stmt_TBlock7::AltCase::kAlt2: {
                     if (context.ServiceId != YtProviderName) {
-                        Error() << "CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for " << context.ServiceId << " provider. "
-                                << "Please use CREATE VIEW ... AS SELECT";
+                        Ctx_.Error(stmtPos) << "CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for " << context.ServiceId << " provider. "
+                                            << "Please use CREATE VIEW ... AS SELECT";
                         return false;
                     }
                     auto& alt = node.GetBlock7().GetAlt2();
@@ -1542,11 +1519,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     Y_ABORT("You should change implementation according to grammar changes");
             }
 
-            const TString objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";
             AddStatementToBlocks(blocks,
                                  BuildCreateObjectOperation(Ctx_.Pos(),
-                                                            BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            *objectId,
                                                             TypeId,
                                                             existingOk,
                                                             false,
@@ -1555,16 +1531,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore43: {
-            // drop_view_stmt: DROP VIEW (IF EXISTS)? name;
+            // drop_view_stmt: DROP VIEW (IF EXISTS)? simple_table_ref_core;
             auto& node = core.GetAlt_sql_stmt_core43().GetRule_drop_view_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false,
-                                 context.ServiceId,
-                                 context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPath(node.GetRule_simple_table_ref_core4(), context);
+            if (!objectId) {
+                return false;
             }
 
             if (context.ServiceId == YtProviderName) {
@@ -1576,11 +1548,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const bool missingOk = node.HasBlock3();
 
-            const TString objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";
             AddStatementToBlocks(blocks,
                                  BuildDropObjectOperation(Ctx_.Pos(),
-                                                          BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                          *objectId,
                                                           TypeId,
                                                           missingOk,
                                                           {},
@@ -1617,38 +1588,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore45: {
-            // create_resource_pool_stmt: CREATE RESOURCE POOL name WITH (k=v,...);
+            // create_resource_pool_stmt: CREATE RESOURCE POOL object_ref with_table_settings;
             auto& node = core.GetAlt_sql_stmt_core45().GetRule_create_resource_pool_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
             if (!ParseResourcePoolSettings(kv, node.GetRule_with_table_settings5())) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore46: {
-            // alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref alter_resource_pool_action (COMMA alter_external_data_source_action)*
+            // alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
+            //     alter_resource_pool_action (COMMA alter_resource_pool_action)*;
             Ctx_.BodyPart();
             const auto& node = core.GetAlt_sql_stmt_core46().GetRule_alter_resource_pool_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
             if (!ParseResourcePoolSettings(kv, toReset, node.GetRule_alter_resource_pool_action5())) {
@@ -1661,22 +1627,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore47: {
-            // drop_resource_pool_stmt: DROP RESOURCE POOL name;
+            // drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
             auto& node = core.GetAlt_sql_stmt_core47().GetRule_drop_resource_pool_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref4().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, {}, context));
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", false, {}, context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore48: {
@@ -1851,38 +1814,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore52: {
-            // create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER name WITH (k=v,...);
+            // create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref with_table_settings;
             auto& node = core.GetAlt_sql_stmt_core52().GetRule_create_resource_pool_classifier_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref5().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
             if (!ParseResourcePoolClassifierSettings(kv, node.GetRule_with_table_settings6())) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore53: {
-            // alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*
+            // alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
+            //     alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*;
             Ctx_.BodyPart();
             const auto& node = core.GetAlt_sql_stmt_core53().GetRule_alter_resource_pool_classifier_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref5().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
             std::map<TString, TDeferredAtom> kv;
             std::set<TString> toReset;
             if (!ParseResourcePoolClassifierSettings(kv, toReset, node.GetRule_alter_resource_pool_classifier_action6())) {
@@ -1895,22 +1853,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore54: {
-            // drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER name;
+            // drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
             auto& node = core.GetAlt_sql_stmt_core54().GetRule_drop_resource_pool_classifier_stmt1();
             TObjectOperatorContext context(Ctx_.Scoped);
-            if (node.GetRule_object_ref5().HasBlock1()) {
-                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
-                                 false, context.ServiceId, context.Cluster)) {
-                    return false;
-                }
+            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
+            if (!objectId) {
+                return false;
             }
 
-            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", false, {}, context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore55: {

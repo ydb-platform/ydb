@@ -4,11 +4,13 @@
 
 Подробно будут разобраны операции:
 
-* [Подключение к YDB](#connect-ydb)
-* [Создание таблицы для хранения векторов](#create-table)
-* [Вставка векторов в таблицу](#insert-vectors)
-* [Добавление векторного индекса](#add-vector-index)
-* [Поиск ближайших векторов](#search-by-vector)
+- [Векторный поиск](#векторный-поиск)
+  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
+  - [Создание таблицы](#create-table)
+  - [Вставка векторов](#insert-vectors)
+  - [Добавление индекса](#add-vector-index)
+  - [Поиск по вектору](#search-by-vector)
+  - [Итоговый пример](#full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -1058,8 +1060,7 @@
             ],
         )
 
-      ```python
-      import ydb
+    ```
 
     {% endcut %}
 
@@ -1101,21 +1102,19 @@
                 ),
             ],
         )
-
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
+        pool.execute_with_retries(query)
+        driver.table_client.alter_table(
+            f"{driver._driver_config.database}/{table_name}",
+            rename_indexes=[
+                ydb.RenameIndexItem(
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
+                    replace_destination=True,
+                ),
+            ],
+        )
+        print(f"Table index {index_name} created.")
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1162,7 +1161,57 @@
           print(f"Table index {index_name} created.")
       ```
 
+<<<<<<< cpp-code-snippets
     {% endlist %}
+=======
+- C++
+
+    ```cpp
+    void AddIndex(
+        NYdb::TDriver& driver,
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& database,
+        const std::string& tableName,
+        const std::string& indexName,
+        const std::string& strategy,
+        std::uint64_t dim,
+        std::uint64_t levels,
+        std::uint64_t clusters)
+    {
+        std::string query = std::format(R"(
+            ALTER TABLE `{0}`
+            ADD INDEX {1}__temp
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {2},
+                vector_type="Float",
+                vector_dimension={3},
+                levels={4},
+                clusters={5},
+                overlap_clusters=3
+            );
+        )", tableName, indexName, strategy, dim, levels, clusters);
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        }));
+
+        NYdb::NTable::TTableClient tableClient(driver);
+        NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
+                .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
+                    .SourceName_ = indexName + "__temp",
+                    .DestinationName_ = indexName,
+                    .ReplaceDestination_ = true
+                })
+            ).ExtractValueSync();
+        }));
+
+        std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
+    }
+    ```
+>>>>>>> main
 
 - C#
 

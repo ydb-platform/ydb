@@ -260,6 +260,7 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "TableFullScan"; }
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -393,6 +394,9 @@ class TOpAggregate: public IUnaryOperator {
 public:
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
                  const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos);
+    TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
+                 const EOpPhase aggPhase, bool distinctAll, const TPhysicalOpProps& props, TPositionHandle pos);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
@@ -401,9 +405,19 @@ public:
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "Aggregate"; }
 
-
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    EOpPhase GetAggregationPhase() const { return AggregationPhase; }
+    TVector<TOpAggregationTraits> GetAggregationTraits() const {
+        return AggregationTraitsList;
+    }
+    TVector<TOpAggregationTraits>& GetAggregationTraits() {
+        return AggregationTraitsList;
+    }
+    TVector<TInfoUnit> GetKeyColumns() const { return KeyColumns; }
+    TVector<TInfoUnit>& GetKeyColumns() { return KeyColumns; }
+    bool IsDistinctAll() const { return DistinctAll; }
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;

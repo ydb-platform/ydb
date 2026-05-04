@@ -296,8 +296,24 @@ public:
     }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        sink.Add(TPireMatch::Name(true, true))->SetTypeAwareness();
-        sink.Add(TPireMatch::Name(false, true))->SetTypeAwareness();
+        static const TStringBuf MultiPolyArgs = R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["DataType";"String"]
+                }
+            ]]
+        )";
+        auto multiGrep = sink.Add(TPireMatch::Name(true, true));
+        multiGrep->SetTypeAwareness();
+        multiGrep->SetPolyArgs(MultiPolyArgs);
+        auto multiMatch = sink.Add(TPireMatch::Name(false, true));
+        multiMatch->SetTypeAwareness();
+        multiMatch->SetPolyArgs(MultiPolyArgs);
         sink.Add(TPireMatch::Name(true, false));
         sink.Add(TPireMatch::Name(false, false));
         sink.Add(TPireCapture::Name());

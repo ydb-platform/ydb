@@ -108,11 +108,17 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
 
 NJson::TJsonValue TShuffleConnection::ToJson() const {
     auto json = TConnection::ToJson();
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
+
+    const auto hashFunc = ToString(*HashFuncType);
+    json["HashFunc"] = hashFunc;
+
     const auto keyColumns = MakeKeyColumnsJson(Keys);
     json["KeyColumns"] = keyColumns;
     json["Node Type"] = TStringBuilder()
         << GetExplainName()
-        << " (KeyColumns: " << keyColumns << ")";
+        << " (KeyColumns: " << keyColumns
+        << ", HashFunc: \"" << hashFunc << "\")";
     return json;
 }
 

@@ -708,7 +708,7 @@ public:
         auto txCtx = GetTxContextForCompilation();
 
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx.Get()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -728,7 +728,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileQuery request",
             (trace_id, TraceId()));
 
@@ -739,7 +739,7 @@ public:
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
         auto txCtx = GetTxContextForCompilation();
-        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, txCtx.Get());
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileSplittedQuery request",
             (trace_id, TraceId()));
 
@@ -771,7 +771,7 @@ public:
             }
 
             auto txCtx = GetTxContextForCompilation();
-            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -837,7 +837,7 @@ public:
         auto txCtx = GetTxContextForCompilation();
 
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx.Get()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             QueryState->CompileResult->IncUsage();
@@ -857,7 +857,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
+        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx);
         STLOG_D("Sending CompileQuery request (statement)",
             (trace_id, TraceId()));
 
@@ -1199,9 +1199,9 @@ public:
         return control;
     }
 
-    TIntrusivePtr<TKqpTransactionContext> GetTxContextForCompilation() {
+    TKqpTransactionContext* GetTxContextForCompilation() {
         if (QueryState->TxCtx) {
-            return QueryState->TxCtx;
+            return QueryState->TxCtx.Get();
         }
 
         if (!QueryState->HasTxControl()) {
@@ -1211,7 +1211,8 @@ public:
         const auto& txControl = QueryState->GetTxControl();
         if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
             auto txId = TTxId::FromString(txControl.tx_id());
-            return Transactions.Find(txId);
+            auto txCtx = Transactions.Find(txId);
+            return txCtx ? txCtx.Get() : nullptr;
         }
 
         return nullptr;
@@ -1233,7 +1234,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl && QueryState->TxId.GetValue() != TTxId()) {
+                    if (hasTxControl && QueryState->TxId.GetValue() == TTxId()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

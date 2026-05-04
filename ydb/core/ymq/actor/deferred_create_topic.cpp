@@ -181,7 +181,7 @@ private:
         const TQueuePath path(Cfg().GetRoot(), UserName_, QueueName_);
         const TString versionName = TStringBuilder() << "v" << Version_;
 
-        TPersQueueGroupTopicParams params;
+        TTopicParams params;
         ui64 retentionMs = LoadedAttrs_.MessageRetentionMs;
         if (!retentionMs) {
             retentionMs = TDuration::Days(4).MilliSeconds();

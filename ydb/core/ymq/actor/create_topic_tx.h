@@ -1,13 +1,14 @@
 #pragma once
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NSQS {
 
-struct TPersQueueGroupTopicParams {
+struct TTopicParams {
     ui64 PartitionLifetimeSeconds = 0;
     bool HasContentBasedDeduplication = false;
     bool ContentBasedDeduplication = false;
@@ -20,11 +21,11 @@ struct TPersQueueGroupTopicParams {
     TString FolderId;
 };
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> BuildCreateTopicTx(
+Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     const TString& queuePath,
     const TString& versionName,
     bool isFifo,
-    const TPersQueueGroupTopicParams& params
+    const TTopicParams& params
 );
 
 } // namespace NKikimr::NSQS

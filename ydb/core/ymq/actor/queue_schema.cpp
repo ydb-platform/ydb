@@ -483,7 +483,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
 }
 
 void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
-    TPersQueueGroupTopicParams params;
+    TTopicParams params;
     params.PartitionLifetimeSeconds = Max<ui64>(1, *ValidatedAttributes_.MessageRetentionPeriod);
     if (ValidatedAttributes_.ContentBasedDeduplication) {
         params.HasContentBasedDeduplication = true;

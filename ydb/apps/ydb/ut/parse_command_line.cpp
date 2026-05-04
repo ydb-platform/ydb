@@ -1,5 +1,7 @@
 #include "mock_env.h"
 
+using namespace fmt::literals;
+
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
     Y_UNIT_TEST_F(EndpointAndDatabaseFromCommandLine, TCliTestFixture) {
         RunCli(

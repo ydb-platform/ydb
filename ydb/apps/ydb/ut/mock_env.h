@@ -30,7 +30,6 @@
 #include <typeinfo>
 #include <unordered_map>
 
-using namespace fmt::literals;
 using namespace yandex::cloud::iam::v1;
 
 extern const TString TEST_DATABASE;

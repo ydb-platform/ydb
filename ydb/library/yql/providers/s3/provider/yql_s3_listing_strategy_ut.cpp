@@ -15,9 +15,10 @@ TListError MakeGenericError(const TString& description) {
 
 TListError MakeLimitExceededError(
     const TString& componentName, ui64 limit, ui64 actual, ui64 listObjectSize) {
+    Y_UNUSED(componentName);
     auto issue = TIssue(
-        TStringBuilder{} << '[' << componentName << "] Limit exceeded. Limit: " << limit
-                         << " Actual: " << actual);
+        TStringBuilder{} << "The number of files in S3 source exceeds the limit of "
+                         << limit << ". Found at least " << actual << " files");
     return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
 }
 

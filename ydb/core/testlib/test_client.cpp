@@ -83,6 +83,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
@@ -587,6 +588,8 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
+            TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
+            appData.DefaultUserSIDs = std::move(defaultUserSIDs);
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
@@ -1469,6 +1472,7 @@ namespace Tests {
         }
 
         {
+            Runtime->GetAppData(nodeIdx).SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
             IActor* longTxService = NLongTxService::CreateLongTxService();
             TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx, userPoolId);
             Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);

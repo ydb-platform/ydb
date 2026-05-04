@@ -68,12 +68,20 @@ public:
         ui64 txId = params.GetSnapshotTxId();
         Y_ENSURE(step != 0);
 
-        if (const auto* record = DataShard.GetScanManager().Get(params.GetBuildIndexId())) {
+        const ui64 buildIndexId = params.GetBuildIndexId();
+        if (const auto* record = DataShard.GetScanManager().Get(buildIndexId)) {
             for (auto scanId : record->ScanIds) {
                 DataShard.CancelScan(tableInfo->LocalTid, scanId);
             }
-            DataShard.GetScanManager().Drop(params.GetBuildIndexId());
+            DataShard.GetScanManager().Drop(buildIndexId);
         }
+
+        NIceDb::TNiceDb db(txc.DB);
+        const auto& scans = DataShard.GetBuildIndexScanManager().GetScans();
+        if (const auto* info = scans.FindPtr(buildIndexId)) {
+            DataShard.GetBuildIndexScanManager().PersistRemove(db, buildIndexId, info->SeqNoGeneration, info->SeqNoRound);
+        }
+        DataShard.ClearPendingBuildIndexFinalResponse(buildIndexId);
 
         const TSnapshotKey key(pathId, step, txId);
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);

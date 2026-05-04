@@ -112,6 +112,44 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
     }
+
+    Y_UNIT_TEST(TopicWithoutDatabase) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
+                NActors::NLog::PRI_DEBUG
+        );
+
+        ExecuteDDL(*setup, "CREATE TOPIC topic1");
+
+        auto& runtime = setup->GetRuntime();
+        CreateActor(runtime, {"topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("topic1"));
+        auto& topicInfo = topics["topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
+    }
+
+    Y_UNIT_TEST(TopicNotCanonizedPath) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
+                NActors::NLog::PRI_DEBUG
+        );
+
+        ExecuteDDL(*setup, "CREATE TOPIC topic1");
+
+        auto& runtime = setup->GetRuntime();
+        CreateActor(runtime, {"Root/topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("Root/topic1"));
+        auto& topicInfo = topics["Root/topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
+    }
 }
 
 }

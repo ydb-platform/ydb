@@ -1,8 +1,11 @@
 #include "result.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const {
     if (!Next) {
@@ -17,6 +20,12 @@ bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSour
 }
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
+    const ui32 resultChunkRowsCount = (source->HasStageResult() && !source->GetStageResult().IsEmpty())
+        ? source->GetStageResult().GetResultChunkRowsCount()
+        : 0;
+    LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount,
+            source->GetReservedMemory(), source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (Next) {
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;
@@ -42,7 +51,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
             reader.OnIntervalResult(
                 std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetDeprecatedPortionId()));
         } else if (!isFinished) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source")("source_idx", source->GetSourceIdx())(
                 "source_idx", source->GetSourceIdx());

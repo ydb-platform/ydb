@@ -54,6 +54,7 @@ public:
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
+        , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -524,7 +525,8 @@ private:
                 return ResolveTableShards();
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
+                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
+                if (!isThrottled && (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read))) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
@@ -532,7 +534,7 @@ private:
                 CA_LOG_D("OVERLOADED was received from tablet: " << read.ShardId << "."
                     << getIssues().ToOneLineString());
                 read.SetBlocked();
-                return RetryTableRead(read, /*allowInstantRetry = */false);
+                return RetryTableRead(read, /*allowInstantRetry = */false, isThrottled);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
@@ -663,6 +665,7 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+        auto allocState = &guard.GetMutex()->Ref();
 
         YQL_ENSURE(!Input.IsInvalid());
         if (Input.IsFinish() || !Input.HasValue()) {
@@ -671,12 +674,14 @@ private:
         }
 
         size_t fetchCount = 0;
+        i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
             ++fetchCount;
-            // avoid fetching too many rows at once
-            // todo: it might be better to check memory usage instead of rows count
-            if (fetchCount >= MaxRowsProcessing) {
+            // Avoid fetching too many rows at once: limit both the number of rows and
+            // the allocator growth since the start of this fetch loop. GetAllocated()
+            // is only a heuristic for memory pressure here, not a precise retained-memory metric.
+            if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
                 break;
             }
         }
@@ -791,20 +796,22 @@ private:
         return limit && TotalRetryAttempts + 1 > *limit;
     }
 
-    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true) {
+    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, bool isThrottled = false) {
         CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
             << ", shardId: " << failedRead.ShardId);
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
-                NYql::NDqProto::StatusIds::UNAVAILABLE);
-        }
-        ++TotalRetryAttempts;
+        if (!isThrottled) {
+            if (CheckTotalRetriesExeeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
+                    NYql::NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetryAttempts;
 
-        if (Reads.CheckShardRetriesExeeded(failedRead)) {
-            StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
-            Reads.erase(failedRead);
-            return ResolveTableShards();
+            if (Reads.CheckShardRetriesExeeded(failedRead)) {
+                StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
+                Reads.erase(failedRead);
+                return ResolveTableShards();
+            }
         }
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
@@ -903,7 +910,7 @@ private:
     TReads Reads;
     bool SentResultsAvailable = false;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
-    std::shared_ptr<const TPartitioning> Partitioning;
+    TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;
@@ -926,6 +933,7 @@ private:
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
     ui64 MaxInFlightReads = 50;
+    ui64 MaxBytesPerFetch = 256_MB;
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

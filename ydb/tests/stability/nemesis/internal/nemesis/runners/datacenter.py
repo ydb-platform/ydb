@@ -219,6 +219,7 @@ class ClusterDataCenterRouteUnreachableNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("Failed to block YDB ports: %s", e)
+            raise
 
     def extract_fault(self, payload=None):
         del payload

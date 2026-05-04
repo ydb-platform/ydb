@@ -2729,18 +2729,13 @@ bool IsSupportedJoinKind(const TString &joinKind) {
     return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
 }
 
-TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType, TString joinKind, TExprContext& ctx) {
+    auto leftItemType = leftType->Cast<TListExprType>()->GetItemType();
+    auto rightItemType = rightType->Cast<TListExprType>()->GetItemType();
 
-    auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
-    auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
-
-    auto opJoin = TKqpOpJoin(input);
-    const TString joinKind = TString(opJoin.JoinKind().StringValue());
-    Y_ENSURE(IsSupportedJoinKind(joinKind), "Unsupported join kind");
     const bool rightSideColumnsNeedsOptional = joinKind == "Left";
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+
     for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
         if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
             structItemTypes.push_back(item);
@@ -2750,8 +2745,41 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
             structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
         }
     }
-
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);
+    return resultStructType;
+}
+
+TStatus AnnotateOpJoinFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto leftInputType = input->ChildPtr(TKqpOpJoinFilter::idx_LeftInput)->GetTypeAnn();
+    auto rightInputType = input->ChildPtr(TKqpOpJoinFilter::idx_RightInput)->GetTypeAnn();
+    
+    // Join filters operate on top of potenially joined tuples, so inner join is the right semantics
+    auto itemType = JoinResultType(leftInputType, rightInputType, "Inner", ctx);
+
+    auto& lambda = input->ChildRef(TKqpOpJoinFilter::idx_Lambda);
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto lambdaType = lambda->GetTypeAnn();
+    if (!lambdaType) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
+    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+    auto opJoin = TKqpOpJoin(input);
+    const TString joinKind = TString(opJoin.JoinKind().StringValue());
+    Y_ENSURE(IsSupportedJoinKind(joinKind), "Unsupported join kind");
+
+    auto resultStructType = JoinResultType(leftInputType, rightInputType, joinKind, ctx);
     const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultStructType);
     input->SetTypeAnn(resultAnn);
 
@@ -3086,6 +3114,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpFilter::Match(input.Get())) {
                 return AnnotateOpFilter(input, ctx);
+            }
+
+            if (TKqpOpJoinFilter::Match(input.Get())) {
+                return AnnotateOpJoinFilter(input, ctx);
             }
 
             if (TKqpOpJoin::Match(input.Get())) {

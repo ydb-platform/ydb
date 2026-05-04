@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/control/lib/generated
     ydb/library/aclib/protos
     ydb/library/actors/core
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 RESOURCE(

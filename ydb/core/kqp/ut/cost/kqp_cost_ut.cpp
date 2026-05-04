@@ -470,8 +470,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 24},
-                {"/Root/Vectors", 24}
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 31},
+                {"/Root/Vectors", 31}
             });
         }
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 24},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 31},
             });
         }
 
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4}, // levels=2, clusters=2: 2 (level1) + 2 (level2) = 4
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
                 {"/Root/Vectors", 4} // same as posting
             });

@@ -38,7 +38,8 @@ public:
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
         const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
-        TLangVersion langver = UnknownLangVersion);
+        TLangVersion langver = UnknownLangVersion,
+        const TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
 
     ~TLambdaBuilder();
 
@@ -112,7 +113,7 @@ protected:
     const NKikimr::NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NKikimr::NUdf::ILogProvider* LogProvider;
     const TLangVersion LangVer;
-
+    const TRuntimeSettings::TConstPtr RuntimeSettings;
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);
 private:
@@ -133,7 +134,8 @@ public:
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
-        TLangVersion langver = UnknownLangVersion);
+        TLangVersion langver = UnknownLangVersion,
+        TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
 
     TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
 };

@@ -64,13 +64,20 @@ public:
             ++CurrentTxIndex;
         }
 
-        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput),
-            TKqpPhysicalQuery(input), std::move(TxResults),
+        SetPlans(input, query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), TKqpPhysicalQuery(input), std::move(TxResults), 
             ctx, Gateway->GetDatabase(), Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
-        query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 
-        TransformCtx->ExplainTransformerInput = nullptr;
         return TStatus::Ok;
+    }
+
+    virtual void SetPlans(NYql::TExprNode::TPtr input, NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+             TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+            const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+            NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
+
+        PhyQuerySetTxPlans(queryProto, query, peepHoleOptimizedQuery, pureTxResults, ctx, database, cluster, tablesData, config, typeCtx, optCtx);
+        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        TransformCtx->ExplainTransformerInput = nullptr;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& /*input*/) override {
@@ -100,7 +107,7 @@ public:
         TxResults.clear();
     }
 
-private:
+protected:
     bool PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx) {
         for (const auto& paramBinding : tx->GetParamBindings()) {
             bool res = TransformCtx->QueryCtx->QueryData->MaterializeParamValue(/*ensure*/ false,
@@ -126,12 +133,53 @@ private:
     TIntrusivePtr<NOpt::TKqpOptimizeContext> OptimizeCtx;
 };
 
+class TKqpRBOExplainPreparedTransformer : public TKqpExplainPreparedTransformer {
+public:
+    TKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
+        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+        TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) :
+            TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optCtx)
+        {}
+
+        void SetPlans(NYql::TExprNode::TPtr input, NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
+             TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
+            const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+            NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) override {
+
+        Y_UNUSED(query);
+        Y_UNUSED(peepHoleOptimizedQuery);
+        Y_UNUSED(pureTxResults);
+        Y_UNUSED(database);
+        Y_UNUSED(cluster);
+        Y_UNUSED(tablesData);
+        Y_UNUSED(config);
+        Y_UNUSED(typeCtx);
+        Y_UNUSED(optCtx);
+
+        if (TransformCtx->PlanJson.has_value()) {
+            NJsonWriter::TBuf writer;
+            auto plan = TransformCtx->PlanJson.value();
+            writer.WriteJsonValue(&plan, true, PREC_NDIGITS, 17);
+            queryProto.SetQueryPlan(writer.Str());
+        }
+        queryProto.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+    }
+
+};
+
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx)
 {
     return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
+}
+
+TAutoPtr<IGraphTransformer> CreateKqpRBOExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
+    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx)
+{
+    return new TKqpRBOExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
 }
 
 } // namespace NKqp

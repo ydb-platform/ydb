@@ -251,7 +251,7 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
 {
     return Sparse == other.Sparse &&
         Global == other.Global &&
-        DisableSensorsRename == other.DisableSensorsRename &&
+        DisableSensorsRename.value_or(false) == other.DisableSensorsRename.value_or(false) &&
         DisableDefault == other.DisableDefault &&
         DisableProjections == other.DisableProjections &&
         SummaryPolicy == other.SummaryPolicy;
@@ -679,6 +679,24 @@ TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(const std::string& name, std::v
     options.TimeHistogramBounds = std::move(bounds);
     timer.Timer_ = impl->RegisterTimeHistogram(Namespace_ + Prefix_ + name, Tags_, options);
     return timer;
+}
+
+template <bool UseWeakPtr>
+TEventTimer TProfiler<UseWeakPtr>::TimeHistogram(
+    const std::string& name,
+    TDuration min,
+    TDuration max,
+    TDuration granularity) const
+{
+    YT_VERIFY(granularity != TDuration::Zero());
+    YT_VERIFY(min <= max);
+
+    std::vector<TDuration> bounds;
+    for (auto bound = min; bound <= max; bound += granularity) {
+        bounds.push_back(bound);
+    }
+
+    return TimeHistogram(name, std::move(bounds));
 }
 
 template <bool UseWeakPtr>

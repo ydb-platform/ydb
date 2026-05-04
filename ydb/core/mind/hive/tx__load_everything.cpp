@@ -814,6 +814,26 @@ public:
                         << numMissingNodes << " for missing nodes)");
         }
 
+        {
+            auto groupRowset = db.Table<Schema::Group>().Select();
+            if (!groupRowset.IsReady()) {
+                return false;
+            }
+            while (!groupRowset.EndOfSet()) {
+                TStorageGroupId groupId = groupRowset.GetValue<Schema::Group::Id>();
+                TString storagePoolName = groupRowset.GetValue<Schema::Group::StoragePool>();
+                auto& storagePool = Self->GetStoragePool(storagePoolName);
+                auto& group = storagePool.GetStorageGroup(groupId);
+                group.Status = groupRowset.GetValue<Schema::Group::Status>();
+                if (!group.IsActive()) {
+                    storagePool.InactiveGroups.push_back(groupId);
+                }
+                if (!groupRowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
         TInstant now = TActivationContext::Now();

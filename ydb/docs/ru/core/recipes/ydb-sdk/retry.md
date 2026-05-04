@@ -651,6 +651,51 @@
 
   {% endlist %}
 
+- C#
+
+  В {{ ydb-short-name }} C# SDK повторные попытки реализованы на двух уровнях.
+
+  {% list tabs %}
+
+  - OpenRetryableConnectionAsync
+
+    Метод `OpenRetryableConnectionAsync` создаёт соединение с автоматическими повторными попытками при transient-ошибках. Соединение, полученное таким образом, не поддерживает интерактивные транзакции — для работы с транзакциями используйте `ExecuteInTransactionAsync`.
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    var command = new YdbCommand("SELECT series_id, title FROM series WHERE series_id = $series_id", connection);
+    command.Parameters.Add(new YdbParameter("$series_id", YdbDbType.Uint64, 1U));
+
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        Console.WriteLine($"series_id: {reader.GetUint64(0)}, title: {reader.GetString(1)}");
+    }
+    ```
+
+  - ExecuteInTransactionAsync
+
+    Метод `ExecuteInTransactionAsync` выполняет несколько операций в рамках одной транзакции с автоматическим повтором при конфликтах:
+
+    ```C#
+    using Ydb.Sdk.Ado;
+
+    await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+
+    await dataSource.ExecuteInTransactionAsync(async connection =>
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "UPSERT INTO series (series_id, title) VALUES (1, \"IT Crowd\")";
+        await command.ExecuteNonQueryAsync();
+    });
+    ```
+
+  {% endlist %}
+
 - JavaScript
 
   Повторные попытки и переподключения сделаны внутри sdk, отдельно ничего пользователю настраивать не нужно.
@@ -669,6 +714,66 @@
     attempts++
     throw new Error('test error')
   })
+  ```
+
+- Rust
+
+  Повторные попытки для запросов к Table API выполняет `TableClient::retry_transaction`: callback получает транзакцию, внутри вызываются `query` и при необходимости `commit`.
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, Query, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let row = client
+          .table_client()
+          .retry_transaction(|mut tx| async move {
+              let res = tx
+                  .query(Query::new(
+                      "SELECT series_id, title FROM series WHERE series_id = 1",
+                  ))
+                  .await?;
+              Ok(res.into_only_row()?.remove_field_by_name("title")?)
+          })
+          .await?;
+
+      let _title: String = row.try_into()?;
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  В {{ ydb-short-name }} PHP SDK повторные попытки для запросов к Table API задаются через `Table::retryTransaction()` (транзакция + коммит + ретраи при поддерживаемых ошибках) или `Table::retrySession()` (одна сессия без обёртки «транзакция целиком»). Второй аргумент `retryTransaction` — признак идемпотентности (`true` расширяет набор ошибок, при которых выполняется повтор).
+
+  Пример с `retryTransaction`:
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $result = $ydb->table()->retryTransaction(
+      function (Session $session) {
+          return $session->query(
+              'SELECT series_id, title FROM series WHERE series_id = 1;'
+          );
+      },
+      true
+  );
+
+  // $result->rows(), $result->rowCount(), ...
   ```
 
 {% endlist %}

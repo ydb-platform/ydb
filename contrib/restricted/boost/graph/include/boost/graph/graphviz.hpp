@@ -34,7 +34,6 @@
 #include <boost/static_assert.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/xpressive/xpressive_static.hpp>
-#include <boost/foreach.hpp>
 
 namespace boost
 {
@@ -843,13 +842,13 @@ namespace detail
                     edge_permutation_from_sorting[temp[e]] = e;
                 }
                 typedef boost::tuple< id_t, bgl_vertex_t, id_t > v_prop;
-                BOOST_FOREACH (const v_prop& t, vertex_props)
+                for (const v_prop& t : vertex_props)
                 {
                     put(boost::get< 0 >(t), dp_, boost::get< 1 >(t),
                         boost::get< 2 >(t));
                 }
                 typedef boost::tuple< id_t, bgl_edge_t, id_t > e_prop;
-                BOOST_FOREACH (const e_prop& t, edge_props)
+                for (const e_prop& t : edge_props)
                 {
                     put(boost::get< 0 >(t), dp_,
                         edge_permutation_from_sorting[boost::get< 1 >(t)],

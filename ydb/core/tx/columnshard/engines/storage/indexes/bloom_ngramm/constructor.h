@@ -1,8 +1,12 @@
 #pragma once
+
+#include <optional>
+
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
@@ -16,14 +20,16 @@ public:
     }
 
 private:
-    ui32 NGrammSize = NDefaults::NGrammSize;
-    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
-    bool CaseSensitive = NDefaults::CaseSensitive;
+    TRequestSettings Request;
     static inline auto Registrator = TFactory::TRegistrator<TIndexConstructor>(GetClassNameStatic());
 
 protected:
     virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const ui32 indexId, const TString& indexName,
         const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const override;
+
+    virtual std::shared_ptr<IIndexMeta> DoCreateOrPatchIndexMeta(const ui32 indexId, const TString& indexName,
+        const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors,
+        const IIndexMeta& existingMeta) const override;
 
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
 
@@ -31,6 +37,8 @@ protected:
 
 private:
     TConclusionStatus ValidateValues() const;
+    TConclusionStatus FillRequestFromJson(const NJson::TJsonValue& jsonInfo);
+    void FillRequestFromProtoFilter(const NKikimrSchemeOp::TRequestedBloomNGrammFilter& bFilter);
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 
 public:

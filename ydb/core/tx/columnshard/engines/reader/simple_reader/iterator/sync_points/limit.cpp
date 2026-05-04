@@ -1,8 +1,11 @@
 #include "limit.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
     const std::shared_ptr<TScanWithLimitCollection>& collection)
@@ -45,6 +48,9 @@ std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const 
 
 ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
+    LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }

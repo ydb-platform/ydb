@@ -55,6 +55,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
+            state->UseYtflowEngine = useYtflowEngine;
             if (useYtflowEngine) {
                 state->YtflowIntegration = CreatePqYtflowIntegration(state);
                 state->YtflowOptimization = CreatePqYtflowOptimization(state);

@@ -102,7 +102,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
 inline bool IsRegisteredMethodsMapEnabled() { return false; }
 inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
 inline bool IsRstpitEnabled() { return false; }
 inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE
@@ -175,7 +175,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
 inline bool IsRegisteredMethodsMapEnabled() { return false; }
 inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
 inline bool IsRstpitEnabled() { return false; }
 inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE
@@ -217,7 +217,8 @@ inline bool IsClientPrivacyEnabled() { return false; }
 inline bool IsCombinerOffloadToEventEngineEnabled() { return true; }
 inline bool IsEventEngineClientEnabled() { return false; }
 inline bool IsEventEngineDnsEnabled() { return false; }
-inline bool IsEventEngineListenerEnabled() { return false; }
+#define GRPC_EXPERIMENT_IS_INCLUDED_EVENT_ENGINE_LISTENER
+inline bool IsEventEngineListenerEnabled() { return true; }
 inline bool IsFreeLargeAllocatorEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_HTTP2_STATS_FIX
 inline bool IsHttp2StatsFixEnabled() { return true; }
@@ -247,7 +248,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
 inline bool IsRegisteredMethodsMapEnabled() { return false; }
 inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
 inline bool IsRstpitEnabled() { return false; }
 inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
 #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE

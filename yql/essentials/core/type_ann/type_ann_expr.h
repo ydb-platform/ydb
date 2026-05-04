@@ -39,9 +39,10 @@ TExprNode::TPtr ParseAndAnnotate(
 TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
     TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types);
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
+bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
     std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
-    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser);
+    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser,
+    std::function<TString (const TTypeAnnotationNode*)> typeWriter);
 
 void CheckFatalTypeError(IGraphTransformer::TStatus status);
 

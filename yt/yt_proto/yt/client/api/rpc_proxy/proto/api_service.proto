@@ -544,6 +544,8 @@ message TReqLookupRows
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
 
+    optional bool allow_missing_key_columns = 14 [default = false];
+
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 11;
 
@@ -590,6 +592,8 @@ message TReqVersionedLookupRows
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
 
+    optional bool allow_missing_key_columns = 12 [default = false];
+
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 10;
 
@@ -621,6 +625,8 @@ message TReqMultiLookup
 
         optional bool enable_partial_result = 4 [default = false];
         optional bool use_lookup_cache = 5 [default = false];
+
+        optional bool allow_missing_key_columns = 10 [default = false];
 
         required TRowsetDescriptor rowset_descriptor = 6;
 
@@ -2287,6 +2293,7 @@ message TReqPartitionTables
     optional bool adjust_data_weight_per_partition = 9;
 
     optional bool enable_cookies = 10;
+    optional bool fetch_cookie_node_descriptors = 15;
 
     optional bool omit_inaccessible_rows = 13;
 

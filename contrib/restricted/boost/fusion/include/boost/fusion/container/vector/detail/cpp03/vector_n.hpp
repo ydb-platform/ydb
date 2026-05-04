@@ -6,7 +6,7 @@
 ==============================================================================*/
 // No include guard. This file is meant to be included many times
 
-#if !defined(FUSION_MACRO_05042005)
+#ifndef FUSION_MACRO_05042005
 #define FUSION_MACRO_05042005
 
 #define FUSION_VECTOR_CTOR_DEFAULT_INIT(z, n, _)                                \

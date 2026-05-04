@@ -284,6 +284,11 @@
             "uri": "file://test.test_TryAs_/results.txt"
         }
     ],
+    "test.test[Utf8]": [
+        {
+            "uri": "file://test.test_Utf8_/results.txt"
+        }
+    ],
     "test.test[WeakYsonRest]": [
         {
             "uri": "file://test.test_WeakYsonRest_/results.txt"

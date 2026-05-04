@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/io_formats/json/json.h>
 #include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -58,9 +59,6 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
         case NScheme::NTypeIds::Bool:
         case NScheme::NTypeIds::Double:
         case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Date:
-        case NScheme::NTypeIds::Datetime:
-        case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Interval:
         case NScheme::NTypeIds::Date32:
         case NScheme::NTypeIds::Datetime64:
@@ -74,11 +72,14 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
             if (!NFormats::MakeCell(*cell, value, type, pool, err)) {
                 throw yexception() << "Failed to parse " << value << " for type " << typeId << ": " << err;
             }
-            if (!NFormats::CheckCellValue(*cell, type)) {
-                throw yexception() << "Invalid value " << value << " for type " << typeId;
-            }
             return TRawTypeValue(cell->Data(), cell->Size(), typeId);
         }
+        case NScheme::NTypeIds::Date:
+            return ToRawTypeValue<NScheme::TDate>(static_cast<ui16>(value.GetUIntegerSafe()), pool);
+        case NScheme::NTypeIds::Datetime:
+            return ToRawTypeValue<NScheme::TDatetime>(static_cast<ui32>(value.GetUIntegerSafe()), pool);
+        case NScheme::NTypeIds::Timestamp:
+            return ToRawTypeValue<NScheme::TTimestamp>(value.GetUIntegerSafe(), pool);
         case NScheme::NTypeIds::PairUi64Ui64: {
             const auto& arr = value.GetArraySafe();
             if (arr.size() != 2) {
@@ -86,14 +87,6 @@ TRawTypeValue MakeTypeValueFromJson(NScheme::TTypeInfo type, const NJson::TJsonV
             }
             std::pair<ui64, ui64> pair = {arr[0].GetUIntegerSafe(), arr[1].GetUIntegerSafe()};
             return ToRawTypeValue<NScheme::TPairUi64Ui64>(pair, pool);
-        }
-        case NScheme::NTypeIds::ActorId: {
-            TActorId actorId;
-            const auto& v = value.GetStringSafe();
-            if (!actorId.Parse(v.data(), v.size())) {
-                throw yexception() << "Failed to parse ActorId from string: " << v;
-            }
-            return ToRawTypeValue<NScheme::TActorId>(actorId, pool);
         }
         case NScheme::NTypeIds::String:
         default: {
@@ -588,11 +581,21 @@ public:
 
         auto cgi = ev->Get()->Cgi();
         if (const auto& path = cgi.Get("restoreBackup")) {
-            if (RestoreState == ERestoreState::NotStarted) {
-                bool skipChecksum = cgi.Has("skipChecksumValidation");
-                bool dryRun = cgi.Has("dryRun");
-                StartRestore(path, {}, skipChecksum, dryRun);
-            }
+            if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
+                if (RestoreState == ERestoreState::NotStarted) {
+                    bool skipChecksum = cgi.Has("skipChecksumValidation");
+                    bool dryRun = cgi.Has("dryRun");
+                    StartRestore(path, {}, skipChecksum, dryRun);
+                }
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                    "HTTP/1.1 405 Method Not Allowed\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Allow: POST\r\n"
+                    "\r\n"
+                    "restoreBackup requires POST"));
+                return true;
+            } 
         }
 
         TStringStream str;
@@ -675,9 +678,8 @@ public:
                             }
 
                             $.ajax({
-                                type: "GET",
-                                url: window.location.href,
-                                data: form.serialize(),
+                                type: "POST",
+                                url: window.location.href + '&' + form.serialize(),
                                 success: function(response) {
                                     $('body').html(response);
                                 },
@@ -833,7 +835,8 @@ public:
 
             try {
                 NJson::TJsonValue json;
-                NJson::ReadJsonTree(line, &json, true);
+                auto config = NFormats::DefaultJsonReaderConfig();
+                NJson::ReadJsonTree(line, &config, &json, true);
                 UploadData(json, &table, NTable::ERowOp::Upsert, Pool, txc, Self->DryRun);
 
                 processedBytes += line.size() + 1; // +1 for newline
@@ -904,7 +907,8 @@ public:
 
             NJson::TJsonValue json;
             try {
-                NJson::ReadJsonTree(line, &json, true);
+                auto config = NFormats::DefaultJsonReaderConfig();
+                NJson::ReadJsonTree(line, &config, &json, true);
             } catch (const std::exception& e) {
                 Result.Error(TStringBuilder() << "Failed to parse changelog: " << e.what() << ", line: " << line);
                 return true;
@@ -1389,7 +1393,8 @@ public:
     {
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(line, &json, true);
+            auto config = NFormats::DefaultJsonReaderConfig();
+            NJson::ReadJsonTree(line, &config, &json, true);
         } catch (const std::exception& e) {
             error = TStringBuilder()
                 << "Failed to parse changelog line " << line << ": " << e.what()

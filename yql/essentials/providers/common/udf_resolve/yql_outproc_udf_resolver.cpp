@@ -153,7 +153,8 @@ public:
 
         bool hasErrors = false;
         for (auto udf : functions) {
-            TStringBuf moduleName, funcName;
+            TStringBuf moduleName;
+            TStringBuf funcName;
             if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                 ctx.AddError(TIssue(udf->Pos, TStringBuilder() << "Incorrect format of function name: " << udf->Name));
                 hasErrors = true;
@@ -405,7 +406,8 @@ void LoadSystemModulePaths(
         // {{module_name}}\t{{module_path}}\n
 
         for (const auto& it : StringSplitter(output).Split('\n')) {
-            TStringBuf moduleName, modulePath;
+            TStringBuf moduleName;
+            TStringBuf modulePath;
             const TStringBuf& line = it.Token();
             if (!line.empty()) {
                 line.Split('\t', moduleName, modulePath);

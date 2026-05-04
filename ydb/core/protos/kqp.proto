@@ -906,6 +906,7 @@ message TKqpStreamLookupSettings {
     optional bool IsTableImmutable = 16;
     optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
+    optional string PoolId = 21;
     optional TReadVectorTopK VectorTopK = 19;
     optional uint64 QuerySpanId = 20;
 }
@@ -941,6 +942,7 @@ message TKqpFullTextSourceSettings {
     optional TKqpSnapshot Snapshot = 10;
 
     optional string Database = 11;
+    optional string PoolId = 18;
 
     optional double K1Factor = 12;
     optional double BFactor = 13;

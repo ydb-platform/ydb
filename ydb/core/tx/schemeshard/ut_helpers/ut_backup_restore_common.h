@@ -121,7 +121,7 @@ class TFileDescriber {
 public:
     TFileDescriber(const TFsPath& dir, const TFsPath& name)
         : Dir(dir)
-        , Path(dir / name)
+        , Path(TFsPath("/") / dir / name)
     {}
 
     const TString& GetDir() const {
@@ -272,7 +272,7 @@ public:
     }
 
     TString GetRestoredDir() const {
-        return TStringBuilder() << "/Restored" << Dir;
+        return TStringBuilder() << "/Restored/" << Dir;
     }
 
     TString GetExportRequest(ui32 port) const {
@@ -305,7 +305,7 @@ private:
 
     const char* ExportRequestItemTemp = R"(
         items {
-            source_path: "/MyRoot%s"
+            source_path: "/MyRoot/%s"
             destination_prefix: "%s"
         }
     )";
@@ -313,7 +313,7 @@ private:
     const char* ImportRequestItemTemp = R"(
         items {
             source_prefix: "%s"
-            destination_path: "/MyRoot/Restored%s"
+            destination_path: "/MyRoot/Restored/%s"
         }
     )";
 };
@@ -354,7 +354,7 @@ private:
 
 public:
     TSimpleTopic(ui64 number, ui64 countConsumers = 0)
-        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "create_topic.pb")
+        : TSchemeObjectDescriber(Sprintf("Topic_%d", number), "create_topic.pb")
     {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicPrivate, number), &PrivateProto);
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);

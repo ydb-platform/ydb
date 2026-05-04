@@ -458,7 +458,7 @@ protected:
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
-                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -918,8 +918,7 @@ protected:
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
             //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-            addDatabaseEvent->Id = databaseId;
+            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
             this->Send(schedulerServiceId, addDatabaseEvent.Release());
 
             // TODO: replace with more precise pool events.
@@ -1302,7 +1301,7 @@ protected:
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
-                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1835,7 +1834,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    TVector<NKikimr::TTableId> tableIdsForSnapshot);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,

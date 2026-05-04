@@ -22,6 +22,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     struct TKikimrRunnerOptions {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
+        ui32 DynamicNodeCount = 0;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
@@ -29,6 +30,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TTestLogSettings LogSettings;
         bool UseLocalCheckpointsInStreamingQueries = false;
         bool InternalInitFederatedQuerySetupFactory = false;
+        TVector<TString> StoragePoolTypes;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

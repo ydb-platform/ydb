@@ -1,4 +1,5 @@
 #include <ydb/core/ymq/actor/cfg/cfg.h>
+#include "create_topic_tx.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
@@ -482,62 +483,31 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
 }
 
 void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
-
-    auto topicDir = TString::Join(workingDir, '/', dirName);
-
-    trans->SetWorkingDir(topicDir);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
-
-    auto *pqgroup = trans->MutableCreatePersQueueGroup();
-    pqgroup->SetName("streamImpl");
-    pqgroup->SetTotalGroupCount(1);
-
-    auto * config = pqgroup->MutablePQTabletConfig();
-    config->SetTopicName("streamImpl");
-    config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
-    config->MutablePartitionConfig()->SetLifetimeSeconds(*ValidatedAttributes_.MessageRetentionPeriod);
+    TPersQueueGroupTopicParams params;
+    params.PartitionLifetimeSeconds = Max<ui64>(1, *ValidatedAttributes_.MessageRetentionPeriod);
     if (ValidatedAttributes_.ContentBasedDeduplication) {
-        config->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+        params.HasContentBasedDeduplication = true;
+        params.ContentBasedDeduplication = *ValidatedAttributes_.ContentBasedDeduplication;
     }
-
-    auto* partitionStrategy = pqgroup->MutablePQTabletConfig()->MutablePartitionStrategy();
-    partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE);
-    partitionStrategy->SetMinPartitionCount(1);
-    partitionStrategy->SetMaxPartitionCount(100);
-    partitionStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(80);
-    partitionStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(20);
-    partitionStrategy->SetScaleThresholdSeconds(30);
-
-    auto* consumer = config->AddConsumers();
-    consumer->SetName(ConsumerName);
-    consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-    consumer->SetKeepMessageOrder(IsFifo_);
     if (ValidatedAttributes_.DelaySeconds) {
-        consumer->SetDefaultDelayMessageTimeMs(SecondsToMs(*ValidatedAttributes_.DelaySeconds));
+        params.DefaultDelayMessageTimeMs = SecondsToMs(*ValidatedAttributes_.DelaySeconds);
     }
     if (ValidatedAttributes_.VisibilityTimeout) {
-        consumer->SetDefaultProcessingTimeoutSeconds(*ValidatedAttributes_.VisibilityTimeout);
+        params.DefaultProcessingTimeoutSeconds = *ValidatedAttributes_.VisibilityTimeout;
     }
     if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
-        consumer->SetDefaultReceiveMessageWaitTimeMs(SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
+        params.DefaultReceiveMessageWaitTimeMs = SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds);
     }
     if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
-        consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
-    }
-
-    if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-        consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+        params.MaxReceiveCount = *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount;
     }
     if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
-        consumer->SetDeadLetterPolicyEnabled(true);
-        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-        consumer->SetDeadLetterQueue(TStringBuilder() << "sqs://" << AccountName_ << "/" << FolderId_ << "/" << *ValidatedAttributes_.RedrivePolicy.TargetQueueName);
+        params.RedriveTargetQueueName = *ValidatedAttributes_.RedrivePolicy.TargetQueueName;
     }
+    params.AccountName = AccountName_;
+    params.FolderId = FolderId_;
 
+    auto ev = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 

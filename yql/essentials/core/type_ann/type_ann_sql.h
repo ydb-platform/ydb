@@ -52,4 +52,6 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
 
 IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
+IGraphTransformer::TStatus SqlWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
 } // namespace NYql::NTypeAnnImpl

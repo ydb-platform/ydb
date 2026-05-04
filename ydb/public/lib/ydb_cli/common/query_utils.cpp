@@ -21,7 +21,9 @@ TExplainGenericQuery::TExplainGenericQuery(const TDriver& driver)
 
 TExplainGenericQuery::TResult TExplainGenericQuery::Explain(const TString& query, std::optional<TDuration> timeout, bool analyze) {
     NQuery::TExecuteQuerySettings settings;
-    settings.ClientTimeout(timeout.value_or(TDuration()));
+    if (timeout) {
+        settings.ClientTimeout(*timeout);
+    }
 
     if (analyze) {
         settings.StatsMode(NQuery::EStatsMode::Full);
@@ -97,12 +99,6 @@ NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TStrin
 }
 
 int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings) {
-    Y_DEFER {
-        if (execSettings.AddIndent) {
-            Cout << Endl;
-        }
-    };
-
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;

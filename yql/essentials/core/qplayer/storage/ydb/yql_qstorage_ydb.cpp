@@ -349,8 +349,11 @@ private:
         ThrowOnError(rtResult);
 
         auto writer = memory->MakeWriter("", {});
-        ui64 totalBytes = 0, totalItems = 0, checksum = 0;
-        ui32 currentIndex = Max<ui32>(), currentPart = Max<ui32>();
+        ui64 totalBytes = 0;
+        ui64 totalItems = 0;
+        ui64 checksum = 0;
+        ui32 currentIndex = Max<ui32>();
+        ui32 currentPart = Max<ui32>();
         TQItemKey currentKey;
         TString currentValue;
         auto flushItem = [&]() {

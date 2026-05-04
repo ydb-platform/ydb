@@ -1,7 +1,11 @@
 #include "dirty_map.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -211,243 +215,6 @@ void TDDiskState::UpdateState()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInflightInfo::TInflightInfo(
-    IReadyQueue* readyQueues,
-    ui64 lsn,
-    ELocation location)
-    : State(EState::PBufferIncompleteWrite)
-    , ReadyQueue(readyQueues)
-    , Lsn(lsn)
-{
-    WriteRequested.Set(location);
-    WriteConfirmed.Set(location);
-    ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Clone);
-}
-
-TInflightInfo::TInflightInfo(
-    IReadyQueue* readyQueue,
-    ui64 lsn,
-    TLocationMask writeRequested,
-    TLocationMask writeConfirmed)
-    : State(EState::PBufferWritten)
-    , ReadyQueue(readyQueue)
-    , Lsn(lsn)
-    , WriteRequested(writeRequested)
-    , WriteConfirmed(writeConfirmed)
-{
-    Y_ABORT_UNLESS(WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
-
-    ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
-}
-
-TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
-    : State(other.State)
-    , ReadyQueue(other.ReadyQueue)
-    , Lsn(other.Lsn)
-    , WriteRequested(other.WriteRequested)
-    , WriteConfirmed(other.WriteConfirmed)
-    , FlushRequested(other.FlushRequested)
-    , FlushConfirmed(other.FlushConfirmed)
-{
-    other.ReadyQueue = nullptr;
-}
-
-TInflightInfo::~TInflightInfo()
-{
-    Y_ABORT_UNLESS(PBuffersLockCount == 0);
-}
-
-void TInflightInfo::RestorePBuffer(ELocation location)
-{
-    Y_ABORT_UNLESS(IsPBuffer(location));
-    Y_ABORT_UNLESS(
-        State == EState::PBufferIncompleteWrite ||
-        State == EState::PBufferWritten);
-    Y_ABORT_UNLESS(!WriteRequested.Get(location));
-    Y_ABORT_UNLESS(!WriteConfirmed.Get(location));
-
-    WriteRequested.Set(location);
-    WriteConfirmed.Set(location);
-
-    if (WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount) {
-        if (QuorumReadyPromise.Initialized()) {
-            QuorumReadyPromise.TrySetValue();
-        }
-
-        State = EState::PBufferWritten;
-        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
-    }
-}
-
-TInflightInfo::EState TInflightInfo::GetState() const
-{
-    return State;
-}
-
-NThreading::TFuture<void> TInflightInfo::GetQuorumReadyFuture()
-{
-    if (!QuorumReadyPromise.Initialized()) {
-        QuorumReadyPromise = NThreading::NewPromise<void>();
-    }
-    return QuorumReadyPromise.GetFuture();
-}
-
-TLocationMask TInflightInfo::ReadMask() const
-{
-    switch (State) {
-        case EState::PBufferIncompleteWrite:
-            // Reading will be possible only after receiving a quorum.
-            return TLocationMask::MakeEmpty();
-
-        case EState::PBufferWritten:
-        case EState::PBufferFlushing:
-            // The data is written to PBuffer, but not transferred to DDisk.
-            // Will read from confirmed PBuffer.
-            return WriteConfirmed;
-
-        case EState::PBufferFlushed:
-        case EState::PBufferErasing:
-        case EState::PBufferErased:
-            // The data has already been transferred to DDisk.
-            // Will read from DDisks.
-            // Filter out non-desired or fresh later.
-            return TLocationMask::MakeAllDDisks();
-    }
-}
-
-ELocation TInflightInfo::RequestFlush(ELocation destination)
-{
-    Y_ABORT_UNLESS(IsDDisk(destination));
-    Y_ABORT_UNLESS(
-        State == EState::PBufferWritten || State == EState::PBufferFlushing);
-
-    FlushDesired.Set(destination);
-
-    if (FlushRequested.Get(destination)) {
-        return ELocation::Unknown;
-    }
-
-    const ELocation bestSource = TranslateDDiskToPBuffer(destination);
-    if (WriteConfirmed.Get(bestSource)) {
-        State = EState::PBufferFlushing;
-        FlushRequested.Set(destination);
-        return bestSource;
-    }
-
-    for (ELocation source: PBufferLocations) {
-        if (WriteConfirmed.Get(source)) {
-            State = EState::PBufferFlushing;
-            FlushRequested.Set(destination);
-            return source;
-        }
-    }
-
-    Y_ABORT_UNLESS(false);
-}
-
-void TInflightInfo::ConfirmFlush(TRoute route)
-{
-    Y_ABORT_UNLESS(IsDDisk(route.Destination));
-    Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.Destination));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.Destination));
-
-    FlushConfirmed.Set(route.Destination);
-
-    if (FlushDesired == FlushConfirmed) {
-        State = EState::PBufferFlushed;
-    }
-
-    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
-        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
-    }
-}
-
-void TInflightInfo::FlushFailed(TRoute route)
-{
-    Y_ABORT_UNLESS(IsDDisk(route.Destination));
-    Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.Destination));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.Destination));
-
-    FlushRequested.Reset(route.Destination);
-    ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
-}
-
-TLocationMask TInflightInfo::GetRequestedFlushes() const
-{
-    return FlushRequested;
-}
-
-bool TInflightInfo::RequestErase(ELocation location)
-{
-    Y_ABORT_UNLESS(IsPBuffer(location));
-    Y_ABORT_UNLESS(
-        State == EState::PBufferFlushed || State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
-
-    if (WriteRequested.Get(location) && !EraseRequested.Get(location)) {
-        State = EState::PBufferErasing;
-        EraseRequested.Set(location);
-        return true;
-    }
-    return false;
-}
-
-bool TInflightInfo::ConfirmErase(ELocation location)
-{
-    Y_ABORT_UNLESS(IsPBuffer(location));
-    Y_ABORT_UNLESS(State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(EraseRequested.Get(location));
-    Y_ABORT_UNLESS(!EraseConfirmed.Get(location));
-
-    EraseConfirmed.Set(location);
-    if (EraseConfirmed == EraseRequested) {
-        State = EState::PBufferErased;
-    }
-
-    return State == EState::PBufferErased;
-}
-
-void TInflightInfo::EraseFailed(ELocation location)
-{
-    Y_ABORT_UNLESS(IsPBuffer(location));
-    Y_ABORT_UNLESS(State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(!EraseConfirmed.Get(location));
-
-    EraseRequested.Reset(location);
-    ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
-}
-
-void TInflightInfo::LockPBuffer()
-{
-    Y_ABORT_UNLESS(
-        State == EState::PBufferWritten || State == EState::PBufferFlushing ||
-        State == EState::PBufferFlushed);
-
-    ++PBuffersLockCount;
-
-    if (PBuffersLockCount == 1) {
-        ReadyQueue->UnRegister(Lsn);
-    }
-}
-
-void TInflightInfo::UnlockPBuffer()
-{
-    Y_ABORT_UNLESS(
-        State == EState::PBufferWritten || State == EState::PBufferFlushing ||
-        State == EState::PBufferFlushed);
-    Y_ABORT_UNLESS(PBuffersLockCount > 0);
-
-    --PBuffersLockCount;
-
-    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
-        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBlocksDirtyMap::TBlocksDirtyMap(ui32 blockSize, ui64 blockCount)
     : BlockSize(blockSize)
     , BlockCount(blockCount)
@@ -455,6 +222,17 @@ TBlocksDirtyMap::TBlocksDirtyMap(ui32 blockSize, ui64 blockCount)
     for (auto l: DDiskLocations) {
         DDiskStates[l].Init(BlockCount, BlockCount);
     }
+}
+
+TBlocksDirtyMap::~TBlocksDirtyMap()
+{
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            item.Value.Detach();
+
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
 }
 
 void TBlocksDirtyMap::UpdateConfig(
@@ -481,81 +259,77 @@ void TBlocksDirtyMap::RestorePBuffer(
         auto& inflight = item->Value;
         inflight.RestorePBuffer(location);
     } else {
-        Inflight.AddRange(lsn, range, TInflightInfo(this, lsn, location));
+        Inflight.AddRange(
+            lsn,
+            range,
+            TInflightInfo(this, lsn, range.Size() * BlockSize, location));
     }
 }
 
+// Create multiple readRangeHints for specified range with possible overlapping
+// with inflight requests
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 {
     TReadHint result;
-
-    auto makeDefaultHint = [this](TBlockRange64 range)
-    {
-        // Filter out disabled locations.
-        auto locationMask = FilterLocations(DesiredDDisks, range);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            0,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            TRangeLock(this, range, locationMask));
-    };
-
-    auto makeHint =
-        [this](TLocationMask locationMask, ui64 lsn, TBlockRange64 range)
-    {
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        // Filter out disabled locations.
-        if (locationMask.HasDDisk()) {
-            locationMask = locationMask.LogicalAnd(DesiredDDisks);
-        }
-        locationMask = locationMask.Exclude(DisabledLocations);
-        Y_ABORT_UNLESS(!locationMask.Empty());
-
-        return TReadRangeHint(
-            locationMask,
-            lsn,
-            TBlockRange64::WithLength(0, range.Size()),
-            range,
-            locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
-                                     : TRangeLock(this, lsn));
-    };
-
-    if (!Inflight.HasOverlaps(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
+    if (!Inflight.HasOverlaps(range)) {   // read from ddisk
+        result.RangeHints.push_back(MakeReadRangeHint({}, 0, range, 0));
         return result;
     }
 
-    ui64 maxLsn = 0;
+    bool shouldWaitQuorum = false;
+    TStackVec<TWeightedRange> ranges;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
         {
-            const ui64 lsn = item.Key;
-            maxLsn = std::max(maxLsn, lsn);
+            const auto readMask = item.Value.ReadMask();
+            if (readMask.Empty()) {
+                shouldWaitQuorum = true;
+                result.WaitReady = item.Value.GetQuorumReadyFuture();
+                result.RangeHints.clear();
+                return TInflightMap::EEnumerateContinuation::Stop;
+            }
 
+            if (!readMask.OnlyDDisk()) {
+                ranges.push_back({.Key = item.Key, .Range = item.Range});
+            }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
-
-    const auto item = Inflight.GetValue(maxLsn);
-
-    // Read from DDisk if the range is not covered by the inflight range.
-    if (!item->Range.Contains(range)) {
-        result.RangeHints.push_back(makeDefaultHint(range));
+    if (shouldWaitQuorum) {
         return result;
     }
 
-    if (item->Value.ReadMask().Empty()) {
-        // Reading from range without quorum is forbidden.
-        // Caller should wait until PBuffers quorum will be made.
-        result.WaitReady = item->Value.GetQuorumReadyFuture();
-        Y_ABORT_UNLESS(result.RangeHints.empty());
-    } else {
-        result.RangeHints.push_back(
-            makeHint(item->Value.ReadMask(), item->Key, item->Range));
+    auto nonOverlappingRanges = SplitOnNonOverlappingContinuousRanges(
+        TBlockRange64::MakeClosedInterval(range.Start, range.End),
+        ranges);
+    result.RangeHints.reserve(nonOverlappingRanges.size());
+
+    ui64 offsetBlocks{};
+    for (auto& nonOverlappingRange: nonOverlappingRanges) {
+        auto lsn = nonOverlappingRange.Key;
+
+        if (lsn == 0) {
+            auto hint = MakeReadRangeHint(
+                {},
+                0,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
+        } else {
+            auto item = Inflight.GetValue(lsn);
+            Y_ABORT_UNLESS(item);
+            const auto readMask = item->Value.ReadMask();
+            Y_DEBUG_ABORT_UNLESS(!readMask.Empty());
+
+            auto hint = MakeReadRangeHint(
+                readMask,
+                lsn,
+                nonOverlappingRange.Range,
+                offsetBlocks);
+            result.RangeHints.push_back(std::move(hint));
+        }
+
+        offsetBlocks += nonOverlappingRange.Range.Size();
     }
 
     return result;
@@ -649,10 +423,19 @@ void TBlocksDirtyMap::WriteFinished(
     Y_ABORT_UNLESS(requested.OnlyPBuffer());
     Y_ABORT_UNLESS(confirmed.OnlyPBuffer());
 
+    if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
+        return;
+    }
+
     const bool inserted = Inflight.AddRange(
         lsn,
         range,
-        TInflightInfo(this, lsn, requested, confirmed));
+        TInflightInfo(
+            this,
+            lsn,
+            range.Size() * BlockSize,
+            requested,
+            confirmed));
     Y_ABORT_UNLESS(inserted);
 }
 
@@ -773,6 +556,12 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     return *ReadyToErase.begin();
 }
 
+const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
+    ELocation pbuffer) const
+{
+    return PBufferCounters[pbuffer];
+}
+
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
 {
     auto item = Inflight.GetValue(lsn);
@@ -850,6 +639,58 @@ void TBlocksDirtyMap::UnRegister(ui64 lsn)
     ReadyToFlush.erase(lsn);
 }
 
+void TBlocksDirtyMap::DataToPBufferAdded(
+    ELocation location,
+    EPBufferCounter counter,
+    size_t byteCount)
+{
+    auto& counters = PBufferCounters[location];
+
+    switch (counter) {
+        case IReadyQueue::EPBufferCounter::Total: {
+            counters.CurrentRecordsCount++;
+            counters.CurrentBytesCount += byteCount;
+            counters.TotalRecordsCount++;
+            counters.TotalBytesCount += byteCount;
+            break;
+        }
+        case IReadyQueue::EPBufferCounter::Locked: {
+            counters.CurrentLockedRecordsCount++;
+            counters.CurrentLockedBytesCount += byteCount;
+            counters.TotalLockedRecordsCount++;
+            counters.TotalLockedBytesCount += byteCount;
+            break;
+        }
+    }
+}
+
+void TBlocksDirtyMap::DataFromPBufferReleased(
+    ELocation location,
+    EPBufferCounter counter,
+    size_t byteCount)
+{
+    auto& counters = PBufferCounters[location];
+
+    switch (counter) {
+        case IReadyQueue::EPBufferCounter::Total: {
+            Y_ABORT_UNLESS(counters.CurrentRecordsCount > 0);
+            Y_ABORT_UNLESS(counters.CurrentBytesCount >= byteCount);
+
+            counters.CurrentRecordsCount--;
+            counters.CurrentBytesCount -= byteCount;
+            break;
+        }
+        case IReadyQueue::EPBufferCounter::Locked: {
+            Y_ABORT_UNLESS(counters.CurrentLockedRecordsCount > 0);
+            Y_ABORT_UNLESS(counters.CurrentLockedBytesCount >= byteCount);
+
+            counters.CurrentLockedRecordsCount--;
+            counters.CurrentLockedBytesCount -= byteCount;
+            break;
+        }
+    }
+}
+
 TString TBlocksDirtyMap::DebugPrintLockedDDiskRanges()
 {
     TBlockRangeSet64 ranges;
@@ -875,6 +716,15 @@ TString TBlocksDirtyMap::DebugPrintDDiskState() const
     return result;
 }
 
+TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
+{
+    TStringBuilder result;
+    for (auto lsn: ReadyToFlush) {
+        result << ToString(lsn) << "; ";
+    }
+    return result;
+}
+
 TLocationMask TBlocksDirtyMap::FilterLocations(
     TLocationMask mask,
     TBlockRange64 range) const
@@ -892,6 +742,31 @@ TLocationMask TBlocksDirtyMap::FilterLocations(
         }
     }
     return result;
+}
+
+TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
+    TLocationMask locationMask,
+    ui64 lsn,
+    TBlockRange64 range,
+    ui64 offsetBlocks)
+{
+    if (locationMask.Empty()) {
+        locationMask = FilterLocations(DesiredDDisks, range);
+    } else if (locationMask.HasDDisk()) {
+        locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        locationMask = FilterLocations(locationMask, range);
+    }
+
+    locationMask = locationMask.Exclude(DisabledLocations);
+    Y_ABORT_UNLESS(!locationMask.Empty());
+
+    return {
+        locationMask,
+        lsn,
+        TBlockRange64::WithLength(offsetBlocks, range.Size()),
+        range,
+        locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
+                                 : TRangeLock(this, lsn)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

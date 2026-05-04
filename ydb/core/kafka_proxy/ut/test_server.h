@@ -42,6 +42,7 @@ struct TTestServerSettings {
     bool EnableAutoConsumerCreation = true;
     bool EnableQuoting = true;
     bool CheckACL = false;
+    bool HideAuthenticationFailureReasons = false;
 };
 
 template <class TKikimr, bool secure>

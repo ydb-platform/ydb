@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

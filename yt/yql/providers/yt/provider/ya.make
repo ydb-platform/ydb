@@ -101,7 +101,7 @@ PEERDIR(
     yql/essentials/core/dqs_expr_nodes
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/core/peephole_opt
     yql/essentials/core/type_ann
     yql/essentials/core/file_storage
@@ -110,6 +110,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/dq
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto

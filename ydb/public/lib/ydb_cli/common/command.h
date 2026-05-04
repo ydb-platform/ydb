@@ -1,5 +1,6 @@
 #pragma once
 
+#include "build_info.h"
 #include "common.h"
 #include "client_command_options.h"
 
@@ -17,9 +18,9 @@
 #include <util/system/info.h>
 #include <string>
 #include <functional>
+#include <optional>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 struct TCommandFlags {
     bool Dangerous = false;
@@ -77,6 +78,7 @@ public:
 
     public:
         using TCredentialsGetter = std::function<std::shared_ptr<ICredentialsProviderFactory>(const TClientCommand::TConfig&)>;
+        using TUsageInfoGetter = std::function<TString(const std::vector<TString>&)>;
 
         class TArgSetting {
         public:
@@ -142,7 +144,7 @@ public:
         TString Oauth2KeyParams;
 
         ui32 VerbosityLevel = 0;
-        size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
+        size_t HelpCommandVerbosityLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
         bool JsonBinaryAsBase64 = false;
@@ -178,11 +180,16 @@ public:
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
-
-        // AI configuration
         bool EnableAiInteractive = false;
-        std::vector<TAiPresetConfig> AiPredefinedProfiles;
-        std::function<TAiTokenConfig()> AiTokenGetter;
+        TUsageInfoGetter UsageInfoGetter;
+
+        // Filled by ValidateAndRun to point at the leaf command being executed
+        const TClientCommand* ActiveLeafCommand = nullptr;
+        // If non-empty, overrides the computed ydb-cli-... build info tag
+        TString BuildInfoCommandTag;
+
+        std::function<TYdbCliBuildInfo()> BuildInfoProvider;
+        const TYdbCliBuildInfo& GetBuildInfo();
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
@@ -194,7 +201,7 @@ public:
             , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
-            , HelpCommandVerbosiltyLevel(ParseHelpCommandVerbosilty(argc, argv))
+            , HelpCommandVerbosityLevel(ParseHelpCommandVerbosity(argc, argv))
             , TabletId(0)
         {
             CredentialsGetter = [](const TClientCommand::TConfig& config) {
@@ -216,7 +223,7 @@ public:
             return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
 
-        static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
+        static size_t ParseHelpCommandVerbosity(int argc, char** argv);
 
         bool IsVerbose() const {
             return VerbosityLevel > 0;
@@ -285,34 +292,9 @@ public:
             throw TNeedToExitWithCode(EXIT_FAILURE);
         }
 
-        TDriverConfig CreateDriverConfig() {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(Address)
-                .SetDatabase(Database)
-                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
-                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+        TDriverConfig CreateDriverConfig();
 
-            if (UseAllNodes) {
-                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
-            }
-
-            if (EnableSsl) {
-                driverConfig.UseSecureConnection(CaCerts);
-            }
-
-            if (IsNetworkIntensive) {
-                size_t networkThreadNum = GetNetworkThreadNum();
-                driverConfig.SetNetworkThreadsNum(networkThreadNum);
-            }
-
-            if (SkipDiscovery) {
-                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
-            }
-
-            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-
-            return driverConfig;
-        }
+        TString GetBuildInfoCommandTag() const;
 
         size_t GetNetworkThreadNum() {
             if (IsNetworkIntensive) {
@@ -340,6 +322,8 @@ public:
         }
 
     private:
+        std::optional<TYdbCliBuildInfo> CachedBuildInfo_;
+
         size_t GetParamsCount() {
             size_t result = 0;
             bool optionArgument = false;
@@ -412,6 +396,7 @@ public:
     virtual ~TClientCommand() {}
 
     virtual int Process(TConfig& config);
+    void PrepareOptions(TConfig& config, bool validate = true);
     virtual void Prepare(TConfig& config);
     /*
       This method will be called after all child
@@ -427,6 +412,7 @@ public:
         Dangerous |= flags.Dangerous;
         OnlyExplicitProfile |= flags.OnlyExplicitProfile;
     }
+    virtual TClientCommand* FindNextCommand(TString cmd) const;
 
     enum RenderEntryType {
         BEGIN,
@@ -504,6 +490,7 @@ protected:
             cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
         }
     }
+    TClientCommand* FindNextCommand(TString cmd) const override;
 
     TClientCommand* SelectedCommand;
 
@@ -531,5 +518,4 @@ protected:
     TString TopicName;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

@@ -668,12 +668,12 @@ streaming_query_definition: AS DO inline_action;
 
 drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
 
-create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
+create_view_stmt: CREATE VIEW (IF NOT EXISTS)? simple_table_ref_core
     create_object_features?
     AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
 ;
 
-drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
+drop_view_stmt: DROP VIEW (IF EXISTS)? simple_table_ref_core;
 
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
@@ -918,6 +918,7 @@ table_setting_value:
     | split_boundaries
     | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
     | bool_value
+    | real
 ;
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;

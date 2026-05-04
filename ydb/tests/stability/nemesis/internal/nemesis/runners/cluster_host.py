@@ -1,8 +1,8 @@
 # Adapted from ydb/tests/tools/nemesis/library/host.py
 #
-# Hard-reboot a remote host via sysrq-trigger.
-# This runner executes on the agent host and reboots a **different** cluster
-# node (never itself) via SSH, mirroring the original HardRebootHostNemesis.
+# Hard-reboot the local host via sysrq-trigger.
+# This runner executes on the agent host and reboots the **local** machine
+# by writing to /proc/sysrq-trigger, mirroring the original HardRebootHostNemesis.
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import Monitor
 
 
 class ClusterHardRebootHostNemesis(MonitoredAgentActor):
-    """Hard-reboot a random cluster host (excluding self) via ``echo b > /proc/sysrq-trigger``.
+    """Hard-reboot the local host via ``echo b > /proc/sysrq-trigger``.
 
-    The orchestrator dispatches this to one agent; the agent picks a random
-    *other* host from cluster.yaml and sends the sysrq reboot command over SSH.
+    The orchestrator dispatches this to one agent; the agent reboots the
+    local machine by writing to ``/proc/sysrq-trigger`` via subprocess.
     """
 
     def __init__(self) -> None:
@@ -31,6 +31,7 @@ class ClusterHardRebootHostNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("HardRebootHostNemesis: failed to reboot host: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

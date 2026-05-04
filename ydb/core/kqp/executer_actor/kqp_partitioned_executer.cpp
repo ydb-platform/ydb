@@ -113,6 +113,7 @@ public:
         , WriteBufferMemoryLimit(std::move(settings.WriteBufferMemoryLimit))
         , ChannelService(channelService)
         , QuerySpanId(settings.QuerySpanId)
+        , UserCtx(settings.UserCtx)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
@@ -617,7 +618,7 @@ private:
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
-            .UserSID = UserToken->GetUserSID()
+            .UserCtx = UserCtx
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -633,11 +634,11 @@ private:
         }
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
-        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig);
+        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig, UserCtx);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, {}, 0, ChannelService);
+            FederatedQuerySetup, GUCSettings, prunerConfig, /* tableIdsForSnapshot */ {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
+            llvmSettings, /* queryServiceConfig */ {}, 0, ChannelService);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;
@@ -928,7 +929,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     THashMap<ui32, size_t> KeyColumnIdToPos;
 
-    std::shared_ptr<const TPartitioning> TablePartitioning;
+    TPartitioning::TCPtr TablePartitioning;
     THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;
     TPartitionIndex NextPartitionIndex = 0;
 
@@ -963,6 +964,7 @@ private:
     const ui64 WriteBufferMemoryLimit;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     ui64 QuerySpanId = 0;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace

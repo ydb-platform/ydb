@@ -1,5 +1,11 @@
 # Changing column groups
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 The mechanism of [column groups](../../../../concepts/datamodel/table.md#column-groups) allows for improved performance of partial row read operations by dividing the storage of table columns into several groups. The most commonly used scenario is to organize the storage of infrequently used attributes into a separate column group.
 
 ## Creating column groups {#creating-column-groups}
@@ -37,12 +43,6 @@ Using the `ALTER FAMILY` command, you can change the parameters of the column gr
 
 ### Changing storage type
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
-
-{% endif %}
-
 The code below changes the storage type to `rot` for the `default` column group in the `series_with_families` table:
 
 ```yql
@@ -63,18 +63,16 @@ The code below changes the compression codec to `lz4` for the `default` column g
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ```
 
-### Changing compression level of codec
+### Changing cache mode
 
-{% if oss == true and backend_name == "YDB" %}
+When switching the cache mode to `in_memory` for an existing table with `ALTER TABLE`, the pages that are not yet in memory are loaded automatically.
 
-{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+If the table was previously in `in_memory` mode and `ALTER TABLE` then sets the cache mode to `regular`, the pages that are already in memory stay there, but they may later be evicted according to the general caching policy.
 
-{% endif %}
-
-The code below changes the compression level of codec if it supports different compression levels for the `default` column group in the `series_with_families` table:
+The code below changes the [cache mode](../../../../concepts/datamodel/table.md#cache-modes) to `in_memory` for the `default` column group in the `series_with_families` table:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
 ```
 
-You can specify any parameters of a group of columns from the [`CREATE TABLE`](../create_table/index.md) command.
+You can specify any column group parameters described in the [`CREATE TABLE`](../create_table/index.md) command.

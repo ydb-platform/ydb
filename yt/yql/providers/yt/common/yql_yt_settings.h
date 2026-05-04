@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -132,6 +133,8 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -270,7 +273,6 @@ public:
     NCommon::TConfSetting<TString, Dynamic> IntermediateDataMedium;
     NCommon::TConfSetting<TString, Dynamic> PrimaryMedium;
     NCommon::TConfSetting<ui64, Dynamic> QueryCacheChunkLimit;
-    NCommon::TConfSetting<ui64, Dynamic> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, Dynamic> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, Dynamic> NetworkProject;
     NCommon::TConfSetting<bool, Dynamic> _EnableYtPartitioning;

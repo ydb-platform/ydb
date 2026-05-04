@@ -1,6 +1,6 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Window and aggregation functions are not allowed in this context */
+/* custom error: YqlSelect unsupported: FULL */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -87,9 +87,9 @@ FROM (
             web.cume_sales AS web_sales,
             store.cume_sales AS store_sales
         FROM
-            web_v1 AS web
+            $web_v1 AS web
         FULL OUTER JOIN
-            store_v1 AS store
+            $store_v1 AS store
         ON
             (
                 web.item_sk == store.item_sk

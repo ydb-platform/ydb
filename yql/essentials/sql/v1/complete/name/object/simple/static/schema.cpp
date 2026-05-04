@@ -35,7 +35,8 @@ public:
             return {.Path = "", .NameHint = path};
         }
 
-        TStringBuf head, tail;
+        TStringBuf head;
+        TStringBuf tail;
         TStringBuf(path).SplitAt(pos + 1, head, tail);
         return {.Path = head, .NameHint = tail};
     }

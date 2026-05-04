@@ -46,7 +46,7 @@ CREATE RESOURCE POOL CLASSIFIER olap_classifier WITH (
 )
 ```
 
-This creates classifier `olap_classifier` that sends queries from `user1@domain` to pool `olap`. Other users use the `default` pool unless other classifiers apply.
+The example above creates a resource pool classifier named `olap_classifier` that routes queries from user `user1@domain` to the resource pool named `olap`. Queries from all other users go to the `default` resource pool, assuming no other resource pool classifiers exist.
 
 ## See also
 

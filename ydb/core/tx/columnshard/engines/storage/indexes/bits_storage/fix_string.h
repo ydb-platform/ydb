@@ -30,6 +30,7 @@ public:
 
 private:
     virtual TString DoSerializeToString(TDynBitMap&& bitsVector) const override;
+    virtual TString DoSerializeToString(const TArrayPower2BitsStorage& storage) const override;
 
     virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override {
         return std::make_shared<TFixStringBitsStorage>(data);

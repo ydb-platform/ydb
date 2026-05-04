@@ -1,5 +1,5 @@
 //
-// Copyright 2013-2025 Antony Polukhin.
+// Copyright 2013-2026 Antony Polukhin.
 //
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying

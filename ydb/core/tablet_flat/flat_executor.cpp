@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "flat_executor.h"
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
@@ -684,7 +686,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
         return;
     }
     TTransactionWaitPad& transaction = *it->second;
-    
+
     if (pageCollection) {
         auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
@@ -764,7 +766,7 @@ void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCo
 {
     auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
-   
+
     if (syncPages) {
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
     }
@@ -4022,7 +4024,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.StickyBytes);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY].Set(stats.TryKeepInMemoryBytes);
             }
-            
+
             Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED].Set(TransactionPagesMemory);
 
             const auto &memory = Memory->Stats();
@@ -4831,12 +4833,21 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     { // Check bloom filters
-        TVector<ui32> partPrefixes;
-        for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
-            if (bloom) partPrefixes.push_back(prefixLen);
-        }
-        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
+        if (partView->ByKeyPrefixes.size() != tableInfo.ByKeyFilterPrefixes.size()) {
             return true;
+        }
+        for (size_t i = 0; i < tableInfo.ByKeyFilterPrefixes.size(); ++i) {
+            const auto& [prefixLen, bloom] = partView->ByKeyPrefixes[i];
+            const auto& expected = tableInfo.ByKeyFilterPrefixes[i];
+            if (!bloom || prefixLen != expected.PrefixLength) {
+                return true;
+            }
+            // Detect FalsePositiveProbability changes: hashes = ceil(-log2(fpp))
+            ui16 expectedHashes = static_cast<ui16>(std::min<ui64>(
+                Max<ui16>(), static_cast<ui64>(std::ceil(-std::log2(expected.FalsePositiveProbability)))));
+            if (bloom->Stats().Hashes != expectedHashes) {
+                return true;
+            }
         }
     }
 
@@ -4908,7 +4919,9 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
-    comp->Layout.ByKeyFilterPrefixes = tableInfo->ByKeyFilterPrefixes;
+    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
+        comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
+    }
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
     comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();

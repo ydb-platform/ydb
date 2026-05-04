@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 TNormalizationController::INormalizerComponent::TPtr TNormalizationController::RegisterNormalizer(INormalizerComponent::TPtr normalizer) {
     AFL_VERIFY(normalizer);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_register")("description", normalizer->DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_register")("description", normalizer->DebugString());
     Counters.emplace_back(normalizer->GetClassName());
     Normalizers.emplace_back(normalizer);
     return normalizer;

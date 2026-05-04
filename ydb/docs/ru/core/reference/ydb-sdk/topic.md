@@ -32,6 +32,14 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Инициализация соединения с топиками
@@ -146,37 +154,23 @@
 
 - C#
 
-  Для работы с топиками нужно создать экземпляр драйвера {{ ydb-short-name }}.
-
-  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
-
-  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
-
-  ```c#
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(
-      config: config,
-      loggerFactory: loggerFactory
-  );
-  ```
+  Для работы с топиками достаточно передать строку подключения напрямую в конструктор нужного клиента.
 
   В этом примере используется анонимная аутентификация. Подробнее про [соединение с базой данных](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
 
   ```c#
-  var topicClient = new TopicClient(driver);
+  const string connectionString = "Host=localhost;Port=2136;Database=/local";
 
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var topicClient = new TopicClient(connectionString);
+
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
 
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -241,6 +235,14 @@
     producer: "demo-producer",
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -362,6 +364,14 @@
   );
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -448,6 +458,10 @@
                   .build());
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -459,6 +473,14 @@
     }),
   );
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -528,6 +550,10 @@
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -538,6 +564,14 @@
     }),
   );
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -598,6 +632,14 @@
     }),
   );
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -731,7 +773,7 @@
 - C#
 
   ```c#
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
@@ -745,6 +787,14 @@
     producer: producerName,
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -925,6 +975,14 @@
   await writer.close();
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -1053,7 +1111,7 @@
         });
   ```
 
-- С#
+- C#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
 
@@ -1091,6 +1149,14 @@
   // Чтобы получить последний записанный seqNo на сервере.
   await writer.flush();
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1153,6 +1219,10 @@
           .build();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -1172,6 +1242,14 @@
     codec: 10000, // CUSTOM (допустимый диапазон: 10000–19999)
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1197,7 +1275,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Go
 
@@ -1205,7 +1283,19 @@
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1348,6 +1438,14 @@
     },
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1573,9 +1671,21 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1742,10 +1852,10 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -1760,6 +1870,14 @@
     consumer: consumerName,
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1824,7 +1942,7 @@
 - C#
 
   ```c#
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings =
@@ -1882,6 +2000,14 @@
   });
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Чтение сообщений {#reading-messages}
@@ -1922,7 +2048,15 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2018,6 +2152,14 @@
     }
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2132,6 +2274,14 @@
   for await (let batch of reader.read()) {
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2252,6 +2402,14 @@
   }
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 #### Чтение сообщений пакетом с подтверждением
@@ -2353,7 +2511,7 @@
 
   {% endlist %}
 
-- С#
+- C#
 
   ```c#
   try
@@ -2389,6 +2547,14 @@
     await reader.commit(batch);
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2514,6 +2680,18 @@
   });
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -2590,9 +2768,21 @@
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2789,11 +2979,21 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-  {% endlist %}
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2897,9 +3097,21 @@
 
   {% endlist %}
 
+- C#
+
+  Специальной обработки не требуется.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3000,9 +3212,21 @@
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3223,11 +3447,23 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3308,7 +3544,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -3328,5 +3564,17 @@
           .build()
   ).join().expectSuccess("Error commit!");
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

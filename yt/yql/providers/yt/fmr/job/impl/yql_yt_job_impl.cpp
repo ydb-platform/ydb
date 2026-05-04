@@ -113,23 +113,50 @@ public:
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
         auto sortedUploadJobFunc = [&, cancelFlag] () -> TStatistics {
-            const auto tableId = params.Input.TableId;
-            const auto tableRanges = params.Input.TableRanges;
-            const auto neededColumns = params.Input.Columns;
-            const auto columnGroups = params.Input.SerializedColumnGroups;
+            const auto& input = params.Input;
+            const auto tableId = input.TableId;
+            const auto& tableRanges = input.TableRanges;
+            const auto& neededColumns = input.Columns;
+            const auto& columnGroups = input.SerializedColumnGroups;
             const auto order = params.Order;
+            const auto& sortingColumns = params.SortingColumns;
 
-            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(
-                tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
             YQL_ENSURE(clusterConnections.size() == 1);
             const auto& clusterConnection = clusterConnections.begin()->second;
+
+            NYT::TRawTableReaderPtr reader;
+            bool hasSortingColumns = !sortingColumns.Columns.empty();
+
+            if (hasSortingColumns) {
+                std::vector<IBlockIterator::TPtr> blockIterators;
+                for (const auto& range : tableRanges) {
+                    std::vector<TTableRange> singleRange = {range};
+                    blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
+                        tableId,
+                        singleRange,
+                        TableDataService_,
+                        sortingColumns.Columns,
+                        sortingColumns.SortOrders,
+                        neededColumns,
+                        columnGroups,
+                        input.IsFirstRowInclusive,
+                        input.FirstRowKeys,
+                        input.LastRowKeys,
+                        Settings_.FmrReaderSettings.ReadAheadChunks
+                    ));
+                }
+                reader = MakeIntrusive<TSortedMergeReader>(blockIterators);
+            } else {
+                reader = MakeIntrusive<TFmrTableDataServiceReader>(
+                    tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
+            }
 
             auto writer = YtJobService_->GetDistributedWriter(
                 params.CookieYson,
                 clusterConnection
             );
             StreamBulkToYtDistributed(
-                tableDataServiceReader,
+                reader,
                 *writer,
                 Settings_.ParseRecordSettings.UploadReadBlockSize,
                 cancelFlag);
@@ -274,10 +301,6 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
             YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
 
-            YQL_CLOG(INFO, FastMapReduce) << "LocalSort: output table=" << output.TableId
-                << " outputColumnGroups=" << (output.SerializedColumnGroups.empty() ? "(empty)" : output.SerializedColumnGroups.substr(0, 100))
-                << " sortColumns=" << output.SortingColumns.Columns.size();
-
             auto writerSettings = Settings_.FmrWriterSettings;
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
                 output.TableId,
@@ -291,9 +314,6 @@ public:
             std::vector<IBlockIterator::TPtr> blockIterators;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
-                    YQL_CLOG(INFO, FastMapReduce) << "LocalSort: input table=" << fmrInput->TableId
-                        << " inputColumnGroups=" << (fmrInput->SerializedColumnGroups.empty() ? "(empty)" : fmrInput->SerializedColumnGroups.substr(0, 100))
-                        << " ranges=" << fmrInput->TableRanges.size();
                     blockIterators.emplace_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,

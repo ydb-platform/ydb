@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
-        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
+        initialConf.ByKeyFilterPrefixes = {NPage::TConf::TByKeyFilterPrefix{2}}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = mass.Saved.Size();
 
         RunMainEdgeTest(mass.Model->Scheme, mass.Saved, initialConf, false, 2);
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         initialConf.CutIndexKeys = false;
         initialConf.SmallEdge = 19;
         initialConf.LargeEdge = 29;
-        initialConf.ByKeyFilterPrefixes = {2}; /* full-key bloom for 2-column PK */
+        initialConf.ByKeyFilterPrefixes = {NPage::TConf::TByKeyFilterPrefix{2}}; /* full-key bloom for 2-column PK */
         initialConf.MaxRows = mass.Saved.Size();
 
         auto initial =
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilterPrefixes = {1}; /* full-key bloom for 1-column PK */
+        initialConf.ByKeyFilterPrefixes = {NPage::TConf::TByKeyFilterPrefix{1}}; /* full-key bloom for 1-column PK */
         initialConf.MaxRows = rows.Size();
 
         RunMainEdgeTest(lay.RowScheme(), rows, initialConf);
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilterPrefixes = {1}; /* full-key bloom for 1-column PK */
+        initialConf.ByKeyFilterPrefixes = {NPage::TConf::TByKeyFilterPrefix{1}}; /* full-key bloom for 1-column PK */
         initialConf.MaxRows = rows.Size();
         initialConf.SmallEdge = 13;
 
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto initialConf = NPage::TConf{ false, 2044 };
         // precise size estimation doesn't work with cut keys
         initialConf.CutIndexKeys = false;
-        initialConf.ByKeyFilterPrefixes = {1}; /* full-key bloom for 1-column PK */
+        initialConf.ByKeyFilterPrefixes = {NPage::TConf::TByKeyFilterPrefix{1}}; /* full-key bloom for 1-column PK */
         initialConf.MaxRows = rows.Size();
         initialConf.LargeEdge = 13;
 

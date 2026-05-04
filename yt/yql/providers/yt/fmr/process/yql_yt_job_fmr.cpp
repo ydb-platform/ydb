@@ -55,6 +55,13 @@ TIntrusivePtr<TMkqlWriterImpl> TFmrUserJob::MakeMkqlJobWriter() {
     return MakeIntrusive<TMkqlWriterImpl>(outputStreams, YQL_JOB_CODEC_BLOCK_COUNT, YQL_JOB_CODEC_BLOCK_SIZE);
 }
 
+void TFmrUserJob::ChangeMkqlIOSpecIfNeeded() {
+    // disable skiff and arrow formats for fmr job.
+    MkqlIOSpecs->UseBlockInput_ = false;
+    MkqlIOSpecs->UseBlockOutput_ = false;
+    MkqlIOSpecs->UseSkiff_ = false;
+}
+
 void TFmrUserJob::FillQueueFromSingleInputTable(ui64 curTableNum) {
     auto inputTableRef = InputTables_.Inputs[curTableNum];
     auto queueTableWriter = MakeIntrusive<TFmrRawTableQueueWriter>(UnionInputTablesQueue_);

@@ -442,6 +442,7 @@ public:
     const std::vector<std::string>& GetDataColumns() const;
     const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
+    void SetParallel(uint32_t parallel);
 
     static TIndexDescription CreateGlobalIndex(
         const std::string& name,
@@ -521,6 +522,7 @@ private:
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
     std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
+    uint32_t Parallel_ = 0;
 };
 
 struct TRenameIndex {
@@ -538,8 +540,8 @@ public:
     TBuildIndexOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        EBuildIndexState State;
-        float Progress;
+        EBuildIndexState State = EBuildIndexState::Unspecified;
+        float Progress = 0;
         std::string Path;
         std::optional<TIndexDescription> Desctiption;
     };
@@ -566,13 +568,13 @@ public:
     TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     struct TMetadata {
-        ECompactState State;
-        float Progress;
+        ECompactState State = ECompactState::Unspecified;
+        float Progress = 0;
         std::string Path;
-        bool Cascade;
-        uint32_t MaxInFlight;
-        uint32_t Total;
-        uint32_t Done;
+        bool Cascade = false;
+        uint32_t MaxInFlight = 0;
+        uint32_t Total = 0;
+        uint32_t Done = 0;
     };
 
     const TMetadata& Metadata() const;
@@ -618,6 +620,8 @@ public:
     TChangefeedDescription& WithInitialScan();
     // Enable UserSIDs
     TChangefeedDescription& WithUserSIDs();
+    // Enable TraceIds
+    TChangefeedDescription& WithTraceIds();
     // Attributes
     TChangefeedDescription& AddAttribute(const std::string& key, const std::string& value);
     TChangefeedDescription& SetAttributes(const std::unordered_map<std::string, std::string>& attrs);
@@ -634,6 +638,7 @@ public:
     const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
     bool GetUserSIDs() const;
+    bool GetTraceIds() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
     const std::string& GetAwsRegion() const;
     const std::optional<TInitialScanProgress>& GetInitialScanProgress() const;
@@ -664,6 +669,7 @@ private:
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
     bool UserSIDs_ = false;
+    bool TraceIds_ = false;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string AwsRegion_;
     std::optional<TInitialScanProgress> InitialScanProgress_;

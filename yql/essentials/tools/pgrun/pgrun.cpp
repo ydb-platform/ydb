@@ -673,7 +673,8 @@ private:
 TString GetFormattedStmt(const TStringBuf& stmt) {
     TString result;
     result.reserve(stmt.length());
-    size_t pos = 0, next_pos = TStringBuf::npos;
+    size_t pos = 0;
+    size_t next_pos = TStringBuf::npos;
 
     while (TStringBuf::npos != (next_pos = stmt.find('\n', pos))) {
         if (0 < next_pos - pos) {
@@ -1003,7 +1004,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     rowSpec->SetColumnOrder(std::move(columnOrder));
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], false);
 
     NYT::TNode spec;
     rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);

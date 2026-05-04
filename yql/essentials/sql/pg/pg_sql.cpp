@@ -40,6 +40,7 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log_level.h>
 #include <yql/essentials/utils/log/log.h>
@@ -362,6 +363,7 @@ public:
                TMaybe<ui32> sqlProcArgsCount)
         : AstParseResults_(astParseResults)
         , Settings_(settings)
+        , WarningPolicy_(settings.IsReplay)
         , DqEngineEnabled_(Settings_.DqDefaultAuto->Allow())
         , BlockEngineEnabled_(Settings_.BlockDefaultAuto->Allow())
         , StmtParseInfo_(stmtParseInfo)
@@ -1217,7 +1219,9 @@ public:
                 }
 
                 if (ListLength(x->lockingClause) > 0) {
-                    AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+                    if (!AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored")) {
+                        return nullptr;
+                    }
                 }
             }
 
@@ -1351,7 +1355,9 @@ public:
         }
 
         if (ListLength(value->lockingClause) > 0) {
-            AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+            if (!AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored")) {
+                return nullptr;
+            }
         }
 
         TAstNode* limit = nullptr;
@@ -2510,6 +2516,63 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
+        } else if (name == "warning") {
+            if (auto langver = NYql::MakeLangVersion(2026, 01);
+                !NYql::IsBackwardCompatibleFeatureAvailable(
+                    Settings_.LangVer, langver, Settings_.BackportMode))
+            {
+                AddError(
+                    TStringBuilder()
+                    << "VariableSetStmt, Warning pragma is not available "
+                    << "before language version " << NYql::FormatLangVersion(langver));
+                return nullptr;
+            }
+
+            if (ListLength(value->args) != 2) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 2 args for Warning pragma, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto actionArg = ListNodeNth(value->args, 0);
+            auto patternArg = ListNodeNth(value->args, 1);
+
+            TString action;
+            TString codePattern;
+
+            if (NodeTag(actionArg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, actionArg)->val) == T_String)) {
+                action = StrVal(CAST_NODE(A_Const, actionArg)->val);
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for Warning action");
+                return nullptr;
+            }
+
+            if (NodeTag(patternArg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, patternArg)->val) == T_String)) {
+                codePattern = StrVal(CAST_NODE(A_Const, patternArg)->val);
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for Warning pattern");
+                return nullptr;
+            }
+
+            TWarningRule rule;
+            TString parseError;
+            auto parseResult = TWarningRule::ParseFrom(codePattern, action, rule, parseError);
+            switch (parseResult) {
+                case TWarningRule::EParseResult::PARSE_OK:
+                    break;
+                case TWarningRule::EParseResult::PARSE_PATTERN_FAIL:
+                case TWarningRule::EParseResult::PARSE_ACTION_FAIL:
+                    AddError(parseError);
+                    return nullptr;
+            }
+
+            WarningPolicy_.AddRule(rule);
+            if (rule.GetPattern() == "*" && rule.GetAction() == EWarningAction::ERROR) {
+                // Keep 'unused symbol' warning as warning unless explicitly set to error
+                TWarningRule defaultRule;
+                TString defaultParseError;
+                TWarningRule::ParseFrom(ToString(static_cast<int>(TIssuesIds::YQL_UNUSED_SYMBOL)), "default", defaultRule, defaultParseError);
+                WarningPolicy_.AddRule(defaultRule);
+            }
         } else {
             AddError(TStringBuilder() << "VariableSetStmt, not supported name: " << value->name);
             return nullptr;
@@ -3244,7 +3307,9 @@ public:
                     isBinding = true;
                     break;
                 case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
-                    AddWarning(TIssuesIds::YQL_DEPRECATED_BINDINGS, "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon");
+                    if (!AddWarning(TIssuesIds::YQL_DEPRECATED_BINDINGS, "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon")) {
+                        return {};
+                    }
                     [[fallthrough]];
                 case NSQLTranslation::EBindingsMode::DROP:
                     schemaname = Settings_.DefaultCluster;
@@ -4128,7 +4193,9 @@ public:
         }
 
         if (name == "shobj_description" || name == "obj_description") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to NULL")) {
+                return nullptr;
+            }
             return L(A("Null"));
         }
 
@@ -4138,12 +4205,16 @@ public:
 
         // for zabbix https://github.com/ydb-platform/ydb/issues/2904
         if (name == "pg_try_advisory_lock" || name == "pg_try_advisory_lock_shared" || name == "pg_advisory_unlock" || name == "pg_try_advisory_xact_lock" || name == "pg_try_advisory_xact_lock_shared") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock")) {
+                return nullptr;
+            }
             return L(A("PgConst"), QA("true"), L(A("PgType"), QA("bool")));
         }
 
         if (name == "pg_advisory_lock" || name == "pg_advisory_lock_shared" || name == "pg_advisory_unlock_all" || name == "pg_advisory_xact_lock" || name == "pg_advisory_xact_lock_shared") {
-            AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock");
+            if (!AddWarning(TIssuesIds::PG_COMPAT, name + " function forced to return OK without waiting and without really lock/unlock")) {
+                return nullptr;
+            }
             return L(A("Null"));
         }
 
@@ -4840,7 +4911,9 @@ public:
             auto subselect = CAST_NODE(SelectStmt, sublink->subselect);
             if (subselect->withClause && subselect->withClause->recursive) {
                 if (State_.ApplicationName && State_.ApplicationName->StartsWith("pgAdmin")) {
-                    AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false");
+                    if (!AddWarning(TIssuesIds::PG_COMPAT, "AEXPR_OP_ANY forced to false")) {
+                        return nullptr;
+                    }
                     return L(A("PgConst"), QA("false"), L(A("PgType"), QA("bool")));
                 }
             }
@@ -5146,13 +5219,34 @@ public:
         return VL(nodes_vec.data(), nodes_vec.size());
     }
 
+public:
+    TWarningRules GetWarningRules() const {
+        return WarningPolicy_.GetRules();
+    }
+
+    void ClearWarningRules() {
+        WarningPolicy_.Clear();
+    }
+
 private:
     void AddError(const TString& value) {
         AstParseResults_[StatementId_].Issues.AddIssue(TIssue(State_.Positions.back(), value));
     }
 
-    void AddWarning(int code, const TString& value) {
-        AstParseResults_[StatementId_].Issues.AddIssue(TIssue(State_.Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
+    [[nodiscard]] bool AddWarning(int code, const TString& value) {
+        auto action = WarningPolicy_.GetAction(code);
+        if (action == NYql::EWarningAction::DISABLE) {
+            return true;
+        }
+
+        auto severity = ESeverity::TSeverityIds_ESeverityId_S_WARNING;
+        if (action == NYql::EWarningAction::ERROR) {
+            severity = ESeverity::TSeverityIds_ESeverityId_S_ERROR;
+        }
+
+        AstParseResults_[StatementId_].Issues.AddIssue(
+            TIssue(State_.Positions.back(), value).SetCode(code, severity));
+        return severity != ESeverity::TSeverityIds_ESeverityId_S_ERROR;
     }
 
     struct TLState {
@@ -5249,6 +5343,7 @@ private:
 private:
     TVector<TAstParseResult>& AstParseResults_;
     NSQLTranslation::TTranslationSettings Settings_;
+    NYql::TWarningPolicy WarningPolicy_;
     bool DqEngineEnabled_ = false;
     bool DqEngineForce_ = false;
     bool BlockEngineEnabled_ = false;
@@ -5272,7 +5367,7 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::KikimrProviderName, "insert_abort"},
     {NYql::YtProviderName, "append"}};
 
-NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
     TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
@@ -5281,21 +5376,29 @@ NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TSt
         Y_ENSURE(!stmtParseInfos.empty());
         *stmtParseInfo = stmtParseInfos.back();
     }
+    if (warningRules) {
+        *warningRules = converter.GetWarningRules();
+        converter.ClearWarningRules();
+    }
     Y_ENSURE(!results.empty());
     results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
 }
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo, NYql::TWarningRules* warningRules) {
     NYql::TPGParseResult parseResult;
     NYql::PGParse(query, parseResult);
-    return PGToYql(parseResult, query, settings, stmtParseInfo);
+    return PGToYql(parseResult, query, settings, stmtParseInfo, warningRules);
 }
 
-TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo, NYql::TWarningRules* warningRules) {
     TVector<NYql::TAstParseResult> results;
     TConverter converter(results, settings, query, stmtParseInfo, true, Nothing());
     NYql::PGParse(query, converter);
+    if (warningRules) {
+        *warningRules = converter.GetWarningRules();
+        converter.ClearWarningRules();
+    }
     for (auto& res : results) {
         res.ActualSyntaxType = NYql::ESyntaxType::Pg;
     }
@@ -6384,8 +6487,7 @@ public:
 
     NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
                                     NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
-        Y_UNUSED(warningRules);
-        return PGToYql(query, settings, stmtParseInfo);
+        return PGToYql(query, settings, stmtParseInfo, warningRules);
     }
 
     google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
@@ -6409,8 +6511,7 @@ public:
 
     TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
                                                  NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
-        Y_UNUSED(warningRules);
-        return PGToYqlStatements(query, settings, stmtParseInfo);
+        return PGToYqlStatements(query, settings, stmtParseInfo, warningRules);
     }
 };
 

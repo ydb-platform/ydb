@@ -46,6 +46,11 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
         Cerr << "Try \"--help\" option for more info." << Endl;
         return 1;
     }
+    catch (const NLastGetopt::TUsageException& e) {
+        Cerr << e.what() << Endl;
+        Cerr << "Try \"--help\" option for more info." << Endl;
+        return 1;
+    }
     catch (const yexception& e) {
         Cerr << "Caught exception: " << e.what() << Endl;
         return 1;

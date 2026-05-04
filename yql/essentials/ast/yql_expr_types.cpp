@@ -4,16 +4,16 @@ namespace NYql {
 }
 
 template <>
-void Out<NYql::ETypeAnnotationKind>(class IOutputStream& o, NYql::ETypeAnnotationKind x) {
+void Out<NYql::ETypeAnnotationKind>(class IOutputStream& out, NYql::ETypeAnnotationKind value) {
 #define YQL_TYPE_ANN_KIND_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::ETypeAnnotationKind::name:               \
-        o << #name;                                     \
+        out << #name;                                   \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_TYPE_ANN_KIND_MAP(YQL_TYPE_ANN_KIND_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }

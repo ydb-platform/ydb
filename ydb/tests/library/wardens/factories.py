@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.nemesis.safety_warden import AggregateSafetyWarden
+from ydb.tests.library.nemesis.safety_warden import AggregateSafetyWarden, RemoteCommandExecutor
 
 from ydb.tests.library.wardens.base import AggregateLivenessWarden
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
-from ydb.tests.library.wardens.logs import kikimr_grep_dmesg_safety_warden_factory
+from ydb.tests.library.wardens.logs import kikimr_grep_kernel_log_safety_warden_factory
 from ydb.tests.library.wardens.logs import kikimr_start_logs_safety_warden_factory
 from ydb.tests.library.wardens.logs import kikimr_crit_and_alert_logs_safety_warden_factory
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
@@ -13,18 +13,24 @@ from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransa
 
 def safety_warden_factory(cluster, ssh_username, lines_after=5, cut=True, modification_days=1):
     list_of_host_names = [node.host for node in cluster.nodes.values()]
+    executor = RemoteCommandExecutor(list_of_host_names, username=ssh_username)
     wardens = [AllPDisksAreInValidStateSafetyWarden(cluster)]
-    wardens.extend(kikimr_grep_dmesg_safety_warden_factory(list_of_host_names, ssh_username))
+    wardens.extend(kikimr_grep_kernel_log_safety_warden_factory(executor=executor))
     by_directory = {}
     for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
         if node.logs_directory not in by_directory:
             by_directory[node.logs_directory] = []
         by_directory[node.logs_directory].append(node.host)
 
-    for directory, list_of_host_names in by_directory.items():
+    for directory, hosts in by_directory.items():
+        dir_executor = RemoteCommandExecutor(hosts, username=ssh_username)
         wardens.extend(
             kikimr_start_logs_safety_warden_factory(
-                list_of_host_names, ssh_username, directory, lines_after, cut, modification_days
+                executor=dir_executor,
+                deploy_path=directory,
+                lines_after=lines_after,
+                cut=cut,
+                modification_days=modification_days,
             )
         )
 
@@ -44,8 +50,9 @@ def liveness_warden_factory(cluster, ssh_username):
 
 def strict_safety_warden_factory(cluster, ssh_username):
     list_of_host_names = [node.host for node in cluster.nodes.values()]
+    executor = RemoteCommandExecutor(list_of_host_names, username=ssh_username)
     return AggregateSafetyWarden(
-        kikimr_crit_and_alert_logs_safety_warden_factory(list_of_host_names, ssh_username)
+        kikimr_crit_and_alert_logs_safety_warden_factory(executor=executor)
     )
 
 

@@ -2,6 +2,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface/yql_yt_yson_block_iterator.h>
 
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
@@ -38,6 +39,7 @@ public:
 private:
     void SetMinChunkInNewRange();
     bool RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const;
+    static TString FindGroupForColumn(const TString& col, const TParsedColumnGroupSpec& spec);
 
     struct TPrefetchEntry {
         std::vector<NThreading::TFuture<TMaybe<TString>>> Futures;

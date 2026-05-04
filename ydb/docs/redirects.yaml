@@ -160,7 +160,11 @@ common:
   - from: /operations/manage-users-attr.md
     to: /dev/custom-attributes.md
   - from: /operations/query_plans_optimization.md
-    to: /dev/query-plans-optimization.md
+    to: /dev/query-execution-optimization/query-plans-optimization.md
+  - from: /dev/query-plans-optimization.md
+    to: /dev/query-execution-optimization/query-plans-optimization.md
+  - from: /dev/query-hints.md
+    to: /dev/query-execution-optimization/query-hints.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md
@@ -508,6 +512,10 @@ ru:
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
 en:
   - from: /concepts/query_execution/index.md

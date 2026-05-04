@@ -5,6 +5,7 @@ option java_package = "ru.yandex.kikimr.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/core/protos/data_events.proto";
 
 message TLongTxId {
     optional bytes UniqueId = 1;
@@ -64,18 +65,6 @@ message TEvAttachColumnShardWritesResult {
     repeated Ydb.Issue.IssueMessage Issues = 2;
 }
 
-message TEvAcquireReadSnapshot {
-    optional string DatabaseName = 1;
-}
-
-message TEvAcquireReadSnapshotResult {
-    optional Ydb.StatusIds.StatusCode Status = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional uint64 SnapshotStep = 3;
-    optional uint64 SnapshotTxId = 4;
-    optional string DatabaseName = 5;
-}
-
 // Lock wait edges are uniquely identified by the (Owner, RequestId) tuple. Owner is the actor
 // reporting the wait (e.g. a DataShard), and RequestId is an id unique to the particular
 // Owner. These unique ids allow us to make the TEvUpdateLockWaitEdges message idempotent.
@@ -127,6 +116,50 @@ message TEvLockStatus {
 message TEvUnsubscribeLock {
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
+}
+
+message TRemoteSnapshotInfo {
+    optional uint64 SnapshotStep = 1;
+    optional uint64 SnapshotTxId = 2;
+    repeated NKikimrDataEvents.TTableId TableIds = 3;
+    optional NActorsProto.TActorId SessionActorId = 4;
+}
+
+message TNodeRemoteSnapshotCollectionInfo {
+    optional uint32 NodeId = 1;
+    optional uint64 UpdateTime = 2;
+}
+
+message TRemoteSnapshots {
+    repeated TRemoteSnapshotInfo Snapshots = 1;
+    optional uint64 BorderStep = 2;
+    optional uint64 BorderTxId = 3;
+    repeated TNodeRemoteSnapshotCollectionInfo NodesCollectionInfo = 4;
+}
+
+message TPropagationTree {
+    repeated NActorsProto.TActorId ChildrenActorIds = 1;
+}
+
+message TEvCollectSnapshots {
+    optional TPropagationTree Tree = 1;
+}
+
+message TEvCollectSnapshotsResult {
+    optional TRemoteSnapshots Snapshots = 1;
+}
+
+message TEvPropagateSnapshots {
+    optional TPropagationTree Tree = 1;
+    optional TRemoteSnapshots Snapshots = 2;
+}
+
+message TEvPropagateSnapshotsResult {
+}
+
+message TSnapshotExchangeBoardNodeInfo {
+    optional bytes DataCenterId = 1;
+    optional NActorsProto.TActorId Owner = 2;
 }
 
 message TEvUpdateLockWaitEdges {

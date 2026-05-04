@@ -447,3 +447,24 @@
 - source_filter: "^contrib/libs/kvazaar"
   includes:
     - getopt.h: contrib/libs/kvazaar/src/extras/getopt.h
+
+# libgpg-error has its own thread.h
+- source_filter: "^contrib/restricted/libgpg-error"
+  includes:
+  - thread.h: contrib/restricted/libgpg-error/src/thread.h
+
+# libgcrypt has its own types.h
+- source_filter: "^contrib/restricted/libgcrypt"
+  includes:
+  - types.h: contrib/restricted/libgcrypt/src/types.h
+
+# libgcrypt has its own gcrypt.h and types.h
+- source_filter: "^contrib/restricted/libgcrypt|^contrib/libs/audiowmark"
+  includes:
+  - gcrypt.h: contrib/restricted/libgcrypt/src/gcrypt.h
+  - types.h: contrib/restricted/libgcrypt/src/types.h
+
+# fftw3 has its own fftw3.h
+- source_filter: "^contrib/restricted/fftw3|^contrib/libs/audiowmark"
+  includes:
+  - fftw3.h: contrib/restricted/fftw3/api/fftw3.h

@@ -369,7 +369,7 @@ private:
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->DataReqInFly;
@@ -464,7 +464,7 @@ public:
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls,
-             const TString& userSID)
+             NACLib::TUserContext::TPtr userCtx)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxId(txid)
@@ -486,7 +486,7 @@ public:
         , WallClockPrepared(TInstant::MicroSeconds(0))
         , WallClockPlanned(TInstant::MicroSeconds(0))
         , TxProxyMon(mon)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {
         ++*TxProxyMon->DataReqInFly;
     }
@@ -1011,11 +1011,10 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 }
 
 void TDataReq::Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr &ev, const TActorContext &ctx) {
-    const auto& record = ev->Get()->Record;
+    const auto* msg = ev->Get();
 
-    if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetIssues(), issues);
+    if (msg->Status != Ydb::StatusIds::SUCCESS) {
+        NYql::TIssues issues = msg->Issues;
         IssueManager.RaiseIssues(issues);
         ReportStatus(
             TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,
@@ -1029,7 +1028,7 @@ void TDataReq::Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotRe
     WallClockAfterBuild = Now();
 
     Y_ABORT_UNLESS(FlatMKQLRequest);
-    FlatMKQLRequest->Snapshot = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    FlatMKQLRequest->Snapshot = msg->Snapshot;
     ContinueFlatMKQLResolve(ctx);
 }
 
@@ -1126,7 +1125,9 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
             ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
                 ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
         }
-        ev->Record.SetUserSID(UserSID);
+        if (UserCtx != nullptr) {
+            UserCtx->SerializeToEvent(ev->Record);
+        }
 
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));
 
@@ -1212,7 +1213,9 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
             ctx.SelfID, TxId, transactionBuffer,
             TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
-        ev->Record.SetUserSID(UserSID);
+        if (UserCtx != nullptr) {
+            UserCtx->SerializeToEvent(ev->Record);
+        }
         Send(pipeCache, new TEvPipeCache::TEvForward(ev, partition.ShardId, true));
     }
 
@@ -1377,7 +1380,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 FlatMKQLRequest->Snapshot = TRowVersion(mkqlTxBody.GetSnapshotStep(), mkqlTxBody.GetSnapshotTxId());
             NMiniKQL::TEngineFlatSettings settings(NMiniKQL::IEngineFlat::EProtocol::V1, functionRegistry,
                                                    *TAppData::RandomProvider, *TAppData::TimeProvider,
-                                                   UserSID,
+                                                   UserCtx,
                                                    nullptr, TxProxyMon->AllocPoolCounters);
             settings.EvaluateResultType = mkqlTxBody.GetEvaluateResultType();
             settings.EvaluateResultValue = mkqlTxBody.GetEvaluateResultValue();
@@ -3062,8 +3065,8 @@ bool TDataReq::IsReadOnlyRequest() const {
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,
-                             const TRequestControls& requestControls, const TString& userSID) {
-    return new NTxProxy::TDataReq(services, txid, mon, requestControls, userSID);
+                             const TRequestControls& requestControls, NACLib::TUserContext::TPtr userCtx) {
+    return new NTxProxy::TDataReq(services, txid, mon, requestControls, userCtx);
 }
 
 }}

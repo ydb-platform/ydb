@@ -449,7 +449,8 @@ int main(int argc, char** argv) {
         aggs.push_back(&sum);
         TAggregate<true, true> agg(aggs);
         agg.AddBatch(col1, col2);
-        arrow::Datum keys, sums;
+        arrow::Datum keys;
+        arrow::Datum sums;
         agg.GetResult(keys, sums);
         ui64 total1 = 0;
         for (ui32 i = 0; i < col2.length(); ++i) {
@@ -476,7 +477,8 @@ int main(int argc, char** argv) {
             for (ui32 i = 0; i < nIters; ++i) {
                 TAggregate<false, true> agg(aggs);
                 agg.AddBatch(col1, col2);
-                arrow::Datum keys, sums;
+                arrow::Datum keys;
+                arrow::Datum sums;
                 agg.GetResult(keys, sums);
             }
 
@@ -484,7 +486,8 @@ int main(int argc, char** argv) {
             durations.push_back(1e-6 * duration.MicroSeconds());
         }
 
-        double sumDurations = 0.0, sumDurationsQ = 0.0;
+        double sumDurations = 0.0;
+        double sumDurationsQ = 0.0;
         for (auto d : durations) {
             sumDurations += d;
             sumDurationsQ += d * d;

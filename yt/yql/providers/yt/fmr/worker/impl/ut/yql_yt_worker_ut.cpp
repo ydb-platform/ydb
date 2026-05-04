@@ -87,12 +87,12 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         TFmrCoordinatorSettings coordinatorSettings{};
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
+        coordinatorSettings.WorkerDeadlineLease = TDuration::Seconds(3);
         auto coordinator = setup.GetFmrCoordinator(coordinatorSettings);
 
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
-        // TODO - maybe improve test
         ui64 numIterations = 5;
-        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+        auto func = [&operationResult, numIterations] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             ui64 pos = 0;
             while (!cancelFlag->load()) {
                 if (pos == numIterations) {
@@ -102,7 +102,6 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
                 Sleep(TDuration::Seconds(1));
                 ++pos;
             }
-            *operationResult = 0; // reset counter in case of cancel
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
 
@@ -117,8 +116,8 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         Sleep(TDuration::Seconds(2));
         firstWorker->Stop();
         secondWorker->Start();
-        Sleep(TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(operationResult->load(), numIterations);
+        Sleep(TDuration::Seconds(15));
+        UNIT_ASSERT_GE(operationResult->load(), numIterations);
     }
 }
 

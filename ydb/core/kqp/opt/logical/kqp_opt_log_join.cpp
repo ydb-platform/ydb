@@ -927,6 +927,10 @@ TVector<TString> CollectLabels(const TExprBase& node) {
         return CollectLabels(precompute.Input());
     }
 
+    if (node.Maybe<TCoExtractMembers>()) {
+        return CollectLabels(node.Cast<TCoExtractMembers>().Input());
+    }
+
     if (node.Maybe<TDqJoin>()) {
         auto join = node.Cast<TDqJoin>();
 

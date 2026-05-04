@@ -93,6 +93,11 @@
         #endif
     #endif
 
+    #if !defined(SYS_faccessat2)
+        #if defined(__NR_faccessat2)
+            #define SYS_faccessat2 __NR_faccessat2
+        #endif
+    #endif
 #endif
 
 using namespace NKikimr;
@@ -379,6 +384,10 @@ int main(int argc, char** argv) {
                 Allow(eventfd2),
                 Allow(exit),
                 Allow(exit_group),
+                Allow(faccessat),
+    #if defined(SYS_faccessat2)
+                Allow(faccessat2),
+    #endif
                 Allow(fadvise64),
                 Allow(fallocate),
                 Allow(flock),

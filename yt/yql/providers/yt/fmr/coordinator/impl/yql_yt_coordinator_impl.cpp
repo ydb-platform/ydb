@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <queue>
 #include <thread>
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -16,12 +17,28 @@ TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
     WorkersNum = 1;
     RandomProvider = CreateDefaultRandomProvider();
     TimeProvider = CreateDefaultTimeProvider();
-    IdempotencyKeyStoreTime = TDuration::Seconds(10);
-    TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
-    WorkerDeadlineLease = TDuration::Seconds(5);
-    TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
-    SessionInactivityTimeout = TDuration::Minutes(5);
-    HealthCheckInterval = TDuration::Seconds(1);
+
+    if (DefaultFmrOperationSpec.IsMap() && DefaultFmrOperationSpec.HasKey("coordinator")) {
+        auto& coord = DefaultFmrOperationSpec["coordinator"];
+        if (coord.HasKey("idempotency_key_store_time_sec")) {
+            IdempotencyKeyStoreTime = TDuration::Seconds(coord["idempotency_key_store_time_sec"].AsInt64());
+        }
+        if (coord.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
+            TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(coord["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
+        }
+        if (coord.HasKey("worker_deadline_lease_sec")) {
+            WorkerDeadlineLease = TDuration::Seconds(coord["worker_deadline_lease_sec"].AsInt64());
+        }
+        if (coord.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
+            TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(coord["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
+        }
+        if (coord.HasKey("session_inactivity_timeout_sec")) {
+            SessionInactivityTimeout = TDuration::Seconds(coord["session_inactivity_timeout_sec"].AsInt64());
+        }
+        if (coord.HasKey("health_check_interval_sec")) {
+            HealthCheckInterval = TDuration::Seconds(coord["health_check_interval_sec"].AsInt64());
+        }
+    }
 }
 
 namespace {
@@ -58,6 +75,7 @@ public:
         StartClearingIdempotencyKeys();
         CheckWorkersAliveStatus();
         CheckGatewaySessionsActivity();
+        StartGcThread();
         GcService_->ClearAll();
     }
 
@@ -66,6 +84,7 @@ public:
         ClearIdempotencyKeysThread_.join();
         CheckWorkersAliveStatusThread_.join();
         CheckGatewaySessionsActivityThread_.join();
+        GcThread_.join();
     }
 
     NThreading::TFuture<TStartOperationResponse> StartOperation(const TStartOperationRequest& request) override {
@@ -590,6 +609,51 @@ private:
         CheckGatewaySessionsActivityThread_ = std::thread(checkFunc);
     }
 
+    void StartGcThread() {
+        auto gcFunc = [this] {
+            while (!StopCoordinator_) {
+                TGcTask gcTask;
+                bool hasTask = false;
+                with_lock(GcQueueMutex_) {
+                    if (!GcQueue_.empty()) {
+                        gcTask = std::move(GcQueue_.front());
+                        GcQueue_.pop();
+                        hasTask = true;
+                    }
+                }
+                if (hasTask) {
+                    try {
+                        GcService_->ClearGarbage(gcTask.TableGroupsToClear).GetValueSync();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, FastMapReduce) << "GC thread error during ClearGarbage: " << CurrentExceptionMessage();
+                    }
+                    with_lock(Mutex_) {
+                        for (const auto& group : gcTask.GroupsToClear) {
+                            if (gcTask.PartIdsToKeep.contains(GetTableDataServiceGroup(group.TableId, group.PartId))) {
+                                continue;
+                            }
+                            PartIdStats_.erase(group.PartId);
+                            auto tableIt = PartIdsForTables_.find(group.TableId);
+                            if (tableIt != PartIdsForTables_.end()) {
+                                auto& partIds = tableIt->second;
+                                auto partIdPosition = std::find(partIds.begin(), partIds.end(), group.PartId);
+                                if (partIdPosition != partIds.end()) {
+                                    partIds.erase(partIdPosition);
+                                }
+                                if (partIds.empty()) {
+                                    PartIdsForTables_.erase(tableIt);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Sleep(TDuration::MilliSeconds(100));
+                }
+            }
+        };
+        GcThread_ = std::thread(gcFunc);
+    }
+
     void UpdateSessionActivity(const TString& sessionId) {
         if (Sessions_.contains(sessionId)) {
             Sessions_[sessionId].LastActivity = TimeProvider_->Now();
@@ -614,7 +678,9 @@ private:
             Sessions_.erase(sessionId);
         }
 
+        YQL_CLOG(INFO, FastMapReduce) << "ClearSessionImpl: clearing " << tasks.size() << " tasks for session " << sessionId;
         for (auto& taskId: tasks) {
+            YQL_CLOG(DEBUG, FastMapReduce) << "ClearSessionImpl: clearing taskId=" << taskId;
             ClearTaskAndPartIds(taskId);
         }
     }
@@ -765,13 +831,19 @@ private:
     }
 
     std::vector<TPartIdInfo> CollectPreviousPartIdsForTask(TTask::TPtr task) {
+        if (!Tasks_.contains(task->TaskId)) {
+            return {};
+        }
+        TString operationId = Tasks_[task->TaskId].OperationId;
+        auto opIt = Operations_.find(operationId);
+        if (opIt == Operations_.end() || !opIt->second.StageManager) {
+            return {};
+        }
         GetPartIdsForTaskContext context{
             .Task = task,
             .PartIdStats = PartIdStats_
         };
-        TString operationId = Tasks_[task->TaskId].OperationId;
-        const auto& stageManager = Operations_[operationId].StageManager;
-        return stageManager->GetPartIdsForTask(context);
+        return opIt->second.StageManager->GetPartIdsForTask(context);
     }
 
     std::vector<TString> GetTableGroupsToClear(const std::vector<TPartIdInfo>& groupsToClear) {
@@ -801,26 +873,22 @@ private:
             tableGroupsToClear = GetTableGroupsToClear(groupsToClear);
         }
 
-        GcService_->ClearGarbage(tableGroupsToClear).GetValueSync();
+        if (tableGroupsToClear.empty() && groupsToClear.empty()) {
+            return;
+        }
 
-        with_lock(Mutex_) {
-            for (const auto& group : groupsToClear) {
-                if (partIdsToKeep.contains(GetTableDataServiceGroup(group.TableId, group.PartId))) {
-                    continue;
-                }
-                PartIdStats_.erase(group.PartId);
-                auto tableIt = PartIdsForTables_.find(group.TableId);
-                if (tableIt != PartIdsForTables_.end()) {
-                    auto& partIds = tableIt->second;
-                    auto partIdPosition = std::find(partIds.begin(), partIds.end(), group.PartId);
-                    if (partIdPosition != partIds.end()) {
-                        partIds.erase(partIdPosition);
-                    }
-                    if (partIds.empty()) {
-                        PartIdsForTables_.erase(tableIt);
-                    }
-                }
-            }
+        YQL_CLOG(INFO, FastMapReduce) << "ClearPreviousPartIdsForTask: taskId=" << task->TaskId
+            << " groupsToClear=" << tableGroupsToClear.size();
+        for (const auto& group : tableGroupsToClear) {
+            YQL_CLOG(DEBUG, FastMapReduce) << "ClearPreviousPartIdsForTask: clearing group=" << group;
+        }
+
+        with_lock(GcQueueMutex_) {
+            GcQueue_.push(TGcTask{
+                .TableGroupsToClear = std::move(tableGroupsToClear),
+                .GroupsToClear = std::move(groupsToClear),
+                .PartIdsToKeep = std::move(partIdsToKeep),
+            });
         }
     }
 
@@ -924,6 +992,16 @@ private:
     NYT::TNode DefaultFmrOperationSpec_;
     IYtCoordinatorService::TPtr YtCoordinatorService_; // Needed for partitioning of yt tables
     IFmrGcService::TPtr GcService_;
+
+    struct TGcTask {
+        std::vector<TString> TableGroupsToClear;
+        std::vector<TPartIdInfo> GroupsToClear;
+        std::unordered_set<TString> PartIdsToKeep;
+    };
+
+    TMutex GcQueueMutex_;
+    std::queue<TGcTask> GcQueue_;
+    std::thread GcThread_;
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 

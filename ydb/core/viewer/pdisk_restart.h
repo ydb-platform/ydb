@@ -29,10 +29,13 @@ public:
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
+        if (!RequireAdminIfForce(Force)) {
+            return;
+        }
         ui32 nodeId = 0;
         ui32 pDiskId = 0;
         TVector<TString> parts = StringSplitter(Params.Get("pdisk_id")).Split('-').SkipEmpty();
-        if (parts.size() > 2) {
+        if (parts.empty() || parts.size() > 2) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
         }
         if (parts.size() == 2) {
@@ -45,7 +48,6 @@ public:
         if (nodeId == 0 || pDiskId == 0) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
         }
-        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
         Response = RequestBSControllerPDiskRestart(nodeId, pDiskId, Force);
 
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());

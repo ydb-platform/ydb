@@ -44,8 +44,11 @@ class TExpression {
     // Check is the expression can be folded
     bool IsConstantExpr() const;
 
-    // Check if this is a potential join condition
-    bool MaybeJoinCondition(bool includeExpressions = false) const;
+    // Check if this is a potential equi-join condition
+    bool MaybeEquiJoinCondition() const;
+
+    // Check if this is a potential equi-join condition over simple expressions
+    bool MaybeExprEquiJoinCondition() const;
 
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
@@ -74,15 +77,18 @@ class TExpression {
     TExprNode::TPtr Node;
     TExprContext* Ctx;
     TPlanProps* PlanProps;
+
+  private:
+    bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
 };
 
 /**
  * Model a generic potential join condition
  */
-class TJoinCondition {
+class TEquiJoinCondition {
   public:
 
-    TJoinCondition(const TExpression& expr);
+    TEquiJoinCondition(const TExpression& expr);
 
     // In case this is a simple predicate that contains a single column reference on each side, return left column
     TInfoUnit GetLeftIU() const;
@@ -98,7 +104,6 @@ class TJoinCondition {
     TVector<TInfoUnit> RightIUs;
 
     bool IncludesExpressions = true;
-    bool EquiJoin = false;
 };
 
 // Create an expression that accesses a single column
@@ -113,6 +118,9 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 // Make a conjunction from a list of conjuncts. Expression context and plan properies will be extracted
 // from one of the conjuncts.
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
+
+// Negate a predicate
+TExpression MakeNegation(const TExpression& expr);
 
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);

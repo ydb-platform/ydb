@@ -14,6 +14,8 @@ namespace NKqp {
 struct TLookupSettings {
     TString TablePath;
     TTableId TableId;
+    TString Database;
+    TString PoolId;
 
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
@@ -57,8 +59,7 @@ public:
 class TKqpStreamLookupWorker {
 public:
     using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
-    using TPartitionInfo = std::shared_ptr<const TPartitioning>;
-
+    using TPartitionInfo = TPartitioning::TCPtr;
 
     struct TReadResultStats {
         ui64 ReadRowsCount = 0;

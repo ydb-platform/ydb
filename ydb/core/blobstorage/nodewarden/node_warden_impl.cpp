@@ -41,6 +41,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxChunksToDefragInflight(10, 1, 1000)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
+    , HullCompFreeSpaceThresholdPerMille(2000, 0, 100'000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
@@ -60,6 +61,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(1, 0, 1)
+    , EnablePersistentPhantomFlagStorage(0, 0, 1)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , EnableChunkKeeper(0, 0, 1)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -397,7 +399,6 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-
         TControlBoard::RegisterLocalControl(EnablePutBatching, icb->BlobStorage.EnablePutBatching);
         TControlBoard::RegisterLocalControl(EnableVPatch, icb->BlobStorage.EnableVPatch);
         TControlBoard::RegisterSharedControl(EnableLocalSyncLogDataCutting, icb->VDiskControls.EnableLocalSyncLogDataCutting);
@@ -415,6 +416,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
         TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
+        TControlBoard::RegisterSharedControl(HullCompFreeSpaceThresholdPerMille, icb->VDiskControls.HullCompFreeSpaceThresholdPerMille);
         TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
@@ -431,6 +433,7 @@ void TNodeWarden::Bootstrap() {
 
         TControlBoard::RegisterSharedControl(MaxInProgressSyncCount, icb->VDiskControls.MaxInProgressSyncCount);
         TControlBoard::RegisterSharedControl(EnablePhantomFlagStorage, icb->VDiskControls.EnablePhantomFlagStorage);
+        TControlBoard::RegisterSharedControl(EnablePersistentPhantomFlagStorage, icb->VDiskControls.EnablePersistentPhantomFlagStorage);
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 

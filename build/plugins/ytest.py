@@ -1139,6 +1139,7 @@ def on_add_custom_explicit_linter_check(fields, unit, *args):
         "WRAPPER_SCRIPT": 1,
         "FILES": unlimited,
         "DEPENDS": unlimited,
+        "CONFIG_TYPE": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "DEFAULT_CONFIGS": 1,

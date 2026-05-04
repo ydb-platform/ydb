@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -49,7 +50,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
 
     TString ToYsonString() const;
     void FillCodecNode(NYT::TNode& attrs, const NCommon::TStructMemberMapper& mapper = {}) const;
-    void FillAttrNode(NYT::TNode& attrs, ui64 nativeTypeCompatibility, bool useCompactForm) const;
+    void FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const;
     void FillColumnOrder(NYT::TNode& attr) const;
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const;
 
@@ -84,7 +85,7 @@ struct TYqlRowSpecInfo: public TThrRefBase {
         return Columns;
     }
 
-    void SetType(const TStructExprType* type, TMaybe<ui64> nativeYtTypeFlags = Nothing());
+    void SetType(const TStructExprType* type, ui64 nativeTypeCompatibility = NTCF_NONE);
     void SetColumnOrder(const TMaybe<TColumnOrder>& columnOrder);
     void SetConstraints(const TConstraintSet& constraints);
     TConstraintSet GetConstraints() const;
@@ -127,6 +128,7 @@ private:
     void FillSort(NYT::TNode& attrs, const NCommon::TStructMemberMapper& mapper = {}) const;
     void FillDefValues(NYT::TNode& attrs, const NCommon::TStructMemberMapper& mapper = {}) const;
     void FillFlags(NYT::TNode& attrs) const;
+    void ParseFlagsFromNativeSchema(const NYT::TNode& schemaAsRowSpec);
     void FillConstraints(NYT::TNode& attrs) const;
     void FillExplicitYson(NYT::TNode& attrs, const NCommon::TStructMemberMapper& mapper) const;
     bool ParsePatched(const NYT::TNode& rowSpecAttr, const THashMap<TString, TString>& attrs, TExprContext& ctx, const TPositionHandle& pos);
@@ -155,7 +157,6 @@ private:
 };
 
 ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMemberMapper& mapper = {});
-void UpdateNativeYtTypeFlags(NYT::TNode& spec, ui64 nativeTypeCompat);
 TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers);
 
 }

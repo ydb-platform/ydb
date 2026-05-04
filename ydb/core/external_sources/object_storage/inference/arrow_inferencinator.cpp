@@ -27,11 +27,34 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
+<<<<<<< HEAD
 bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+=======
+using ArrowField = std::shared_ptr<arrow::Field>;
+using ArrowFields = std::vector<ArrowField>;
+
+bool ShouldBeOptional(const arrow::Field& field, const std::shared_ptr<FormatConfig>& config) {
+>>>>>>> 046baf1d831 (updated schema inference with parquet format (#39461))
     if (!config->ShouldMakeOptional) {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    if (config->Format == EFileFormat::Parquet) {
+        return field.nullable();
+    }
+
+    const auto& type = *field.type();
+
+    // For JSON formats, TIMESTAMP is reinterpreted as UTF8 (see MapPrimitiveType),
+    // so it should not be wrapped in Optional either.
+    if (type.id() == arrow::Type::TIMESTAMP &&
+        (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList)) {
+        return false;
+    }
+
+>>>>>>> 046baf1d831 (updated schema inference with parquet format (#39461))
     switch (type.id()) {
     case arrow::Type::NA:
     case arrow::Type::STRING:
@@ -106,6 +129,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         } else {
             resType.set_type_id(Ydb::Type::TIMESTAMP);
         }
+<<<<<<< HEAD
         return true;
     case arrow::Type::TIME32: // TODO: is there anything?
         return false;
@@ -151,6 +175,29 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         return false;
     }
     return false;
+=======
+        return Ydb::Type::TIMESTAMP;
+    }
+
+    for (const auto& [arrowId, ydbId] : kPrimitiveTypeTable) {
+        if (arrowId == type.id()) {
+            return ydbId;
+        }
+    }
+    return std::nullopt;
+}
+
+bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::Field& field, const std::shared_ptr<FormatConfig>& config) {
+    auto mapped = MapPrimitiveType(*field.type(), *config);
+    if (!mapped) {
+        return false;
+    }
+    auto& resType = ShouldBeOptional(field, config)
+        ? *maybeOptionalType.mutable_optional_type()->mutable_item()
+        : maybeOptionalType;
+    resType.set_type_id(*mapped);
+    return true;
+>>>>>>> 046baf1d831 (updated schema inference with parquet format (#39461))
 }
 
 TEvInferredFileSchema* MakeErrorSchema(TString path, NFq::TIssuesIds::EIssueCode code, TString message) {
@@ -312,10 +359,15 @@ public:
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
             Ydb::Column column;
+<<<<<<< HEAD
             if (!ArrowToYdbType(*column.mutable_type(), *field->type(), file.Config)) {
                 continue;
             }
             if (field->name().empty()) {
+=======
+            if (!ArrowToYdbType(*column.mutable_type(), *field, file.Config)) {
+                skippedUnsupported.push_back(TStringBuilder() << field->name() << " (" << field->type()->ToString() << ")");
+>>>>>>> 046baf1d831 (updated schema inference with parquet format (#39461))
                 continue;
             }
             column.mutable_name()->assign(field->name());

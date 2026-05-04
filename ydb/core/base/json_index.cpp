@@ -824,6 +824,7 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     if (pathEnd > 0) {
         std::vector<TString> path;
         size_t pos = 0;
+
         while (pos < pathEnd) {
             size_t encodedLength = 0;
             int shift = 0;
@@ -835,13 +836,16 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
                     break;
                 }
             }
+
             if (encodedLength == 0) {
                 break;
             }
+
             size_t keyLength = encodedLength - 1;
             if (pos + keyLength > pathEnd) {
                 break;
             }
+
             path.push_back(pathToken.substr(pos, keyLength));
             pos += keyLength;
         }
@@ -852,7 +856,7 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
         }
     }
 
-    // Decode literal suffix: \0 + EEntryType byte + optional payload
+    // Decode literal suffix
     if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
         auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
         TMaybe<TString> literalValue;

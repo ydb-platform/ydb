@@ -286,6 +286,85 @@ def test_success_external_data_table(db_fixture, ydb_cluster):
     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
 
 
+@pytest.mark.parametrize(
+    "case_id,auth_clause,secrets,expected_err",
+    [
+        # SERVICE_ACCOUNT: empty SERVICE_ACCOUNT_ID
+        (
+            1,
+            'AUTH_METHOD="SERVICE_ACCOUNT", SERVICE_ACCOUNT_ID="", SERVICE_ACCOUNT_SECRET_NAME="{s0}"',
+            [('s0', 'nonemptysig')],
+            "Service account auth requires non-empty SERVICE_ACCOUNT_ID",
+        ),
+        # SERVICE_ACCOUNT: empty resolved secret value
+        (
+            2,
+            'AUTH_METHOD="SERVICE_ACCOUNT", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}"',
+            [('s0', '')],
+            "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME",
+        ),
+        # AWS: empty resolved access-key secret value
+        (
+            3,
+            'AUTH_METHOD="AWS", AWS_ACCESS_KEY_ID_SECRET_NAME="{s0}", AWS_SECRET_ACCESS_KEY_SECRET_NAME="{s1}", AWS_REGION="ru-central-1"',
+            [('s0', ''), ('s1', 'nonemptysecret')],
+            "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME",
+        ),
+        # AWS: empty resolved secret-access-key secret value
+        (
+            4,
+            'AUTH_METHOD="AWS", AWS_ACCESS_KEY_ID_SECRET_NAME="{s0}", AWS_SECRET_ACCESS_KEY_SECRET_NAME="{s1}", AWS_REGION="ru-central-1"',
+            [('s0', 'nonemptyid'), ('s1', '')],
+            "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME",
+        ),
+    ],
+)
+def test_external_data_source_with_empty_auth_fields(
+    db_fixture, ydb_cluster, case_id, auth_clause, secrets, expected_err
+):
+    """
+    Reading from an EXTERNAL DATA SOURCE with empty auth fields (empty LOGIN
+    for BASIC, empty SERVICE_ACCOUNT_ID, empty resolved secret values for
+    SERVICE_ACCOUNT/AWS, etc.) must fail with a clear BAD_REQUEST error
+    instead of silently falling back to no-auth.
+    """
+    user_name = f"emptyauthuser{case_id}"
+    user_config = create_user(ydb_cluster, db_fixture, user_name)
+    provide_grants(db_fixture, user_name, DATABASE, ["ydb.granular.create_table"])
+
+    # Pre-create secrets referenced in auth_clause; values may be empty by design.
+    secret_paths = {}
+    paths_list = []
+    values_list = []
+    for placeholder, value in secrets:
+        path = f'{DATABASE}/case{case_id}{placeholder}'
+        secret_paths[placeholder] = path
+        paths_list.append(path)
+        values_list.append(value)
+    create_secrets(user_config, paths_list, values_list)
+
+    auth_clause_filled = auth_clause.format(**secret_paths)
+
+    s3_endpoint, _, _, s3_bucket = setup_s3()
+    eds_name = f"s3eds{case_id}"
+
+    create_eds_query = f"""
+        CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
+            SOURCE_TYPE="ObjectStorage",
+            LOCATION="{s3_endpoint}/{s3_bucket}",
+            {auth_clause_filled}
+        );"""
+    # CREATE itself must succeed; validation runs on read, after secret resolution.
+    run_with_assert(user_config, create_eds_query)
+
+    read_query = f"""
+        SELECT * FROM `{eds_name}`.`file.txt` WITH (
+            FORMAT = "raw",
+            SCHEMA = ( Data String )
+        );"""
+    run_with_assert(user_config, read_query, expected_err)
+
+
 def test_migration_to_new_secrets_in_external_data_source(db_fixture, ydb_cluster):
     user1_config = create_user(ydb_cluster, db_fixture, "user1")
     provide_grants(db_fixture, "user1", DATABASE, ["ydb.granular.create_table"])

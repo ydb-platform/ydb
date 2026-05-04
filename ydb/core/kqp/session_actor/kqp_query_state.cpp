@@ -221,6 +221,7 @@ bool TKqpQueryState::TryGetFromCache(
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
+    settings.IsolationLevel = GetIsolationLevel();
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     bool keepInCache = false;
@@ -276,15 +277,16 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
+    auto isolationLevel = GetIsolationLevel();
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
+    settings.IsolationLevel = isolationLevel;
 
     bool keepInCache = false;
-    auto isolationLevel = GetIsolationLevel();
     bool perStatementResult = isolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
@@ -338,16 +340,16 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
+    auto isolationLevel = GetIsolationLevel();
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
+    settings.IsolationLevel = isolationLevel;
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
-
-    auto isolationLevel = GetIsolationLevel();
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -388,15 +390,17 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
+    const auto isolationLevel = GetIsolationLevel();
+
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
+    settings.IsolationLevel = isolationLevel;
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
-    const auto isolationLevel = GetIsolationLevel();
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:

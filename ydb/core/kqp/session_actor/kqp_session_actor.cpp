@@ -705,7 +705,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        EnsureTxContextForCompilation();
+        //EnsureTxContextForCompilation();
 
         // quick path
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
@@ -1230,7 +1230,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl) {
+                    if (hasTxControl) { //} && QueryState->TxId.GetValue() != TTxId()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

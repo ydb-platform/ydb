@@ -566,6 +566,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
                                                                                    "Host: " + hostProxy + "\r\n"
                                                                                    "Cookie: yc_session=invalid_cookie\r\n"
                                                                                    "Referer: https://" + hostProxy + protectedPage + "\r\n"));
+        const TString expectedRequestedAddress = TContext(incomingRequest).GetRequestedAddress();
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
 
         TAutoPtr<IEventHandle> handle;
@@ -587,7 +588,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuf setCookie = headers.Get("Set-Cookie");
         UNIT_ASSERT_STRING_CONTAINS(
             setCookie,
-            CreateNameYdbOidcCookie(redirectStrategy.IsNavigationRequest() ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX));
+            CreateNameYdbOidcCookie(CreateFlowId(settings.ClientSecret, expectedRequestedAddress)));
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -671,7 +672,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = redirectStrategy.IsNavigationRequest()});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page"});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
@@ -695,15 +696,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
-        if (redirectStrategy.IsNavigationRequest()) {
-            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
-            UNIT_ASSERT(protectedPageHeaders.Has("Location"));
-            UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
-        } else {
-            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
-            UNIT_ASSERT(!protectedPageHeaders.Has("Location"));
-        }
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
     }
 
     Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlow) {
@@ -716,20 +709,20 @@ Y_UNIT_TEST_SUITE(Mvp) {
         OidcWrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectExpiredBackgroundStateKeepsCookieSuffix) {
+    Y_UNIT_TEST(OpenIdConnectExpiredStateKeepsCookieSuffix) {
         TPortManager tp;
         auto settings = BuildBaseSettings(tp);
         TState sourcePayload;
         sourcePayload.AntiForgeryToken = "state";
         sourcePayload.ExpirationTime = TInstant::Seconds(0);
-        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+        sourcePayload.CookieSuffix = "_flow-id";
 
         TCheckStateResult result = CheckState(EncodeState(sourcePayload, settings.ClientSecret), settings.ClientSecret);
-        const TString expectedCookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+        const TString expectedCookieSuffix = "_flow-id";
 
         UNIT_ASSERT(!result.Ok);
         UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, expectedCookieSuffix);
-        UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State life time expired");
+        UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State lifetime expired");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
@@ -748,7 +741,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page"});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -796,7 +789,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = redirectStrategy.IsNavigationRequest()});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page"});
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -858,7 +851,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         builder.AddListeningPort(settings.SessionServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&sessionServiceMock);
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
-        TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
+        TContext context({.State = "test_state", .RequestedAddress = "/requested/page"});
         TStringBuilder request;
         request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
@@ -1003,7 +996,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page"});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
@@ -1035,7 +1028,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
-        TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
+        TContext context({.State = "good_state", .RequestedAddress = "/requested/page"});
         TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
@@ -1637,8 +1630,10 @@ Y_UNIT_TEST_SUITE(Utils) {
 
         TState sourcePayload;
         sourcePayload.AntiForgeryToken = "state";
-        sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
-        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+        sourcePayload.ExpirationTime = TInstant::Seconds(
+            TInstant::Now().Seconds() + TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME.Seconds()
+        );
+        sourcePayload.CookieSuffix = "_flow-id";
 
         const TString state = EncodeState(sourcePayload, settings.ClientSecret);
         const TCheckStateResult result = CheckState(state, settings.ClientSecret);
@@ -1651,6 +1646,47 @@ Y_UNIT_TEST_SUITE(Utils) {
         UNIT_ASSERT(decodedResult.HasStateContainerJson);
         UNIT_ASSERT(decodedResult.Payload == sourcePayload);
         UNIT_ASSERT_STRINGS_EQUAL(EncodeState(decodedResult.Payload, settings.ClientSecret), state);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectFlowIdIsDeterministicForSameAddress) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+
+        const TString requestedAddress = "https://site.example.com/path?x=1";
+        const TString flowId1 = CreateFlowId(settings.ClientSecret, requestedAddress);
+        const TString flowId2 = CreateFlowId(settings.ClientSecret, requestedAddress);
+
+        UNIT_ASSERT_STRINGS_EQUAL(flowId1, flowId2);
+        UNIT_ASSERT_VALUES_EQUAL(flowId1.size(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(flowId1[0], '_');
+    }
+
+    Y_UNIT_TEST(OpenIdConnectFlowIdDiffersForDifferentAddresses) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+
+        const TString flowId1 = CreateFlowId(settings.ClientSecret, "https://site.example.com/path?x=1");
+        const TString flowId2 = CreateFlowId(settings.ClientSecret, "https://site.example.com/path?x=2");
+
+        UNIT_ASSERT_UNEQUAL(flowId1, flowId2);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStateUsesFlowIdAsCookieSuffix) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+
+        const TString requestedAddress = "https://site.example.com/path?x=1";
+        TContext context({
+            .State = "state",
+            .RequestedAddress = requestedAddress,
+        });
+
+        const TString state = context.GetState(settings.ClientSecret);
+        const TDecodeStateResult decodedResult = DecodeState(state);
+
+        UNIT_ASSERT(decodedResult.HasSignedStateJson);
+        UNIT_ASSERT(decodedResult.HasStateContainerJson);
+        UNIT_ASSERT_STRINGS_EQUAL(decodedResult.Payload.CookieSuffix, CreateFlowId(settings.ClientSecret, requestedAddress));
     }
 
     Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {

@@ -17,7 +17,6 @@ public:
     struct TInitializer {
         TString State;
         TString RequestedAddress;
-        bool NavigationRequest = true;
     };
 
 private:

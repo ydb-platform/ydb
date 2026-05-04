@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Tool for benchmarking YDB CLI AI interactive mode",
         epilog="examples:\n"
-        "  ./ydb_cli_bench --config config.json --database /Root --endpoint localhost:12345 --concurrency 3",
+        "  ./ydb_cli_bench --config config.json --ydb-cli-binary ../ai_interactive/ydb --database /Root --endpoint localhost:12345 --concurrency 3",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -59,10 +59,10 @@ def main():
         config = json.load(f)
     logging.info(f"Starting benchmark with config:\n{config}")
 
+    runner = BenchmarkRunner(
+        config, args.database, args.endpoint, args.concurrency, args.ydb_cli_binary, dry_run=args.dry_run
+    )
     try:
-        runner = BenchmarkRunner(
-            config, args.database, args.endpoint, args.concurrency, args.ydb_cli_binary, dry_run=args.dry_run
-        )
         runner.init()
         runner.run()
     finally:

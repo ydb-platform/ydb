@@ -52,7 +52,7 @@ export MODEL_TOKEN=<token>
 ./ydb_cli_bench --config config.json --ydb-cli-binary ../ai_interactive/ydb --database /Root/shared_database --endpoint localhost:12345 --concurrency 3
 ```
 
-Where `database` is path to shared database. Benchmark will be runned over database from `database` / `endpoint` where will be created:
+Where `database` is path to shared database. Benchmark will be run over database from `database` / `endpoint` where will be created:
 
 - `concurrency` count serverless databases `ydb_cli_bench_serverless_db_[0-concurrency]`
 

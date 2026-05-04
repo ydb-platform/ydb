@@ -1013,7 +1013,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftInput))
@@ -1023,6 +1022,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
             .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+            .Add(7, blockHashJoin.Settings().Ptr())
         .Seal()
         .Build();
 

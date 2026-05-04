@@ -427,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 7, "BlockHashJoinCore should have 7 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -488,9 +488,16 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             }();
 
 
-            // Use the specialized DqBlockHashJoin method
+            NMiniKQL::TBlockHashJoinSettings settings;
+            for (const auto& setting : node.Child(7)->Children()) {
+                if (setting->Child(0)->Content() == "BuildSide") {
+                    if (setting->Child(1)->Content() == "Left") {
+                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
+                }
+            }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType);
+                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

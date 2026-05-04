@@ -21,6 +21,10 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+bool ConvertArrowType(const NYql::NUdf::TType* type, std::shared_ptr<arrow::DataType>& arrowType) {
+    return NKikimr::NMiniKQL::ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), arrowType);
+}
+
 template<typename Buffer = NYql::NUdf::TResizeableBuffer>
 std::unique_ptr<arrow::Buffer> MakeBufferWithSize(int size, arrow::MemoryPool* pool){
     auto buff = NUdf::AllocateResizableBuffer<Buffer>(size, pool);
@@ -66,9 +70,15 @@ struct IColumnDataExtractor {
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TFixedSizeColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
+    TFixedSizeColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool)
         : Pool_(pool)
-        , Type_(type)
+    {
+        Y_ENSURE(ConvertArrowType(type, ArrowType_));
+    }
+
+    TFixedSizeColumnDataExtractor(std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool* pool)
+        : Pool_(pool)
+        , ArrowType_(std::move(arrowType))
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
@@ -119,17 +129,13 @@ public:
         auto bytesCount = bytes.front();
         Y_ENSURE(bytesCount == len * GetElementSize());
 
-        std::shared_ptr<arrow::DataType> type;
-        auto isConverted = ConvertArrowType(Type_, type);
-        Y_ENSURE(isConverted);
-
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto dataBuffer = MakeBufferWithSize(bytesCount, Pool_);
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
+        return arrow::ArrayData::Make(ArrowType_, len, {std::move(nullBitmap), std::move(dataBuffer)});
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
@@ -138,16 +144,17 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    TType* Type_;
+    std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
 template <bool Nullable>
 class TResourceColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TResourceColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
+    TResourceColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool)
         : Pool_(pool)
-        , Type_(type)
-    {}
+    {
+        Y_ENSURE(ConvertArrowType(type, ArrowType_));
+    }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
 		Y_ENSURE(array->buffers.size() == 2);
@@ -199,17 +206,13 @@ public:
         auto bytesCount = bytes.front();
         Y_ENSURE(bytesCount == len * GetElementSize());
 
-        std::shared_ptr<arrow::DataType> type;
-        auto isConverted = ConvertArrowType(Type_, type);
-        Y_ENSURE(isConverted);
-
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto dataBuffer = MakeBufferWithSize<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(bytesCount, Pool_);
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
+        return arrow::ArrayData::Make(ArrowType_, len, {std::move(nullBitmap), std::move(dataBuffer)});
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
@@ -218,13 +221,13 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    TType* Type_;
+    std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TSingularColumnDataExtractor(arrow::MemoryPool* pool, TType* type) {
-        Y_UNUSED(pool, type);
+    TSingularColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
+        Y_UNUSED(type, pool);
     }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
@@ -269,10 +272,11 @@ class TStringColumnDataExtractor : public IColumnDataExtractor {
     using TOffset = typename TStringType::offset_type;
 
 public:
-    TStringColumnDataExtractor(arrow::MemoryPool* pool, TType* type)
+    TStringColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool)
         : Pool_(pool)
-        , Type_(type)
-    {}
+    {
+        Y_ENSURE(ConvertArrowType(type, ArrowType_));
+    }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
         MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
@@ -330,10 +334,6 @@ public:
         Y_ENSURE(bytes.size() == 1);
         auto bytesCount = bytes.front();
 
-        std::shared_ptr<arrow::DataType> type;
-        auto isConverted = ConvertArrowType(Type_, type);
-        Y_ENSURE(isConverted);
-
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
@@ -344,7 +344,7 @@ public:
         std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * (len + 1));
         auto dataBuffer = MakeBufferWithSize(bytesCount, Pool_);
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
+        return arrow::ArrayData::Make(ArrowType_, len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
@@ -353,19 +353,20 @@ public:
 
 protected:
     arrow::MemoryPool* Pool_;
-    TType* Type_;
+    std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
 template <bool Nullable>
 class TTupleColumnDataExtractor : public IColumnDataExtractor {
 public:
     TTupleColumnDataExtractor(
-        std::vector<IColumnDataExtractor::TPtr> children, arrow::MemoryPool* pool, TType* type
+        std::vector<IColumnDataExtractor::TPtr> children, const NYql::NUdf::TType* type, arrow::MemoryPool* pool
     )
         : Children_(std::move(children))
         , Pool_(pool)
-        , Type_(type)
-    {}
+    {
+        Y_ENSURE(ConvertArrowType(type, ArrowType_));
+    }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 1);
@@ -432,10 +433,6 @@ public:
     }
 
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
-        std::shared_ptr<arrow::DataType> type;
-        auto isConverted = ConvertArrowType(Type_, type);
-        Y_ENSURE(isConverted);
-
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
@@ -445,7 +442,7 @@ public:
             reservedChildren.push_back(Children_[i]->ReserveArray({bytes[i]}, len)); // TODO: handle recursive tuple, only one level of nesting is available now
         }
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, std::move(reservedChildren));
+        return arrow::ArrayData::Make(ArrowType_, len, {std::move(nullBitmap)}, std::move(reservedChildren));
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
@@ -460,20 +457,21 @@ protected:
 protected:
     std::vector<IColumnDataExtractor::TPtr> Children_;
     arrow::MemoryPool* Pool_;
-    TType* Type_;
+    std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
 template<typename TDate, bool Nullable>
 class TTzDateColumnDataExtractor : public TTupleColumnDataExtractor<Nullable> {
-    using TBase = TTupleColumnDataExtractor<Nullable>;
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
 public:
-    TTzDateColumnDataExtractor(arrow::MemoryPool* pool, TType* type) {
+    TTzDateColumnDataExtractor(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
         this->Pool_ = pool;
-        this->Type_ = type;
-        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<TDateLayout, false>>(pool, type));
-        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<ui16, false>>(pool, type));
+        Y_ENSURE(ConvertArrowType(type, this->ArrowType_));
+        const auto structType = std::dynamic_pointer_cast<arrow::StructType>(this->ArrowType_);
+        Y_ENSURE(structType && structType->num_fields() == 2);
+        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<TDateLayout, false>>(structType->field(0)->type(), pool));
+        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<ui16, false>>(structType->field(1)->type(), pool));
     }
 };
 
@@ -481,12 +479,13 @@ public:
 class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
     TExternalOptionalColumnDataExtractor(
-        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type
+        IColumnDataExtractor::TPtr inner, const NYql::NUdf::TType* type, arrow::MemoryPool* pool
     )
         : Inner_(std::move(inner))
         , Pool_(pool)
-        , Type_(type)
-    {}
+    {
+        Y_ENSURE(ConvertArrowType(type, ArrowType_));
+    }
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 1);
@@ -523,17 +522,13 @@ public:
     }
 
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
-        std::shared_ptr<arrow::DataType> type;
-        auto isConverted = ConvertArrowType(Type_, type);
-        Y_ENSURE(isConverted);
-
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto reservedInner = Inner_->ReserveArray(bytes, len);
 
-        return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, {std::move(reservedInner)});
+        return arrow::ArrayData::Make(ArrowType_, len, {std::move(nullBitmap)}, {std::move(reservedInner)});
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
@@ -543,7 +538,7 @@ public:
 private:
     IColumnDataExtractor::TPtr Inner_;
     arrow::MemoryPool* Pool_;
-    TType* Type_;
+    std::shared_ptr<arrow::DataType> ArrowType_;
 };
 
 // ------------------------------------------------------------
@@ -563,37 +558,37 @@ struct TColumnDataExtractorTraits {
     using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
     using TSingular = TSingularColumnDataExtractor;
 
-    constexpr static bool PassType = false;
+    constexpr static bool PassType = true;
 
-    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool, TType* type) {
+    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>(pool, type);
+            return std::make_unique<TFixedSize<ui64, true>>(type, pool);
         } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>(pool, type);
+            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>(type, pool);
         }
     }
 
     template <bool IsNull>
-    static TResult::TPtr MakeSingular(arrow::MemoryPool* pool, TType* type) {
+    static TResult::TPtr MakeSingular(const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
         Y_UNUSED(IsNull);
-        return std::make_unique<TSingular>(pool, type);
+        return std::make_unique<TSingular>(type, pool);
     }
 
-    static TResult::TPtr MakeResource(bool isOptional, arrow::MemoryPool* pool, TType* type) {
+    static TResult::TPtr MakeResource(bool isOptional, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
         if (isOptional) {
-            return std::make_unique<TResource<true>>(pool, type);
+            return std::make_unique<TResource<true>>(type, pool);
         } else {
-            return std::make_unique<TResource<false>>(pool, type);
+            return std::make_unique<TResource<false>>(type, pool);
         }
     }
 
     template<typename TTzDate>
-    static TResult::TPtr MakeTzDate(bool isOptional, arrow::MemoryPool* pool, TType* type) {
+    static TResult::TPtr MakeTzDate(bool isOptional, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
         if (isOptional) {
-            return std::make_unique<TTzDateReader<TTzDate, true>>(pool, type);
+            return std::make_unique<TTzDateReader<TTzDate, true>>(type, pool);
         } else {
-            return std::make_unique<TTzDateReader<TTzDate, false>>(pool, type);
+            return std::make_unique<TTzDateReader<TTzDate, false>>(type, pool);
         }
     }
 };
@@ -759,11 +754,10 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     TVector<IColumnDataExtractor::TPtr> extractors;
 
     for (auto type: types) {
-        extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool, type));
+        extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool));
     }
 
     return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles, rememberNullBitmaps);
 }
 
 } // namespace NKikimr::NMiniKQL
-

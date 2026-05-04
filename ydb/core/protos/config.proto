@@ -2206,6 +2206,15 @@ message TImmediateControlsConfig {
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
+
+    message TQuoterControls {
+        optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
+            Description: "Quoter proxy protocol version (0 = legacy, 1 = dual channel)",
+            MinValue: 0,
+            MaxValue: 10,
+            DefaultValue: 1 }];
+    }
+    optional TQuoterControls QuoterControls = 21;
 };
 
 message TMeteringConfig {

@@ -83,6 +83,8 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
 }
 
 TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(HashFuncType, "Hash function type must be assigned before building a shuffle connection.");
+
     TVector<TCoAtom> keyColumns;
     for (const auto& key : Keys) {
         const auto columnName = key.GetFullName();
@@ -99,7 +101,7 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
             .Add(keyColumns)
         .Build()
         .UseSpilling().Build(UseSpilling)
-        .HashFunc().Build(ToString(HashFuncType))
+        .HashFunc().Build(ToString(*HashFuncType))
     .Done().Ptr();
     // clang-format on
 }

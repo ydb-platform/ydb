@@ -8,6 +8,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -83,11 +85,9 @@ private:
 struct TShuffleConnection: public TConnection {
     TShuffleConnection(const TVector<TInfoUnit>& keys,
                        ui32 outputIndex,
-                       NDq::EHashShuffleFuncType hashFuncType,
                        bool useSpilling = false)
         : TConnection("Shuffle", outputIndex)
         , Keys(keys)
-        , HashFuncType(hashFuncType)
         , UseSpilling(useSpilling) {
     }
 
@@ -98,7 +98,7 @@ struct TShuffleConnection: public TConnection {
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
-    NDq::EHashShuffleFuncType HashFuncType;
+    std::optional<NDq::EHashShuffleFuncType> HashFuncType;
     bool UseSpilling = false;
 };
 

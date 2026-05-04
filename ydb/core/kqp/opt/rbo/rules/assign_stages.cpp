@@ -37,16 +37,6 @@ void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPl
         op->Props.StageId = readStageId;
     }
 }
-
-NYql::NDq::EHashShuffleFuncType GetAppropriateHashFunction(const TRBOContext& rboCtx, bool shuffleEliminated) {
-    if (shuffleEliminated) {
-        return rboCtx.KqpCtx.Config->ColumnShardHashShuffleFuncType.Get()
-            .GetOrElse(NYql::NDq::EHashShuffleFuncType::ColumnShardHashV1);
-    }
-
-    return rboCtx.KqpCtx.Config->HashShuffleFuncType.Get()
-        .GetOrElse(rboCtx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType());
-}
 } // namespace
 
 namespace NKikimr {
@@ -110,11 +100,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 rightShuffleKeys.push_back(key.second);
             }
 
-            bool shuffleEliminated =
-                join->Props.LeftShuffleEliminated || join->Props.RightShuffleEliminated;
-
-            auto hashFunction = GetAppropriateHashFunction(ctx, shuffleEliminated);
-
             // Channel spilling (UseSpilling) is opt-in: without a specific need, backpressure
             // is preferred. There are two exceptions to this:
             //
@@ -132,7 +117,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
                     leftShuffleKeys,
                     0u,
-                    hashFunction,
                     /*useSpilling=*/true
                 );
                 props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
@@ -144,7 +128,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
                     rightShuffleKeys,
                     0u,
-                    hashFunction,
                     /*useSpilling=*/true
                 );
                 props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
@@ -204,8 +187,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         if (!aggregate->KeyColumns.empty()) {
             auto connection = MakeIntrusive<TShuffleConnection>(
                 aggregate->KeyColumns,
-                0u,
-                GetAppropriateHashFunction(ctx, /*shuffleEliminated=*/false)
+                0u
             );
 
             props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));

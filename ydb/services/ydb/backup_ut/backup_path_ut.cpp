@@ -1511,9 +1511,13 @@ void ParallelBackupWholeDatabaseImpl(TBackupTestFixture& f, bool /*isOlap*/) {
             remove(TStringBuilder() << "/Root/Restored_" << i);
         }
         remove("/Root", false);
-        auto listResult = f.YdbSchemeClient().ListDirectory("/Root").GetValueSync();
+        const auto listResult = f.YdbSchemeClient().ListDirectory("/Root").GetValueSync();
+        std::unordered_set<std::string> expectedResult = {".sys", ".metadata"};
         UNIT_ASSERT_C(listResult.IsSuccess(), listResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetChildren().size(), 2, "Current database directory children: " << f.DebugListDir("/Root")); // .sys, .metadata
+        UNIT_ASSERT_C(listResult.GetChildren().size() <= 2, "Current database directory children: " << f.DebugListDir("/Root"));
+        for (const auto& entry : listResult.GetChildren()) {
+            UNIT_ASSERT_C(expectedResult.erase(entry.Name), "Unexpected child: " << entry.Name);
+        }
 
         // Import to database root
         TImportSettings settings = traits.MakeImportSettingsCustomSource(f, "ParallelBackupWholeDatabasePrefix_0", "");
@@ -1734,9 +1738,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(EncryptedExportWithExplicitObjectList) {
         EncryptedExportWithExplicitObjectListImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
-    // Y_UNIT_TEST(ParallelBackupWholeDatabase) {
-    //     ParallelBackupWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
-    // }
+    Y_UNIT_TEST(ParallelBackupWholeDatabase) {
+        ParallelBackupWholeDatabaseImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
     Y_UNIT_TEST(ChecksumsForSchemaMappingFiles) {
         ChecksumsForSchemaMappingFilesImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }

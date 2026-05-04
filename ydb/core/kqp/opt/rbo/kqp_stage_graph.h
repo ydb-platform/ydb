@@ -211,6 +211,8 @@ struct TStageGraph {
     // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
     TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
 
+    TList<ui32> GetTopologicalOrder() const;
+
     /**
      * Generate an expression for stage inputs
      * The complication is the special handling of Source stage due to limitation of data shard reader

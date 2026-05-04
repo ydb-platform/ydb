@@ -170,7 +170,7 @@ TIntrusivePtr<TConnection> TStageGraph::TryGetConnection(ui32 from, ui32 to, ui3
     return connectionsIt->second[occurrence];
 }
 
-void TStageGraph::TopologicalSort() {
+TList<ui32> TStageGraph::GetTopologicalOrder() const {
     TList<ui32> sortedStages;
     THashSet<ui32> visited;
 
@@ -180,7 +180,11 @@ void TStageGraph::TopologicalSort() {
         }
     }
 
-    StageIds.swap(sortedStages);
+    return sortedStages;
+}
+
+void TStageGraph::TopologicalSort() {
+    StageIds = GetTopologicalOrder();
 }
 }
 }

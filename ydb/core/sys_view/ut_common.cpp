@@ -104,13 +104,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
-<<<<<<< HEAD
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
-=======
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
->>>>>>> b8744e7d637 (Add Dictionary Encoding support (#34784))
 
     Settings->SetFeatureFlags(featureFlags);
 

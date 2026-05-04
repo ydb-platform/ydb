@@ -1653,9 +1653,6 @@ TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslati
     return compression;
 }
 
-<<<<<<< HEAD
-TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
-=======
 bool EncodingSettingEntry(const TRule_encoding_setting_entry& node, TTranslation& ctx, TEncoding& encoding) {
     const auto id = to_lower(Id(node.GetRule_an_id1(), ctx));
     const auto& value = node.GetRule_encoding_setting_value3();
@@ -1732,7 +1729,6 @@ TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslati
 }
 
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx) {
->>>>>>> a46b6dca66e (Add per column encoding settings YQL grammar)
     TNodePtr defaultExpr;
     TVector<TIdentifier> families;
     TMaybe<TCompression> compression;

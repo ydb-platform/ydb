@@ -9,12 +9,14 @@ TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file
 if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
 from error_type_utils import (  # noqa: E402
-    classify_failure_row,
+    build_error_type_csv_for_storage,
+    debug_file_texts_from_cache,
     failure_row_from_ydb,
     is_failure_like_status,
-    merge_classified_error_type,
     normalize_fetch_url,
     prefetch_text_cache_and_urls_for_failure_rows,
+    should_prefetch_debug_files,
+    source_has_tag,
 )
 
 
@@ -111,7 +113,6 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(
         failure_rows
     )
-    failure_row_iter = iter(failure_rows)
     if prefetch_debug_file_urls:
         norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
         total_urls = len(norm)
@@ -124,13 +125,19 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
 
     verify_count = 0
     for row in results:
-        if is_failure_like_status(row.get("status")):
-            classified = classify_failure_row(next(failure_row_iter), fetch_cache)
-        else:
-            classified = ""
-        error_type = merge_classified_error_type(classified, row.get("error_type"))
-        row["error_type"] = error_type
-        if error_type == "VERIFY":
+        need = should_prefetch_debug_files(row.get("status"), row.get("stderr"), row.get("log"))
+        stderr_text, log_text = debug_file_texts_from_cache(
+            need, row.get("stderr"), row.get("log"), fetch_cache
+        )
+        row["error_type"] = build_error_type_csv_for_storage(
+            row.get("status"),
+            row.get("status_description"),
+            row.get("error_type"),
+            stderr_text,
+            log_text,
+            row.get("status"),
+        )
+        if source_has_tag(row["error_type"], "VERIFY"):
             verify_count += 1
     print(f"classification summary: rows={len(results)}, verify={verify_count}")
     return results
@@ -147,8 +154,7 @@ def main():
     args = parser.parse_args()
 
     with YDBWrapper() as ydb_wrapper:
-        
-        
+
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

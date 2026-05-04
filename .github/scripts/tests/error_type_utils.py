@@ -8,13 +8,10 @@ In each **test run row** (``test_results``), ``error_type`` may already be e.g. 
 Pipeline (shared by ``test_history_fast`` and ``generate-summary``):
 
 1. Build a :class:`FailureRow` (status, snippet, ``error_type`` from the run row, stderr/log URLs).
-2. Prefetch stderr/log only where :func:`should_prefetch_debug_files_for_verify` is true, via
-   :func:`prefetch_text_cache_and_urls_for_failure_rows` or :func:`prefetch_texts_by_urls`.
-3. :func:`classify_failure_row` → ``TIMEOUT`` | ``XFAILED`` | ``VERIFY`` | ``SANITIZER`` | ``""``.
-4. :func:`merge_classified_error_type`: if the classifier returned a tag, use it; otherwise keep
-   ``error_type`` from the run row (and drop blacklisted values such as ``REGULAR``).
-
-Low-level helpers (:func:`classify_error_type`, HTTP helpers) remain for tests or custom callers.
+2. For failure/mute/error rows, prefetch stderr/log whenever at least one URL is present
+   (:func:`should_prefetch_debug_files`) so VERIFY and SANITIZER can use log text, not only the snippet.
+3. :func:`build_error_type_csv_for_storage` → all applicable tags, comma-separated, for YDB
+   (``test_history_fast``). HTML summary uses the same text sources for independent badges.
 """
 
 # ---------------------------------------------------------------------------
@@ -42,6 +39,10 @@ DEFAULT_FETCH_RETRY_DELAY_SEC = 0.5
 # After classify+merge: drop these tags from stored error_type (case-insensitive). Keep NOT_LAUNCHED etc.
 _ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
 
+# Order of known tags in comma-separated ``error_type`` written to storage
+_STORAGE_TAG_ORDER = ("TIMEOUT", "XFAILED", "NOT_LAUNCHED", "VERIFY", "SANITIZER")
+_KNOWN_STORAGE_TAGS = frozenset(_STORAGE_TAG_ORDER)
+
 # ---------------------------------------------------------------------------
 # Text and URL helpers
 # ---------------------------------------------------------------------------
@@ -62,33 +63,15 @@ def normalize_fetch_url(url):
     return _normalize_text(url).strip()
 
 
-# ---------------------------------------------------------------------------
-# Merge classifier output with ``error_type`` from the test run row (storage policy)
-# ---------------------------------------------------------------------------
-
-
-def _apply_error_type_blacklist(merged_error_type):
-    t = _normalize_text(merged_error_type).strip()
-    if not t:
-        return ""
-    if t.upper() in _ERROR_TYPE_BLACKLIST:
-        return ""
-    return t
-
-
-def merge_classified_error_type(classified, source_error_type):
-    """
-    Persisted ``error_type``: non-empty classifier result wins; else ``error_type`` from the
-    test run row (``test_results``). That column does not carry VERIFY (VERIFY comes only from
-    :func:`classify_failure_row`). Values in :data:`_ERROR_TYPE_BLACKLIST` are stored as empty.
-
-    ``source_error_type`` is the run row's ``error_type`` before merge.
-    """
-    if classified:
-        merged = classified
-    else:
-        merged = _normalize_text(source_error_type).strip()
-    return _apply_error_type_blacklist(merged)
+def source_has_tag(source_error_type, tag: str) -> bool:
+    """True if ``error_type`` is a single tag or comma-separated list containing ``tag`` (case-insensitive)."""
+    want = _normalize_text(tag).strip().upper()
+    if not want:
+        return False
+    for part in re.split(r"\s*,\s*", _normalize_text(source_error_type)):
+        if part.strip().upper() == want:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -122,12 +105,12 @@ def is_sanitizer_issue(error_text):
 
 
 def is_timeout_issue(source_error_type):
-    return _normalize_text(source_error_type).upper() == "TIMEOUT"
+    return source_has_tag(source_error_type, "TIMEOUT")
 
 
 def is_xfailed_issue(source_error_type):
-    """Expected failure marker in ``error_type`` (same field as TIMEOUT); used in classify_error_type."""
-    return _normalize_text(source_error_type).upper() == "XFAILED"
+    """Expected failure marker in ``error_type`` (same field as TIMEOUT)."""
+    return source_has_tag(source_error_type, "XFAILED")
 
 
 def is_verify_issue(error_text):
@@ -153,8 +136,21 @@ def is_verify_classification(status_description=None, stderr_text=None, log_text
     return False
 
 
+def is_sanitizer_classification(status_description=None, stderr_text=None, log_text=None):
+    """
+    Like :func:`is_verify_classification`, but sanitizer heuristics on the same text sources.
+    """
+    if is_sanitizer_issue(status_description):
+        return True
+    if stderr_text is not None and is_sanitizer_issue(stderr_text):
+        return True
+    if log_text is not None and is_sanitizer_issue(log_text):
+        return True
+    return False
+
+
 def is_not_launched_issue(source_error_type, status_name=None):
-    if _normalize_text(source_error_type).upper() != "NOT_LAUNCHED":
+    if not source_has_tag(source_error_type, "NOT_LAUNCHED"):
         return False
 
     return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
@@ -170,23 +166,53 @@ def is_failure_like_status(status):
     return _normalize_text(status).strip().lower() in ("failure", "mute", "error")
 
 
-def _classify_failure_branch(status, status_description, source_error_type, stderr_text=None, log_text=None):
-    """TIMEOUT/XFAILED from the run row's ``error_type``; VERIFY only from text; SANITIZER heuristic on snippet."""
-    if is_timeout_issue(source_error_type):
-        return "TIMEOUT"
-    if is_xfailed_issue(source_error_type):
-        return "XFAILED"
-    if is_verify_classification(status_description, stderr_text, log_text):
-        return "VERIFY"
-    if is_sanitizer_issue(status_description):
-        return "SANITIZER"
-    return ""
-
-
-def classify_error_type(status, status_description, source_error_type, stderr_text=None, log_text=None):
-    if not is_failure_like_status(status):
+def format_error_type_tags_csv(tag_set):
+    """Format a set of canonical UPPER tags as a stable comma-separated string."""
+    if not tag_set:
         return ""
-    return _classify_failure_branch(status, status_description, source_error_type, stderr_text, log_text)
+    clean = {t.strip().upper() for t in tag_set if t and t.strip().upper() not in _ERROR_TYPE_BLACKLIST}
+    if not clean:
+        return ""
+    out = [k for k in _STORAGE_TAG_ORDER if k in clean]
+    out.extend(sorted(t for t in clean if t not in _KNOWN_STORAGE_TAGS))
+    return ",".join(out)
+
+
+def build_error_type_csv_for_storage(
+    status,
+    status_description,
+    source_error_type,
+    stderr_text,
+    log_text,
+    status_name_for_not_launched=None,
+):
+    """
+    All applicable error-type tags for a test run row, comma-separated, for YDB (e.g. ``test_history_fast``).
+
+    Unions tokens already present in ``source_error_type`` (possibly comma-separated) with tags
+    from the field (TIMEOUT, XFAILED, NOT_LAUNCHED) and from text (VERIFY, SANITIZER).
+    """
+    tags = set()
+    raw = _normalize_text(source_error_type).strip()
+    for part in re.split(r"\s*,\s*", raw):
+        p = part.strip().upper()
+        if not p or p in _ERROR_TYPE_BLACKLIST:
+            continue
+        tags.add(p)
+    if is_failure_like_status(status):
+        if is_verify_classification(status_description, stderr_text, log_text):
+            tags.add("VERIFY")
+        if is_sanitizer_classification(status_description, stderr_text, log_text):
+            tags.add("SANITIZER")
+    if is_timeout_issue(source_error_type):
+        tags.add("TIMEOUT")
+    if is_xfailed_issue(source_error_type):
+        tags.add("XFAILED")
+    if status_name_for_not_launched is not None and is_not_launched_issue(
+        source_error_type, status_name_for_not_launched
+    ):
+        tags.add("NOT_LAUNCHED")
+    return format_error_type_tags_csv(tags)
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +220,16 @@ def classify_error_type(status, status_description, source_error_type, stderr_te
 # ---------------------------------------------------------------------------
 
 
-def should_prefetch_debug_files_for_verify(status, status_description, source_error_type):
-    """True if stderr/log fetch might reveal VERIFY (snippet alone does not finish classification)."""
+def should_prefetch_debug_files(status, stderr_url, log_url):
+    """
+    Fetch stderr/log for every failure-like row that has at least one URL.
+
+    This matches VERIFY and SANITIZER detection in logs (not only the snippet) without a second
+    prefetch policy. Rows with no URLs only ever use the snippet.
+    """
     if not is_failure_like_status(status):
         return False
-    return _classify_failure_branch(status, status_description, source_error_type, None, None) == ""
+    return bool(normalize_fetch_url(stderr_url) or normalize_fetch_url(log_url))
 
 
 def urls_for_debug_prefetch_if_needed(need_prefetch, stderr_url, log_url):
@@ -310,34 +341,13 @@ def failure_row_from_ydb(row: Dict[str, Any]) -> FailureRow:
 
 
 def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
-    """``status_str`` must be failure|error|mute tokens used by :func:`classify_error_type`."""
+    """``status_str`` must be failure|error|mute tokens used by :func:`is_failure_like_status`."""
     return FailureRow(
         status=status_str,
         status_description=getattr(test, "status_description", None),
         source_error_type=getattr(test, "error_type", None),
         stderr_url=getattr(test, "stderr_url", None),
         log_url=getattr(test, "log_url", None),
-    )
-
-
-def classify_failure_row(row: FailureRow, fetch_cache: Optional[Dict[str, Any]]) -> str:
-    """
-    Full classification for one failure using optional prefetch cache (same dict as
-    :func:`prefetch_texts_by_urls`). Pass ``{}`` if nothing was fetched.
-    """
-    cache = fetch_cache if fetch_cache is not None else {}
-    need = should_prefetch_debug_files_for_verify(
-        row.status, row.status_description, row.source_error_type
-    )
-    stderr_text, log_text = debug_file_texts_from_cache(
-        need, row.stderr_url, row.log_url, cache
-    )
-    return classify_error_type(
-        row.status,
-        row.status_description,
-        row.source_error_type,
-        stderr_text=stderr_text,
-        log_text=log_text,
     )
 
 
@@ -358,9 +368,7 @@ def prefetch_text_cache_and_urls_for_failure_rows(
     for fr in failure_rows:
         urls.extend(
             urls_for_debug_prefetch_if_needed(
-                should_prefetch_debug_files_for_verify(
-                    fr.status, fr.status_description, fr.source_error_type
-                ),
+                should_prefetch_debug_files(fr.status, fr.stderr_url, fr.log_url),
                 fr.stderr_url,
                 fr.log_url,
             )

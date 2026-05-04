@@ -12,12 +12,15 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
-    classify_failure_row,
+    debug_file_texts_from_cache,
     failure_row_from_test_result,
     is_not_launched_issue,
+    is_sanitizer_issue,
     is_timeout_issue,
+    is_verify_classification,
     is_xfailed_issue,
     prefetch_text_cache_and_urls_for_failure_rows,
+    should_prefetch_debug_files,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -188,7 +191,7 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            is_sanitizer_issue=False,  # set in gen_summary from classify_failure_row (same order as VERIFY)
+            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
             is_verify_issue=False,
@@ -580,7 +583,7 @@ def iter_build_results_files(path):
 
 
 def _status_string_for_error_utils(st: TestStatus) -> str:
-    """Same status tokens as test_results / classify_error_type (failure|error|mute)."""
+    """Same status tokens as test_results / is_failure_like_status (failure|error|mute)."""
     return {
         TestStatus.FAIL: "failure",
         TestStatus.ERROR: "error",
@@ -621,9 +624,20 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             existing_cache=stderr_fetch_cache,
         )
         for test, fr in pairs:
-            tag = classify_failure_row(fr, stderr_fetch_cache)
-            test.is_verify_issue = tag == "VERIFY"
-            test.is_sanitizer_issue = tag == "SANITIZER"
+            # Badges are independent; same text sources as build_error_type_csv_for_storage (multi-tag in YDB).
+            need = should_prefetch_debug_files(fr.status, fr.stderr_url, fr.log_url)
+            stderr_text, log_text = debug_file_texts_from_cache(
+                need, fr.stderr_url, fr.log_url, stderr_fetch_cache
+            )
+            sanitizer_texts = [test.status_description or ""]
+            if stderr_text is not None:
+                sanitizer_texts.append(stderr_text)
+            if log_text is not None:
+                sanitizer_texts.append(log_text)
+            test.is_sanitizer_issue = any(is_sanitizer_issue(t) for t in sanitizer_texts)
+            test.is_verify_issue = is_verify_classification(
+                test.status_description, stderr_text, log_text
+            )
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
@@ -732,8 +746,9 @@ def main():
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
-        f.write(overall_status)
+    if args.status_report_file:
+        with open(args.status_report_file, "w") as f:
+            f.write(overall_status)
 
 
 if __name__ == "__main__":

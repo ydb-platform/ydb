@@ -8,6 +8,8 @@
 
 #|
 || Версия |  Дата выпуска | Скачать | Список изменений ||
+|| **v25.3** | > | > | > ||
+|| v.25.3.1.25 | 03.04.26 | [Бинарный файл](https://binaries.ydb.tech/release/25.3.1.25/ydbd-25.3.1.25-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-3-1) ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.24 | 28.01.26 | [Бинарный файл](https://binaries.ydb.tech/release/25.2.1.24/ydbd-25.2.1.24-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc   | 21.09.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-2-1-10-rc) ||

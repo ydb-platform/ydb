@@ -136,6 +136,8 @@ items:
       href: workload-click-bench.md
     - name: Key-Value нагрузка
       href: workload-kv.md
+    - name: Query нагрузка
+      href: workload-query.md
     - name: Topic нагрузка
       href: workload-topic.md
     - name: Transfer нагрузка

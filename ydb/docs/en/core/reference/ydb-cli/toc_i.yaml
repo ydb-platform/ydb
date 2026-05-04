@@ -149,3 +149,7 @@ items:
     include:
       mode: link
       path: commands/configuration/toc_p.yaml
+  - name: Bridge cluster management
+    include:
+      mode: link
+      path: commands/bridge/toc_p.yaml

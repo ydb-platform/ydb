@@ -41,7 +41,7 @@ SELECT * FROM greenplum_datasource.<table_name>
 - `greenplum_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с кластерами Greenplum существует ряд ограничений:
 

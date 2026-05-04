@@ -152,25 +152,17 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  var metadataProvider = new MetadataProvider();
-
-  // Await initial IAM token.
-  await metadataProvider.Initialize();
-
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: metadataProvider
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
+
+  Для Entity Framework и linq2db используйте тот же connectionString.
 
 - Rust
 

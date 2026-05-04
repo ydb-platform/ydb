@@ -50,7 +50,8 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& fe
 TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
     NArrow::NSplitter::ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
     : Schema(schema)
-    , Counters(counters) {
+    , Counters(counters)
+{
     std::optional<ui32> recordsCount;
     for (auto&& [entityId, chunks] : data) {
         TSplittedEntity entity(entityId);
@@ -74,7 +75,8 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(
     const ui32 recordsCount, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
     : RecordsCount(recordsCount)
     , Schema(schema)
-    , Counters(counters) {
+    , Counters(counters)
+{
 }
 
 void TGeneralSerializedSlice::MergeSlice(TGeneralSerializedSlice&& slice) {

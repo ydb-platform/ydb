@@ -34,7 +34,8 @@ public:
         : ExternalStorageId(storage)
         , EvictColumnName(column)
         , EvictDuration(evictDuration)
-        , TtlUnitsInSecond(unitsInSecond) {
+        , TtlUnitsInSecond(unitsInSecond)
+    {
         Y_ABORT_UNLESS(!!EvictColumnName);
     }
 
@@ -89,7 +90,8 @@ public:
 class TTierRef {
 public:
     TTierRef(const std::shared_ptr<TTierInfo>& tierInfo)
-        : Info(tierInfo) {
+        : Info(tierInfo)
+    {
         Y_ABORT_UNLESS(tierInfo);
     }
 
@@ -153,7 +155,8 @@ public:
             : CurrentTierName(tierName)
             , CurrentTierLag(waiting)
             , NextTierName(nextTierName)
-            , NextTierWaiting(nextTierDuration) {
+            , NextTierWaiting(nextTierDuration)
+        {
             AFL_VERIFY(!nextTierName == !nextTierDuration);
         }
 

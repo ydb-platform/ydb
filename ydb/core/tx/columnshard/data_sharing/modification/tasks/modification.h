@@ -33,7 +33,8 @@ private:
 public:
     TBlobOwnerRemap(const TTabletId from, const TTabletId to)
         : From(from)
-        , To(to) {
+        , To(to)
+    {
     }
 
     bool operator==(const TBlobOwnerRemap& item) const {
@@ -53,7 +54,8 @@ private:
 public:
     TStorageTabletTask(const TString& storageId, const TTabletId tabletId)
         : TabletId(tabletId)
-        , StorageId(storageId) {
+        , StorageId(storageId)
+    {
     }
 
     NKikimrColumnShardDataSharingProto::TStorageTabletTask SerializeToProto() const {
@@ -164,7 +166,8 @@ private:
 
 public:
     TTaskForTablet(const TTabletId tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     void Merge(const TTaskForTablet& from) {
@@ -238,7 +241,8 @@ private:
 public:
     TBlobSharing(const TString& storageId, const TUnifiedBlobId& blobId)
         : StorageId(storageId)
-        , BlobId(blobId) {
+        , BlobId(blobId)
+    {
     }
 
     void AddShared(const TTabletId tabletId) {

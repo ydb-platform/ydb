@@ -20,7 +20,8 @@ public:
     void NotifyColumnShardSubscribers(const TColumnShardInfo& columnShardInfo);
 
     TOverloadSubscribers(const TCSOverloadManagerCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
     }
 
 private:

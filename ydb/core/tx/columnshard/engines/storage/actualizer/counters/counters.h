@@ -18,7 +18,8 @@ public:
         : TBase(base, "category", categoryName)
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
-        , Bytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Bytes")) {
+        , Bytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Bytes"))
+    {
     }
 };
 
@@ -59,7 +60,8 @@ private:
 
 public:
     TGlobalCounters()
-        : TBase("Actualizer") {
+        : TBase("Actualizer")
+    {
         PortionsWaitingEviction = std::make_shared<TPortionCategoryCounterAgents>(*this, "eviction_waiting");
         PortionsWaitingDelete = std::make_shared<TPortionCategoryCounterAgents>(*this, "delete_waiting");
         PortionsLatenessEviction = std::make_shared<TPortionCategoryCounterAgents>(*this, "eviction_lateness");
@@ -101,7 +103,8 @@ public:
         , PortionsWaitingDelete(TGlobalCounters::BuildPortionsWaitingDeleteAggregation())
         , PortionsLatenessEviction(TGlobalCounters::BuildPortionsLatenessEvictionAggregation())
         , PortionsLatenessDelete(TGlobalCounters::BuildPortionsLatenessDeleteAggregation())
-        , PortionsToSyncSchema(TGlobalCounters::BuildPortionsToSyncSchemaAggregation()) {
+        , PortionsToSyncSchema(TGlobalCounters::BuildPortionsToSyncSchemaAggregation())
+    {
     }
 };
 

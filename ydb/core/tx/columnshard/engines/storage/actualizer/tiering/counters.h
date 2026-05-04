@@ -23,7 +23,8 @@ private:
 
 public:
     TTieringGlobalCounters()
-        : TBase("TieringActualizer") {
+        : TBase("TieringActualizer")
+    {
         QueueSizeToEvict = TBase::GetValueAutoAggregations("Granule/Eviction/QueueSize");
         QueueSizeToDelete = TBase::GetValueAutoAggregations("Granule/Deletion/QueueSize");
         DifferenceWaitToEvict = TBase::GetValueAutoAggregations("Granule/Eviction/WaitingInSeconds");
@@ -86,7 +87,8 @@ public:
         , SkipEvictionForCompaction(TTieringGlobalCounters::GetSkipEvictionForCompaction())
         , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit())
         , SkipEvictionForTooEarly(TTieringGlobalCounters::GetSkipEvictionForTooEarly())
-        , SkipEvictionForNoLongerNeeded(TTieringGlobalCounters::GetSkipEvictionForNoLongerNeeded()) {
+        , SkipEvictionForNoLongerNeeded(TTieringGlobalCounters::GetSkipEvictionForNoLongerNeeded())
+    {
     }
 };
 

@@ -20,7 +20,8 @@ private:
 public:
     TTxProgressTx(TColumnShard* self)
         : TTransactionBase(self)
-        , TabletTxNo(++Self->TabletTxCounter) {
+        , TabletTxNo(++Self->TabletTxCounter)
+    {
     }
 
     TTxType GetTxType() const override {

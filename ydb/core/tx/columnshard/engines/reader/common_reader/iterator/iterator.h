@@ -25,7 +25,8 @@ public:
     }
 
     TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
     }
 
     const std::unique_ptr<TPartialReadResult>& emplace_back(std::unique_ptr<TPartialReadResult>&& v) {

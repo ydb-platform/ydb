@@ -25,7 +25,8 @@ public:
         TEntryGuard(TKey key, const std::shared_ptr<const TObject> object, TObjectCache* cache)
             : Key(key)
             , Object(object)
-            , Cache(cache ? cache->weak_from_this() : std::weak_ptr<TObjectCache>()) {
+            , Cache(cache ? cache->weak_from_this() : std::weak_ptr<TObjectCache>())
+        {
         }
 
         const TObject* operator->() const {

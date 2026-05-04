@@ -31,7 +31,8 @@ private:
             std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData = nullptr)
             : BlobRange(range)
             , RecordsCount(recordsCount)
-            , AdditionalAccessorData(std::move(additionalAccessorData)) {
+            , AdditionalAccessorData(std::move(additionalAccessorData))
+        {
         }
 
         const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -40,7 +41,8 @@ private:
 
         TChunkRestoreInfo(const ui32 recordsCount, const TPortionDataAccessor::TAssembleBlobInfo& defaultData)
             : Data(defaultData)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
 
         TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
@@ -124,7 +126,8 @@ private:
 
 public:
     TDefaultFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(entityId, storagesManager) {
+        : TBase(entityId, storagesManager)
+    {
     }
 };
 

@@ -19,7 +19,8 @@ public:
 
     TTxWriteDraft(TColumnShard* self, const IWriteController::TPtr writeController)
         : TBase(self)
-        , WriteController(writeController) {
+        , WriteController(writeController)
+    {
         AFL_VERIFY(WriteController);
     }
 

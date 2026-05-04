@@ -30,7 +30,8 @@ public:
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter)
-        , LockIdsForCheck(lockIdsForCheck) {
+        , LockIdsForCheck(lockIdsForCheck)
+    {
         AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);
@@ -69,7 +70,8 @@ public:
         const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
-        , Filter(filter) {
+        , Filter(filter)
+    {
         AFL_VERIFY(PathId.IsValid());
         AFL_VERIFY(Schema);
         AFL_VERIFY(Filter);

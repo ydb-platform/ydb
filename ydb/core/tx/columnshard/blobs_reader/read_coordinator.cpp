@@ -28,7 +28,8 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
 
 TReadCoordinatorActor::TReadCoordinatorActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , Parent(parent) {
+    , Parent(parent)
+{
 }
 
 TReadCoordinatorActor::~TReadCoordinatorActor() {

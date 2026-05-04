@@ -19,7 +19,8 @@ public:
 
     TDataSnapshotInterval(const std::optional<TInstant>& start, const std::optional<TInstant>& finish)
         : StartInstant(start)
-        , FinishInstant(finish) {
+        , FinishInstant(finish)
+    {
         AFL_VERIFY(!StartInstant || !FinishInstant || *StartInstant <= *FinishInstant);
     }
 
@@ -87,7 +88,8 @@ private:
 public:
     TSnapshotPortionsSelector(const TDataSnapshotInterval& dataSnapshotInterval, const TString& name)
         : TBase(name)
-        , DataSnapshotInterval(dataSnapshotInterval) {
+        , DataSnapshotInterval(dataSnapshotInterval)
+    {
     }
 };
 

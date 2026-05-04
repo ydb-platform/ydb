@@ -157,7 +157,8 @@ private:
 
 public:
     TMockDataAccessorsManager(const NActors::TActorId& tabletActorId)
-        : IDataAccessorsManager(tabletActorId) {
+        : IDataAccessorsManager(tabletActorId)
+    {
     }
 };
 
@@ -168,7 +169,8 @@ class TMockColumnDataCacheService: public NActors::TActor<TMockColumnDataCacheSe
 public:
     TMockColumnDataCacheService(TColumnDataMap&& data)
         : TBase(&TMockColumnDataCacheService::StateWork)
-        , Data(std::move(data)) {
+        , Data(std::move(data))
+    {
     }
 
     STFUNC(StateWork) {
@@ -247,7 +249,8 @@ public:
     TManagerSetupActor(std::shared_ptr<TReadContext> readCtx, std::deque<std::shared_ptr<TPortionInfo>> portions, TManagerSetupResult* result)
         : ReadCtx(std::move(readCtx))
         , Portions(std::move(portions))
-        , Result(result) {
+        , Result(result)
+    {
     }
 
     void Bootstrap() {

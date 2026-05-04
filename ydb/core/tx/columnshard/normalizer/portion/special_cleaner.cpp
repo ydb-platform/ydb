@@ -25,7 +25,8 @@ public:
         , PlanStep(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PlanStep>())
         , TxId(rowset.template GetValue<NColumnShard::Schema::IndexColumns::TxId>())
         , Portion(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>())
-        , Chunk(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
+        , Chunk(rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>())
+    {
     }
 
     virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const override {
@@ -47,7 +48,8 @@ public:
         : PathId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>())
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>())
         , SSColumnId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::SSColumnId>())
-        , ChunkIdx(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::ChunkIdx>()) {
+        , ChunkIdx(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::ChunkIdx>())
+    {
     }
 
     virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const override {
@@ -67,7 +69,8 @@ public:
     TDeleteChunksV2(TRowSet& rowset, const ui64 columnId)
         : PathId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>())
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())
-        , ColumnId(columnId) {
+        , ColumnId(columnId)
+    {
     }
 
     virtual TConclusionStatus ApplyOnExecute(NIceDb::TNiceDb& db) const override {
@@ -98,7 +101,8 @@ public:
 class TChanges: public INormalizerChanges {
 public:
     TChanges(std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>&& actions)
-        : Actions(std::move(actions)) {
+        : Actions(std::move(actions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normController*/) const override {
@@ -178,9 +182,8 @@ std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTr
     using namespace NColumnShard;
     std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
     auto rowset =
-        db.Table<Schema::IndexColumns>()
-            .Select<Schema::IndexColumns::Index, Schema::IndexColumns::Granule, Schema::IndexColumns::ColumnIdx, Schema::IndexColumns::PlanStep,
-                Schema::IndexColumns::TxId, Schema::IndexColumns::Portion, Schema::IndexColumns::Chunk>();
+        db.Table<Schema::IndexColumns>().Select<Schema::IndexColumns::Index, Schema::IndexColumns::Granule, Schema::IndexColumns::ColumnIdx,
+            Schema::IndexColumns::PlanStep, Schema::IndexColumns::TxId, Schema::IndexColumns::Portion, Schema::IndexColumns::Chunk>();
     if (!rowset.IsReady()) {
         return std::nullopt;
     }
@@ -200,9 +203,8 @@ std::optional<std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>>> TDeleteTr
     NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;
     std::vector<std::shared_ptr<TDeleteTrashImpl::IAction>> actions;
-    auto rowset = db.Table<Schema::IndexColumnsV1>()
-                      .Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId, Schema::IndexColumnsV1::SSColumnId,
-                          Schema::IndexColumnsV1::ChunkIdx>();
+    auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId,
+        Schema::IndexColumnsV1::SSColumnId, Schema::IndexColumnsV1::ChunkIdx>();
     if (!rowset.IsReady()) {
         return std::nullopt;
     }

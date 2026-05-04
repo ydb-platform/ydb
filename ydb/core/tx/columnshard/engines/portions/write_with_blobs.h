@@ -28,7 +28,8 @@ public:
 
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
-            : Operator(bOperator) {
+            : Operator(bOperator)
+        {
         }
 
         class TBuilder {
@@ -39,7 +40,8 @@ public:
         public:
             TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
                 : OwnerBlob(&blob)
-                , OwnerPortion(&portion) {
+                , OwnerPortion(&portion)
+            {
             }
 
             ui64 GetSize() const {
@@ -78,7 +80,8 @@ private:
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
     explicit TWritePortionInfoWithBlobsConstructor(TPortionAccessorConstructor&& portionConstructor)
-        : PortionConstructor(std::move(portionConstructor)) {
+        : PortionConstructor(std::move(portionConstructor))
+    {
         AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
@@ -136,7 +139,8 @@ public:
         TBlobInfo(const TString& blobData, TBlobChunks&& chunks, const std::shared_ptr<IBlobsStorageOperator>& stOperator)
             : Chunks(std::move(chunks))
             , ResultBlob(blobData)
-            , Operator(stOperator) {
+            , Operator(stOperator)
+        {
         }
 
         const TString& GetResultBlob() const {
@@ -183,7 +187,8 @@ public:
     }
 
     TWritePortionInfoWithBlobsResult(TWritePortionInfoWithBlobsConstructor&& constructor)
-        : PortionConstructor(std::move(constructor.PortionConstructor)) {
+        : PortionConstructor(std::move(constructor.PortionConstructor))
+    {
         for (auto&& i : constructor.Blobs) {
             Blobs.emplace_back(i.ExtractBlob(), i.ExtractChunks(), i.GetOperator());
         }

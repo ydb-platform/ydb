@@ -7,7 +7,8 @@
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NOptimizer {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(

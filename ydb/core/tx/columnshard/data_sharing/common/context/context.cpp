@@ -65,7 +65,8 @@ TTransferContext::TTransferContext(const TTabletId destination, const THashSet<T
     , SourceTabletIds(sources)
     , Moving(moving)
     , SnapshotBarrier(snapshotBarrier)
-    , TxId(txId) {
+    , TxId(txId)
+{
     AFL_VERIFY(!TxId || *TxId);
     AFL_VERIFY(!sources.contains(destination));
 }

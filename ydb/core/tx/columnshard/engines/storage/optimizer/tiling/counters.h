@@ -17,7 +17,8 @@ public:
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")) {
+        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
+    {
     }
 };
 
@@ -28,7 +29,8 @@ private:
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-        : TBase(agents) {
+        : TBase(agents)
+    {
         Height = agents.Height->GetClient();
     }
 
@@ -42,7 +44,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounterAgents> Portions;
 
     TLevelAgents(const TString& name, NColumnShard::TCommonCountersOwner& baseOwner)
-        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name)) {
+        : Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, name))
+    {
     }
 };
 
@@ -54,7 +57,8 @@ private:
 
 public:
     TGlobalCounters()
-        : TBase("TilingCompactionOptimizer") {
+        : TBase("TilingCompactionOptimizer")
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
             Accumulators.emplace_back(std::make_shared<TLevelAgents>("acc=" + ::ToString(i), *this));
@@ -81,7 +85,8 @@ public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
 
     explicit TLevelCounters(std::shared_ptr<TPortionCategoryCounters> portions)
-        : Portions(std::move(portions)) {
+        : Portions(std::move(portions))
+    {
         AFL_VERIFY(Portions);
     }
 };

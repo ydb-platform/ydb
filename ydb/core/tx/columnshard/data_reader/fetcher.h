@@ -37,7 +37,8 @@ private:
 
 public:
     TCounters()
-        : TBase("data_fetcher") {
+        : TBase("data_fetcher")
+    {
     }
 
     std::shared_ptr<TClassCounters> GetClassCounters(const TString& className) {
@@ -82,7 +83,8 @@ public:
         , Script(script)
         , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
-        , ConveyorCategory(conveyorCategory) {
+        , ConveyorCategory(conveyorCategory)
+    {
         AFL_VERIFY(Environment);
         AFL_VERIFY(Callback);
     }

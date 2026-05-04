@@ -195,7 +195,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext) {
+    : TBase(commonContext)
+{
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {

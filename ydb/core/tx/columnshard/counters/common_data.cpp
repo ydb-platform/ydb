@@ -4,7 +4,8 @@ namespace NKikimr::NColumnShard {
 
 TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataName)
     : TBase(module)
-    , DataName(dataName) {
+    , DataName(dataName)
+{
     DataSize = TBase::GetValueAutoAggregationsClient(DataName + "/Size");
     ChunksCount = TBase::GetValueAutoAggregationsClient(DataName + "/Chunks/Count");
 

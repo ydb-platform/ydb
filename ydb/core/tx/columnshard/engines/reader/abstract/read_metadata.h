@@ -192,7 +192,8 @@ public:
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
         , TabletId(tabletId)
-        , ResultIndexSchema(schema) {
+        , ResultIndexSchema(schema)
+    {
         AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
                                                                 "tablet_id", TabletId);
     }

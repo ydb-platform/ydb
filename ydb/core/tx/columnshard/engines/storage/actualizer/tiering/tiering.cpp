@@ -291,7 +291,8 @@ private:
 
 public:
     TActualizationReply(const std::shared_ptr<TTieringActualizer>& tieringActualizer)
-        : TieringActualizer(tieringActualizer) {
+        : TieringActualizer(tieringActualizer)
+    {
         AFL_VERIFY(tieringActualizer);
     }
 };

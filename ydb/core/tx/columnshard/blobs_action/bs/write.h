@@ -42,7 +42,8 @@ public:
     TWriteAction(const TString& storageId, const std::shared_ptr<IBlobManager>& manager)
         : TBase(storageId)
         , BlobBatch(manager->StartBlobBatch())
-        , Manager(manager) {
+        , Manager(manager)
+    {
     }
 };
 

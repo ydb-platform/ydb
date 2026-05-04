@@ -99,7 +99,8 @@ private:
     public:
         TWriteIdInfo(const ui64 lockId, const std::shared_ptr<TAtomicCounter>& counter)
             : LockId(lockId)
-            , Conflicts(counter) {
+            , Conflicts(counter)
+        {
         }
 
         ui64 GetLockId() const {

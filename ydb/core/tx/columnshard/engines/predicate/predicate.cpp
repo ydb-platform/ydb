@@ -11,7 +11,8 @@ namespace NKikimr::NOlap {
 
 TPredicate::TPredicate(EOperation op, NArrow::NMerger::TSortableBatchPosition batch) noexcept
     : Operation(op)
-    , Batch(std::move(batch)) {
+    , Batch(std::move(batch))
+{
     Y_ABORT_UNLESS(IsFrom() || IsTo());
 }
 

@@ -59,12 +59,14 @@ public:
 
     // Initialize as DS blob Id
     TUnifiedBlobId(ui32 dsGroup, const TLogoBlobID& logoBlobId)
-        : Id(TDsBlobId{ logoBlobId, dsGroup }) {
+        : Id(TDsBlobId{ logoBlobId, dsGroup })
+    {
     }
 
     // Initialize as Small blob Id
     TUnifiedBlobId(ui64 tabletId, ui32 gen, ui32 step, ui32 cookie, ui32 channel, const ui32 groupId, ui32 size)
-        : Id(TDsBlobId{ TLogoBlobID(tabletId, gen, step, channel, size, cookie), groupId }) {
+        : Id(TDsBlobId{ TLogoBlobID(tabletId, gen, step, channel, size, cookie), groupId })
+    {
     }
 
     TUnifiedBlobId(const TUnifiedBlobId& other) = default;
@@ -163,13 +165,15 @@ public:
 
     explicit TBlobRangeLink16(ui32 offset, ui32 size)
         : Offset(offset)
-        , Size(size) {
+        , Size(size)
+    {
     }
 
     explicit TBlobRangeLink16(const ui16 blobIdx, ui32 offset, ui32 size)
         : BlobIdx(blobIdx)
         , Offset(offset)
-        , Size(size) {
+        , Size(size)
+    {
     }
 
     ui16 GetBlobIdxVerified() const;
@@ -349,7 +353,7 @@ public:
 };
 
 // Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED
-enum class EEvictState : ui8 {
+enum class EEvictState: ui8 {
     UNKNOWN = 0,
     EVICTING = 1,   // source, extern, cached blobs: 1--
     SELF_CACHED = 2,   // source, extern, cached blobs: 11-

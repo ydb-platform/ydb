@@ -70,7 +70,8 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     , Merger(merger)
     , IncomingData(incomingData)
     , Context(context)
-    , ReadOnlyConflicts(readOnlyConflicts) {
+    , ReadOnlyConflicts(readOnlyConflicts)
+{
     AFL_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 

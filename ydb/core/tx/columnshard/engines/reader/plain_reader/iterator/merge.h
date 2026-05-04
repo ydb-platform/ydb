@@ -27,7 +27,8 @@ public:
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
         , IntervalIdx(intervalIdx)
-        , IsExclusiveIntervalFlag(isExclusiveInterval) {
+        , IsExclusiveIntervalFlag(isExclusiveInterval)
+    {
     }
 
     void SetIntervalChunkMemory(const ui64 value) {
@@ -87,7 +88,8 @@ public:
         , IAllocation(TValidator::CheckNotNull(mergingContext)->GetIntervalChunkMemory())
         , Context(readContext)
         , MergingContext(mergingContext)
-        , IntervalIdx(MergingContext->GetIntervalIdx()) {
+        , IntervalIdx(MergingContext->GetIntervalIdx())
+    {
     }
 };
 
@@ -123,7 +125,8 @@ public:
 
     TContinueMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
         std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
-        : TBase(mergingContext, readContext) {
+        : TBase(mergingContext, readContext)
+    {
         AFL_VERIFY(merger);
         Merger = std::move(merger);
     }

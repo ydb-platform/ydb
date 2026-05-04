@@ -110,7 +110,8 @@ struct TAllocatedGenStep: public TThrRefBase {
     const TGenStep GenStep;
 
     explicit TAllocatedGenStep(const TGenStep& genStep)
-        : GenStep(genStep) {
+        : GenStep(genStep)
+    {
     }
 
     bool Finished() const {

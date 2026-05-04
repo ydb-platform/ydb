@@ -45,7 +45,8 @@ public:
         , Step(GenStepRef->GenStep.Step())
         , Channel(channel)
         , InFlightCount(0)
-        , TotalSizeBytes(0) {
+        , TotalSizeBytes(0)
+    {
     }
 
     TUnifiedBlobId NextBlobId(const ui32 blobSize) {
@@ -61,7 +62,8 @@ public:
 };
 
 TBlobBatch::TBlobBatch(std::unique_ptr<TBatchInfo> batchInfo)
-    : BatchInfo(std::move(batchInfo)) {
+    : BatchInfo(std::move(batchInfo))
+{
 }
 
 TBlobBatch::TBlobBatch() = default;
@@ -127,7 +129,8 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
     : SelfTabletId(selfTabletId)
     , TabletInfo(tabletInfo)
     , CurrentGen(gen)
-    , CurrentStep(0) {
+    , CurrentStep(0)
+{
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
 }
@@ -219,7 +222,8 @@ public:
     }
 
     TGCContext(const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsManager)
-        : SharedBlobsManager(sharedBlobsManager) {
+        : SharedBlobsManager(sharedBlobsManager)
+    {
     }
 
     void InitializeFirst(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo) {

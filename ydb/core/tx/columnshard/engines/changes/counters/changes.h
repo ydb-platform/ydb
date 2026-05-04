@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap::NChanges {
 
-enum class EStage : ui32 {
+enum class EStage: ui32 {
     Created = 0,
     Started,
     AskAccessorResources,
@@ -57,7 +57,8 @@ public:
         TTaskCounters(const NColumnShard::TCommonCountersOwner& owner)
             : TBase(owner)
             , TasksChanges(TBase::GetDeriviative("Tasks/Count"))
-            , TasksCount(TBase::GetValue("Tasks/Count")) {
+            , TasksCount(TBase::GetValue("Tasks/Count"))
+        {
         }
     };
 
@@ -72,7 +73,8 @@ private:
 
 public:
     TChangesCounters()
-        : TBase("ColumnEngineChanges") {
+        : TBase("ColumnEngineChanges")
+    {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
             auto base = this->CreateSubGroup("consumer", ::ToString(static_cast<NBlobOperations::EConsumer>(i)));
             StagesByConsumer[i] = std::make_shared<NCounters::TStateSignalsOperator<EStage>>(base, "indexation_stage");

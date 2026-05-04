@@ -42,7 +42,8 @@ TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, con
     , TabletId(tabletId)
     , CurrentGen(currentGen)
     , KeepsToErase(std::move(keepsToErase))
-    , Manager(manager) {
+    , Manager(manager)
+{
 }
 
 void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {

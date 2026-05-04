@@ -13,7 +13,8 @@ private:
 public:
     TBlobAddress(const ui32 groupId, const ui32 channelId)
         : GroupId(groupId)
-        , ChannelId(channelId) {
+        , ChannelId(channelId)
+    {
     }
 
     TString DebugString() const;

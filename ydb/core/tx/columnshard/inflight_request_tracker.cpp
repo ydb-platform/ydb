@@ -59,7 +59,8 @@ public:
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
         : TBase(self, "save_persistent_snapshots")
         , SaveSnapshots(std::move(saveSnapshots))
-        , RemoveSnapshots(std::move(removeSnapshots)) {
+        , RemoveSnapshots(std::move(removeSnapshots))
+    {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };

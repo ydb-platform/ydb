@@ -11,7 +11,8 @@ private:
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     TResourceContainer(T&& value)
-        : Value(std::move(value)) {
+        : Value(std::move(value))
+    {
     }
 
 public:
@@ -34,7 +35,8 @@ public:
 
     TResourceContainer(TResourceContainer<T>&& other)
         : Value(std::move(other.Value))
-        , ResourcesGuard(std::move(other.ResourcesGuard)) {
+        , ResourcesGuard(std::move(other.ResourcesGuard))
+    {
     }
 
     TResourceContainer& operator=(TResourceContainer<T>&& other) {
@@ -45,7 +47,8 @@ public:
 
     TResourceContainer(T&& value, std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>&& guard)
         : Value(std::move(value))
-        , ResourcesGuard(std::move(guard)) {
+        , ResourcesGuard(std::move(guard))
+    {
         AFL_VERIFY(ResourcesGuard);
     }
 

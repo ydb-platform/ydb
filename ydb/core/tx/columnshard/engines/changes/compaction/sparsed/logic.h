@@ -90,7 +90,8 @@ private:
         TSparsedChunkCursor(
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader, const ui32 cursorIdx)
             : TBase(input, loader)
-            , CursorIdx(cursorIdx) {
+            , CursorIdx(cursorIdx)
+        {
         }
     };
 

@@ -21,7 +21,8 @@ public:
         : ClassName(className)
         , Identifier(identifier)
         , Sessions(sessions)
-        , Adapter(adapter) {
+        , Adapter(adapter)
+    {
         AFL_VERIFY(!!Adapter);
         AFL_VERIFY(!!Sessions);
         AFL_VERIFY(!!ClassName);

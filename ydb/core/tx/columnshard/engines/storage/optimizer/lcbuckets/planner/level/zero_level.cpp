@@ -43,9 +43,8 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
 }
 
 ui64 TZeroLevelPortions::GetMaxConcurrency() const {
-    return std::clamp(
-        ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) / std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())),
-        ui64(1), Concurrency);
+    return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) /
+                           std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);
 }
 
 ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
@@ -111,7 +110,8 @@ TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_pt
     , CompactAtLevel(compactAtLevel)
     , Concurrency(concurrency)
     , CompactionTaskMemoryLimit(compactionTaskMemoryLimit)
-    , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit) {
+    , CompactionTaskPortionsCountLimit(compactionTaskPortionsCountLimit)
+{
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

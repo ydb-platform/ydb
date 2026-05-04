@@ -28,7 +28,8 @@ private:
 
 public:
     TTxInit(TColumnShard* self)
-        : TBase(self) {
+        : TBase(self)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -116,7 +117,8 @@ class TTxUpdateSchema: public TTransactionBase<TColumnShard> {
 
 public:
     TTxUpdateSchema(TColumnShard* self)
-        : TBase(self) {
+        : TBase(self)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -180,7 +182,8 @@ public:
     TTxApplyNormalizer(TColumnShard* self, NOlap::INormalizerChanges::TPtr changes)
         : TBase(self)
         , IsDryRun(self->NormalizerController.GetNormalizer()->GetIsDryRun())
-        , Changes(changes) {
+        , Changes(changes)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -246,7 +249,8 @@ private:
 
 public:
     TTxInitSchema(TColumnShard* self)
-        : TBase(self) {
+        : TBase(self)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

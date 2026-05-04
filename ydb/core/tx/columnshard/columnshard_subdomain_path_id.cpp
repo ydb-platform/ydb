@@ -6,7 +6,8 @@ class TTxPersistSubDomainOutOfSpace: public NTabletFlatExecutor::TTransactionBas
 public:
     TTxPersistSubDomainOutOfSpace(TColumnShard* self, bool outOfSpace)
         : TTransactionBase(self)
-        , OutOfSpace(outOfSpace) {
+        , OutOfSpace(outOfSpace)
+    {
     }
 
     TTxType GetTxType() const override {
@@ -36,7 +37,8 @@ class TTxPersistSubDomainPathId: public NTabletFlatExecutor::TTransactionBase<TC
 public:
     TTxPersistSubDomainPathId(TColumnShard* self, ui64 localPathId)
         : TTransactionBase(self)
-        , LocalPathId(localPathId) {
+        , LocalPathId(localPathId)
+    {
     }
 
     TTxType GetTxType() const override {

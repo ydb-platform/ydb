@@ -175,11 +175,13 @@ ui32 TPortionMetaBase::GetBlobIdsCount() const {
 }
 
 TPortionMetaBase::TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds)
-    : BlobIds(std::move(blobIds)) {
+    : BlobIds(std::move(blobIds))
+{
 }
 
 TPortionMetaBase::TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds)
-    : BlobIds(blobIds) {
+    : BlobIds(blobIds)
+{
 }
 
 std::vector<TUnifiedBlobId> TPortionMetaBase::ExtractBlobIds() {
@@ -213,7 +215,8 @@ TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& m
     , FirstPKRow(pk.GetFirst().GetContent())
     , LastPKRow(pk.GetLast().GetContent())
     , RecordSnapshotMin(min)
-    , RecordSnapshotMax(max) {
+    , RecordSnapshotMax(max)
+{
     AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
     ("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
 }
@@ -262,7 +265,8 @@ ui64 TPortionMeta::GetDataSize() const {
 
 TPortionAddress::TPortionAddress(const TInternalPathId pathId, const ui64 portionId)
     : PathId(pathId)
-    , PortionId(portionId) {
+    , PortionId(portionId)
+{
 }
 
 bool TPortionAddress::operator<(const TPortionAddress& item) const {

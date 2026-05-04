@@ -39,7 +39,8 @@ public:
         const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
         , SnapshotBarrier(snapshotBarrier)
-        , PathIds(pathIds) {
+        , PathIds(pathIds)
+    {
         AFL_VERIFY(SnapshotBarrier.Valid());
     }
 };

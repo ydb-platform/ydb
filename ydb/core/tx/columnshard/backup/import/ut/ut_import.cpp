@@ -88,18 +88,14 @@ Y_UNIT_TEST_SUITE(Restore) {
                 PlanCommit(runtime, sender, planStep, txId);
             }
 
-            TestWaitCondition(
-                runtime, "insert compacted",
-                [&]() {
-                    ++writeId;
-                    std::vector<ui64> writeIds;
-                    WriteData(
-                        runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 5, (writeId + 1) * 5 }, schema), schema, true, &writeIds);
-                    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-                    PlanCommit(runtime, sender, planStep, txId);
-                    return true;
-                },
-                TDuration::Seconds(1000));
+            TestWaitCondition(runtime, "insert compacted", [&]() {
+                ++writeId;
+                std::vector<ui64> writeIds;
+                WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 5, (writeId + 1) * 5 }, schema), schema, true, &writeIds);
+                planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+                PlanCommit(runtime, sender, planStep, txId);
+                return true;
+            }, TDuration::Seconds(1000));
 
             NKikimrTxColumnShard::TBackupTxBody txBody;
             NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);

@@ -13,7 +13,7 @@ using TColumnSaver = NArrow::NAccessor::TColumnSaver;
 
 class IIndexInfo {
 public:
-    enum class ESpecialColumn : ui32 {
+    enum class ESpecialColumn: ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
         WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
@@ -22,7 +22,7 @@ public:
 
     using TSystemColumnsSet = ui64;
 
-    enum class ESystemColumnsSet : ui64 {
+    enum class ESystemColumnsSet: ui64 {
         Snapshot = 1,
         Deletion = 1 << 1,
     };

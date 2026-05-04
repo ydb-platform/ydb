@@ -59,7 +59,8 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
     std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
-    , GranuleMeta(granule) {
+    , GranuleMeta(granule)
+{
     Y_ABORT_UNLESS(GranuleMeta);
 
     for (const auto& portionInfo : portions) {

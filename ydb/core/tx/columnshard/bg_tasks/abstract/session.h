@@ -26,7 +26,8 @@ private:
 public:
     TStartContext(const std::shared_ptr<TSession>& sessionSelfPtr, const std::shared_ptr<ITabletAdapter>& adapter)
         : SessionSelfPtr(sessionSelfPtr)
-        , Adapter(adapter) {
+        , Adapter(adapter)
+    {
         AFL_VERIFY(!!SessionSelfPtr);
         AFL_VERIFY(!!Adapter);
     }
@@ -174,7 +175,8 @@ public:
     TSessionInfoReport(const TString& id, const TString& className, const bool isFinished)
         : Identifier(id)
         , ClassName(className)
-        , IsFinished(isFinished) {
+        , IsFinished(isFinished)
+    {
     }
 };
 

@@ -66,7 +66,8 @@ public:
     public:
         TLoadTimer(const TLoadTimeSignals& signals, const TString& name)
             : Signals(signals)
-            , Name(name) {
+            , Name(name)
+        {
             Start = TInstant::Now();
         }
 
@@ -108,7 +109,8 @@ private:
 
     TLoadTimeSignals(const TString& type)
         : TBase("Startup")
-        , Type(type) {
+        , Type(type)
+    {
         LoadingTimeCounter = TBase::GetValue("Startup/" + type + "/LoadingTime");
         FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "/FailedLoadingTime");
         LoadingFailCounter = TBase::GetValue("Startup/" + type + "/LoadingFailCount");
@@ -147,7 +149,8 @@ public:
         , SchemaPresetLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPreset"))
         , TableVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("TableVersionss"))
         , SchemaPresetVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPresetVersions"))
-        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge")) {
+        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge"))
+    {
     }
 };
 

@@ -86,7 +86,8 @@ private:
     public:
         TTxWriteReceivedAck(TColumnShard& owner, const ui64 txId)
             : TBase(&owner, "write_received_ack")
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -150,7 +151,8 @@ private:
             , TxId(txId)
             , Step(step)
             , ArbiterTabletId(arbiterTabletId)
-            , BrokenFlag(broken) {
+            , BrokenFlag(broken)
+        {
         }
     };
 
@@ -200,7 +202,8 @@ private:
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
             : TBase(owner, "start_preparation")
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -231,7 +234,8 @@ public:
         const TFullTxInfo& txInfo, const ui64 lockId, const ui64 arbiterTabletId, const bool needReceiveBroken)
         : TBase(txInfo, lockId)
         , ArbiterTabletId(arbiterTabletId)
-        , NeedReceiveBroken(needReceiveBroken) {
+        , NeedReceiveBroken(needReceiveBroken)
+    {
     }
 };
 

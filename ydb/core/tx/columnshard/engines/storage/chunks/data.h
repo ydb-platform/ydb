@@ -55,7 +55,8 @@ public:
         : TBase(address.GetColumnId(), address.GetChunkIdx())
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(data) {
+        , Data(data)
+    {
     }
 };
 }   // namespace NKikimr::NOlap::NChunks

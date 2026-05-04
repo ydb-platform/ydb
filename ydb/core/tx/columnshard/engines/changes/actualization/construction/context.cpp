@@ -15,7 +15,8 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
     , Counters(counters)
     , Controller(controller)
     , ActualInstant(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
-    , DataLocksManager(dataLocksManager) {
+    , DataLocksManager(dataLocksManager)
+{
 }
 
 TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(

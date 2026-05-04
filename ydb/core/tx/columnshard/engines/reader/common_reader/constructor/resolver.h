@@ -9,7 +9,8 @@ class TIndexColumnResolver: public NArrow::NSSA::IColumnResolver {
 
 public:
     explicit TIndexColumnResolver(const NOlap::TIndexInfo& indexInfo)
-        : IndexInfo(indexInfo) {
+        : IndexInfo(indexInfo)
+    {
     }
 
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {

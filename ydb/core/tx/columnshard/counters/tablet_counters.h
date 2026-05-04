@@ -14,7 +14,8 @@ private:
 
 public:
     TTabletCountersHandle(TTabletCountersBase& stats)
-        : TabletCounters(stats) {
+        : TabletCounters(stats)
+    {
     }
 
     void SetCounter(NColumnShard::ESimpleCounters counter, ui64 num) const {

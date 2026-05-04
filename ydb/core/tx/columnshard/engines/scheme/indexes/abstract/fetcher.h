@@ -37,12 +37,14 @@ public:
 
     explicit TRangeFetchingState(const TString& storageId, const TBlobRange& range)
         : StorageId(storageId)
-        , BlobRange(range) {
+        , BlobRange(range)
+    {
         AFL_VERIFY(BlobRange->IsValid());
     }
 
     explicit TRangeFetchingState(const TString& blobData)
-        : BlobData(blobData) {
+        : BlobData(blobData)
+    {
     }
 };
 
@@ -91,11 +93,13 @@ private:
         }
 
         TFetchingState(const TRangeFetchingState& headerFetching)
-            : HeaderFetching(headerFetching) {
+            : HeaderFetching(headerFetching)
+        {
         }
 
         TFetchingState(const std::vector<TRangeFetchingState>& colsFetching)
-            : ColumnsFetching(colsFetching) {
+            : ColumnsFetching(colsFetching)
+        {
         }
 
         void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
@@ -196,7 +200,8 @@ public:
         , IndexAddresses(addresses)
         , OriginalData(originalData)
         , RecordsCount(recordsCount)
-        , FetchingState(BuildFetchingState(storageId, OriginalData, Header, addresses)) {
+        , FetchingState(BuildFetchingState(storageId, OriginalData, Header, addresses))
+    {
     }
 };
 
@@ -218,7 +223,8 @@ public:
     TIndexFetcherLogic(const THashSet<NRequest::TOriginalDataAddress>& dataAddress, const std::shared_ptr<IIndexMeta>& indexMeta,
         const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(indexMeta->GetIndexId(), storagesManager)
-        , IndexMeta(indexMeta) {
+        , IndexMeta(indexMeta)
+    {
         for (auto&& i : dataAddress) {
             const TIndexDataAddress indexAddr(IndexMeta->GetIndexId(), IndexMeta->CalcCategory(i.GetSubColumnName()));
             DataAddresses.emplace(i, indexAddr);

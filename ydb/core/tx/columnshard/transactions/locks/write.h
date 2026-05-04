@@ -31,7 +31,8 @@ public:
     TEvWriteWriter(
         const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
         : PathId(pathId)
-        , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names())) {
+        , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names()))
+    {
         AFL_VERIFY(PathId);
         AFL_VERIFY(RecordBatch);
     }

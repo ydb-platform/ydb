@@ -36,11 +36,13 @@ private:
 
     public:
         TGeneralAccessorBuilder(TSparsedBuilder&& builder)
-            : Builder(std::move(builder)) {
+            : Builder(std::move(builder))
+        {
         }
 
         TGeneralAccessorBuilder(TPlainBuilder&& builder)
-            : Builder(std::move(builder)) {
+            : Builder(std::move(builder))
+        {
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
@@ -60,7 +62,8 @@ private:
 
                 TVisitor(const ui32 recordIndex, const std::string_view value)
                     : RecordIndex(recordIndex)
-                    , Value(value) {
+                    , Value(value)
+                {
                 }
             };
 
@@ -84,7 +87,8 @@ private:
                 }
 
                 TVisitor(const ui32 recordsCount)
-                    : RecordsCount(recordsCount) {
+                    : RecordsCount(recordsCount)
+                {
                 }
             };
 
@@ -106,7 +110,8 @@ public:
         , Context(context)
         , OthersBuilder(TOthersData::MakeMergedBuilder())
         , Settings(settings)
-        , Remapper(remapper) {
+        , Remapper(remapper)
+    {
         Initialize();
     }
 

@@ -90,7 +90,8 @@ void ITask::TReadSubscriber::DoOnAllocationSuccess(const std::shared_ptr<NResour
 ITask::ITask(const TReadActionsCollection& actions, const TString& taskCustomer, const TString& externalTaskId)
     : TaskIdentifier(TaskIdentifierBuilder.Inc())
     , ExternalTaskId(externalTaskId)
-    , TaskCustomer(taskCustomer) {
+    , TaskCustomer(taskCustomer)
+{
     Agents = actions;
     //    AFL_VERIFY(!Agents.IsEmpty());
     for (auto&& i : Agents) {

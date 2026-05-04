@@ -127,7 +127,8 @@ private:
 
     public:
         TBlobInfo(const NOlap::TUnifiedBlobId& blobId)
-            : BlobId(blobId) {
+            : BlobId(blobId)
+        {
         }
 
         void AddOwner(const ui64 tabletId) {

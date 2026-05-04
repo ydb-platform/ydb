@@ -9,7 +9,8 @@ private:
 public:
     TAbortWriteTransaction(TColumnShard* self, const ui64 lockId)
         : TBase(self)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {

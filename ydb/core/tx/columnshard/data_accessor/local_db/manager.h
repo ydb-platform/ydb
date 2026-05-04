@@ -18,7 +18,8 @@ public:
 
     TManager(const NActors::TActorId& actorId, const ui64 /* memoryCacheSize */, const bool fetchOnStart)
         : TabletActorId(actorId)
-        , FetchOnStart(fetchOnStart) {
+        , FetchOnStart(fetchOnStart)
+    {
     }
 };
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB

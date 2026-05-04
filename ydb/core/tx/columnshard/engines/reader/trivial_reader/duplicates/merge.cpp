@@ -12,7 +12,8 @@ TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStrea
     , Counters(std::move(counters))
     , IsReversed(reversed)
     , Portions(portions)
-    , FetchingColumns(fetchingColumns) {
+    , FetchingColumns(fetchingColumns)
+{
 }
 
 TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context,
@@ -20,7 +21,8 @@ TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMerge
     : Owner(owner)
     , Context(context)
     , Event(event)
-    , ReadyBorders(readyBorders) {
+    , ReadyBorders(readyBorders)
+{
 }
 
 void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {

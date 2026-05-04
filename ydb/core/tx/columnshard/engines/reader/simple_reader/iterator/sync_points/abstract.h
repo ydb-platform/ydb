@@ -90,7 +90,8 @@ public:
         : PointIndex(pointIndex)
         , PointName(pointName)
         , Context(context)
-        , Collection(collection) {
+        , Collection(collection)
+    {
     }
 
     void AddSource(std::shared_ptr<NCommon::IDataSource>&& source);

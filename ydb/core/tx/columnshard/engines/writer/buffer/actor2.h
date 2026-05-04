@@ -25,7 +25,8 @@ public:
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
         , ModificationType(mType)
-        , IsBulk(isBulk) {
+        , IsBulk(isBulk)
+    {
     }
 
     bool operator==(const TAggregationId& item) const {
@@ -51,7 +52,8 @@ public:
     TWriteAggregation(const NOlap::TWritingContext& context, const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType)
-        , Context(context) {
+        , Context(context)
+    {
     }
 
     void MergeContext(const NOlap::TWritingContext& newContext) {

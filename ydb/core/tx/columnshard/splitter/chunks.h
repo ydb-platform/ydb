@@ -38,7 +38,8 @@ protected:
 
 public:
     IPortionColumnChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
-        : TBase(entityId, chunkIdx) {
+        : TBase(entityId, chunkIdx)
+    {
     }
 
     virtual ~IPortionColumnChunk() = default;
@@ -65,7 +66,8 @@ private:
 public:
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
         : Chunks(chunks)
-        , Loader(loader) {
+        , Loader(loader)
+    {
         Start();
     }
 
@@ -120,7 +122,8 @@ private:
 
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders) {
+        : Columns(columnReaders)
+    {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());

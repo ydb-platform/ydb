@@ -40,7 +40,8 @@ protected:
 
 public:
     TBuildFakeSpec()
-        : TBase("FAKE_SPEC") {
+        : TBase("FAKE_SPEC")
+    {
     }
 };
 
@@ -62,7 +63,8 @@ public:
 
     TDetectInMemStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
@@ -81,7 +83,8 @@ protected:
 
 public:
     TPortionAccessorFetchingStep()
-        : TBase("FETCHING_ACCESSOR") {
+        : TBase("FETCHING_ACCESSOR")
+    {
     }
 };
 
@@ -98,7 +101,8 @@ public:
     TFilterCutLimit(const ui32 limit, const bool reverse)
         : TBase("LIMIT")
         , Limit(limit)
-        , Reverse(reverse) {
+        , Reverse(reverse)
+    {
         AFL_VERIFY(Limit);
     }
 };
@@ -112,7 +116,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
-        : TBase("PREDICATE") {
+        : TBase("PREDICATE")
+    {
     }
 };
 
@@ -125,7 +130,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TSnapshotFilter()
-        : TBase("SNAPSHOT") {
+        : TBase("SNAPSHOT")
+    {
     }
 };
 
@@ -140,7 +146,8 @@ public:
 
     TDetectInMem(const TColumnsSetIds& columns)
         : TBase("DETECT_IN_MEM")
-        , Columns(columns) {
+        , Columns(columns)
+    {
     }
 };
 
@@ -153,7 +160,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
-        : TBase("DELETION") {
+        : TBase("DELETION")
+    {
     }
 };
 
@@ -166,7 +174,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()
-        : TBase("SHARDING") {
+        : TBase("SHARDING")
+    {
     }
 };
 

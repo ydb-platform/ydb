@@ -6,7 +6,8 @@ class TTxTxAbort: public TTransactionBase<TColumnShard> {
 public:
     TTxTxAbort(TColumnShard* self, ui64 txId)
         : TBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {

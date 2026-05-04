@@ -18,7 +18,8 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     , Selectors(std::move(selectors))
     , Levels(std::move(levels))
     , StoragesManager(storagesManager)
-    , PrimaryKeysSchema(primaryKeysSchema) {
+    , PrimaryKeysSchema(primaryKeysSchema)
+{
     RefreshWeights();
 }
 

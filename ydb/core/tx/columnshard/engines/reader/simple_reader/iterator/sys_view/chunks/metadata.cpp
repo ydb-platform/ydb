@@ -5,7 +5,8 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
 std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(

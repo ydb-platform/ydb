@@ -45,7 +45,8 @@ public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , MemoryBytes(memoryBytes) {
+        , MemoryBytes(memoryBytes)
+    {
     }
 };
 
@@ -232,8 +233,8 @@ public:
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
-        : TBase(
-              type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId) {
+        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
+    {
     }
 
     virtual ~IDataSource() = default;
@@ -611,7 +612,8 @@ public:
               CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {
+        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+    {
         AFL_VERIFY(Sources.size());
     }
 };

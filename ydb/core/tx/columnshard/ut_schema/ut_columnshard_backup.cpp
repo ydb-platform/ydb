@@ -209,18 +209,14 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
             PlanCommit(runtime, sender, planStep, txId);
         }
 
-        TestWaitCondition(
-            runtime, "insert compacted",
-            [&]() {
-                ++writeId;
-                std::vector<ui64> writeIds;
-                WriteData(
-                    runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 100, (writeId + 1) * 100 }, schema), schema, true, &writeIds);
-                planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-                PlanCommit(runtime, sender, planStep, txId);
-                return true;
-            },
-            TDuration::Seconds(1000));
+        TestWaitCondition(runtime, "insert compacted", [&]() {
+            ++writeId;
+            std::vector<ui64> writeIds;
+            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ writeId * 100, (writeId + 1) * 100 }, schema), schema, true, &writeIds);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+            return true;
+        }, TDuration::Seconds(1000));
 
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);

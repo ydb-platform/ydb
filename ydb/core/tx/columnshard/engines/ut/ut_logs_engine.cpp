@@ -217,7 +217,8 @@ public:
     };
 
     TBuilder()
-        : Schema(NArrow::MakeArrowSchema(testColumns)) {
+        : Schema(NArrow::MakeArrowSchema(testColumns))
+    {
         auto status = arrow::RecordBatchBuilder::Make(Schema, arrow::default_memory_pool(), &BatchBuilder);
         Y_ABORT_UNLESS(status.ok());
     }
@@ -340,7 +341,8 @@ public:
     TTestCompactionAccessorsSubscriber(
         const std::shared_ptr<TColumnEngineChanges>& changes, const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
         : Changes(changes)
-        , VersionedIndex(versionedIndex) {
+        , VersionedIndex(versionedIndex)
+    {
     }
 };
 
@@ -425,7 +427,8 @@ private:
 public:
     TTestMetadataAccessorsSubscriber(const std::shared_ptr<IMetadataAccessorResultProcessor>& processor, TColumnEngineForLogs& engine)
         : Processor(processor)
-        , Engine(engine) {
+        , Engine(engine)
+    {
     }
 };
 

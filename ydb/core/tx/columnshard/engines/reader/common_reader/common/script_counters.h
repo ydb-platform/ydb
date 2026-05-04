@@ -25,7 +25,8 @@ public:
         , SkipGraphNode(TBase::GetDeriviative("Skips/Count"))
         , SkipGraphNodeRecords(TBase::GetDeriviative("Skips/Records/Count"))
         , ExecuteGraphNode(TBase::GetDeriviative("Executions/Count"))
-        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count")) {
+        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count"))
+    {
     }
 
     void OnSkipGraphNode(const ui32 recordsCount) {
@@ -68,7 +69,8 @@ private:
 
 public:
     TFetchingStepsSignalsCollection()
-        : TBase("ScanSteps") {
+        : TBase("ScanSteps")
+    {
     }
 
     static std::shared_ptr<TFetchingStepSignals> GetSignals(const TString& name) {

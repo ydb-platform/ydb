@@ -41,7 +41,8 @@ public:
         , HistogramBlobsWrittenBytes("GeneralCompaction", "BlobsWritten/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
         , HistogramCompactionDuration("GeneralCompaction", "Compaction/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds)
         , HistogramTaskGenerationDuration(
-              "GeneralCompaction", "TaskGeneration/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds) {
+              "GeneralCompaction", "TaskGeneration/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds)
+    {
         for (ui32 i = 0; i < 10; ++i) {
             RepackPortionsFromLevel.emplace(
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")));

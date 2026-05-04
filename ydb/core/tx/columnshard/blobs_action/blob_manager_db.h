@@ -52,7 +52,8 @@ public:
 class TBlobManagerDb: public IBlobManagerDb {
 public:
     explicit TBlobManagerDb(NTable::TDatabase& db)
-        : Database(db) {
+        : Database(db)
+    {
     }
 
     [[nodiscard]] bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) override;

@@ -26,7 +26,8 @@ ui64 TFilterBuildingGuard::GetMemoryGroupId() const {
 TFilterBuildingGuard::TFilterBuildingGuard()
     : ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(GetStageFeatures()))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
-    , GroupGuard(ScopeGuard->BuildGroupGuard()) {
+    , GroupGuard(ScopeGuard->BuildGroupGuard())
+{
 }
 
 TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag,
@@ -46,7 +47,8 @@ TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared
     , DataAccessorsManager(dataAccessorsManager)
     , Counters(counters)
     , RequestGuard(std::move(requestGuard))
-    , SelfMemory(contextMemory) {
+    , SelfMemory(contextMemory)
+{
     AFL_VERIFY(Owner);
     AFL_VERIFY(Columns.size());
     AFL_VERIFY(PKSchema);

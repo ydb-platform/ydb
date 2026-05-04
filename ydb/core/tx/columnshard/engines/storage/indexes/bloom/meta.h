@@ -50,7 +50,8 @@ public:
         const ui32 columnId, const TRequestSettings& request, const TReadDataExtractorContainer& dataExtractor,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
-        , Request(request) {
+        , Request(request)
+    {
         AFL_VERIFY(Initialize());
     }
 

@@ -28,7 +28,8 @@ public:
     }
 
     TNormalizerRemoveChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
-        : Insertions(insertions) {
+        : Insertions(insertions)
+    {
     }
 };
 
@@ -58,7 +59,8 @@ public:
     }
 
     TNormalizerCleanDedupChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
-        : Insertions(insertions) {
+        : Insertions(insertions)
+    {
     }
 };
 

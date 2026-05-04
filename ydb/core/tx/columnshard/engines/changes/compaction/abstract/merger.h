@@ -185,7 +185,8 @@ public:
         TView(TMergingChunkContext& owner, const ui32 offset, const ui32 size)
             : Owner(&owner)
             , Offset(offset)
-            , Size(size) {
+            , Size(size)
+        {
             AFL_VERIFY(offset + size <= Owner->GetRecordsCount());
             AFL_VERIFY(size);
             IdxArray = std::static_pointer_cast<arrow::UInt16Array>(Owner->IdxArray->Slice(offset, size));
@@ -212,7 +213,8 @@ private:
 
 public:
     TMergingContext(const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers)
-        : InputContainers(inputContainers) {
+        : InputContainers(inputContainers)
+    {
     }
 };
 
@@ -238,7 +240,8 @@ public:
 
     TChunkMergeContext(const NColumnShard::TIndexationCounters& counters, TMergingChunkContext::TView&& remapper)
         : Counters(counters)
-        , Remapper(std::move(remapper)) {
+        , Remapper(std::move(remapper))
+    {
     }
 };
 
@@ -322,7 +325,8 @@ public:
 
         TBaseIterator(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input, const std::shared_ptr<TColumnLoader>& loader)
             : Input(input)
-            , Loader(loader) {
+            , Loader(loader)
+        {
             AFL_VERIFY(Loader);
             InitArray(0);
         }
@@ -357,7 +361,8 @@ public:
     public:
         TPortionColumnChunkWriter(const TConstructorImpl& constructor, const ui32 columnId)
             : TBase(columnId)
-            , Constructor(constructor) {
+            , Constructor(constructor)
+        {
         }
 
         void AddChunk(const std::shared_ptr<TArrayImpl>& cArray, const TColumnMergeContext& cmContext) {
@@ -378,7 +383,8 @@ public:
         std::make_shared<arrow::Field>(PortionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     IColumnMerger(const TColumnMergeContext& context)
-        : Context(context) {
+        : Context(context)
+    {
     }
 
     virtual ~IColumnMerger() = default;

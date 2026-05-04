@@ -27,7 +27,8 @@ public:
     TColumnPortion(const TColumnMergeContext& context)
         : TBase(context.GetColumnId())
         , Context(context)
-        , ColumnInfo(Context.GetIndexInfo().GetColumnFeaturesVerified(context.GetColumnId())) {
+        , ColumnInfo(Context.GetIndexInfo().GetColumnFeaturesVerified(context.GetColumnId()))
+    {
         Builder = Context.MakeBuilder();
         Type = Builder->type();
     }

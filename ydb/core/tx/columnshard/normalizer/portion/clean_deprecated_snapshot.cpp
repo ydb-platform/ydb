@@ -37,7 +37,8 @@ private:
 
 public:
     TChanges(std::vector<TColumnChunkLoadContext>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {

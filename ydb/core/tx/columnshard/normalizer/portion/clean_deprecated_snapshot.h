@@ -19,7 +19,8 @@ private:
 public:
     TCleanDeprecatedSnapshotNormalizer(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {

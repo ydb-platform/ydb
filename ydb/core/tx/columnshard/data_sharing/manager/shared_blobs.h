@@ -44,7 +44,8 @@ private:
 public:
     TStorageSharedBlobsManager(const TString& storageId, const TTabletId tabletId)
         : StorageId(storageId)
-        , SelfTabletId(tabletId) {
+        , SelfTabletId(tabletId)
+    {
     }
 
     bool IsTrivialLinks() const {
@@ -165,7 +166,8 @@ private:
 
 public:
     TSharedBlobsManager(const TTabletId tabletId)
-        : SelfTabletId(tabletId) {
+        : SelfTabletId(tabletId)
+    {
     }
 
     void StartExternalModification() {

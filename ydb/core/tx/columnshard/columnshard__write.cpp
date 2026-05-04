@@ -167,7 +167,8 @@ public:
     }
 
     TCommitOperation(const ui64 tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
@@ -267,7 +268,8 @@ public:
         : TBase(self, "TProposeWriteTransaction")
         , WriteCommit(op)
         , Source(source)
-        , Cookie(cookie) {
+        , Cookie(cookie)
+    {
     }
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
@@ -422,9 +424,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                             "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN),
                             "tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                 " != " + ::ToString(commitOperation->GetGeneration()));
-                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
-                                      " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " +
+                                      ::ToString(commitOperation->GetGeneration()), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0,
                             "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN),
@@ -547,10 +548,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                         .PipeServerId = ev->Recipient, .InterconnectSessionId = PipeServersInterconnectSessions[ev->Recipient] },
                     NOverload::TOverloadSubscriberInfo{ .PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = seqNo }));
         }
-        OverloadWriteFail(overloadStatus.Status,
-            NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
-                Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),
-            arrowData->GetSize(), cookie, std::move(result), ctx);
+        OverloadWriteFail(overloadStatus.Status, NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
+                                                     Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()), arrowData->GetSize(),
+            cookie, std::move(result), ctx);
         return;
     }
 

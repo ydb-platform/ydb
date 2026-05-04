@@ -7,7 +7,8 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
-    , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
+    , SpecialReadContext(std::make_shared<TSpecialReadContext>(context))
+{
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
     SpecialReadContext->RegisterActors(*constructor);

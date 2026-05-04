@@ -20,7 +20,8 @@ public:
     TTxFinishFromSource(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& session)
         : TBase(self, "finish_from_source")
         , Session(session)
-        , SourceTabletId(sourceTabletId) {
+        , SourceTabletId(sourceTabletId)
+    {
         Session->GetCursorVerified(SourceTabletId).ReceiveFinished().Validate();
     }
 

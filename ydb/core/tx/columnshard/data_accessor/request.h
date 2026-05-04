@@ -195,7 +195,8 @@ public:
     }
 
     TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
-        : Consumer(consumer) {
+        : Consumer(consumer)
+    {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {

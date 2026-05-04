@@ -29,7 +29,8 @@ public:
         , TabletId(tabletId)
         , PathId(pathId)
         , LockId(lockId)
-        , Sender(Runtime.AllocateEdgeActor()) {
+        , Sender(Runtime.AllocateEdgeActor())
+    {
     }
 
     const TActorId& GetSender() const {

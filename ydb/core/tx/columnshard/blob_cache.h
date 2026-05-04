@@ -50,7 +50,8 @@ struct TEvBlobCache {
 
         explicit TEvReadBlobRange(const TBlobRange& blobRange, TReadBlobRangeOptions&& opts)
             : BlobRange(blobRange)
-            , ReadOptions(std::move(opts)) {
+            , ReadOptions(std::move(opts))
+        {
         }
     };
 
@@ -62,7 +63,8 @@ struct TEvBlobCache {
 
         explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, TReadBlobRangeOptions&& opts)
             : BlobRanges(std::move(blobRanges))
-            , ReadOptions(std::move(opts)) {
+            , ReadOptions(std::move(opts))
+        {
         }
     };
 
@@ -82,7 +84,8 @@ struct TEvBlobCache {
             , Data(data)
             , DetailedError(detailedError)
             , FromCache(fromCache)
-            , DataSourceId(dataSourceId) {
+            , DataSourceId(dataSourceId)
+        {
         }
     };
 
@@ -94,7 +97,8 @@ struct TEvBlobCache {
 
         TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data)
             : BlobRange(blobRange)
-            , Data(data) {
+            , Data(data)
+        {
         }
     };
 
@@ -104,7 +108,8 @@ struct TEvBlobCache {
         TUnifiedBlobId BlobId;
 
         explicit TEvForgetBlob(const TUnifiedBlobId& blobId)
-            : BlobId(blobId) {
+            : BlobId(blobId)
+        {
         }
     };
 };

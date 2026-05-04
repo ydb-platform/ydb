@@ -41,7 +41,8 @@ public:
         const std::shared_ptr<TRemoveGCCounters>& counters)
         : TBase(storageId, std::move(blobsToRemove), counters)
         , DraftBlobIds(std::move(draftBlobIds))
-        , ExternalStorageOperator(externalStorageOperator) {
+        , ExternalStorageOperator(externalStorageOperator)
+    {
         for (auto&& i : DraftBlobIds) {
             Counters->OnRequest(i.BlobSize());
         }

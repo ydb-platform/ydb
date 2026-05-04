@@ -73,8 +73,7 @@ TString TScanDiagnosticsActor::RenderScanDiagnosticsInfo(const TScanDiagnosticsI
         </script>
         <div id="{tag}_graph_{id}"></div>
         <hr>
-    )",
-        "tag"_a = tag, "id"_a = id, "request_message"_a = info.RequestMessage, "pk_ranges_filter"_a = info.PKRangesFilter,
+    )", "tag"_a = tag, "id"_a = id, "request_message"_a = info.RequestMessage, "pk_ranges_filter"_a = info.PKRangesFilter,
         "ssa_program"_a = info.SSAProgram, "dot_graph"_a = info.DotGraph, "scan_iterator"_a = info.ScanIterator);
 }
 

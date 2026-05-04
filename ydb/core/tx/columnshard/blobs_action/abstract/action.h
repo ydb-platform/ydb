@@ -18,7 +18,8 @@ private:
 
 public:
     TStorageAction(const std::shared_ptr<IBlobsStorageOperator>& storage)
-        : Storage(storage) {
+        : Storage(storage)
+    {
     }
 
     const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const NBlobOperations::EConsumer consumerId) {
@@ -94,7 +95,8 @@ private:
 public:
     explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const NBlobOperations::EConsumer consumerId)
         : Storages(storages)
-        , ConsumerId(consumerId) {
+        , ConsumerId(consumerId)
+    {
     }
 
     TString GetStorageIds() const {

@@ -138,7 +138,8 @@ public:
 
     public:
         TResultInFlightGuard(const std::shared_ptr<TJobStatus>& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             AFL_VERIFY(Owner);
             Owner->ResultsInFlight.Inc();
         }
@@ -204,7 +205,8 @@ public:
         , Counters(counters)
         , RequestGuard(std::move(requestGuard))
         , Status(std::make_shared<TJobStatus>())
-        , SelfMemory(contextMemory) {
+        , SelfMemory(contextMemory)
+    {
         AFL_VERIFY(Owner);
         AFL_VERIFY(RequiredPortions.size());
         AFL_VERIFY(Columns.size());

@@ -7,7 +7,8 @@ class TTxMonitoring: public TTransactionBase<TColumnShard> {
 public:
     TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(self)
-        , HttpInfoEvent(ev) {
+        , HttpInfoEvent(ev)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

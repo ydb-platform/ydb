@@ -65,7 +65,8 @@ public:
     TDataClassCounters(
         const std::shared_ptr<TValueAggregationClient>& portionsSize, const std::shared_ptr<TValueAggregationClient>& portionsCount)
         : PortionsSize(portionsSize)
-        , PortionsCount(portionsCount) {
+        , PortionsCount(portionsCount)
+    {
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
@@ -82,7 +83,8 @@ private:
 
 public:
     TAgentDataClassCounters(const TString& baseName, const TString& signalId)
-        : TBase(baseName) {
+        : TBase(baseName)
+    {
         PortionsSize = TBase::GetValueAutoAggregations(signalId + "/Bytes");
         PortionsCount = TBase::GetValueAutoAggregations(signalId + "/Chunks");
     }
@@ -97,7 +99,8 @@ public:
     const std::shared_ptr<TValueAggregationClient> MinReadBytes;
 
     TIntervalMemoryCounters(const std::shared_ptr<TValueAggregationClient>& minReadBytes)
-        : MinReadBytes(minReadBytes) {
+        : MinReadBytes(minReadBytes)
+    {
     }
 };
 
@@ -108,7 +111,8 @@ public:
 
     TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes)
         : RawBytes(std::move(rawBytes))
-        , BlobBytes(std::move(blobBytes)) {
+        , BlobBytes(std::move(blobBytes))
+    {
     }
 };
 
@@ -129,7 +133,8 @@ public:
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
-        , PortionsIndexCounters(std::move(portionsIndexCounters)) {
+        , PortionsIndexCounters(std::move(portionsIndexCounters))
+    {
     }
 
     void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
@@ -147,7 +152,8 @@ private:
 public:
     TIntervalMemoryAgentCounters(const TCommonCountersOwner& base, const TString& memoryType)
         : TBase(base, "memory", memoryType)
-        , ReadBytes(TBase::GetValueAutoAggregations("Bytes")) {
+        , ReadBytes(TBase::GetValueAutoAggregations("Bytes"))
+    {
     }
 
     TIntervalMemoryCounters GetClient() const {
@@ -165,7 +171,8 @@ public:
     TPortionsIndexAgentsCounters(const TString& baseName)
         : TBase(baseName)
         , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
-        , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob") {
+        , ReadBlobBytes(TBase::CreateSubGroup("control", "read_memory"), "blob")
+    {
     }
 
     TPortionsIndexCounters BuildCounters() const {
@@ -185,7 +192,8 @@ public:
         : InsertedData(ownerId, "ByGranule/Inserted")
         , CompactedData(ownerId, "ByGranule/Compacted")
         , FullData(ownerId, "ByGranule/Full")
-        , PortionsIndex("ByGranule/PortionsIndex") {
+        , PortionsIndex("ByGranule/PortionsIndex")
+    {
     }
 
     TGranuleDataCounters RegisterClient() const {
@@ -255,7 +263,8 @@ public:
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
             NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount)
-            : BadPortionsCount(badPortionsCount) {
+            : BadPortionsCount(badPortionsCount)
+        {
             for (auto&& i : distrBlobs) {
                 BlobGuards.emplace_back(i->BuildGuard());
             }

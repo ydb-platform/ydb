@@ -83,13 +83,15 @@ public:
     TGroupFeatures(const TString& name, const TSplitSettings& settings, std::set<ui32>&& entities)
         : Name(name)
         , SplitSettings(settings)
-        , EntityIds(std::move(entities)) {
+        , EntityIds(std::move(entities))
+    {
         AFL_VERIFY(!!Name);
     }
 
     TGroupFeatures(const TString& name, const TSplitSettings& settings)
         : Name(name)
-        , SplitSettings(settings) {
+        , SplitSettings(settings)
+    {
         AFL_VERIFY(!!Name);
     }
 
@@ -114,12 +116,14 @@ private:
 
 public:
     TEntityGroups(const TGroupFeatures& defaultGroup)
-        : DefaultGroupFeatures(defaultGroup) {
+        : DefaultGroupFeatures(defaultGroup)
+    {
         AFL_VERIFY(DefaultGroupFeatures.IsEmpty())("problem", "default group cannot be not empty");
     }
 
     TEntityGroups(const TSplitSettings& splitSettings, const TString& name)
-        : DefaultGroupFeatures(name, splitSettings) {
+        : DefaultGroupFeatures(name, splitSettings)
+    {
     }
 
     const TGroupFeatures& GetDefaultGroupFeatures() const {

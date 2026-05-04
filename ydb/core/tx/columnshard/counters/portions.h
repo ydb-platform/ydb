@@ -172,7 +172,8 @@ private:
 
 public:
     TPortionGroupCounters(const TString& kind, const NColumnShard::TCommonCountersOwner& baseOwner)
-        : TBase(baseOwner, "kind", kind) {
+        : TBase(baseOwner, "kind", kind)
+    {
         Count = TBase::GetDeriviative("Portions/Count");
         RawBytes = TBase::GetDeriviative("Portions/Raw/Bytes");
         BlobBytes = TBase::GetDeriviative("Portions/Blob/Bytes");
@@ -212,7 +213,8 @@ public:
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
         , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes"))
-        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders) {
+        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders)
+    {
     }
 };
 

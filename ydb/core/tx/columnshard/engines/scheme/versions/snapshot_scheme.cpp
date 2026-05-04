@@ -7,7 +7,8 @@ namespace NKikimr::NOlap {
 TSnapshotSchema::TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot)
     : IndexInfo(std::move(indexInfo))
     , Schema(IndexInfo->ArrowSchemaWithSpecials())
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot)
+{
 }
 
 TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {

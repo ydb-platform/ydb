@@ -22,13 +22,15 @@ private:
 public:
     TIndexesSet(const std::set<ui32>& indexIds)
         : IndexIds(indexIds.begin(), indexIds.end())
-        , IndexIdsSet(indexIds) {
+        , IndexIdsSet(indexIds)
+    {
         AFL_VERIFY(IndexIds.size() == IndexIdsSet.size())("indexes", JoinSeq(",", IndexIds));
     }
 
     TIndexesSet(const ui32& indexId)
         : IndexIds({ indexId })
-        , IndexIdsSet({ indexId }) {
+        , IndexIdsSet({ indexId })
+    {
     }
 
     ui32 GetIndexesCount() const {
@@ -54,17 +56,20 @@ public:
     }
 
     TColumnsSetIds(const std::set<ui32>& ids)
-        : ColumnIds(ids) {
+        : ColumnIds(ids)
+    {
     }
 
     TColumnsSetIds() = default;
 
     TColumnsSetIds(std::set<ui32>&& ids)
-        : ColumnIds(std::move(ids)) {
+        : ColumnIds(std::move(ids))
+    {
     }
 
     TColumnsSetIds(const std::vector<ui32>& ids)
-        : ColumnIds(ids.begin(), ids.end()) {
+        : ColumnIds(ids.begin(), ids.end())
+    {
     }
 
     TColumnsSetIds operator+(const TColumnsSetIds& external) const {
@@ -186,7 +191,8 @@ public:
 
     TColumnsSet(const std::set<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
         : TBase(columnIds)
-        , FullReadSchema(fullReadSchema) {
+        , FullReadSchema(fullReadSchema)
+    {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();
@@ -194,7 +200,8 @@ public:
 
     TColumnsSet(const std::vector<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
         : TBase(columnIds)
-        , FullReadSchema(fullReadSchema) {
+        , FullReadSchema(fullReadSchema)
+    {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();

@@ -33,13 +33,13 @@ class TColumnShard;
 using TOperationWriteId = NOlap::TOperationWriteId;
 using TInsertWriteId = NOlap::TInsertWriteId;
 
-enum class EOperationStatus : ui32 {
+enum class EOperationStatus: ui32 {
     Draft = 1,
     Started = 2,
     Prepared = 3
 };
 
-enum class EOperationBehaviour : ui32 {
+enum class EOperationBehaviour: ui32 {
     Undefined = 1,
     WriteWithLock = 3,
     CommitWriteLock = 4,

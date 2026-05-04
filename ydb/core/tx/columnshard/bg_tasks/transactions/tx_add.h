@@ -18,7 +18,8 @@ public:
         const std::shared_ptr<TSession>& session)
         : Sessions(sessions)
         , Adapter(adapter)
-        , Session(session) {
+        , Session(session)
+    {
         AFL_VERIFY(!!Session);
     }
 

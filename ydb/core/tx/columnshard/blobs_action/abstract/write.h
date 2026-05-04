@@ -42,7 +42,8 @@ protected:
 
 public:
     IBlobsWritingAction(const TString& storageId)
-        : TBase(storageId) {
+        : TBase(storageId)
+    {
     }
 
     virtual ~IBlobsWritingAction();

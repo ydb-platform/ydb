@@ -43,7 +43,8 @@ public:
 
     TLockSharingInfo(const ui64 lockId, const ui64 generation)
         : LockId(lockId)
-        , Generation(generation) {
+        , Generation(generation)
+    {
     }
 
     bool HasWrites() const {
@@ -148,7 +149,8 @@ public:
     }
 
     void SetAborted(const ui64 txId) {
-        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting", IsAborting())("aborted", Aborted);
+        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting",
+                                               IsAborting())("aborted", Aborted);
         Aborted = true;
     }
 

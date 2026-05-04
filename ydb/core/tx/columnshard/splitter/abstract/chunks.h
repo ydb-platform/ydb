@@ -52,7 +52,8 @@ protected:
 public:
     IPortionDataChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
         : EntityId(entityId)
-        , ChunkIdx(chunkIdx) {
+        , ChunkIdx(chunkIdx)
+    {
     }
 
     virtual ~IPortionDataChunk() = default;

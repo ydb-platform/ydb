@@ -29,7 +29,8 @@ public:
         , TabletTxNo(++Self->TabletTxCounter)
         , InitiatorActorId(initiatorActorId)
         , SharingBlobIds(sharingBlobIds)
-        , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId)) {
+        , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId))
+    {
         Self->GetStoragesManager()->GetSharedBlobsManager()->StartExternalModification();
         RemoveAction = Self->GetStoragesManager()->GetOperatorVerified(storageId)->StartDeclareRemovingAction(
             NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);

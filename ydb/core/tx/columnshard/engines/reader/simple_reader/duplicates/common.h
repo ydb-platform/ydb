@@ -39,7 +39,8 @@ private:
 public:
     TRowRange(const ui64 begin, const ui64 end)
         : Begin(begin)
-        , End(end) {
+        , End(end)
+    {
         AFL_VERIFY(end >= begin);
     }
 
@@ -80,7 +81,8 @@ private:
 private:
     TPortionBorderView(const ui64 portionId, const EBorder border)
         : PortionId(portionId)
-        , Border(border) {
+        , Border(border)
+    {
     }
 
 public:
@@ -134,7 +136,8 @@ private:
 
 public:
     TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
-        : Portions(std::move(portions)) {
+        : Portions(std::move(portions))
+    {
     }
 
     TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const {
@@ -152,7 +155,8 @@ private:
 public:
     TIntervalBordersView(const TPortionBorderView& begin, const TPortionBorderView& end)
         : Begin(begin)
-        , End(end) {
+        , End(end)
+    {
     }
 
     const TPortionBorderView& GetBegin() const {
@@ -187,7 +191,8 @@ public:
     TSortableBorders(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& begin,
         const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& end)
         : Begin(begin)
-        , End(end) {
+        , End(end)
+    {
         AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
     }
 
@@ -208,7 +213,8 @@ public:
     TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 portionId)
         : MaxVersion(maxVersion)
         , Interval(interval)
-        , PortionId(portionId) {
+        , PortionId(portionId)
+    {
     }
 
     explicit operator size_t() const {
@@ -240,7 +246,8 @@ private:
     TIntervalBorder(const bool isLast, const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId)
         : IsLast(isLast)
         , Key(key)
-        , PortionId(portionId) {
+        , PortionId(portionId)
+    {
     }
 
 public:
@@ -284,7 +291,8 @@ public:
         : Begin(begin)
         , End(end)
         , IntersectingPortionsCount(portionIds.size())
-        , ExclusivePortionId(portionIds.size() == 1 ? *portionIds.begin() : 0) {
+        , ExclusivePortionId(portionIds.size() == 1 ? *portionIds.begin() : 0)
+    {
     }
 
     const TIntervalBorder& GetBegin() const {

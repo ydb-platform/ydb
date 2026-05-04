@@ -230,11 +230,13 @@ private:
 
     TIntervalPoint(const NArrow::TSimpleRow& primaryKey, const int includeState)
         : IncludeState(includeState)
-        , PrimaryKey(primaryKey) {
+        , PrimaryKey(primaryKey)
+    {
     }
 
     TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
-        : IncludeState(includeState) {
+        : IncludeState(includeState)
+    {
         if (!point.IsAll()) {
             auto fields = schema->fields();
             fields.resize(point.NumColumns());

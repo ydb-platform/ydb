@@ -20,7 +20,8 @@ public:
         THashMap<TString, std::shared_ptr<TSourceSession>>& sessions, const TString& info)
         : TBase(self, info)
         , Session(session)
-        , Sessions(&sessions) {
+        , Sessions(&sessions)
+    {
     }
 
     TTxType GetTxType() const override {

@@ -31,7 +31,8 @@ public:
         , Target(target)
         , CheckType(std::forward<TCheckType>(checkType))
         , Getter(std::forward<TGetter>(getter))
-        , TypeError(typeError) {
+        , TypeError(typeError)
+    {
     }
 
     TConclusionStatus Parse(const NJson::TJsonValue& json) const {
@@ -70,8 +71,7 @@ inline auto MakeOptionalDoubleField(const TStringBuf key, std::optional<double>&
         },
         [](const NJson::TJsonValue& v) {
             return v.GetDouble();
-        },
-        typeError);
+        }, typeError);
 }
 
 inline auto MakeOptionalUintField(const TStringBuf key, std::optional<ui32>& target, const TStringBuf typeError) {
@@ -82,8 +82,7 @@ inline auto MakeOptionalUintField(const TStringBuf key, std::optional<ui32>& tar
         },
         [](const NJson::TJsonValue& v) {
             return v.GetUInteger();
-        },
-        typeError);
+        }, typeError);
 }
 
 inline auto MakeOptionalBoolField(const TStringBuf key, std::optional<bool>& target, const TStringBuf typeError) {
@@ -94,8 +93,7 @@ inline auto MakeOptionalBoolField(const TStringBuf key, std::optional<bool>& tar
         },
         [](const NJson::TJsonValue& v) {
             return v.GetBoolean();
-        },
-        typeError);
+        }, typeError);
 }
 
 template <class... TFields>

@@ -10,7 +10,8 @@ namespace NKikimr::NOlap {
 
 TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv)
     : WriteIndexEv(writeEv)
-    , DstActor(dstActor) {
+    , DstActor(dstActor)
+{
     auto& changes = *WriteIndexEv->IndexChanges;
     for (ui32 i = 0; i < changes.GetWritePortionsCount(); ++i) {
         if (!changes.NeedWritePortion(i)) {

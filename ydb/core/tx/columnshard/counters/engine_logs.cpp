@@ -22,7 +22,8 @@ ui64 GetBadPortionSizeLimit() {
 
 TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
-    , GranuleDataAgent("EngineLogs") {
+    , GranuleDataAgent("EngineLogs")
+{
     for (auto&& i : GetEnumNames<NOlap::NPortion::EProduced>()) {
         if (BlobSizeDistribution.size() <= (ui32)i.first) {
             BlobSizeDistribution.resize((ui32)i.first + 1);

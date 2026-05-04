@@ -14,7 +14,8 @@ public:
     virtual TString GetTaskClassIdentifier() const override;
 
     TFetchingExecutor(const std::shared_ptr<TPortionsDataFetcher>& fetcher)
-        : Fetcher(fetcher) {
+        : Fetcher(fetcher)
+    {
     }
 };
 

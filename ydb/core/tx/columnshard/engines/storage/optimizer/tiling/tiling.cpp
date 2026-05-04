@@ -77,50 +77,39 @@ struct TSettings {
     }
 
     static inline THashMap<TStringBuf, TJsonValueHandler> JsonValueHandlers = {
-        MakeNumberHandler("factor",
-            [](auto& self, auto value) {
-                self.Factor = value;
-            }),
-        MakeNumberHandler("max_levels",
-            [](auto& self, auto value) {
-                self.MaxLevels = value;
-            }),
-        MakeNumberHandler("expected_portion_count",
-            [](auto& self, auto value) {
-                self.ExpectedPortionCount = value;
-            }),
-        MakeNumberHandler("expected_portion_size",
-            [](auto& self, auto value) {
-                self.ExpectedPortionSize = value;
-            }),
-        MakeNumberHandler("max_accumulate_count",
-            [](auto& self, auto value) {
-                self.MaxAccumulateCount = value;
-            }),
-        MakeNumberHandler("max_accumulate_portion_size",
-            [](auto& self, auto value) {
-                self.MaxAccumulatePortionSize = value;
-            }),
-        MakeDurationHandler("max_accumulate_time",
-            [](auto& self, auto value) {
-                self.MaxAccumulateTime = value;
-            }),
-        MakeNumberHandler("max_compaction_bytes",
-            [](auto& self, auto value) {
-                self.MaxCompactionBytes = value;
-            }),
-        MakeNumberHandler("full_compaction_until_level",
-            [](auto& self, auto value) {
-                self.FullCompactionUntilLevel = value;
-            }),
-        MakeNumberHandler("full_compaction_max_bytes",
-            [](auto& self, auto value) {
-                self.FullCompactionMaxBytes = value;
-            }),
-        MakeBooleanHandler("compact_next_level_edges",
-            [](auto& self, auto value) {
-                self.CompactNextLevelEdges = value;
-            }),
+        MakeNumberHandler("factor", [](auto& self, auto value) {
+            self.Factor = value;
+        }),
+        MakeNumberHandler("max_levels", [](auto& self, auto value) {
+            self.MaxLevels = value;
+        }),
+        MakeNumberHandler("expected_portion_count", [](auto& self, auto value) {
+            self.ExpectedPortionCount = value;
+        }),
+        MakeNumberHandler("expected_portion_size", [](auto& self, auto value) {
+            self.ExpectedPortionSize = value;
+        }),
+        MakeNumberHandler("max_accumulate_count", [](auto& self, auto value) {
+            self.MaxAccumulateCount = value;
+        }),
+        MakeNumberHandler("max_accumulate_portion_size", [](auto& self, auto value) {
+            self.MaxAccumulatePortionSize = value;
+        }),
+        MakeDurationHandler("max_accumulate_time", [](auto& self, auto value) {
+            self.MaxAccumulateTime = value;
+        }),
+        MakeNumberHandler("max_compaction_bytes", [](auto& self, auto value) {
+            self.MaxCompactionBytes = value;
+        }),
+        MakeNumberHandler("full_compaction_until_level", [](auto& self, auto value) {
+            self.FullCompactionUntilLevel = value;
+        }),
+        MakeNumberHandler("full_compaction_max_bytes", [](auto& self, auto value) {
+            self.FullCompactionMaxBytes = value;
+        }),
+        MakeBooleanHandler("compact_next_level_edges", [](auto& self, auto value) {
+            self.CompactNextLevelEdges = value;
+        }),
     };
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
@@ -205,7 +194,8 @@ struct TAccumulator {
 
     TAccumulator(ui32 level, const TLevelCounters& counters)
         : Level(level)
-        , Counters(counters) {
+        , Counters(counters)
+    {
     }
 
     bool Empty() const {
@@ -326,7 +316,8 @@ struct TLevel {
 
     TLevel(ui32 level, const TLevelCounters& counters)
         : Level(level)
-        , Counters(counters) {
+        , Counters(counters)
+    {
     }
 
     bool Empty() const {
@@ -530,7 +521,8 @@ class TOptimizerPlanner: public IOptimizerPlanner, private TSettings {
 
         explicit TTimedPortion(TPortionInfo::TPtr portion)
             : Portion(portion)
-            , LastUpdate(TInstant::Now()) {
+            , LastUpdate(TInstant::Now())
+        {
         }
 
         friend bool operator<(const TTimedPortion& a, const TTimedPortion& b) {
@@ -559,7 +551,8 @@ public:
         , Counters(std::make_shared<TCounters>())
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>())
         , StoragesManager(storagesManager)
-        , PrimaryKeysSchema(primaryKeysSchema) {
+        , PrimaryKeysSchema(primaryKeysSchema)
+    {
     }
 
     bool UpdateSettings(const TSettings& settings) {

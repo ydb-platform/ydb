@@ -26,7 +26,8 @@ protected:
 public:
     TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
         : TBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 };
 
@@ -100,7 +101,8 @@ void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
 }
 
 TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
-    : TBase(bgSession, adapter) {
+    : TBase(bgSession, adapter)
+{
     ImportSession = bgSession->GetLogicAsVerifiedPtr<NImport::TSession>();
 }
 

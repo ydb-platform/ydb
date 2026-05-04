@@ -2064,7 +2064,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             : Runtime(runtime)
             , PlanStep(planStep)
             , TxId(txId)
-            , YdbPk(ydbPk) {
+            , YdbPk(ydbPk)
+        {
         }
 
         class TBorder {
@@ -2075,7 +2076,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         public:
             TBorder(const std::vector<ui32>& values, const bool include = false)
                 : Border(values)
-                , Include(include) {
+                , Include(include)
+            {
             }
 
             bool GetInclude() const noexcept {
@@ -2157,7 +2159,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             TTestCase(TTabletReadPredicateTest& owner, const TString& testCaseName, const TTestCaseOptions& opts = {})
                 : TTestCaseOptions(opts)
                 , Owner(owner)
-                , TestCaseName(testCaseName) {
+                , TestCaseName(testCaseName)
+            {
                 Cerr << "TEST CASE " << TestCaseName << " START..." << Endl;
             }
 

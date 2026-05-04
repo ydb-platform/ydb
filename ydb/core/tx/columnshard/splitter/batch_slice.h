@@ -29,7 +29,8 @@ protected:
 public:
     TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
         : Schema(schema)
-        , Stats(stats) {
+        , Stats(stats)
+    {
         AFL_VERIFY(Stats);
     }
 

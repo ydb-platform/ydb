@@ -57,7 +57,8 @@ private:
 
 public:
     TPortionSources(std::vector<std::shared_ptr<TPortionInfo>>&& sources)
-        : Sources(sources.begin(), sources.end()) {
+        : Sources(sources.begin(), sources.end())
+    {
     }
 
     static std::unique_ptr<TPortionSources> BuildEmpty() {

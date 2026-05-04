@@ -22,7 +22,8 @@ private:
 
 public:
     TSplitterCaseCounters(const TCommonCountersOwner& owner, const TString& splitterType)
-        : TBase(owner) {
+        : TBase(owner)
+    {
         DeepSubGroup("splitter_type", splitterType);
 
         SmallDataSerializationBytes = TBase::GetDeriviative("SmallDataSerialization/Bytes");
@@ -67,7 +68,8 @@ private:
 
 public:
     TBlobResultCounters(const TCommonCountersOwner& owner, const TString& blobsType)
-        : TBase(owner) {
+        : TBase(owner)
+    {
         DeepSubGroup("blobs_type", blobsType);
 
         BlobsCount = TBase::GetDeriviative("DataSerialization/Bytes");

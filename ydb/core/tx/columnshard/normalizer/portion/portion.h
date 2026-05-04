@@ -34,7 +34,8 @@ public:
     }
 
     TPortionsNormalizer(const TNormalizationController::TInitContext& info)
-        : TPortionsNormalizerBase(info) {
+        : TPortionsNormalizerBase(info)
+    {
     }
 
     virtual INormalizerTask::TPtr BuildTask(

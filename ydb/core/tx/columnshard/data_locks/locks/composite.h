@@ -56,7 +56,8 @@ public:
 
     TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks,
         const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -67,7 +68,8 @@ public:
 
     TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks,
         const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;

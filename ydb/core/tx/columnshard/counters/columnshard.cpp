@@ -8,7 +8,8 @@ TCSCounters::TCSCounters()
     : TBase("CS")
     , WritingCounters(std::make_shared<TWriteCounters>(*this))
     , Initialization(*this)
-    , TxProgress(*this) {
+    , TxProgress(*this)
+{
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
         AFL_VERIFY((ui32)i == WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));

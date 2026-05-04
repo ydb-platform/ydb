@@ -58,7 +58,8 @@ public:
 
     TSortedFullScanCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
-        : TBase(context, std::move(sourcesConstructor)) {
+        : TBase(context, std::move(sourcesConstructor))
+    {
     }
 };
 

@@ -9,7 +9,8 @@ namespace NKikimr::NOlap::NWritingPortions {
 
 TActor::TActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , ParentActorId(parent) {
+    , ParentActorId(parent)
+{
 }
 
 void TActor::Bootstrap() {

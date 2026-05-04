@@ -13,7 +13,8 @@ private:
 
 public:
     TEvExecuteGeneralLocalTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
-        : Transaction(std::move(transaction)) {
+        : Transaction(std::move(transaction))
+    {
         AFL_VERIFY(!!Transaction);
     }
 
@@ -29,7 +30,8 @@ private:
 
 public:
     TEvLocalTransactionCompleted(const ui64 internalTxId)
-        : InternalTxId(internalTxId) {
+        : InternalTxId(internalTxId)
+    {
     }
 
     ui64 GetInternalTxId() const {
@@ -45,7 +47,8 @@ private:
 public:
     TEvRemoveSession(const TString& className, const TString& identifier)
         : ClassName(className)
-        , Identifier(identifier) {
+        , Identifier(identifier)
+    {
     }
 };
 

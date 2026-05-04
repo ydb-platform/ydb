@@ -22,7 +22,8 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
 
         TMyPortion(const ui64 appearedPlanStep, const ui64 removedPlanStep)
             : Appeared(appearedPlanStep, 1)
-            , Removed(removedPlanStep, 1) {
+            , Removed(removedPlanStep, 1)
+        {
         }
     };
 

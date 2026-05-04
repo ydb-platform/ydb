@@ -25,7 +25,8 @@ protected:
 
 public:
     explicit TCleanUnusedTablesNormalizerTemplate(const TNormalizationController::TInitContext& ctx)
-        : TBase(ctx) {
+        : TBase(ctx)
+    {
     }
 
     TString GetClassName() const override {

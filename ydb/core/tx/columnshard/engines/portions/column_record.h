@@ -37,7 +37,8 @@ private:
 
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
-        : TBase(baseMeta) {
+        : TBase(baseMeta)
+    {
     }
 
     [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
@@ -83,7 +84,8 @@ private:
     TChunkMeta Meta;
 
     TColumnRecord(TChunkMeta&& meta)
-        : Meta(std::move(meta)) {
+        : Meta(std::move(meta))
+    {
     }
 
     TColumnRecord() = default;
@@ -115,7 +117,8 @@ public:
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
-        , BlobRange(range) {
+        , BlobRange(range)
+    {
     }
 
     class TTestInstanceBuilder {

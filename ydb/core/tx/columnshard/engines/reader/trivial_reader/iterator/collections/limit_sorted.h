@@ -19,12 +19,14 @@ private:
     public:
         TFinishedDataSource(const std::shared_ptr<IDataSource>& source)
             : RecordsCount(source->GetResultRecordsCount())
-            , SourceIdx(source->GetSourceIdx()) {
+            , SourceIdx(source->GetSourceIdx())
+        {
         }
 
         TFinishedDataSource(const std::shared_ptr<IDataSource>& source, const ui32 partSize)
             : RecordsCount(partSize)
-            , SourceIdx(source->GetSourceIdx()) {
+            , SourceIdx(source->GetSourceIdx())
+        {
             AFL_VERIFY(partSize < source->GetResultRecordsCount());
         }
     };

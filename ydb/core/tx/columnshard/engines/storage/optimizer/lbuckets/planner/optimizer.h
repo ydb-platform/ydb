@@ -64,7 +64,8 @@ private:
 
 public:
     TPortionsGroupInfo(const std::shared_ptr<TPortionCategoryCounters>& signals)
-        : Signals(signals) {
+        : Signals(signals)
+    {
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
@@ -262,7 +263,8 @@ public:
 
     TPortionsPool(const std::shared_ptr<TCounters>& counters, const TDuration futureDetector)
         : Counters(counters)
-        , FutureDetector(futureDetector) {
+        , FutureDetector(futureDetector)
+    {
     }
 
     ~TPortionsPool() {
@@ -705,7 +707,8 @@ public:
         TModificationGuard(TPortionsBucket& owner)
             : Owner(owner)
             , IsEmptyOthers(Owner.Others.ActualsEmpty())
-            , HasNextBorder(Owner.NextBorder) {
+            , HasNextBorder(Owner.NextBorder)
+        {
             AFL_VERIFY_DEBUG(Owner.Validate());
         }
 
@@ -741,7 +744,8 @@ public:
         const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TCounters>& counters)
         : MainPortion(portion)
         , Counters(counters)
-        , Others(Counters, GetCommonFreshnessCheckDuration()) {
+        , Others(Counters, GetCommonFreshnessCheckDuration())
+    {
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition sBatchPosition(
                 MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false);
@@ -1054,7 +1058,8 @@ public:
         : PrimaryKeysSchema(primaryKeysSchema)
         , StoragesManager(storagesManager)
         , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, primaryKeysSchema, counters))
-        , Counters(counters) {
+        , Counters(counters)
+    {
         AddBucketToRating(LeftBucket);
     }
 
@@ -1247,7 +1252,8 @@ public:
         : TBase(pathId, nodePortionsCountLimit)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 };
 

@@ -39,7 +39,8 @@ public:
         , Schema(std::move(schema))
         , TierName(std::move(tierName))
         , IndexInBatch(indexInBatch)
-        , ProcessColumns(processColumns) {
+        , ProcessColumns(processColumns)
+    {
     }
 
     void AddDeferredIndexBlobIdx(ui16 blobIdx) {
@@ -73,7 +74,8 @@ class TBatchCursor {
 
 public:
     TBatchCursor(size_t maxSize)
-        : MaxSize(maxSize) {
+        : MaxSize(maxSize)
+    {
     }
 
     bool IsFinished() const {
@@ -242,7 +244,8 @@ class TLeakedBlobsStats {
 
 public:
     explicit TLeakedBlobsStats(const ui64 tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     void SetLogLevel(const NActors::NLog::EPriority logLevel) {

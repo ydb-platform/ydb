@@ -17,7 +17,8 @@ private:
 
 public:
     TMemoryAggregation(const TString& moduleId, const TString& signalId)
-        : TBase(moduleId) {
+        : TBase(moduleId)
+    {
         DeriviativeAddInFlightBytes = TBase::GetDeriviative(signalId + "/Add/Bytes");
         DeriviativeRemoveInFlightBytes = TBase::GetDeriviative(signalId + "/Remove/Bytes");
         InFlightBytes = TBase::GetValueAutoAggregationsClient(signalId + "/Bytes");
@@ -89,7 +90,8 @@ public:
     public:
         TGuard(std::shared_ptr<IMemoryAccessor> accesor, std::shared_ptr<TMemoryAggregation> memorySignals = nullptr)
             : MemoryAccessor(accesor)
-            , MemorySignals(memorySignals) {
+            , MemorySignals(memorySignals)
+        {
         }
 
         ~TGuard() {
@@ -127,7 +129,8 @@ public:
         using TPtr = std::shared_ptr<IMemoryAccessor>;
 
         IMemoryAccessor(std::shared_ptr<TScanMemoryLimiter> owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
         }
 
         bool HasBuffer() {
@@ -176,7 +179,8 @@ public:
         : LimiterName(limiterName)
         , AvailableMemoryLimit(memoryLimit)
         , AvailableMemory(memoryLimit)
-        , Counters("MemoryLimiters/" + limiterName, memoryLimit) {
+        , Counters("MemoryLimiters/" + limiterName, memoryLimit)
+    {
     }
 
     bool HasBufferOrSubscribe(std::shared_ptr<IMemoryAccessor> accessor);

@@ -61,7 +61,8 @@ public:
         const std::shared_ptr<arrow::ChunkedArray>& steps, const std::shared_ptr<arrow::ChunkedArray>& ids, const TSnapshot& snapshot)
         : Snapshot(snapshot)
         , Steps(steps)
-        , Ids(ids) {
+        , Ids(ids)
+    {
         Y_ABORT_UNLESS(steps->length() == ids->length());
     }
 
@@ -102,7 +103,8 @@ private:
 
 public:
     TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
-        : Snapshot(snapshot) {
+        : Snapshot(snapshot)
+    {
         Y_ABORT_UNLESS(steps);
         Y_ABORT_UNLESS(ids);
         Y_ABORT_UNLESS(steps->length() == ids->length());

@@ -17,7 +17,8 @@
 
 namespace NKikimr::NOlap {
 ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
-    : TablePath(tablePath) {
+    : TablePath(tablePath)
+{
     AFL_VERIFY(!!TablePath);
 }
 
@@ -35,7 +36,8 @@ TString ITableMetadataAccessor::GetTableName() const {
 
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
     : TBase(tableName)
-    , PathId(pathId) {
+    , PathId(pathId)
+{
     AFL_VERIFY(pathId.IsValid());
 }
 

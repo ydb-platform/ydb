@@ -37,7 +37,8 @@ private:
 
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
-        , InternalLevelWeight(levelWeight) {
+        , InternalLevelWeight(levelWeight)
+    {
     }
 
 public:
@@ -93,7 +94,8 @@ private:
 
 public:
     TTaskDescription(const ui64 taskId)
-        : TaskId(taskId) {
+        : TaskId(taskId)
+    {
     }
 
     bool operator<(const TTaskDescription& item) const {
@@ -161,7 +163,8 @@ public:
 
     IOptimizerPlanner(const TInternalPathId pathId, const std::optional<ui64>& nodePortionsCountLimit)
         : PathId(pathId)
-        , NodePortionsCountLimit(nodePortionsCountLimit) {
+        , NodePortionsCountLimit(nodePortionsCountLimit)
+    {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
         Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
@@ -226,7 +229,8 @@ public:
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
         TModificationGuard(IOptimizerPlanner& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
         }
 
         ~TModificationGuard() {
@@ -299,7 +303,8 @@ public:
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
+            , DefaultStrategy(EOptimizerStrategy::Default)
+        {   //TODO configure me via DDL
         }
     };
 

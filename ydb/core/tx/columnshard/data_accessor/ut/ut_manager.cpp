@@ -43,7 +43,8 @@ private:
 
 public:
     TTestSubscriber()
-        : AbortionFlag(std::make_shared<TAtomicCounter>(0)) {
+        : AbortionFlag(std::make_shared<TAtomicCounter>(0))
+    {
     }
 
     bool IsFinished() const {
@@ -64,7 +65,8 @@ private:
 public:
     TMockCacheService(bool withRemovedAddresses)
         : TBase(&TMockCacheService::StateWork)
-        , WithRemovedAddresses(withRemovedAddresses) {
+        , WithRemovedAddresses(withRemovedAddresses)
+    {
     }
 
     STFUNC(StateWork) {
@@ -106,7 +108,8 @@ private:
 public:
     TTestActor(std::shared_ptr<TActorAccessorsManager> manager, std::shared_ptr<TDataAccessorsRequest> request)
         : Manager(std::move(manager))
-        , Request(std::move(request)) {
+        , Request(std::move(request))
+    {
     }
 
     void Bootstrap() {

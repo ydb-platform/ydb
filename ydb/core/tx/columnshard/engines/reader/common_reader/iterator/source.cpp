@@ -227,7 +227,8 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     , Context(context)
     , RecordsCountImpl(recordsCount)
     , ShardingVersionOptional(shardingVersion)
-    , HasDeletions(hasDeletions) {
+    , HasDeletions(hasDeletions)
+{
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
 }

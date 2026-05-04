@@ -65,7 +65,8 @@ public:
         const TString& storageId, TBlobsCategories&& blobsToRemove, const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters)
         : TBase(storageId)
         , BlobsToRemove(std::move(blobsToRemove))
-        , Counters(counters) {
+        , Counters(counters)
+    {
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             Counters->OnRequest(i.GetBlobId().BlobSize());
         }

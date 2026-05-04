@@ -124,7 +124,8 @@ public:
         , ExpectedPortionSize(expectedPortionSize)
         , SizeLimitGuarantee(sizeLimitGuarantee)
         , StrictOneLayer(strictOneLayer)
-        , SummaryPortionsInfo(summaryPortionsInfo) {
+        , SummaryPortionsInfo(summaryPortionsInfo)
+    {
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {

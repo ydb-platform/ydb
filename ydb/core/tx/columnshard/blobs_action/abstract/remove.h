@@ -33,7 +33,8 @@ public:
         const TString& storageId, const TTabletId& selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
         : TBase(storageId)
         , SelfTabletId(selfTabletId)
-        , Counters(counters) {
+        , Counters(counters)
+    {
     }
 
     TTabletId GetSelfTabletId() const {

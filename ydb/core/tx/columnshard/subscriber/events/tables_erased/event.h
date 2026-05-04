@@ -14,7 +14,8 @@ private:
 public:
     TEventTablesErased(const THashSet<TInternalPathId>& pathIds)
         : TBase(EEventType::TablesErased)
-        , PathIds(pathIds) {
+        , PathIds(pathIds)
+    {
     }
 };
 }   // namespace NKikimr::NColumnShard::NSubscriber

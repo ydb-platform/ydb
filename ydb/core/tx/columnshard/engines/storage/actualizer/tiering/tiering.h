@@ -40,7 +40,8 @@ private:
             : Address(std::move(address))
             , TargetTierName(targetTierName)
             , TargetScheme(targetScheme)
-            , WaitDurationValue(waitDurationValue) {
+            , WaitDurationValue(waitDurationValue)
+        {
         }
 
         TInstant GetWaitInstant(const TInstant now) const {
@@ -72,7 +73,8 @@ private:
 
         TFindActualizationInfo(TRWAddress&& rwAddress, const TInstant waitInstant)
             : RWAddress(std::move(rwAddress))
-            , WaitInstant(waitInstant) {
+            , WaitInstant(waitInstant)
+        {
         }
     };
 
@@ -150,7 +152,8 @@ public:
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
         : PathId(pathId)
         , VersionedIndex(versionedIndex)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
         Y_UNUSED(PathId);
         AFL_VERIFY(StoragesManager);
     }

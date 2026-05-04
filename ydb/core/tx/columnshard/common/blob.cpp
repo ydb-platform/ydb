@@ -145,7 +145,8 @@ TString TBlobRange::GetData(const TString& blobData) const {
 TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32 offset /*= 0*/, ui32 size /*= 0*/)
     : BlobId(blobId)
     , Offset(offset)
-    , Size(size) {
+    , Size(size)
+{
     if (Size > 0) {
         AFL_VERIFY(Offset < BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());
         AFL_VERIFY(Offset + Size <= BlobId.BlobSize())("offset", Offset)("size", Size)("blob", BlobId.ToStringNew());

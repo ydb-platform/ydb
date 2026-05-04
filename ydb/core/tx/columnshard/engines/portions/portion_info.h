@@ -56,7 +56,8 @@ public:
         : Address(address)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytesSize)
-        , BlobRange(blobRange) {
+        , BlobRange(blobRange)
+    {
     }
 };
 
@@ -75,7 +76,7 @@ public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;
     using TPtr = std::shared_ptr<TPortionInfo>;
     using TRuntimeFeatures = ui8;
-    enum class ERuntimeFeature : TRuntimeFeatures {
+    enum class ERuntimeFeature: TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
     };
 
@@ -121,7 +122,8 @@ public:
 
     public:
         TReversablePortionAddressComparator(const bool reverse)
-            : Reverse(reverse) {
+            : Reverse(reverse)
+        {
         }
 
         bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
@@ -170,7 +172,8 @@ public:
     virtual ~TPortionInfo() = default;
 
     TPortionInfo(TPortionMeta&& meta)
-        : Meta(std::move(meta)) {
+        : Meta(std::move(meta))
+    {
     }
 
     TPortionInfo(TPortionInfo&&) = default;

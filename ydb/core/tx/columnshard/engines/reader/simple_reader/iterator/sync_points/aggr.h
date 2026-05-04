@@ -195,7 +195,8 @@ public:
         : TBase(pointIndex, "SYNC_AGGR", context, nullptr)
         , Collection(collection)
         , AggregationScript(aggregationScript)
-        , RestoreResultScript(restoreResultScript) {
+        , RestoreResultScript(restoreResultScript)
+    {
         AFL_VERIFY(AggregationScript);
         AFL_VERIFY(RestoreResultScript);
         AFL_VERIFY(pointIndex);

@@ -20,7 +20,8 @@ void TExtendedTransactionBase::Complete(const NActors::TActorContext& ctx) {
 TExtendedTransactionBase::TExtendedTransactionBase(TColumnShard* self, const TString& txInfo)
     : TBase(self)
     , TxInfo(txInfo)
-    , TabletTxNo(++Self->TabletTxCounter) {
+    , TabletTxNo(++Self->TabletTxCounter)
+{
     AFL_VERIFY(!TxInfo.empty());
 }
 

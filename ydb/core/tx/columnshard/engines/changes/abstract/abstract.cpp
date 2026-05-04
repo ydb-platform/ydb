@@ -126,7 +126,8 @@ TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrap
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot)
+{
 }
 
 }   // namespace NKikimr::NOlap

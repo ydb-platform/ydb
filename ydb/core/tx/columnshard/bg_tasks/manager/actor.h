@@ -48,7 +48,8 @@ public:
         : TabletId(adapter->GetTabletId())
         , TabletActorId(adapter->GetTabletActorId())
         , Adapter(adapter)
-        , Session(session) {
+        , Session(session)
+    {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);
     }

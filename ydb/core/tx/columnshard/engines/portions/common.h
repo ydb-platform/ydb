@@ -23,7 +23,8 @@ public:
 
     TChunkAddress(const ui32 columnId, const ui16 chunk)
         : ColumnId(columnId)
-        , Chunk(chunk) {
+        , Chunk(chunk)
+    {
     }
 
     bool operator<(const TChunkAddress& address) const {
@@ -57,7 +58,8 @@ public:
         : PathId(pathId)
         , PortionId(portionId)
         , ColumnId(columnId)
-        , Chunk(chunk) {
+        , Chunk(chunk)
+    {
     }
 
     bool operator<(const TFullChunkAddress& address) const {

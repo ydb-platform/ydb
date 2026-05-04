@@ -23,7 +23,8 @@ private:
 public:
     TEvReadFinishedWriter(const TInternalPathId pathId, const TTxConflicts& conflicts)
         : PathId(pathId)
-        , Conflicts(conflicts) {
+        , Conflicts(conflicts)
+    {
         AFL_VERIFY(PathId);
     }
 };

@@ -82,7 +82,8 @@ public:
 
     TBaseEvWriteTransactionOperator(const TFullTxInfo& txInfo, const ui64 lockId)
         : TBase(txInfo)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     virtual bool IsTxBroken() const {

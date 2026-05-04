@@ -16,7 +16,8 @@ private:
 
 public:
     TArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
-        : IndexSchema(schema) {
+        : IndexSchema(schema)
+    {
     }
 
     bool Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NKikimr::NEvWrite::IPayloadReader& payload);
@@ -45,7 +46,8 @@ private:
 
 public:
     TProtoArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
-        : IndexSchema(schema) {
+        : IndexSchema(schema)
+    {
     }
 
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);

@@ -21,7 +21,8 @@ public:
         , DefaultMinSnapshotAge(TBase::GetValue("Snapshots/DefaultAge/Seconds"))
         , SnapshotsCount(TBase::GetValue("Snapshots/Count"))
         , SnapshotLock(TBase::GetDeriviative("Snapshots/Lock"))
-        , SnapshotUnlock(TBase::GetDeriviative("Snapshots/Unlock")) {
+        , SnapshotUnlock(TBase::GetDeriviative("Snapshots/Unlock"))
+    {
     }
 
     void OnDefaultMinSnapshotInstant(const TInstant instant) const {

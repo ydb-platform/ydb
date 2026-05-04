@@ -54,7 +54,8 @@ public:
         const TString& currentTierName)
         : CurrentScheme(currentScheme)
         , TargetScheme(targetScheme)
-        , CurrentTierName(currentTierName) {
+        , CurrentTierName(currentTierName)
+    {
         AFL_VERIFY(CurrentTierName);
     }
 
@@ -118,7 +119,8 @@ public:
     TFinalizationContext(ui64& lastGranuleId, ui64& lastPortionId, const TSnapshot& snapshot)
         : LastGranuleId(&lastGranuleId)
         , LastPortionId(&lastPortionId)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+    {
     }
 
     ui64 NextGranuleId() {
@@ -150,7 +152,8 @@ public:
 
     TChangesFinishContext(const TString& errorMessage)
         : FinishedSuccessfully(false)
-        , ErrorMessage(errorMessage) {
+        , ErrorMessage(errorMessage)
+    {
     }
 
     TChangesFinishContext() = default;
@@ -175,7 +178,8 @@ public:
         , BytesWritten(bytesWritten)
         , Duration(d)
         , EngineLogs(engineLogs)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+    {
     }
 };
 
@@ -189,7 +193,8 @@ public:
         const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
         : SchemaVersions(schemaVersions)
         , Counters(counters)
-        , LastCommittedTx(lastCommittedTx) {
+        , LastCommittedTx(lastCommittedTx)
+    {
     }
 
     std::shared_ptr<TFilteredSnapshotSchema> BuildResultFiltered(
@@ -248,7 +253,8 @@ private:
 
 public:
     TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
-        : VersionedIndex(versionedIndex) {
+        : VersionedIndex(versionedIndex)
+    {
         AFL_VERIFY(VersionedIndex);
     }
 };
@@ -364,7 +370,8 @@ public:
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : StateGuard(NChanges::TChangesCounters::GetStageCounters(consumerId))
-        , BlobsAction(storagesManager, consumerId) {
+        , BlobsAction(storagesManager, consumerId)
+    {
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;

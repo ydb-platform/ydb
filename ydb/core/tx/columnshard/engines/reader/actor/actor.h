@@ -19,8 +19,7 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>,
-                        NArrow::IRowWriter,
+class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter,
                         NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
@@ -104,7 +103,8 @@ private:
 
     public:
         TScanStatsOwner(const TReadStats& stats)
-            : Stats(stats) {
+            : Stats(stats)
+        {
         }
 
         virtual THashMap<TString, ui64> GetMetrics() const override {
@@ -178,7 +178,8 @@ private:
     public:
         TBlobStats(const NMonitoring::THistogramPtr blobDurationsCounter, const NMonitoring::THistogramPtr byteDurationsCounter)
             : BlobDurationsCounter(blobDurationsCounter)
-            , ByteDurationsCounter(byteDurationsCounter) {
+            , ByteDurationsCounter(byteDurationsCounter)
+        {
         }
 
         void Received(const TBlobRange& br, const TDuration d) {

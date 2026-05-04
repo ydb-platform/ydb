@@ -48,7 +48,8 @@ private:
 
 public:
     TSubscriberCounters()
-        : TBase("ResourcesSubscriber") {
+        : TBase("ResourcesSubscriber")
+    {
     }
 
     std::shared_ptr<TSubscriberTypeCounters> GetTypeCounters(const TString& resourceType);

@@ -37,7 +37,8 @@ private:
 public:
     TRemoveV0(const TPortionAddress& portionAddress, const std::vector<TColumnChunkLoadContext>& chunks)
         : PortionAddress(portionAddress)
-        , Chunks(chunks) {
+        , Chunks(chunks)
+    {
     }
 };
 
@@ -63,7 +64,8 @@ private:
 public:
     TRemoveV1(const TPortionAddress& portionAddress, const std::vector<TChunkAddress>& chunks)
         : PortionAddress(portionAddress)
-        , Chunks(chunks) {
+        , Chunks(chunks)
+    {
     }
 };
 
@@ -84,7 +86,8 @@ private:
 
 public:
     TRemoveV2(const TPortionAddress& portionAddress)
-        : PortionAddress(portionAddress) {
+        : PortionAddress(portionAddress)
+    {
     }
 };
 
@@ -107,7 +110,8 @@ private:
 public:
     TRemovePortion(const TPortionAddress& portionAddress, const ui64 planStep)
         : PortionAddress(portionAddress)
-        , PlanStep(planStep) {
+        , PlanStep(planStep)
+    {
     }
 };
 
@@ -151,9 +155,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     }
     {
         std::map<TPortionAddress, std::vector<TChunkAddress>> usedPortions;
-        auto rowset = db.Table<Schema::IndexColumnsV1>()
-                          .Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId, Schema::IndexColumnsV1::SSColumnId,
-                              Schema::IndexColumnsV1::ChunkIdx>();
+        auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId,
+            Schema::IndexColumnsV1::SSColumnId, Schema::IndexColumnsV1::ChunkIdx>();
         if (!rowset.IsReady()) {
             return false;
         }
@@ -221,7 +224,8 @@ private:
 public:
     TIterator(std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& source)
         : Current(source.begin())
-        , End(source.end()) {
+        , End(source.end())
+    {
     }
 
     bool Next() {
@@ -334,7 +338,8 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
 class TChanges: public INormalizerChanges {
 public:
     TChanges(std::vector<std::shared_ptr<IDBModifier>>&& modifications)
-        : Modifications(std::move(modifications)) {
+        : Modifications(std::move(modifications))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {

@@ -24,7 +24,8 @@ public:
     }
 
     IDataAccessorsManager(const NActors::TActorId& tabletActorId)
-        : TabletActorId(tabletActorId) {
+        : TabletActorId(tabletActorId)
+    {
     }
 
     virtual ~IDataAccessorsManager() = default;
@@ -85,7 +86,8 @@ private:
         public:
             TAdapterCallback(const std::shared_ptr<IDataAccessorRequestsSubscriber>& accCallback, const ui64 requestId)
                 : AccessorsCallback(accCallback)
-                , RequestId(requestId) {
+                , RequestId(requestId)
+            {
             }
         };
 
@@ -113,7 +115,8 @@ private:
 
 public:
     TActorAccessorsManager(const NActors::TActorId& tabletActorId)
-        : TBase(tabletActorId) {
+        : TBase(tabletActorId)
+    {
         AFL_VERIFY(!!tabletActorId);
     }
 };

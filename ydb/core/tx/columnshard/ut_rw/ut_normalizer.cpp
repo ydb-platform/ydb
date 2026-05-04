@@ -156,12 +156,10 @@ public:
                 metaProto.MutableRecordSnapshotMin()->SetTxId(0);
                 metaProto.MutableRecordSnapshotMax()->SetPlanStep(0);
                 metaProto.MutableRecordSnapshotMax()->SetTxId(0);
-                db.Table<Schema::IndexPortions>()
-                    .Key(pathId, portionId)
-                    .Update(NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
-                        NIceDb::TUpdate<Schema::IndexPortions::Metadata>(metaProto.SerializeAsString()),
-                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(10),
-                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10));
+                db.Table<Schema::IndexPortions>().Key(pathId, portionId).Update(NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
+                    NIceDb::TUpdate<Schema::IndexPortions::Metadata>(metaProto.SerializeAsString()),
+                    NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(10),
+                    NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10));
             }
         }
     }
@@ -604,9 +602,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
                         UNIT_ASSERT(rowset.Next());
                     }
                 }
-                UNIT_ASSERT_C(internalPathId != 0,
-                    "LeakedBlobsNormalizer: no TableInfo row for the test table's scheme-shard local path "
-                    "(cannot map to IndexPortions.PathId)");
+                UNIT_ASSERT_C(internalPathId != 0, "LeakedBlobsNormalizer: no TableInfo row for the test table's scheme-shard local path "
+                                                   "(cannot map to IndexPortions.PathId)");
 
                 std::set<std::pair<ui64, ui64>> portionSet;
                 {
@@ -625,9 +622,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
                     return;
                 }
 
-                UNIT_ASSERT_C(!portionSet.empty(),
-                    "LeakedBlobsNormalizer: no portions for the test table path before corruption "
-                    "(data must come from TestNormalizerImpl write path)");
+                UNIT_ASSERT_C(!portionSet.empty(), "LeakedBlobsNormalizer: no portions for the test table path before corruption "
+                                                   "(data must come from TestNormalizerImpl write path)");
 
                 std::vector<std::pair<ui64, ui64>> portionVec(portionSet.begin(), portionSet.end());
                 UNIT_ASSERT_C(portionVec.size() == ctrl->ExpectedPortionsCount,
@@ -735,7 +731,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         public:
             explicit TChecker(const TLeakedBlobsNormalizerTestScenario& scenario)
-                : Scenario(scenario) {
+                : Scenario(scenario)
+            {
             }
 
             ui64 RowCount() const override {

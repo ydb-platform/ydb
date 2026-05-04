@@ -19,7 +19,8 @@ public:
     TBitSetStorage() = default;
 
     TBitSetStorage(TDynBitMap&& bits)
-        : Bits(std::move(bits)) {
+        : Bits(std::move(bits))
+    {
     }
 };
 

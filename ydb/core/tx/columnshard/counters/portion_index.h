@@ -73,8 +73,7 @@ public:
     public:
         bool Select(const TPortionClass& portionClass) const override {
             return IsIn({ NOlap::NPortion::EProduced::INSERTED, NOlap::NPortion::EProduced::COMPACTED,
-                            NOlap::NPortion::EProduced::SPLIT_COMPACTED, NOlap::NPortion::EProduced::INACTIVE },
-                       portionClass.GetProduced()) &&
+                            NOlap::NPortion::EProduced::SPLIT_COMPACTED, NOlap::NPortion::EProduced::INACTIVE }, portionClass.GetProduced()) &&
                    portionClass.GetIsDefaultTier();
         }
     };

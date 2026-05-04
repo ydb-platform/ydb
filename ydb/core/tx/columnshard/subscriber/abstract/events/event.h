@@ -23,7 +23,8 @@ public:
     virtual ~ISubscriptionEvent() = default;
 
     ISubscriptionEvent(const EEventType type)
-        : Type(type) {
+        : Type(type)
+    {
     }
 
     TString DebugString() const {

@@ -22,7 +22,8 @@ TBlobsManagerCounters::TBlobsManagerCounters(const TString& module)
 TBlobsManagerGCCounters::TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName)
     : TBase(sameAs, componentName)
     , SkipCollectionEmpty(TBase::GetDeriviative("Skip/Empty/Count"))
-    , SkipCollectionThrottling(TBase::GetDeriviative("Skip/Throttling/Count")) {
+    , SkipCollectionThrottling(TBase::GetDeriviative("Skip/Throttling/Count"))
+{
     KeepsCountTasks = TBase::GetHistogram("Tasks/Keeps/Count", NMonitoring::ExponentialHistogram(16, 2, 100));
     KeepsCountBlobs = TBase::GetHistogram("Tasks/Keeps/Blobs", NMonitoring::ExponentialHistogram(16, 2, 100));
     KeepsCountBytes = TBase::GetHistogram("Tasks/Keeps/Bytes", NMonitoring::ExponentialHistogram(16, 2, 1024));

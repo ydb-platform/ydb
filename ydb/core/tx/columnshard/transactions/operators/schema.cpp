@@ -16,7 +16,8 @@ class TWaitOnProposeTxSubscriberBase: public NSubscriber::ISubscriber {
 
 protected:
     TWaitOnProposeTxSubscriberBase(const ui64 txId)
-        : TxId(txId) {
+        : TxId(txId)
+    {
     }
 
     void OnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) {
@@ -40,7 +41,8 @@ private:
 public:
     TWaitEraseTablesTxSubscriber(const ui64 txId, THashSet<TInternalPathId>&& waitTables)
         : TWaitOnProposeTxSubscriberBase(txId)
-        , WaitTables(std::move(waitTables)) {
+        , WaitTables(std::move(waitTables))
+    {
     }
 
     virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
@@ -67,7 +69,8 @@ class TWaitTxs: public TWaitOnProposeTxSubscriberBase {
 public:
     TWaitTxs(const ui64 txId, const THashSet<ui64>&& txIdsToWait)
         : TWaitOnProposeTxSubscriberBase(txId)
-        , TxIdsToWait(std::move(txIdsToWait)) {
+        , TxIdsToWait(std::move(txIdsToWait))
+    {
     }
 
     std::set<NSubscriber::EEventType> GetEventTypes() const override {

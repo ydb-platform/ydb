@@ -35,7 +35,8 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
     }
 
     bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
@@ -54,7 +55,8 @@ public:
 
     public:
         TModificationGuard(TGranulesStat& storage)
-            : Owner(storage) {
+            : Owner(storage)
+        {
             Owner.StartModificationImpl();
         }
 
@@ -118,7 +120,8 @@ public:
 
     TGranuleOrdered(const NStorageOptimizer::TOptimizationPriority& priority, const std::shared_ptr<TGranuleMeta>& meta)
         : Priority(priority)
-        , Granule(meta) {
+        , Granule(meta)
+    {
     }
 
     bool operator<(const TGranuleOrdered& item) const {
@@ -157,7 +160,8 @@ public:
         : Counters(counters)
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        , Stats(std::make_shared<TGranulesStat>(Counters))
+    {
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(StoragesManager);
     }

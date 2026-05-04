@@ -3,7 +3,8 @@
 namespace NKikimr::NOlap::NBlobOperations::NLocal {
 
 TOperator::TOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
-    : TBase(storageId, storageSharedBlobsManager) {
+    : TBase(storageId, storageSharedBlobsManager)
+{
 }
 
 namespace {
@@ -52,7 +53,8 @@ protected:
 public:
     TBlobsDeclareRemovingAction(
         const TString& storageId, const TTabletId selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
-        : TBase(storageId, selfTabletId, counters) {
+        : TBase(storageId, selfTabletId, counters)
+    {
     }
 };
 }   // namespace

@@ -44,7 +44,8 @@ private:
     public:
         TIntervalFilterCallback(const ui32 intervalIdx, const std::shared_ptr<TFilterAccumulator>& constructor)
             : IntervalIdx(intervalIdx)
-            , Constructor(constructor) {
+            , Constructor(constructor)
+        {
         }
 
         void OnFilterReady(const NArrow::TColumnFilter& filter) {

@@ -18,7 +18,8 @@ private:
 
     public:
         TSharedPtrHashContainer(const std::shared_ptr<ISubscriber>& obj)
-            : Object(obj) {
+            : Object(obj)
+        {
         }
 
         TSharedPtrHashContainer() {
@@ -43,7 +44,8 @@ private:
 
 public:
     TManager(TColumnShard& owner)
-        : Owner(owner) {
+        : Owner(owner)
+    {
     }
 
     void RegisterSubscriber(const std::shared_ptr<ISubscriber>& s) {

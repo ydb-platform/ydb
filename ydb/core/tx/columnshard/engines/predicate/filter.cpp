@@ -152,7 +152,8 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(
 
 TPKRangesFilter::TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data)
     : Data(data)
-    , MemoryGuard(GetMemorySize()) {
+    , MemoryGuard(GetMemorySize())
+{
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
     Y_ABORT_UNLESS(range.IsSuccess());
     SortedRanges.emplace_back(range.DetachResult());

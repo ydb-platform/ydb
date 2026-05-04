@@ -18,7 +18,8 @@ protected:
 public:
     ITxShardInitReader(const TString& name, TColumnShard* shard)
         : TBase(name)
-        , Self(shard) {
+        , Self(shard)
+    {
     }
 };
 

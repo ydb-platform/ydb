@@ -66,7 +66,8 @@ public:
         : TBase(columnChunk.ColumnId)
         , Data(data)
         , Record(columnChunk)
-        , ColumnInfo(columnInfo) {
+        , ColumnInfo(columnInfo)
+    {
         AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)("data", Data.size())("record", Record.BlobRange.Size);
     }
 
@@ -75,7 +76,8 @@ public:
         : TBase(address.GetColumnId())
         , Data(data)
         , Record(address, column)
-        , ColumnInfo(columnInfo) {
+        , ColumnInfo(columnInfo)
+    {
         Y_ABORT_UNLESS(column->GetRecordsCount());
         if (ColumnInfo.GetPKColumnIndex()) {
             First = column->GetScalar(0);
@@ -86,7 +88,8 @@ public:
 
     TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address,
         const TSimpleColumnInfo& columnInfo, std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData)
-        : TChunkPreparation(data, column, address, columnInfo) {
+        : TChunkPreparation(data, column, address, columnInfo)
+    {
         Record.MutableMeta().SetAdditionalAccessorData(std::move(additionalAccessorData));
     }
 };

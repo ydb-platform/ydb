@@ -26,7 +26,8 @@ private:
         }
 
         TFindActualizationInfo(TRWAddress&& rwAddress)
-            : RWAddress(std::move(rwAddress)) {
+            : RWAddress(std::move(rwAddress))
+        {
         }
     };
 
@@ -52,7 +53,8 @@ private:
 
         TFullActualizationInfo(TRWAddress&& address, const std::shared_ptr<ISnapshotSchema>& targetScheme)
             : Address(std::move(address))
-            , TargetScheme(targetScheme) {
+            , TargetScheme(targetScheme)
+        {
         }
     };
 

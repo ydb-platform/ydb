@@ -20,7 +20,8 @@ public:
         THashMap<TString, std::shared_ptr<TDestinationSession>>& sessions, const TString& info)
         : TBase(self, info)
         , Session(session)
-        , Sessions(&sessions) {
+        , Sessions(&sessions)
+    {
     }
 
     TTxType GetTxType() const override {
@@ -40,7 +41,8 @@ protected:
 public:
     TTxConfirmFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, const TString& info)
         : TBase(self, info)
-        , Session(session) {
+        , Session(session)
+    {
     }
 
     TTxType GetTxType() const override {

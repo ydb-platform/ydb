@@ -182,7 +182,8 @@ public:
 
     public:
         TIterator(const TTabletsByBlob& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
             BlobsIterator = Owner.Data.begin();
             if (BlobsIterator != Owner.Data.end()) {
                 TabletsIterator = BlobsIterator->second.begin();
@@ -340,7 +341,8 @@ public:
 
     public:
         TIterator(const TBlobsByTablet& owner)
-            : Owner(&owner) {
+            : Owner(&owner)
+        {
             TabletsIterator = Owner->Data.begin();
             if (TabletsIterator != Owner->Data.end()) {
                 BlobsIterator = TabletsIterator->second.begin();
@@ -538,7 +540,8 @@ public:
 
     public:
         TIterator(const TBlobsCategories& owner)
-            : Owner(&owner) {
+            : Owner(&owner)
+        {
             Sharing = Owner->Sharing.GetIterator();
             Direct = Owner->Direct.GetIterator();
             Borrowed = Owner->Borrowed.GetIterator();
@@ -593,7 +596,8 @@ public:
     }
 
     TBlobsCategories(const TTabletId selfTabletId)
-        : SelfTabletId(selfTabletId) {
+        : SelfTabletId(selfTabletId)
+    {
         Y_UNUSED(SelfTabletId);
     }
 };

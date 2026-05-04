@@ -31,7 +31,8 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
 }
 
 TActor::TActor(const std::shared_ptr<ITask>& task)
-    : Task(task) {
+    : Task(task)
+{
 }
 
 TActor::~TActor() {

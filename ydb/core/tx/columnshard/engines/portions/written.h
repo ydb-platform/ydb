@@ -80,7 +80,8 @@ public:
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
 
     TWrittenPortionInfo(TPortionMeta&& meta)
-        : TBase(std::move(meta)) {
+        : TBase(std::move(meta))
+    {
         //        AFL_VERIFY(!GetMeta().GetTierName());
     }
 

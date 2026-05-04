@@ -6,7 +6,8 @@ namespace NKikimr::NOlap {
 
 TPKRangeFilter::TPKRangeFilter(TPredicateContainer&& f, TPredicateContainer&& t)
     : PredicateFrom(std::move(f))
-    , PredicateTo(std::move(t)) {
+    , PredicateTo(std::move(t))
+{
 }
 
 TPKRangeFilter& TPKRangeFilter::operator=(TPKRangeFilter&& rhs) {
@@ -21,7 +22,8 @@ TPKRangeFilter::TPKRangeFilter(TPKRangeFilter&& rhs)
     }())
     , PredicateTo([&]() {
         return std::move(rhs.PredicateTo);
-    }()) {
+    }())
+{
 }
 
 bool TPKRangeFilter::IsEmpty() const {

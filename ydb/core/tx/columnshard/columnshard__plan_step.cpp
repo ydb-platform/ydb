@@ -13,7 +13,8 @@ public:
     TTxPlanStep(TColumnShard* self, TEvTxProcessing::TEvPlanStep::TPtr& ev)
         : TBase(self)
         , Ev(ev)
-        , TabletTxNo(++Self->TabletTxCounter) {
+        , TabletTxNo(++Self->TabletTxCounter)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

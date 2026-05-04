@@ -41,10 +41,10 @@ public:
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                   sorting == NReader::ERequestSorting::DESC),
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC),
-              !isVisible)
+                  sorting == NReader::ERequestSorting::DESC), !isVisible)
         , Portion(std::move(portion))
-        , RecordsCount(portion->GetRecordsCount()) {
+        , RecordsCount(portion->GetRecordsCount())
+    {
     }
 
     std::shared_ptr<TPortionDataSource> Construct(
@@ -96,7 +96,8 @@ private:
 
 public:
     TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
-        : TBase(sorting) {
+        : TBase(sorting)
+    {
         InitializeConstructors(std::move(sources));
     }
 

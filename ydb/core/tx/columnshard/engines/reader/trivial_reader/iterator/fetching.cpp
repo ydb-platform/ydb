@@ -28,8 +28,7 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            true));
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     const ui32 filteredRows = filter.GetFilteredCount().value_or(source->GetRecordsCount());
     source->MutableStageData().AddFilter(filter);
     ReportTracing(source, step, filteredRows);
@@ -101,11 +100,10 @@ void TSnapshotFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>&
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
-                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
-                               source->GetContext()->GetCommonContext()->GetResolver()),
-            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+    auto filter = MakeSnapshotFilter(
+        source->GetStageData().GetTable().ToTable(
+            std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
+            source->GetContext()->GetCommonContext()->GetResolver()), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
             ReportTracing(source, step);
@@ -223,7 +221,8 @@ private:
 public:
     TApplySourceResult(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
         : Source(source)
-        , Step(step) {
+        , Step(step)
+    {
     }
 
     virtual ui64 GetSourceId() const override {
@@ -480,7 +479,8 @@ void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)
     : Source(source)
     , Step(step)
-    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard())
+{
 }
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(

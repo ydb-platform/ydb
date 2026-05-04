@@ -25,7 +25,8 @@ private:
 
 public:
     TIdentifier(const TInternalPathId pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
     }
 
     static TConclusion<TIdentifier> BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto);

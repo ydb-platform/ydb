@@ -59,7 +59,8 @@ public:
     TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor,
         const std::optional<ui32> limit)
         : TBase(context, std::move(sourcesConstructor))
-        , Limit(limit) {
+        , Limit(limit)
+    {
         if (Limit) {
             InFlightLimit = 1;
         } else {

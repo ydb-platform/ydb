@@ -15,7 +15,8 @@ class TRemovedTablesNormalizer::TNormalizerResult: public INormalizerChanges {
 
 public:
     TNormalizerResult(std::vector<TPathInfo>&& pathIds)
-        : PathIds(std::move(pathIds)) {
+        : PathIds(std::move(pathIds))
+    {
     }
 
 public:

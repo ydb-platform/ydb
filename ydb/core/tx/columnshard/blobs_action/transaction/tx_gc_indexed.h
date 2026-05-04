@@ -10,7 +10,8 @@ private:
 public:
     TTxGarbageCollectionFinished(TColumnShard* self, const std::shared_ptr<NOlap::IBlobsGCAction>& action)
         : TBase(self)
-        , Action(action) {
+        , Action(action)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -31,7 +32,8 @@ public:
         TColumnShard* self, const std::shared_ptr<NOlap::IBlobsGCAction>& action, const std::shared_ptr<NOlap::IBlobsStorageOperator>& op)
         : TBase(self)
         , Action(action)
-        , Operator(op) {
+        , Operator(op)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

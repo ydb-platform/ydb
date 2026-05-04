@@ -38,7 +38,8 @@ public:
         , SkipPortionToRemove(TBase::GetDeriviative("SkipPortionToRemove/Count"))
         , RefreshValue(TBase::GetDeriviative("RefreshValue/Count"))
         , AddPortion(TBase::GetDeriviative("AddPortion/Count"))
-        , RemovePortion(TBase::GetDeriviative("RemovePortion/Count")) {
+        , RemovePortion(TBase::GetDeriviative("RemovePortion/Count"))
+    {
         QueueSizeExternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/ExternalWrite");
         QueueSizeInternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/InternalWrite");
     }
@@ -99,7 +100,8 @@ public:
 
     TSchemeCounters()
         : QueueSizeInternalWrite(TSchemeGlobalCounters::BuildQueueSizeInternalWrite())
-        , QueueSizeExternalWrite(TSchemeGlobalCounters::BuildQueueSizeExternalWrite()) {
+        , QueueSizeExternalWrite(TSchemeGlobalCounters::BuildQueueSizeExternalWrite())
+    {
     }
 };
 

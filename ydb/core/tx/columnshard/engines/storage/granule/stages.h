@@ -24,7 +24,8 @@ public:
     }
 
     TPortionDataAccessors(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo)
-        : BuildInfo(std::move(buildInfo)) {
+        : BuildInfo(std::move(buildInfo))
+    {
     }
 };
 
@@ -74,7 +75,8 @@ public:
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
-        , VersionedIndex(versionedIndex) {
+        , VersionedIndex(versionedIndex)
+    {
         AFL_VERIFY(!!DsGroupSelector);
         AFL_VERIFY(VersionedIndex);
         AFL_VERIFY(Self);
@@ -96,7 +98,8 @@ private:
 public:
     TGranuleFinishCommonLoading(const TString& name, TGranuleMeta* self)
         : TBase(name)
-        , Self(self) {
+        , Self(self)
+    {
         AFL_VERIFY(Self);
     }
 };
@@ -118,7 +121,8 @@ public:
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
         , VersionedIndex(versionedIndex)
-        , Context(context) {
+        , Context(context)
+    {
         AFL_VERIFY(!!DsGroupSelector);
         AFL_VERIFY(VersionedIndex);
         AFL_VERIFY(Self);

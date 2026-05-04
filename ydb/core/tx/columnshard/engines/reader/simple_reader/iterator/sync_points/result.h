@@ -16,7 +16,8 @@ private:
 public:
     TSyncPointResult(
         const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context, const std::shared_ptr<ISourcesCollection>& collection)
-        : TBase(pointIndex, "RESULT", context, collection) {
+        : TBase(pointIndex, "RESULT", context, collection)
+    {
         AFL_VERIFY(Collection);
     }
 };

@@ -48,7 +48,8 @@ public:
 
     TWideSerializedBatch(NArrow::TSerializedBatch&& splitted, TWriteAggregation& parentAggregation)
         : SplittedBlobs(std::move(splitted))
-        , ParentAggregation(&parentAggregation) {
+        , ParentAggregation(&parentAggregation)
+    {
     }
 };
 
@@ -131,7 +132,8 @@ public:
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
         , SchemaSubset(writeData.GetSchemaSubsetVerified())
-        , RecordBatch(batch) {
+        , RecordBatch(batch)
+    {
         AFL_VERIFY(WriteMeta);
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
@@ -145,7 +147,8 @@ public:
         : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
-        , BlobsAction(writeData.GetBlobsAction()) {
+        , BlobsAction(writeData.GetBlobsAction())
+    {
         AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
@@ -162,7 +165,8 @@ public:
 
     TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
         : BlobsAction(action)
-        , Aggregations(std::move(aggregations)) {
+        , Aggregations(std::move(aggregations))
+    {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
             SumSize += aggr->GetSize();

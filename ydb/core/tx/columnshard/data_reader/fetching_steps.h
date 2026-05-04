@@ -36,7 +36,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -91,7 +92,8 @@ private:
 
     public:
         TSubscriber(const std::shared_ptr<TPortionsDataFetcher>& fetcher)
-            : Fetcher(fetcher) {
+            : Fetcher(fetcher)
+        {
         }
     };
 
@@ -132,7 +134,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -154,7 +157,8 @@ protected:
 
 public:
     TAskDataResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
     }
 };
 
@@ -234,7 +238,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -247,7 +252,8 @@ private:
 public:
     TAskGeneralResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const ui64 memoryUsage)
         : ColumnIds(columnIds)
-        , MemoryUsage(memoryUsage) {
+        , MemoryUsage(memoryUsage)
+    {
     }
 };
 
@@ -277,7 +283,8 @@ private:
         TSubscriber(
             const std::shared_ptr<TPortionsDataFetcher>& fetchingContext, std::vector<std::shared_ptr<IBlobsReadingAction>>&& readActions)
             : TBase(readActions, ::ToString(fetchingContext->GetInput().GetConsumer()), fetchingContext->GetInput().GetExternalTaskId())
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -314,7 +321,8 @@ private:
 
 public:
     TAskDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
     }
 };
 
@@ -348,7 +356,8 @@ private:
 
 public:
     TAssembleDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
     }
 };
 

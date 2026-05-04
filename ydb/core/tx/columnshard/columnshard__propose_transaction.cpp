@@ -19,7 +19,8 @@ private:
 public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
-        , Ev(ev) {
+        , Ev(ev)
+    {
         AFL_VERIFY(!!Ev);
     }
 

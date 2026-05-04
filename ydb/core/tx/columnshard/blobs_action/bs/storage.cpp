@@ -45,7 +45,8 @@ TOperator::TOperator(const TString& storageId, const NActors::TActorId& tabletAc
     : TBase(storageId, sharedBlobs)
     , Manager(std::make_shared<TBlobManager>(tabletInfo, generation, sharedBlobs->GetSelfTabletId()))
     , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
-    , TabletActorId(tabletActorId) {
+    , TabletActorId(tabletActorId)
+{
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

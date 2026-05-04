@@ -23,7 +23,8 @@ public:
         : ShardingInfo(shardingInfo)
         , SinceSnapshot(sinceSnapshot)
         , SnapshotVersion(version)
-        , PathId(pathId) {
+        , PathId(pathId)
+    {
         AFL_VERIFY(!!ShardingInfo);
     }
 };
@@ -37,7 +38,8 @@ private:
 
     public:
         TSchemaInfoByVersion(const ISnapshotSchema::TPtr& schema)
-            : Schema(schema) {
+            : Schema(schema)
+        {
         }
 
         void AddIgnoreSchemaVersionTo(const ui64 to) {

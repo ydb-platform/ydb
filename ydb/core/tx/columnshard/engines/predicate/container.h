@@ -24,7 +24,8 @@ private:
     std::optional<NOlap::TPredicate> Object;
 
     TPredicateContainer(std::optional<NOlap::TPredicate> object)
-        : Object(object) {
+        : Object(object)
+    {
     }
 
     TPredicateContainer() {

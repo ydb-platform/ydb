@@ -26,7 +26,8 @@ public:
     TEvOverloadSubscribe(TColumnShardInfo&& columnShardInfo, TPipeServerInfo&& pipeServerInfo, TOverloadSubscriberInfo&& overloadSubscriberInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
         , PipeServerInfo(std::move(pipeServerInfo))
-        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo)) {
+        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo))
+    {
     }
 };
 
@@ -37,7 +38,8 @@ class TEvOverloadUnsubscribe: public NActors::TEventLocal<TEvOverloadUnsubscribe
 public:
     TEvOverloadUnsubscribe(TColumnShardInfo&& columnShardInfo, TOverloadSubscriberInfo&& overloadSubscriberInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
-        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo)) {
+        , OverloadSubscriberInfo(std::move(overloadSubscriberInfo))
+    {
     }
 };
 
@@ -48,7 +50,8 @@ class TEvOverloadPipeServerDisconnected: public NActors::TEventLocal<TEvOverload
 public:
     TEvOverloadPipeServerDisconnected(TColumnShardInfo&& columnShardInfo, TPipeServerInfo&& pipeServerInfo)
         : ColumnShardInfo(std::move(columnShardInfo))
-        , PipeServerInfo(std::move(pipeServerInfo)) {
+        , PipeServerInfo(std::move(pipeServerInfo))
+    {
     }
 };
 
@@ -57,7 +60,8 @@ class TEvOverloadColumnShardDied: public NActors::TEventLocal<TEvOverloadColumnS
 
 public:
     TEvOverloadColumnShardDied(TColumnShardInfo&& columnShardInfo)
-        : ColumnShardInfo(std::move(columnShardInfo)) {
+        : ColumnShardInfo(std::move(columnShardInfo))
+    {
     }
 };
 

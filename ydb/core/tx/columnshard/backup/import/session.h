@@ -25,7 +25,7 @@ class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardImpor
 public:
     static TString GetClassNameStatic();
 
-    enum class EStatus : ui64 {
+    enum class EStatus: ui64 {
         Draft = 0 /*"draft"*/,
         Confirmed = 1 /*"confirmed"*/,
         Started = 2 /*"started"*/,

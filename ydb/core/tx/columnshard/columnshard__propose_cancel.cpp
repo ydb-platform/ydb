@@ -12,7 +12,8 @@ class TColumnShard::TTxProposeCancel: public TTransactionBase<TColumnShard> {
 public:
     TTxProposeCancel(TColumnShard* self, const ui64 txId)
         : TTransactionBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     TTxType GetTxType() const override {

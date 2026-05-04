@@ -55,7 +55,8 @@ public:
     public:
         TGuard(const TString& processId, const std::shared_ptr<TAtomicCounter>& stopFlag)
             : ProcessId(processId)
-            , StopFlag(stopFlag) {
+            , StopFlag(stopFlag)
+        {
         }
 
         void AbortLock();

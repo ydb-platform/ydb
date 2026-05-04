@@ -10,7 +10,8 @@ namespace NKikimr::NOlap {
 TIndexedWriteController::TIndexedWriteController(
     const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
     : Buffer(action, std::move(aggregations))
-    , DstActor(dstActor) {
+    , DstActor(dstActor)
+{
     auto blobs = Buffer.GroupIntoBlobs();
     for (auto&& b : blobs) {
         auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.ExtractBlobData(), action));

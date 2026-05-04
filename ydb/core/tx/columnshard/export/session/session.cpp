@@ -61,7 +61,8 @@ bool TSession::IsConfirmed() const {
 }
 
 TSession::TSession(const std::shared_ptr<TExportTask> &task)
-    : Task(task) {
+    : Task(task)
+{
     AFL_VERIFY(Task);
 }
 

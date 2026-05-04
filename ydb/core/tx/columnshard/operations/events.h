@@ -25,7 +25,8 @@ public:
     }
 
     TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion)
-        : PortionInfoConstructor(portion.DetachPortionConstructor()) {
+        : PortionInfoConstructor(portion.DetachPortionConstructor())
+    {
     }
 
     void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
@@ -100,7 +101,8 @@ private:
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
         AFL_VERIFY(WriteResults.size());
         std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {

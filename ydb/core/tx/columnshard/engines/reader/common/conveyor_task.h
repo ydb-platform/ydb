@@ -70,7 +70,8 @@ public:
 
         ITask(const NActors::TActorId& ownerId, NColumnShard::TCounterGuard&& scanCounter)
             : OwnerId(ownerId)
-            , Guard(std::move(scanCounter)) {
+            , Guard(std::move(scanCounter))
+        {
         }
     };
 };

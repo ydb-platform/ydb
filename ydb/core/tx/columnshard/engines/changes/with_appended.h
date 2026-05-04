@@ -46,7 +46,8 @@ protected:
 public:
     TChangesWithAppend(const TSaverContext& saverContext, const NBlobOperations::EConsumer consumerId)
         : TBase(saverContext.GetStoragesManager(), consumerId)
-        , SaverContext(saverContext) {
+        , SaverContext(saverContext)
+    {
     }
 
     const TRemovePortionsChange& GetPortionsToRemove() const {

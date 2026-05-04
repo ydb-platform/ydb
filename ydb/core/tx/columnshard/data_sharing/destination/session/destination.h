@@ -35,7 +35,8 @@ public:
     TSourceCursorForDestination() = default;
 
     TSourceCursorForDestination(const TTabletId tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     TConclusionStatus ReceiveData(const ui32 packIdxReceived) {
@@ -105,11 +106,13 @@ public:
         const TTransferContext& context)
         : TBase(sessionId, "destination_base", context)
         , InitiatorController(controller)
-        , PathIds(remapper) {
+        , PathIds(remapper)
+    {
     }
 
     TDestinationSession()
-        : TBase("dest_proto") {
+        : TBase("dest_proto")
+    {
     }
 
     void Confirm(const bool allowRepeat = false) {

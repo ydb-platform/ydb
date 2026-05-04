@@ -19,7 +19,8 @@ private:
 public:
     TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
         : Data(data)
-        , Batch(batch) {
+        , Batch(batch)
+    {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
         AFL_VERIFY(Batch.HasContainer());
     }
@@ -48,7 +49,8 @@ public:
         , TabletId(tabletId)
         , ModificationType(modificationType)
         , WriteUnits(std::move(writeUnits))
-        , Context(context) {
+        , Context(context)
+    {
         AFL_VERIFY(WriteUnits.size());
         for (auto&& i : WriteUnits) {
             i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::PackSlicesConstruction);

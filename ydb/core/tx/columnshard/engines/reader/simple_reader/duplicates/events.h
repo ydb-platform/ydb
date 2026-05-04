@@ -48,7 +48,8 @@ private:
 
 public:
     TEvFilterConstructionResult(TConclusion<TFilters>&& result)
-        : Result(std::move(result)) {
+        : Result(std::move(result))
+    {
     }
 
     const TConclusion<TFilters>& GetConclusion() const {

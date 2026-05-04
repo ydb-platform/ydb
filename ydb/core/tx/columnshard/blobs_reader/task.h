@@ -28,7 +28,8 @@ public:
 
     public:
         TGuard(TCompositeReadBlobs* blobs)
-            : Blobs(blobs) {
+            : Blobs(blobs)
+        {
         }
 
         TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
@@ -236,7 +237,8 @@ public:
         TReadSubscriber(const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
             const NResourceBroker::NSubscribe::TTaskContext& context)
             : TBase(cpu, memory, name, context)
-            , Task(readTask) {
+            , Task(readTask)
+        {
         }
     };
 };

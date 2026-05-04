@@ -16,7 +16,7 @@ class TGranuleMeta;
 
 namespace NKikimr::NOlap::NDataLocks {
 
-enum class ELockCategory : ui32 {
+enum class ELockCategory: ui32 {
     Compaction = 0,
     Cleanup,
     Sharing,
@@ -60,7 +60,8 @@ public:
     ILock(const TString& lockName, const ELockCategory category, const bool isReadOnly = false)
         : LockName(lockName)
         , ReadOnlyFlag(isReadOnly)
-        , Category(category) {
+        , Category(category)
+    {
     }
 
     virtual ~ILock() = default;

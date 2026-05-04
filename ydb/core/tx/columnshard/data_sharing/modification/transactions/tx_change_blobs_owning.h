@@ -24,7 +24,8 @@ public:
         , Task(task)
         , InitiatorTabletId(initiatorTabletId)
         , SessionId(sessionId)
-        , PackIdx(packIdx) {
+        , PackIdx(packIdx)
+    {
         AFL_VERIFY(!!Task);
     }
 

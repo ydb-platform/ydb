@@ -23,7 +23,8 @@ private:
 public:
     TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
         : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false), false)
-        , TabletId(tabletId) {
+        , TabletId(tabletId)
+    {
     }
 };
 
@@ -72,7 +73,8 @@ protected:
 public:
     TConstructor(const ERequestSorting sorting, const ui64 tabletId)
         : Constructors(sorting)
-        , TabletId(tabletId) {
+        , TabletId(tabletId)
+    {
     }
 };
 

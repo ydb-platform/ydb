@@ -13,7 +13,8 @@ private:
 
 public:
     TSplittedBlob(const TString& groupName, std::vector<std::shared_ptr<IPortionDataChunk>>&& chunks)
-        : GroupName(groupName) {
+        : GroupName(groupName)
+    {
         const auto pred = [](const std::shared_ptr<IPortionDataChunk>& l, const std::shared_ptr<IPortionDataChunk>& r) {
             return l->GetChunkAddressVerified() < r->GetChunkAddressVerified();
         };
@@ -25,7 +26,8 @@ public:
     }
 
     TSplittedBlob(const TString& groupName)
-        : GroupName(groupName) {
+        : GroupName(groupName)
+    {
     }
 };
 }   // namespace NKikimr::NOlap

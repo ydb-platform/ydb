@@ -83,7 +83,8 @@ public:
     TSession(const TString& identifier, const TStatusChannelContainer& channel, const TSessionLogicContainer& logic)
         : Identifier(identifier)
         , ChannelContainer(channel)
-        , LogicContainer(logic) {
+        , LogicContainer(logic)
+    {
         AFL_VERIFY(!!Identifier);
         AFL_VERIFY(!!ChannelContainer);
         AFL_VERIFY(!!LogicContainer);

@@ -21,7 +21,8 @@ private:
 public:
     TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor = nullptr)
         : Counters(counters)
-        , Executor(executor) {
+        , Executor(executor)
+    {
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {

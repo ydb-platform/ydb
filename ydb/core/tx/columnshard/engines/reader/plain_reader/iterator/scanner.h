@@ -34,7 +34,8 @@ private:
 public:
     TIntervalStat(const ui32 sourcesCount, const bool isPoint)
         : SourcesCount(sourcesCount)
-        , IsPoint(isPoint) {
+        , IsPoint(isPoint)
+    {
     }
 };
 

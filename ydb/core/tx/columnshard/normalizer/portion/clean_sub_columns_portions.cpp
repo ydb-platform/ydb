@@ -16,7 +16,8 @@ class TCleanSubColumnsPortionsNormalizer::TNormalizerResult: public INormalizerC
 
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions)
-        : SubColumnsPortions(std::move(portions)) {
+        : SubColumnsPortions(std::move(portions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {

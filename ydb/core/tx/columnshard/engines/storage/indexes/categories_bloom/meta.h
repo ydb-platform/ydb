@@ -63,7 +63,8 @@ public:
         const double fpProbability, const TReadDataExtractorContainer& dataExtractor,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
-        , FalsePositiveProbability(fpProbability) {
+        , FalsePositiveProbability(fpProbability)
+    {
         Initialize();
     }
 

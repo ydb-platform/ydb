@@ -17,7 +17,8 @@ public:
 
     TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev)
         : TBase(self)
-        , InternalScanEvent(ev) {
+        , InternalScanEvent(ev)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

@@ -26,7 +26,8 @@ private:
 
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
-        : Counters(std::move(counters)) {
+        : Counters(std::move(counters))
+    {
     }
 
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;

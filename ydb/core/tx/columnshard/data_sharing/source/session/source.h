@@ -37,7 +37,8 @@ protected:
 public:
     TSourceSession(const TTabletId selfTabletId)
         : TBase("source_proto")
-        , SelfTabletId(selfTabletId) {
+        , SelfTabletId(selfTabletId)
+    {
     }
 
     TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId,
@@ -45,7 +46,8 @@ public:
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
-        , DestinationTabletId(destTabletId) {
+        , DestinationTabletId(destTabletId)
+    {
     }
 
     TTabletId GetDestinationTabletId() const {

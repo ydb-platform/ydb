@@ -27,8 +27,7 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     if (IntervalTree) {
         IntervalTree->AddRange(
             PortionIntervalTree::TPortionIntervalTree::TOwnedRange(PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true),
-            info);
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
     }
 }
 
@@ -147,7 +146,8 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
     , StoragesManager(owner.GetStoragesManager())
-    , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
+    , PortionsIndex(*this, Counters.GetPortionsIndexCounters())
+{
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
@@ -180,8 +180,7 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
         if (IntervalTree) {
             IntervalTree->AddRange(
                 PortionIntervalTree::TPortionIntervalTree::TOwnedRange(PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion),
-                    true, PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true),
-                portion);
+                    true, PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
     }
 }
@@ -260,37 +259,31 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
     TInGranuleConstructors constructors;
     {
-        if (!db.LoadPortions(
-                [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
-                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                    AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
-                    return true;
-                },
-                PathId)) {
+        if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+                return true;
+            }, PathId)) {
             return false;
         }
     }
 
     {
-        if (!db.LoadColumns(
-                [&](TColumnChunkLoadContextV2&& loadContext) {
-                    auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
-                    constructor->AddBuildInfo(loadContext.CreateBuildInfo());
-                },
-                PathId)) {
+        if (!db.LoadColumns([&](TColumnChunkLoadContextV2&& loadContext) {
+                auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
+                constructor->AddBuildInfo(loadContext.CreateBuildInfo());
+            }, PathId)) {
             return false;
         }
     }
 
     {
-        if (!db.LoadIndexes(
-                [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
-                    auto* constructor = constructors.GetConstructorVerified(portionId);
-                    constructor->LoadIndex(std::move(loadContext));
-                    return true;
-                },
-                PathId)) {
+        if (!db.LoadIndexes([&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
+                auto* constructor = constructors.GetConstructorVerified(portionId);
+                constructor->LoadIndex(std::move(loadContext));
+                return true;
+            }, PathId)) {
             return false;
         };
     }

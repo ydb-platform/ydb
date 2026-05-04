@@ -4,7 +4,8 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TRemoveDeclareCounters::TRemoveDeclareCounters(const TConsumerCounters& owner)
-    : TBase(owner, "RemoveDeclare") {
+    : TBase(owner, "RemoveDeclare")
+{
     RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
 

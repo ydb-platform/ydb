@@ -22,7 +22,8 @@ public:
 
     TBatchReadTask(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& readTask)
         : ObjectId(objectId)
-        , ReadTask(readTask) {
+        , ReadTask(readTask)
+    {
     }
 };
 

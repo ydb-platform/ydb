@@ -19,7 +19,8 @@ class TPKRangesFilter {
 
     public:
         TMemoryTrackingGuard(const ui64 mem)
-            : Bytes(mem) {
+            : Bytes(mem)
+        {
             TotalFiltersMemorySize += mem;
         }
 
@@ -37,7 +38,8 @@ private:
     [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
 
     TPKRangesFilter()
-        : MemoryGuard(0) {
+        : MemoryGuard(0)
+    {
     }
 
     TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
@@ -49,7 +51,8 @@ public:
         : FakeRanges(other.FakeRanges)
         , SortedRanges(std::move(other.SortedRanges))
         , Data(other.Data)
-        , MemoryGuard(other.MemoryGuard.GetBytes()) {
+        , MemoryGuard(other.MemoryGuard.GetBytes())
+    {
     }
 
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
@@ -244,7 +247,8 @@ public:
     ISimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& portionId)
         : SourceIdx(sourceIdx)
         , RecordIndex(recordIndex)
-        , PortionId(portionId) {
+        , PortionId(portionId)
+    {
     }
 };
 
@@ -285,7 +289,8 @@ public:
 
     IDeprecatedSimpleScanCursor(const ui64 deprecatedPortionId, const ui32 recordIndex)
         : PortionId(deprecatedPortionId)
-        , RecordIndex(recordIndex) {
+        , RecordIndex(recordIndex)
+    {
     }
 };
 
@@ -325,7 +330,8 @@ public:
 
     TDeprecatedSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui64 deprecatedPortionId, const ui32 recordIndex)
         : IDeprecatedSimpleScanCursor(deprecatedPortionId, recordIndex)
-        , PrimaryKey(pk) {
+        , PrimaryKey(pk)
+    {
     }
 };
 
@@ -362,7 +368,8 @@ public:
     TDeprecatedNotSortedSimpleScanCursor() = default;
 
     TDeprecatedNotSortedSimpleScanCursor(const ui64 deprecatedPortionId, const ui32 recordIndex)
-        : IDeprecatedSimpleScanCursor(deprecatedPortionId, recordIndex) {
+        : IDeprecatedSimpleScanCursor(deprecatedPortionId, recordIndex)
+    {
     }
 };
 
@@ -409,7 +416,8 @@ public:
     TSimpleScanCursor(
         const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& optonalPortionId)
         : ISimpleScanCursor(sourceIdx, recordIndex, optonalPortionId)
-        , PrimaryKey(pk) {
+        , PrimaryKey(pk)
+    {
     }
 };
 
@@ -452,7 +460,8 @@ public:
     TNotSortedSimpleScanCursor() = default;
 
     TNotSortedSimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& optionalPortionId)
-        : ISimpleScanCursor(sourceIdx, recordIndex, optionalPortionId) {
+        : ISimpleScanCursor(sourceIdx, recordIndex, optionalPortionId)
+    {
     }
 };
 
@@ -490,7 +499,8 @@ public:
     TPlainScanCursor() = default;
 
     TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
-        : PrimaryKey(pk) {
+        : PrimaryKey(pk)
+    {
         AFL_VERIFY(PrimaryKey);
     }
 };
@@ -506,7 +516,8 @@ class TRangesBuilder {
         TPredicateInfo(const NKernels::EOperation operation, const ui32 numColumns, const ui32 rowIndex)
             : Operation(operation)
             , NumColumns(numColumns)
-            , RowIndex(rowIndex) {
+            , RowIndex(rowIndex)
+        {
         }
 
         std::optional<TPredicate> BuildPredicate(
@@ -542,7 +553,8 @@ private:
 public:
     TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
         : YdbPK(ExtractTypes(ydbPk))
-        , ArrPK(arrPk) {
+        , ArrPK(arrPk)
+    {
         AFL_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
         NArrow::TStatusValidator::Validate(BatchBuilder.Start(ydbPk, arrPk));
     }

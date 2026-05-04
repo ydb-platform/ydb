@@ -14,7 +14,8 @@ private:
 
 public:
     TActivityChecker()
-        : ActiveFlag(1) {
+        : ActiveFlag(1)
+    {
     }
 
     void StopWriting(const TString& errorMessage) {
@@ -91,7 +92,8 @@ public:
         , LockMode(lockMode)
         , ActivityChecker(activityChecker)
         , NoTxWrite(noTxWrite)
-        , IsBulk(isBulk) {
+        , IsBulk(isBulk)
+    {
         AFL_VERIFY(ActivityChecker);
     }
 };

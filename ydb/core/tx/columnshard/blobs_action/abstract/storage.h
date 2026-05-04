@@ -75,7 +75,8 @@ public:
     IBlobsStorageOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
         : SelfTabletId(sharedBlobs->GetSelfTabletId())
         , StorageId(storageId)
-        , SharedBlobs(sharedBlobs) {
+        , SharedBlobs(sharedBlobs)
+    {
         Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
 

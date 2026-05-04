@@ -23,7 +23,8 @@ public:
               TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, Max<ui64>()))
         , Granule(std::move(granule))
         , ExternalPathId(externalPathId)
-        , PortionsCount(Granule->GetPortions().size()) {
+        , PortionsCount(Granule->GetPortions().size())
+    {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {

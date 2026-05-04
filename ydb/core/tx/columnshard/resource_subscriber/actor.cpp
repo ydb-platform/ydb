@@ -8,7 +8,8 @@ private:
 
 public:
     TCookie(const ui64 id)
-        : TaskIdentifier(id) {
+        : TaskIdentifier(id)
+    {
     }
 };
 
@@ -52,7 +53,8 @@ void TActor::Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllo
 
 TActor::TActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , Parent(parent) {
+    , Parent(parent)
+{
 }
 
 TActor::~TActor() {

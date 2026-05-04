@@ -24,7 +24,8 @@ public:
               TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
         , PathId(pathId)
         , Portion(portion)
-        , Schema(schema) {
+        , Schema(schema)
+    {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(

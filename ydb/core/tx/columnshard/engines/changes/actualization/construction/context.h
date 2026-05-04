@@ -22,7 +22,8 @@ public:
     TTaskConstructor(
         const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
         : MemoryPredictor(predictor)
-        , Task(task) {
+        , Task(task)
+    {
     }
 
     bool CanTakePortionInTx(const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {

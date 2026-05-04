@@ -29,7 +29,8 @@ protected:
 
 public:
     TSplittedEntity(const ui32 entityId)
-        : EntityId(entityId) {
+        : EntityId(entityId)
+    {
         AFL_VERIFY(EntityId);
     }
 
@@ -74,7 +75,8 @@ public:
         }
 
         TEntityChunk(TSplittedEntity* entity)
-            : Entity(entity) {
+            : Entity(entity)
+        {
         }
 
         ui32 GetEntityId() const {
@@ -266,7 +268,8 @@ public:
             , Tolerance(tolerance)
             , Schema(schema)
             , Counters(counters)
-            , InternalSplitsCount(&internalSplitsCount) {
+            , InternalSplitsCount(&internalSplitsCount)
+        {
             AFL_VERIFY(MinSize * 2 < MaxSize);
         }
 

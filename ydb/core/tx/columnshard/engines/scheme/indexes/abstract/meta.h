@@ -108,7 +108,8 @@ public:
         : IndexName(indexName)
         , IndexId(indexId)
         , DefaultStorageId(storageId)
-        , InheritPortionStorage(inheritPortionStorage) {
+        , InheritPortionStorage(inheritPortionStorage)
+    {
     }
 
     NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
@@ -143,7 +144,8 @@ public:
     TIndexMetaContainer() = default;
 
     TIndexMetaContainer(const std::shared_ptr<IIndexMeta>& object)
-        : TBase(object) {
+        : TBase(object)
+    {
         AFL_VERIFY(Object);
     }
 };

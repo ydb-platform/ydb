@@ -82,7 +82,8 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     : TBase(self)
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
-    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification()) {
+    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification())
+{
     AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
 
     auto changes = Ev->Get()->IndexChanges;

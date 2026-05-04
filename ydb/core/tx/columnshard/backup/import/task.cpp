@@ -88,7 +88,8 @@ TImportTask::TImportTask(const TInternalPathId& internalPathId, const TVector<TN
     , Columns(columns)
     , RestoreTask(restoreTask)
     , TxId(txId)
-    , SchemaVersion(schemaVersion) {
+    , SchemaVersion(schemaVersion)
+{
 }
 
 TString TImportTask::DebugString() const {

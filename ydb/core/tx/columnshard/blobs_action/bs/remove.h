@@ -35,7 +35,8 @@ public:
     TDeclareRemovingAction(
         const TString& storageId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, TBlobManager& manager)
         : TBase(storageId, manager.GetSelfTabletId(), counters)
-        , Manager(&manager) {
+        , Manager(&manager)
+    {
     }
 };
 

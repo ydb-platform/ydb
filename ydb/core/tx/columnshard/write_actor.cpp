@@ -21,7 +21,8 @@ public:
     TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline)
         : TabletId(tabletId)
         , WriteController(writeController)
-        , Deadline(deadline) {
+        , Deadline(deadline)
+    {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)(
             "debug", writeController->DebugString());
     }

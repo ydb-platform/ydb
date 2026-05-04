@@ -54,13 +54,15 @@ public:
     virtual ~TCommonSession() = default;
 
     TCommonSession(const TString& info)
-        : Info(info) {
+        : Info(info)
+    {
     }
 
     TCommonSession(const TString& sessionId, const TString& info, const TTransferContext& transferContext)
         : SessionId(sessionId)
         , Info(info)
-        , TransferContext(transferContext) {
+        , TransferContext(transferContext)
+    {
         AFL_VERIFY(!!SessionId);
     }
 

@@ -59,7 +59,8 @@ private:
 public:
     explicit TTestColumn(const TString& name, const NScheme::TTypeInfo& type)
         : Name(name)
-        , Type(type) {
+        , Type(type)
+    {
     }
 
     NKikimrSchemeOp::TOlapColumnDescription CreateColumn(const ui32 id) const;

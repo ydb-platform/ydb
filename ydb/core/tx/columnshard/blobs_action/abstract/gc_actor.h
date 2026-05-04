@@ -69,7 +69,8 @@ public:
         : OperatorId(operatorId)
         , BlobIdsByTablets(blobIds)
         , SelfTabletId(selfTabletId)
-        , GCAction(gcAction) {
+        , GCAction(gcAction)
+    {
         AFL_VERIFY(GCAction);
     }
 

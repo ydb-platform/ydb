@@ -35,7 +35,8 @@ private:
 
 public:
     TBlobInfoSerializer(NKikimrColumnShardDataSharingProto::TIndexChunk& proto)
-        : Proto(proto) {
+        : Proto(proto)
+    {
     }
 
     void operator()(const TBlobRangeLink16& link) {

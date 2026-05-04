@@ -36,7 +36,8 @@ public:
         , TxId(txId)
         , RestoreTask(restoreTask)
         , TableInfo(tableInfo)
-        , YdbSchema(ydbSchema) {
+        , YdbSchema(ydbSchema)
+    {
     }
 
     void Bootstrap() {

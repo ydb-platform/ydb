@@ -24,12 +24,14 @@ private:
 public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     constexpr TSnapshot(const TPositiveIncreasingControlInteger planStep, const ui64 txId) noexcept
         : PlanStep(planStep.Val())
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     NJson::TJsonValue SerializeToJson() const;

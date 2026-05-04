@@ -41,7 +41,8 @@ public:
         , TablePathId(tablePathId)
         , TablePath(std::move(tablePath))
         , DsGroupSelector(dsGroupSelector)
-        , LogLevel(logLevel) {
+        , LogLevel(logLevel)
+    {
         LeakeadBlobsSize = 0;
         for (const auto& blob : Leaks) {
             LeakeadBlobsSize += blob.BlobSize();
@@ -129,7 +130,8 @@ public:
         , TablePath(std::move(tablePath))
         , TabletGeneration(tabletGeneration)
         , Enabled(enabled)
-        , LogLevel(logLevel) {
+        , LogLevel(logLevel)
+    {
         if (!Enabled) {
             Finished = true;
         }
@@ -363,7 +365,8 @@ public:
         , PrintLeakedBlobIds(printLeakedBlobIds)
         , LogLevel(logLevel)
         , DsGroupSelector(dsGroupSelector)
-        , HiveHistoryCollector(csTabletId, tablePathId, TablePath, tabletGeneration, printLeakedBlobIds, logLevel) {
+        , HiveHistoryCollector(csTabletId, tablePathId, TablePath, tabletGeneration, printLeakedBlobIds, logLevel)
+    {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -471,7 +474,8 @@ public:
         , ActorId(actorId)
         , DsGroupSelector(dsGroupSelector)
         , PrintLeakedBlobIds(printLeakedBlobIds)
-        , LogLevel(logLevel) {
+        , LogLevel(logLevel)
+    {
     }
 
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
@@ -496,7 +500,8 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
     : TBase(info)
     , Channels(info.GetStorageInfo()->Channels)
     , DsGroupSelector(info.GetStorageInfo())
-    , Stats(TabletId) {
+    , Stats(TabletId)
+{
 }
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
@@ -573,8 +578,8 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(TDbWrapper& wrapper
 }
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadPortions(TDbWrapper& wrapper, const TVersionedIndex& versionedIndex) {
-    auto allProcessed = wrapper.LoadPortions(
-        [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+    auto allProcessed =
+        wrapper.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             auto schema = portion->GetSchema(versionedIndex);
             auto portionTier = metaProto.GetTierName();
             auto howToProcessPortion = DefineHowToProcessPortion(portionTier, schema);
@@ -586,8 +591,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortions(TDbWrapper& wrapper, cons
             BatchCursor.OnPortionLoaded(portion->GetPathId(), portion->GetPortionIdVerified());
             Stats.OnPortionLoaded(howToProcessPortion);
             return !BatchCursor.IsFull();
-        },
-        BatchCursor.GetNextLoadPortionKey().first, BatchCursor.GetNextLoadPortionKey().second);
+        }, BatchCursor.GetNextLoadPortionKey().first, BatchCursor.GetNextLoadPortionKey().second);
     if (allProcessed) {
         BatchCursor.NoMorePortions();
     }
@@ -601,35 +605,33 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortions(TDbWrapper& wrapper, cons
 }
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadIndices(TDbWrapper& wrapper) {
-    auto allProcessed = wrapper.LoadIndexes(
-        [&](const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&& indexChunk) {
-            Stats.OnIndexLoaded();
-            BatchCursor.MoveCurrentPortionTo(pathId, portionId);
-            if (BatchCursor.NeedToSkip(pathId, portionId)) {
-                return;
-            }
-            TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
-
-            if (portion.IsInDefaultStorage(indexChunk.GetEntityId())) {
-                if (indexChunk.GetBlobRangeAddress()) {
-                    Result.emplace(indexChunk.GetBlobRangeAddress()->GetBlobId().GetLogoBlobId());
-                    Stats.OnIndexHasItsOwnBlob();
-                } else if (indexChunk.GetBlobRangeLink16()) {
-                    // if the portion is in default storage, we will take all its column blobs anyway
-                    // so no need to add index idxs for checking
-                    if (!portion.IsInDefaultStorage()) {
-                        portion.AddDeferredIndexBlobIdx(indexChunk.GetBlobRangeLink16()->GetBlobIdxVerified());
-                    }
-                    Stats.OnIndexNeedColumnV2();
-                } else {
-                    Stats.OnIndexInplaced();
-                }
-            } else {
-                Stats.OnIndexInForeignStorage();
-            }
+    auto allProcessed = wrapper.LoadIndexes([&](const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&& indexChunk) {
+        Stats.OnIndexLoaded();
+        BatchCursor.MoveCurrentPortionTo(pathId, portionId);
+        if (BatchCursor.NeedToSkip(pathId, portionId)) {
             return;
-        },
-        BatchCursor.StartPathId(), BatchCursor.StartPortionId(), BatchCursor.EndPathId(), BatchCursor.EndPortionId());
+        }
+        TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
+
+        if (portion.IsInDefaultStorage(indexChunk.GetEntityId())) {
+            if (indexChunk.GetBlobRangeAddress()) {
+                Result.emplace(indexChunk.GetBlobRangeAddress()->GetBlobId().GetLogoBlobId());
+                Stats.OnIndexHasItsOwnBlob();
+            } else if (indexChunk.GetBlobRangeLink16()) {
+                // if the portion is in default storage, we will take all its column blobs anyway
+                // so no need to add index idxs for checking
+                if (!portion.IsInDefaultStorage()) {
+                    portion.AddDeferredIndexBlobIdx(indexChunk.GetBlobRangeLink16()->GetBlobIdxVerified());
+                }
+                Stats.OnIndexNeedColumnV2();
+            } else {
+                Stats.OnIndexInplaced();
+            }
+        } else {
+            Stats.OnIndexInForeignStorage();
+        }
+        return;
+    }, BatchCursor.StartPathId(), BatchCursor.StartPortionId(), BatchCursor.EndPathId(), BatchCursor.EndPortionId());
 
     if (allProcessed) {
         BatchCursor.NextStep();
@@ -641,30 +643,28 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadIndices(TDbWrapper& wrapper) {
 }
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadColumns(TDbWrapper& wrapper) {
-    auto allProcessed = wrapper.LoadColumns(
-        [&](TColumnChunkLoadContextV2&& columnChunk) {
-            Stats.OnColumnLoaded();
-            const auto pathId = columnChunk.GetPathId();
-            const auto portionId = columnChunk.GetPortionId();
-            BatchCursor.MoveCurrentPortionTo(pathId, portionId);
-            if (BatchCursor.NeedToSkip(pathId, portionId)) {
-                return;
+    auto allProcessed = wrapper.LoadColumns([&](TColumnChunkLoadContextV2&& columnChunk) {
+        Stats.OnColumnLoaded();
+        const auto pathId = columnChunk.GetPathId();
+        const auto portionId = columnChunk.GetPortionId();
+        BatchCursor.MoveCurrentPortionTo(pathId, portionId);
+        if (BatchCursor.NeedToSkip(pathId, portionId)) {
+            return;
+        }
+        TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
+        const auto& blobIds = columnChunk.GetBlobIds();
+        if (!portion.GetDeferredIndexBlobIdxs().empty()) {
+            for (auto& idx : portion.GetDeferredIndexBlobIdxs()) {
+                AFL_VERIFY(idx < blobIds.size())("idx", idx)("blob_ids_size", blobIds.size())("path_id", portion.GetPathId())(
+                                   "portion_id", portion.GetPortionId());
+                Result.emplace(blobIds[idx].GetLogoBlobId());
             }
-            TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
-            const auto& blobIds = columnChunk.GetBlobIds();
-            if (!portion.GetDeferredIndexBlobIdxs().empty()) {
-                for (auto& idx : portion.GetDeferredIndexBlobIdxs()) {
-                    AFL_VERIFY(idx < blobIds.size())("idx", idx)("blob_ids_size", blobIds.size())("path_id", portion.GetPathId())(
-                                       "portion_id", portion.GetPortionId());
-                    Result.emplace(blobIds[idx].GetLogoBlobId());
-                }
-            } else {
-                for (auto& blobId : blobIds) {
-                    Result.emplace(blobId.GetLogoBlobId());
-                }
+        } else {
+            for (auto& blobId : blobIds) {
+                Result.emplace(blobId.GetLogoBlobId());
             }
-        },
-        BatchCursor.StartPathId(), BatchCursor.StartPortionId(), BatchCursor.EndPathId(), BatchCursor.EndPortionId());
+        }
+    }, BatchCursor.StartPathId(), BatchCursor.StartPortionId(), BatchCursor.EndPathId(), BatchCursor.EndPortionId());
 
     if (allProcessed) {
         BatchCursor.NextStep();

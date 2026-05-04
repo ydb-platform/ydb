@@ -19,7 +19,8 @@ protected:
 public:
     TReadingAction(const TString& storageId, const TActorId& blobCacheActorId)
         : TBase(storageId)
-        , BlobCacheActorId(blobCacheActorId) {
+        , BlobCacheActorId(blobCacheActorId)
+    {
     }
 };
 

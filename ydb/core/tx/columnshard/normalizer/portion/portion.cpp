@@ -14,7 +14,8 @@ class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Portions(std::move(portions))
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {

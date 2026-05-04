@@ -27,7 +27,8 @@ public:
 
 public:
     TSpaceWatcher(TColumnShard* self)
-        : Self(self) {
+        : Self(self)
+    {
     }
 
     void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext& txc);

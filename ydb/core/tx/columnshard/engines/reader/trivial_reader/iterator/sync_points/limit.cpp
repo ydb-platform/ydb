@@ -11,7 +11,8 @@ TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 poin
     const std::shared_ptr<TScanWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
-    , Collection(collection) {
+    , Collection(collection)
+{
     AFL_VERIFY(Collection);
 }
 

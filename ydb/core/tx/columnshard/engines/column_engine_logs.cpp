@@ -72,7 +72,8 @@ public:
         , Orbit(orbit)
         , TabletId(tabletId)
         , TxId(txId)
-        , ScanId(scanId) {
+        , ScanId(scanId)
+    {
     }
 
     std::vector<TColumnEngineForLogs::TSelectedPortionInfo> Select() {
@@ -234,7 +235,8 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , TabletId(tabletId)
     , Counters(counters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
@@ -252,7 +254,8 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , TabletId(tabletId)
     , Counters(counters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));

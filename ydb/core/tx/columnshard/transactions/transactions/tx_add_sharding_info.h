@@ -22,7 +22,8 @@ public:
         : TBase(&owner)
         , GranuleShardingLogic(granuleShardingLogic)
         , PathId(pathId)
-        , ShardingVersion(version) {
+        , ShardingVersion(version)
+    {
         AFL_VERIFY(!!GranuleShardingLogic);
     }
 

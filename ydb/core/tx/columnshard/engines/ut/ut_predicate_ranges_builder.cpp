@@ -139,8 +139,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
                 (Timestamp("2026-04-16T03:22:00Z"), "a1", "r2", "u2", 2),
                 (Timestamp("2026-04-16T03:30:00Z"), "a1", "r3", "u3", 3),
                 (Timestamp("2026-04-16T03:35:00Z"), "a1", "r4", "u4", 4);
-        )",
-                                 NYdb::NQuery::TTxControl::NoTx())
+        )", NYdb::NQuery::TTxControl::NoTx())
                              .ExtractValueSync();
         UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
 

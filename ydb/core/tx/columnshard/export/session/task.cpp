@@ -62,7 +62,8 @@ TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>
     : Identifier(id)
     , BackupTask(backupTask)
     , TxId(txId)
-    , Columns(columns) {
+    , Columns(columns)
+{
 }
 
 TString TExportTask::GetClassNameStatic() {

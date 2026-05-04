@@ -29,7 +29,8 @@ public:
         : WriteData(std::move(writeData))
         , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
-        , Context(context) {
+        , Context(context)
+    {
         WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SlicesConstruction);
     }
 };

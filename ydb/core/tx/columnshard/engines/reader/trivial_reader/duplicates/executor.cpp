@@ -35,7 +35,8 @@ private:
 public:
     TColumnFetchingCallback(TBuildFilterTaskContext&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
         : Request(std::move(request))
-        , AllocationGuard(allocationGuard) {
+        , AllocationGuard(allocationGuard)
+    {
         AFL_VERIFY(allocationGuard);
     }
 
@@ -75,7 +76,8 @@ private:
 public:
     TColumnDataAllocation(TBuildFilterTaskContext&& request, const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
-        , Request(std::move(request)) {
+        , Request(std::move(request))
+    {
     }
 };
 
@@ -118,7 +120,8 @@ public:
     TColumnDataAccessorFetching(
         TBuildFilterTaskContext&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& accessorsMemoryGuard)
         : Request(std::move(request))
-        , AccessorsMemoryGuard(accessorsMemoryGuard) {
+        , AccessorsMemoryGuard(accessorsMemoryGuard)
+    {
     }
 
     static ui64 GetRequiredMemory(const THashSet<ui64>& portions, const TBuildFilterContext& context) {
@@ -157,14 +160,16 @@ private:
 public:
     TDataAccessorAllocation(TBuildFilterTaskContext&& request, const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
-        , Request(std::move(request)) {
+        , Request(std::move(request))
+    {
     }
 };
 
 }   // namespace
 
 TBuildFilterTaskExecutor::TBuildFilterTaskExecutor(TBordersIterator&& bordersIterator)
-    : BordersIterator(std::move(bordersIterator)) {
+    : BordersIterator(std::move(bordersIterator))
+{
 }
 
 bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {

@@ -31,7 +31,8 @@ public:
     TGlobalColumnAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress, const ui64 columnId)
         : TabletActorId(actorId)
         , InternalPortionAddress(internalAddress)
-        , ColumnId(columnId) {
+        , ColumnId(columnId)
+    {
     }
 
     bool operator==(const TGlobalColumnAddress& item) const {

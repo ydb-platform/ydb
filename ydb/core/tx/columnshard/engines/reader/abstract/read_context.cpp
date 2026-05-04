@@ -7,7 +7,8 @@
 namespace NKikimr::NOlap::NReader {
 
 IDataReader::IDataReader(const std::shared_ptr<TReadContext>& context)
-    : Context(context) {
+    : Context(context)
+{
 }
 
 TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
@@ -29,7 +30,8 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ComputeShardingPolicy(computeShardingPolicy)
     , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(
           ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits))
-    , ScanOrbit(scanOrbit) {
+    , ScanOrbit(scanOrbit)
+{
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {
         Resolver = std::make_shared<NCommon::TIndexColumnResolver>(ReadMetadata->GetResultSchema()->GetIndexInfo());

@@ -156,7 +156,8 @@ struct TSettings {
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
-        , CacheDataAfterCompaction(1, 0, 1) {
+        , CacheDataAfterCompaction(1, 0, 1)
+    {
     }
 
     void RegisterControls(TControlBoard& icb) {

@@ -111,7 +111,8 @@ public:
             const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const std::shared_ptr<NLWTrace::TOrbit>& orbit)
             : PathIdTranslator(pathIdTranslator)
             , Engine(engine)
-            , Orbit(orbit) {
+            , Orbit(orbit)
+        {
         }
     };
 
@@ -168,7 +169,8 @@ private:
 public:
     TAbsentTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)
         : TBase(tableName)
-        , PathId(pathId) {
+        , PathId(pathId)
+    {
     }
 
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {

@@ -19,7 +19,8 @@ private:
 
 public:
     TActualizationContext(const TInstant now)
-        : Now(now) {
+        : Now(now)
+    {
     }
 };
 
@@ -31,7 +32,8 @@ private:
 public:
     TActualizationBuildingContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Now(now)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
@@ -50,7 +52,8 @@ private:
 public:
     TAddExternalContext(const TInstant now, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
         : Now(now)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
@@ -74,7 +77,8 @@ public:
     }
 
     TExternalTasksContext(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions)
-        : Portions(portions) {
+        : Portions(portions)
+    {
     }
 };
 

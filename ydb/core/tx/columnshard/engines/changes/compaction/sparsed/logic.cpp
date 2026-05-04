@@ -76,7 +76,8 @@ TColumnPortionResult TSparsedMerger::TWriter::Flush(const ui32 recordsCount) {
 TSparsedMerger::TWriter::TWriter(const TColumnMergeContext& context)
     : TBase(context.GetColumnId())
     , DataType(context.GetResultField()->type())
-    , Context(context) {
+    , Context(context)
+{
     IndexBuilder = NArrow::MakeBuilder(arrow::uint32());
     ValueBuilder = NArrow::MakeBuilder(DataType);
     IndexBuilderImpl = (arrow::UInt32Builder*)(IndexBuilder.get());

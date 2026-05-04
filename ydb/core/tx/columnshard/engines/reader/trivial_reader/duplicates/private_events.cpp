@@ -6,7 +6,8 @@ TEvFilterRequestResourcesAllocated::TEvFilterRequestResourcesAllocated(const std
     const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard, std::unique_ptr<TFilterBuildingGuard>&& requestGuard)
     : Request(request)
     , AllocationGuard(guard)
-    , RequestGuard(std::move(requestGuard)) {
+    , RequestGuard(std::move(requestGuard))
+{
     AFL_VERIFY(RequestGuard);
 }
 
@@ -27,7 +28,8 @@ TBuildFilterTaskContext::TBuildFilterTaskContext(
     TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, TBordersBatch&& batch)
     : Context(std::move(context))
     , Executor(executor)
-    , Batch(std::move(batch)) {
+    , Batch(std::move(batch))
+{
 }
 
 const TBuildFilterContext& TBuildFilterTaskContext::GetGlobalContext() const {
@@ -39,7 +41,8 @@ TBuildFilterContext&& TBuildFilterTaskContext::ExtractGlobalContext() {
 }
 
 TDuplicateSourceCacheResult::TDuplicateSourceCacheResult(TColumnData&& data)
-    : DataByAddress(std::move(data)) {
+    : DataByAddress(std::move(data))
+{
 }
 
 THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> TDuplicateSourceCacheResult::ExtractDataByPortion(
@@ -74,19 +77,22 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
     const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
     : Context(std::move(context))
     , Result(std::move(columns))
-    , AllocationGuard(allocationGuard) {
+    , AllocationGuard(allocationGuard)
+{
 }
 
 TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskContext&& context, TConclusion<TDuplicateSourceCacheResult>&& error)
     : Context(std::move(context))
-    , Result(std::move(error)) {
+    , Result(std::move(error))
+{
 }
 
 TEvMergeBordersResult::TEvMergeBordersResult(
     TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
     : Context(std::move(context))
     , ReadyFilters(std::move(readyFilters))
-    , Result(std::move(conclusion)) {
+    , Result(std::move(conclusion))
+{
 }
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

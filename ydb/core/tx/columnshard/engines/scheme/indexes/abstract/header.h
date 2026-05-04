@@ -69,7 +69,8 @@ private:
 
 public:
     TDefaultHeader(const ui32 size)
-        : Size(size) {
+        : Size(size)
+    {
     }
 };
 

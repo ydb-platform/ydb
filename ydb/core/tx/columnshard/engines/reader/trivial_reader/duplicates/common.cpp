@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 TPortionStore::TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
-    : Portions(std::move(portions)) {
+    : Portions(std::move(portions))
+{
 }
 
 TPortionInfo::TConstPtr TPortionStore::GetPortionVerified(const ui64 portionId) const {
@@ -20,7 +21,8 @@ TPortionInfo::TConstPtr TPortionStore::GetPortionVerified(const ui64 portionId) 
 
 TBorder::TBorder(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const std::vector<ui64>& portionIds)
     : Key(key)
-    , PortionIds(portionIds) {
+    , PortionIds(portionIds)
+{
 }
 
 TString TBorder::DebugString() const {
@@ -34,7 +36,8 @@ void TBordersBatch::AddBorder(const TBorder& border) {
 
 TBordersIterator::TBordersIterator(std::vector<TBorder>&& borders, const ui64 portionsCountSoftLimit)
     : Borders(std::move(borders))
-    , PortionsCountSoftLimit(portionsCountSoftLimit) {
+    , PortionsCountSoftLimit(portionsCountSoftLimit)
+{
 }
 
 TBordersBatch TBordersIterator::Next() {

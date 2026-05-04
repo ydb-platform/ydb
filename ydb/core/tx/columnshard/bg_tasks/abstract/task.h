@@ -56,7 +56,8 @@ public:
     TTask(const TString& identifier, const TStatusChannelContainer& channelContainer, const TTaskDescriptionContainer& descriptionContainer)
         : Identifier(identifier)
         , ChannelContainer(channelContainer)
-        , DescriptionContainer(descriptionContainer) {
+        , DescriptionContainer(descriptionContainer)
+    {
         AFL_VERIFY(!!Identifier);
         AFL_VERIFY(!!ChannelContainer);
         AFL_VERIFY(!!DescriptionContainer);

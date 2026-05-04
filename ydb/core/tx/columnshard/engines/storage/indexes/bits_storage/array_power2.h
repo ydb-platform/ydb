@@ -27,7 +27,8 @@ private:
     TArrayPower2BitsStorage(ui32 dataSize, std::unique_ptr<ui64[]> data)
         : DataSize(dataSize)
         , Data(std::move(data))
-        , SizeMask(DataSize - 1) {
+        , SizeMask(DataSize - 1)
+    {
         Y_ABORT_UNLESS(std::has_single_bit(dataSize));
     }
 
@@ -43,7 +44,8 @@ public:
     TArrayPower2BitsStorage(ui32 bitSize)
         : DataSize(bitSize / BitsInItem)
         , Data(new ui64[DataSize])
-        , SizeMask(DataSize - 1) {
+        , SizeMask(DataSize - 1)
+    {
         Y_ABORT_UNLESS(bitSize >= BitsInItem);
         std::fill(Data.get(), Data.get() + DataSize, 0);
         Y_ABORT_UNLESS(std::has_single_bit(bitSize));

@@ -74,7 +74,8 @@ TScanCounters::TScanCounters(const TString& module)
     , ProcessedSourceRawBytes(TBase::GetDeriviative("ProcessedSource/RawBytes"))
     , ProcessedSourceRecords(TBase::GetDeriviative("ProcessedSource/Records"))
     , ProcessedSourceEmptyCount(TBase::GetDeriviative("ProcessedSource/Empty/Count"))
-    , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2))) {
+    , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2)))
+{
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
     DuplicateFilteringCounters = std::make_shared<TDuplicateFilteringCounters>();
     SimpleDuplicateFilteringCounters = std::make_shared<TSimpleDuplicateFilteringCounters>();
@@ -134,7 +135,8 @@ void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
 TConcreteScanCounters::TConcreteScanCounters(
     const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
     : TBase(counters)
-    , Aggregations(TBase::BuildAggregations()) {
+    , Aggregations(TBase::BuildAggregations())
+{
     if (program) {
         for (auto&& i : program->GetNodes()) {
             SkipNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());

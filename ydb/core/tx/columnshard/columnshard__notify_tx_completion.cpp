@@ -6,7 +6,8 @@ class TTxNotifyTxCompletion: public TTransactionBase<TColumnShard> {
 public:
     TTxNotifyTxCompletion(TColumnShard* self, TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev)
         : TBase(self)
-        , Ev(ev) {
+        , Ev(ev)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {

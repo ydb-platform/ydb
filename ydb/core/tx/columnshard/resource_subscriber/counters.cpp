@@ -14,7 +14,8 @@ std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(co
 }
 
 TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owner, const TString& resourceType)
-    : TBase(owner) {
+    : TBase(owner)
+{
     DeepSubGroup("ResourceType", resourceType);
 
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");

@@ -27,7 +27,8 @@ public:
 
     TManagerConstructionContext(const NActors::TActorId& tabletActorId, const bool isUpdate)
         : TabletActorId(tabletActorId)
-        , IsUpdateFlag(isUpdate) {
+        , IsUpdateFlag(isUpdate)
+    {
     }
 };
 

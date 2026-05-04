@@ -7,7 +7,8 @@ namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NPortions {
 TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
     const IColumnEngine& engine, const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
     const ERequestSorting sorting)
-    : TBase(sorting, tabletId) {
+    : TBase(sorting, tabletId)
+{
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
     std::deque<TDataSourceConstructor> constructors;
@@ -33,9 +34,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             portions.emplace_back(p);
             if (portions.size() == 10) {
                 if (unifiedPathId.HasInternalPathId()) {
-                    constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(
-                                                  unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()),
-                        TabletId, portions);
+                    constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(),
+                                                  unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, portions);
                     if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                             constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                         constructors.pop_back();
@@ -56,9 +56,8 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
         }
         if (portions.size()) {
             if (unifiedPathId.HasInternalPathId()) {
-                constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(
-                                              unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()),
-                    TabletId, std::move(portions));
+                constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(),
+                                              unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, std::move(portions));
                 if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                         constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                     constructors.pop_back();

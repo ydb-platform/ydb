@@ -42,7 +42,8 @@ public:
     TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool isOutOfOrder)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , IsOutOfOrder(isOutOfOrder) {
+        , IsOutOfOrder(isOutOfOrder)
+    {
     }
 
     const TReplaceKeyAdapter& GetStart() const {
@@ -61,7 +62,8 @@ public:
         , Finish(std::move(other.Finish))
         , IsOutOfOrder(other.IsOutOfOrder)
         , SourceIdx(other.SourceIdx)
-        , SourceIdxInitialized(other.SourceIdxInitialized) {
+        , SourceIdxInitialized(other.SourceIdxInitialized)
+    {
     }
 
     TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
@@ -100,7 +102,8 @@ public:
 
     public:
         TReversedComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
+            : Sorting(sorting)
+        {
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
@@ -135,7 +138,8 @@ private:
 
 public:
     TOrderedObjects(const ERequestSorting sorting)
-        : Sorting(sorting) {
+        : Sorting(sorting)
+    {
     }
 
     ERequestSorting GetSorting() const {
@@ -365,7 +369,8 @@ public:
     public:
         TObjectWithAccessor(TConstructor&& obj, std::shared_ptr<TPortionDataAccessor>&& acc)
             : Object(std::move(obj))
-            , Accessor(std::move(acc)) {
+            , Accessor(std::move(acc))
+        {
         }
 
         TConstructor& MutableObject() {
@@ -381,7 +386,8 @@ public:
     }
 
     TSourcesConstructorWithAccessors(const ERequestSorting sorting)
-        : Constructors(sorting) {
+        : Constructors(sorting)
+    {
     }
 
     void InitializeConstructors(std::deque<TConstructor>&& objects) {

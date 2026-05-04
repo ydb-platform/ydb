@@ -40,7 +40,8 @@ private:
 public:
     TStepAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
         : TBase("AGGREGATION")
-        , Aggregator(proc) {
+        , Aggregator(proc)
+    {
     }
 
     virtual TConclusion<bool> DoExecuteInplace(
@@ -56,7 +57,8 @@ private:
 public:
     TCleanAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
         : TBase("CLEAN_AGGREGATION")
-        , Aggregator(proc) {
+        , Aggregator(proc)
+    {
     }
 
     virtual TConclusion<bool> DoExecuteInplace(
@@ -82,7 +84,8 @@ public:
 
     TDetectInMemStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
@@ -109,7 +112,8 @@ public:
 
     TPrepareResultStep(const bool startResultBuildingInplace)
         : TBase("PREPARE_RESULT")
-        , StartResultBuildingInplace(startResultBuildingInplace) {
+        , StartResultBuildingInplace(startResultBuildingInplace)
+    {
     }
 };
 
@@ -139,7 +143,8 @@ public:
     TBuildResultStep(const ui32 startIndex, const ui32 recordsCount)
         : TBase("BUILD_RESULT")
         , StartIndex(startIndex)
-        , RecordsCount(recordsCount) {
+        , RecordsCount(recordsCount)
+    {
     }
 };
 
@@ -162,7 +167,8 @@ public:
 
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
-        , Columns(columns) {
+        , Columns(columns)
+    {
         AFL_VERIFY(Columns.GetColumnsCount());
     }
 };
@@ -182,7 +188,8 @@ protected:
 
 public:
     TPortionAccessorFetchedStep()
-        : TBase("PORTION_ACCESSOR_FETCHED") {
+        : TBase("PORTION_ACCESSOR_FETCHED")
+    {
     }
 };
 
@@ -200,7 +207,8 @@ public:
     TFilterCutLimit(const ui32 limit, const bool reverse)
         : TBase("LIMIT")
         , Limit(limit)
-        , Reverse(reverse) {
+        , Reverse(reverse)
+    {
         AFL_VERIFY(Limit);
     }
 };
@@ -215,7 +223,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
-        : TBase("PREDICATE") {
+        : TBase("PREDICATE")
+    {
     }
 };
 
@@ -229,7 +238,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TConflictDetector()
-        : TBase("CONFLICT_DETECTOR") {
+        : TBase("CONFLICT_DETECTOR")
+    {
     }
 };
 
@@ -243,7 +253,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TSnapshotFilter()
-        : TBase("SNAPSHOT") {
+        : TBase("SNAPSHOT")
+    {
     }
 };
 
@@ -257,7 +268,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TInitializeSourceStep()
-        : TBase("INITIALIZE_SOURCE") {
+        : TBase("INITIALIZE_SOURCE")
+    {
     }
 };
 
@@ -274,7 +286,8 @@ public:
 
     TDetectInMemFlag(const TColumnsSetIds& columns)
         : TBase("DETECT_IN_MEM_FLAG")
-        , Columns(columns) {
+        , Columns(columns)
+    {
     }
 };
 
@@ -288,7 +301,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
-        : TBase("DELETION") {
+        : TBase("DELETION")
+    {
     }
 };
 
@@ -302,7 +316,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()
-        : TBase("SHARDING") {
+        : TBase("SHARDING")
+    {
     }
 };
 
@@ -329,7 +344,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDuplicateFilter()
-        : TBase("DUPLICATE") {
+        : TBase("DUPLICATE")
+    {
     }
 };
 
@@ -343,7 +359,8 @@ public:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TUpdateAggregatedMemoryStep()
-        : TBase("ACTUALIZE_MEMORY_AGGR") {
+        : TBase("ACTUALIZE_MEMORY_AGGR")
+    {
     }
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -21,7 +21,8 @@ struct TBasicTxInfo {
 public:
     TBasicTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
         : TxKind(txKind)
-        , TxId(txId) {
+        , TxId(txId)
+    {
         AFL_VERIFY(txKind != NKikimrTxColumnShard::TX_KIND_NONE);
     }
 
@@ -83,7 +84,8 @@ public:
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId)
-        : TBasicTxInfo(txKind, txId) {
+        : TBasicTxInfo(txKind, txId)
+    {
     }
 
     TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep,
@@ -92,7 +94,8 @@ public:
         , MinStep(minAllowedPlanStep)
         , Source(source)
         , Cookie(cookie)
-        , SeqNo(seqNo) {
+        , SeqNo(seqNo)
+    {
     }
 };
 
@@ -107,7 +110,8 @@ public:
 
         TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
             : Status(status)
-            , StatusMessage(statusMessage) {
+            , StatusMessage(statusMessage)
+        {
         }
 
         bool IsFail() const {
@@ -127,12 +131,14 @@ private:
 public:
     TTxProposeResult(const TBasicTxInfo& txInfo, TProposeResult&& result)
         : BaseTxInfo(txInfo)
-        , ProposeResult(std::move(result)) {
+        , ProposeResult(std::move(result))
+    {
     }
 
     TTxProposeResult(const TFullTxInfo& txInfo, TProposeResult&& result)
         : FullTxInfo(txInfo)
-        , ProposeResult(std::move(result)) {
+        , ProposeResult(std::move(result))
+    {
     }
 
     ui64 GetTxId() const noexcept {
@@ -166,7 +172,8 @@ public:
 
         TPlanQueueItem(const ui64 step, const ui64 txId)
             : Step(step)
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
@@ -308,7 +315,8 @@ public:
         }
 
         ITransactionOperator(const TTxInfo& txInfo)
-            : TxInfo(txInfo) {
+            : TxInfo(txInfo)
+        {
         }
 
         ui64 GetTxId() const {

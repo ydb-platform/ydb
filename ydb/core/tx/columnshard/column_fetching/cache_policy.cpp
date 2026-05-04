@@ -45,7 +45,8 @@ private:
 
 public:
     TObjectsProcessor(const NActors::TActorId& serviceActorId)
-        : ServiceActorId(serviceActorId) {
+        : ServiceActorId(serviceActorId)
+    {
     }
 };
 

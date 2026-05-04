@@ -64,7 +64,8 @@ public:
         std::unique_ptr<NStat::TEvStatistics::TEvStatisticsResponse>&& response)
         : RequestSenderActorId(requestSenderActorId)
         , Cookie(cookie)
-        , Response(std::move(response)) {
+        , Response(std::move(response))
+    {
         for (auto&& i : tags) {
             AFL_VERIFY(Calculated.emplace(i, nullptr).second);
         }
@@ -125,7 +126,8 @@ public:
         , PortionsCountLimit(portionsCountLimit)
         , DataAccessors(dataAccessorsManager)
         , Result(result)
-        , VersionedIndex(vIndex) {
+        , VersionedIndex(vIndex)
+    {
     }
 
     class TIndexReadTask: public NOlap::NBlobOperations::NRead::ITask {
@@ -169,7 +171,8 @@ public:
             : TBase(std::move(readingActions), "STATISTICS", "STATISTICS")
             , Result(result)
             , RangesByColumn(std::move(rangesByColumn))
-            , SketchesByColumns(std::move(readySketches)) {
+            , SketchesByColumns(std::move(readySketches))
+        {
             AFL_VERIFY(!!Result);
             AFL_VERIFY(RangesByColumn.size());
         }
@@ -256,7 +259,8 @@ public:
             : StoragesManager(storagesManager)
             , Result(result)
             , VersionedIndex(vIndex)
-            , ColumnTagsRequested(tags) {
+            , ColumnTagsRequested(tags)
+        {
         }
     };
 

@@ -62,7 +62,8 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
 }
 
 TActor::TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter)
-    : TBase(bgSession, adapter) {
+    : TBase(bgSession, adapter)
+{
     ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
 }
 
@@ -133,7 +134,8 @@ protected:
 public:
     TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
         : TBase(self)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 };
 

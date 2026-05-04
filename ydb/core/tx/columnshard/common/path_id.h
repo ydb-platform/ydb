@@ -12,12 +12,14 @@ private:
     ui64 PathId;
 
     explicit TInternalPathId(ui64 pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
     }
 
 public:
     TInternalPathId()
-        : PathId(0) {
+        : PathId(0)
+    {
     }
 
     TInternalPathId(const TInternalPathId&) = default;
@@ -63,12 +65,14 @@ class TSchemeShardLocalPathId {
 
 private:
     explicit TSchemeShardLocalPathId(const ui64 pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
     }
 
 public:
     TSchemeShardLocalPathId()
-        : PathId(0) {
+        : PathId(0)
+    {
     }
 
     bool IsValid() const {
@@ -112,7 +116,8 @@ private:
 public:
     TUnifiedOptionalPathId(const std::optional<TInternalPathId> internalPathId, const std::optional<TSchemeShardLocalPathId> externalPathId)
         : InternalPathId(internalPathId)
-        , SchemeShardLocalPathId(externalPathId) {
+        , SchemeShardLocalPathId(externalPathId)
+    {
     }
 
     bool HasInternalPathId() const {
@@ -153,14 +158,16 @@ class TUnifiedPathId {
 private:
     TUnifiedPathId(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId)
         : InternalPathId(internalPathId)
-        , SchemeShardLocalPathId(externalPathId) {
+        , SchemeShardLocalPathId(externalPathId)
+    {
     }
 
 public:
     TUnifiedPathId() = default;
 
     TUnifiedPathId(const TUnifiedOptionalPathId& optionalId)
-        : TUnifiedPathId(optionalId.GetInternalPathIdVerified(), optionalId.GetSchemeShardLocalPathIdVerified()) {
+        : TUnifiedPathId(optionalId.GetInternalPathIdVerified(), optionalId.GetSchemeShardLocalPathIdVerified())
+    {
     }
 
     TInternalPathId InternalPathId;

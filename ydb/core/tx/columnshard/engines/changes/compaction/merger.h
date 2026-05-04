@@ -28,7 +28,8 @@ public:
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext)
         : Context(context)
-        , SaverContext(saverContext) {
+        , SaverContext(saverContext)
+    {
     }
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext,
@@ -36,7 +37,8 @@ public:
         : Batches(std::move(batches))
         , Filters(std::move(filters))
         , Context(context)
-        , SaverContext(saverContext) {
+        , SaverContext(saverContext)
+    {
         AFL_VERIFY(Batches.size() == Filters.size());
     }
 

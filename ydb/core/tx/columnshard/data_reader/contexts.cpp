@@ -19,7 +19,8 @@ TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portion
     : Consumer(consumer)
     , ExternalTaskId(externalTaskId)
     , TabletId(tabletId)
-    , MemoryProcessGuard(memoryProcessGuard) {
+    , MemoryProcessGuard(memoryProcessGuard)
+{
     AFL_VERIFY(portions.size());
     ActualSchema = versions->GetLastSchema();
     for (auto&& i : portions) {

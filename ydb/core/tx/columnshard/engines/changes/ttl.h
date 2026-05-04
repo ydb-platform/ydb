@@ -18,7 +18,8 @@ private:
     public:
         TPortionForEviction(const TPortionInfo::TConstPtr& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
-            , Features(std::move(features)) {};
+            , Features(std::move(features))
+        {};
 
         TPortionEvictionFeatures& GetFeatures() {
             return Features;
@@ -140,7 +141,8 @@ public:
 
     TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::TTL)
-        , RWAddress(address) {
+        , RWAddress(address)
+    {
     }
 };
 

@@ -94,7 +94,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
-    , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>())) {
+    , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>()))
+{
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
 }
 
@@ -489,7 +490,8 @@ private:
 
 public:
     TCompactionAllocated(const NActors::TActorId& tabletActorId)
-        : TabletActorId(tabletActorId) {
+        : TabletActorId(tabletActorId)
+    {
     }
 };
 
@@ -627,7 +629,8 @@ public:
         , Counters(counters)
         , SnapshotModification(snapshotModification)
         , NeedBlobs(needBlobs)
-        , TabletActivity(tabletActivity) {
+        , TabletActivity(tabletActivity)
+    {
     }
 };
 
@@ -663,9 +666,8 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
             NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard, TabletID());
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-            std::make_shared<TCompactionExecutor>(
-                TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
-            env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+            std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
+                GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
     }
 }
 
@@ -712,7 +714,8 @@ public:
         const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
         : TabletActorId(tabletActorId)
         , Processor(processor)
-        , Generation(gen) {
+        , Generation(gen)
+    {
     }
 };
 
@@ -742,7 +745,8 @@ public:
         , ChangeTask(changeTask)
         , Request(std::move(request))
         , Subscriber(subscriber)
-        , DataAccessorsManager(dataAccessorsManager) {
+        , DataAccessorsManager(dataAccessorsManager)
+    {
     }
 };
 
@@ -791,14 +795,12 @@ bool TColumnShard::SetupTtl() {
         auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         if (i->NeedConstruction()) {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-                std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, true),
-                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+                std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(),
+                    GetLastCompletedTx(), TabletActivityImpl, true), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         } else {
             NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
-                std::make_shared<TCompactionExecutor>(
-                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
-                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+                std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(),
+                    GetLastCompletedTx(), TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
     }
     return true;
@@ -836,9 +838,8 @@ void TColumnShard::SetupCleanupPortions() {
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard, TabletID());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
-        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(),
+            GetLastCompletedTx(), TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
 void TColumnShard::SetupCleanupTables() {
@@ -887,7 +888,8 @@ private:
 public:
     TTxCleanupSchemasWithnoData(TColumnShard* self, std::vector<TTablesManager::TSchemasChain>&& chainsToClean)
         : TBase(self)
-        , ChainsToClean(std::move(chainsToClean)) {
+        , ChainsToClean(std::move(chainsToClean))
+    {
         for (auto&& i : ChainsToClean) {
             i.FillAddressesTo(AddressesToFetch);
         }
@@ -1217,7 +1219,8 @@ private:
 
 public:
     TPortionConstructorV2(const NOlap::TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo) {
+        : PortionInfo(portionInfo)
+    {
         AFL_VERIFY(PortionInfo);
     }
 
@@ -1278,7 +1281,8 @@ public:
     TAccessorsParsingTask(
         const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions)
         : FetchCallback(callback)
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 };
 
@@ -1297,7 +1301,8 @@ public:
         : TBase(self)
         , FetchCallback(fetchCallback)
         , PortionsByPath(std::move(portions))
-        , StartTime(TInstant::Now()) {
+        , StartTime(TInstant::Now())
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
@@ -1433,12 +1438,12 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
 
     public:
         TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
-                      cacheCallback,
-            const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema)
+                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema)
             : CacheCallback(cacheCallback)
             , Portion(portion)
             , Owner(owner)
-            , Schema(schema) {
+            , Schema(schema)
+        {
         }
     };
 
@@ -1453,8 +1458,8 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
             std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(),
-                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)),
-            env, NConveyorComposite::ESpecialTaskCategory::Scan);
+                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
+            NConveyorComposite::ESpecialTaskCategory::Scan);
     }
 }
 
@@ -1537,9 +1542,8 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
         AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
         AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
-    Execute(
-        new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()),
-        ctx);
+    Execute(new TTxRemoveSharedBlobs(
+                this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
 void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {

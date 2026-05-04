@@ -20,7 +20,8 @@ protected:
 public:
     TReadingAction(const TString& storageId, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator)
         : TBase(storageId)
-        , ExternalStorageOperator(storageOperator) {
+        , ExternalStorageOperator(storageOperator)
+    {
     }
 };
 

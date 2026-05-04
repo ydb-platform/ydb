@@ -4,7 +4,8 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TWriteCounters::TWriteCounters(const TConsumerCounters& owner)
-    : TBase(owner, "Writer") {
+    : TBase(owner, "Writer")
+{
     RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
 

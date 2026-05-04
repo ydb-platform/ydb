@@ -17,7 +17,8 @@ public:
     TColumnDefaultScalarValue() = default;
 
     TColumnDefaultScalarValue(const std::shared_ptr<arrow::Scalar>& val)
-        : Value(val) {
+        : Value(val)
+    {
     }
 
     TString DebugString() const;

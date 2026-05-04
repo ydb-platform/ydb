@@ -33,7 +33,8 @@ public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
         : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
-        , IncomingData(incoming) {
+        , IncomingData(incoming)
+    {
         IncomingFinished = !IncomingPosition.InitPosition(0);
     }
 

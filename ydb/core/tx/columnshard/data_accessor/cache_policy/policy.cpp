@@ -31,7 +31,8 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
             , Callback(callback)
-            , RequestedAddresses(std::move(requestedAddresses)) {
+            , RequestedAddresses(std::move(requestedAddresses))
+        {
         }
 
         ~TAccessorsCallback() override {
@@ -85,10 +86,9 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
-                NActors::TActivationContext::Send(i.first,
-                    std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
-                        i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
-                    0, cookie);
+                NActors::TActivationContext::Send(
+                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
+                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
             }
         }
 
@@ -104,7 +104,8 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
 
     public:
         TObjectsProcessor(const NActors::TActorId& serviceActorId)
-            : ServiceActorId(serviceActorId) {
+            : ServiceActorId(serviceActorId)
+        {
         }
     };
 
@@ -125,7 +126,8 @@ TInternalPathId TGlobalPortionAddress::GetPathId() const {
 
 TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
     : TabletActorId(actorId)
-    , InternalPortionAddress(internalAddress) {
+    , InternalPortionAddress(internalAddress)
+{
 }
 
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {

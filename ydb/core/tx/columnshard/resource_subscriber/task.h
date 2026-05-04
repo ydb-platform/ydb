@@ -14,7 +14,8 @@ private:
 
 public:
     TTaskContext(const TString& typeName, const std::shared_ptr<TSubscriberCounters>& subscriberCounters)
-        : TypeName(typeName) {
+        : TypeName(typeName)
+    {
         Counters = subscriberCounters->GetTypeCounters(TypeName);
     }
 };
@@ -62,7 +63,8 @@ public:
         , MemoryAllocation(memory)
         , ExternalTaskId(externalTaskId)
         , Type(context.GetTypeName())
-        , Context(context) {
+        , Context(context)
+    {
     }
 
     const TTaskContext& GetContext() const {

@@ -42,7 +42,8 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(
     const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
     : PathId(pathId)
     , VersionedIndex(versionedIndex)
-    , StoragesManager(storagesManager) {
+    , StoragesManager(storagesManager)
+{
     Y_UNUSED(PathId);
 }
 

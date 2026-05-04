@@ -135,7 +135,8 @@ public:
         const TReadDataExtractorContainer& dataExtractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor,
         const TRequestSettings& request)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
-        , Request(request) {
+        , Request(request)
+    {
         AFL_VERIFY(Initialize());
     }
 

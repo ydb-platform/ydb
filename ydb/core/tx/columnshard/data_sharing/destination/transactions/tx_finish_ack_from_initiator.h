@@ -17,7 +17,8 @@ protected:
 public:
     TTxFinishAckFromInitiator(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session)
         : TBase(self, "finish_ack_from_initiator")
-        , Session(session) {
+        , Session(session)
+    {
     }
 
     TTxType GetTxType() const override {

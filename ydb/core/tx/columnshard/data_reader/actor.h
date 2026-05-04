@@ -42,7 +42,8 @@ public:
     IRestoreTask(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TString& taskId)
         : TaskId(taskId)
         , TabletId(tabletId)
-        , TabletActorId(tabletActorId) {
+        , TabletActorId(tabletActorId)
+    {
     }
 
     virtual ~IRestoreTask() = default;
@@ -85,7 +86,8 @@ protected:
 
 public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)
-        : RestoreTask(rTask) {
+        : RestoreTask(rTask)
+    {
         AFL_VERIFY(RestoreTask);
     }
 

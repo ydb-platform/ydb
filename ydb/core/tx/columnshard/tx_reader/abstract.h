@@ -31,7 +31,8 @@ public:
     ITxReader(const TString& stageName)
         : StageName(stageName)
         , PrechargeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("PRECHARGE:" + stageName))
-        , ReaderCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("EXECUTE:" + stageName)) {
+        , ReaderCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("EXECUTE:" + stageName))
+    {
         AFL_VERIFY(StageName);
     }
 

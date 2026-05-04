@@ -64,7 +64,8 @@ TStepAction::TStepAction(
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(std::move(source))
     , Cursor(std::move(cursor))
-    , CachedSourceId(Source->GetDeprecatedPortionId()) {
+    , CachedSourceId(Source->GetDeprecatedPortionId())
+{
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {

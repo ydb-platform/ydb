@@ -39,7 +39,8 @@ TResourcesGuard::TResourcesGuard(
     , Memory(task.GetMemoryAllocation())
     , Cpu(task.GetCPUAllocation())
     , Context(context)
-    , Priority(task.GetPriority()) {
+    , Priority(task.GetPriority())
+{
     AFL_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("external_task_id", ExternalTaskId)("task_id", TaskId)(

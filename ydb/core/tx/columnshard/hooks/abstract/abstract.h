@@ -481,12 +481,14 @@ public:
 
     public:
         TGuard(std::shared_ptr<TController> controller)
-            : Controller(controller) {
+            : Controller(controller)
+        {
             Y_ABORT_UNLESS(Controller);
         }
 
         TGuard(TGuard&& other)
-            : TGuard(other.Controller) {
+            : TGuard(other.Controller)
+        {
             other.Controller = nullptr;
         }
 

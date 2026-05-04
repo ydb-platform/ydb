@@ -31,12 +31,14 @@ public:
 
     TOrderedPortion(const TPortionInfo::TConstPtr& portion)
         : Portion(portion)
-        , Start(portion->IndexKeyStart()) {
+        , Start(portion->IndexKeyStart())
+    {
     }
 
     TOrderedPortion(const TPortionInfo::TPtr& portion)
         : Portion(portion)
-        , Start(portion->IndexKeyStart()) {
+        , Start(portion->IndexKeyStart())
+    {
     }
 
     friend bool operator<(const NArrow::TSimpleRow& item, const TOrderedPortion& portion) {
@@ -83,7 +85,8 @@ public:
     TChainAddress(const ui64 from, const ui64 to, const bool lastIsSeparator)
         : FromPortionId(from)
         , ToPortionId(to)
-        , LastIsSeparator(lastIsSeparator) {
+        , LastIsSeparator(lastIsSeparator)
+    {
     }
 
     bool operator<(const TChainAddress& item) const {
@@ -128,7 +131,8 @@ public:
         const bool consistBlockedPortions)
         : Portions(portions)
         , NotIncludedNextPortion(notIncludedNextPortion)
-        , ConsistBlockedPortions(consistBlockedPortions) {
+        , ConsistBlockedPortions(consistBlockedPortions)
+    {
         AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
@@ -288,7 +292,8 @@ public:
         : TargetCompactionLevel(targetCompactionLevel)
         , ExpectedPortionSize(expectedPortionSize)
         , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit))
-        , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(DefaultPortionsCountLimit)) {
+        , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(DefaultPortionsCountLimit))
+    {
     }
 };
 
@@ -353,7 +358,8 @@ private:
 public:
     TLimitsOverloadChecker(const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionBlobsSizeLimit)
         : PortionsCountLimit(portionsCountLimit)
-        , PortionBlobsSizeLimit(portionBlobsSizeLimit) {
+        , PortionBlobsSizeLimit(portionBlobsSizeLimit)
+    {
     }
 };
 
@@ -447,7 +453,8 @@ public:
         , Selectors(selectors)
         , OverloadChecker(overloadChecker ? overloadChecker : std::make_shared<TNoOverloadChecker>())
         , LevelCounters(levelCounters)
-        , NextLevel(nextLevel) {
+        , NextLevel(nextLevel)
+    {
         SelectivePortionsInfo.resize(Selectors.size());
         ui32 idx = 0;
         for (auto&& i : selectors) {

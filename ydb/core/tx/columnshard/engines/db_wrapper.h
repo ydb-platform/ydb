@@ -71,7 +71,8 @@ class TDbWrapper: public IDbWrapper {
 public:
     TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector)
         : Database(db)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+    {
     }
 
     void WritePortion(const std::vector<TUnifiedBlobId>& blobIds, const NOlap::TPortionInfo& portion) override;

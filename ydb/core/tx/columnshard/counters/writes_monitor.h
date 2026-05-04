@@ -17,7 +17,8 @@ private:
 
 public:
     TWritesMonitor(TTabletCountersBase& stats)
-        : Stats(stats) {
+        : Stats(stats)
+    {
     }
 
     ~TWritesMonitor() {

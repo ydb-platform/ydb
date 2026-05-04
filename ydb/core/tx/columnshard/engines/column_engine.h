@@ -86,7 +86,8 @@ private:
 public:
     TCSMetadataRequest(const std::shared_ptr<TDataAccessorsRequest>& request, const std::shared_ptr<IMetadataAccessorResultProcessor>& processor)
         : Request(request)
-        , Processor(processor) {
+        , Processor(processor)
+    {
         AFL_VERIFY(Request);
         AFL_VERIFY(Processor);
     }
@@ -112,7 +113,8 @@ public:
         TSchemaInitializationData(
             const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
             : Schema(schema)
-            , Diff(diff) {
+            , Diff(diff)
+        {
             AFL_VERIFY(Schema || Diff);
         }
 
@@ -142,7 +144,8 @@ public:
     public:
         TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isVisible)
             : Portion(portion)
-            , IsVisible(isVisible) {
+            , IsVisible(isVisible)
+        {
         }
     };
 

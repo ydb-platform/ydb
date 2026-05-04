@@ -44,9 +44,9 @@ void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& s
 void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     if (!ProcessingStarted) {
         AFL_VERIFY(FetchingPlan);
-        InitStageData(std::make_unique<TFetchedData>(GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
-                                                         GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
-            sourcePtr->GetRecordsCountOptional()));
+        InitStageData(std::make_unique<TFetchedData>(
+            GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         if (HasPortionAccessor()) {
             InitUsedRawBytes();
         }
@@ -430,7 +430,8 @@ TPortionDataSource::TPortionDataSource(
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
-    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+{
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(

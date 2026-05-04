@@ -76,7 +76,8 @@ public:
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobRange) {
+        , Data(blobRange)
+    {
     }
 
     TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TString& blobData)
@@ -84,7 +85,8 @@ public:
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobData) {
+        , Data(blobData)
+    {
     }
 
     void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {

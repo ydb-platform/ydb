@@ -64,7 +64,8 @@ public:
     }
 
     TPresetId(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
 };
 
@@ -99,7 +100,8 @@ private:
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
     TIndexInfo(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {

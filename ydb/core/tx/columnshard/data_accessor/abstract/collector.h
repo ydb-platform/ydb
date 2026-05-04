@@ -109,7 +109,8 @@ public:
     }
 
     IGranuleDataAccessor(const TInternalPathId pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
     }
 
     void AskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback);

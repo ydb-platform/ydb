@@ -39,7 +39,8 @@ private:
 
         TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange)
             : TReadBlobRangeOptions(opts)
-            , BlobRange(blobRange) {
+            , BlobRange(blobRange)
+        {
             Y_ABORT_UNLESS(blobRange.BlobId.IsValid());
         }
 
@@ -171,7 +172,8 @@ public:
         , SizeBlobsInFlight(counters->GetCounter("SizeBlobsInFlight"))
         , ReadRequests(counters->GetCounter("ReadRequests", true))
         , ReadsInQueue(counters->GetCounter("ReadsInQueue"))
-        , MaxSizeBytes(counters->GetCounter("MaxSizeBytes")) {
+        , MaxSizeBytes(counters->GetCounter("MaxSizeBytes"))
+    {
     }
 
     void Bootstrap(const TActorContext& ctx) {

@@ -15,7 +15,8 @@ private:
 public:
     TTxGeneral(const std::optional<NActors::TActorId> progressActorId, const ui64 txInternalId)
         : ProgressActorId(progressActorId)
-        , TxInternalId(txInternalId) {
+        , TxInternalId(txInternalId)
+    {
     }
 
     void Complete(const TActorContext& ctx) override final;

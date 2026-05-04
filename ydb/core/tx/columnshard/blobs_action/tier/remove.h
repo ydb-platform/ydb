@@ -23,7 +23,8 @@ public:
     TDeclareRemovingAction(const TString& storageId, const TTabletId selfTabletId,
         const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, const std::shared_ptr<TGCInfo>& gcInfo)
         : TBase(storageId, selfTabletId, counters)
-        , GCInfo(gcInfo) {
+        , GCInfo(gcInfo)
+    {
     }
 };
 

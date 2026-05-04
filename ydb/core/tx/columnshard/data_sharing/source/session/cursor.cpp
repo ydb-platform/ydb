@@ -179,7 +179,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
 TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
-    , PathIds(pathIds) {
+    , PathIds(pathIds)
+{
 }
 
 void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId) {

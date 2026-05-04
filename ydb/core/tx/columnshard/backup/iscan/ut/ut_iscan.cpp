@@ -95,7 +95,8 @@ public:
     TRuntimePtr Runtime;
 
     TGrabActor(TRuntimePtr runtime)
-        : Runtime(runtime) {
+        : Runtime(runtime)
+    {
     }
 
     void Bootstrap() {

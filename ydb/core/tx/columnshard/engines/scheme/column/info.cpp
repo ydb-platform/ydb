@@ -37,7 +37,8 @@ TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<
     , NeedMinMax(needMinMax)
     , IsSorted(isSorted)
     , IsNullable(isNullable)
-    , DefaultValue(defaultValue) {
+    , DefaultValue(defaultValue)
+{
     ColumnName = ArrowField->name();
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }

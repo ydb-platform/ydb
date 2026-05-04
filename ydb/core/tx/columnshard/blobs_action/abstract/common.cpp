@@ -10,7 +10,8 @@ static TAtomicCounter ActionIdCounter = 0;
 
 ICommonBlobsAction::ICommonBlobsAction(const TString& storageId)
     : StorageId(storageId)
-    , ActionId(ActionIdCounter.Inc()) {
+    , ActionId(ActionIdCounter.Inc())
+{
 }
 
 }   // namespace NKikimr::NOlap

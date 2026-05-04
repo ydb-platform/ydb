@@ -89,7 +89,8 @@ public:
         const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor,
         const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, extractor)
-        , BitsStorageConstructor(bitsStorageConstructor) {
+        , BitsStorageConstructor(bitsStorageConstructor)
+    {
         AFL_VERIFY(!!BitsStorageConstructor);
     }
 };

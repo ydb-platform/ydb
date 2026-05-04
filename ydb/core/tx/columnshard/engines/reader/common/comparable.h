@@ -36,7 +36,8 @@ public:
 
     explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(std::move(rk)) {
+        , Value(std::move(rk))
+    {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;
@@ -67,7 +68,8 @@ public:
 
     explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceIdx)
         : Key(key)
-        , SourceIdx(sourceIdx) {
+        , SourceIdx(sourceIdx)
+    {
     }
 
     static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {

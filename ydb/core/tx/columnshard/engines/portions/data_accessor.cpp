@@ -425,7 +425,8 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
             , EntityId(entityId)
             , ChunkIdx(chunkIdx)
             , MemoryStartChunk(memStartChunk)
-            , MemoryFinishChunk(memFinishChunk) {
+            , MemoryFinishChunk(memFinishChunk)
+        {
         }
 
         bool operator<(const TEntityDelimiter& item) const {
@@ -441,7 +442,8 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
 
     public:
         TGlobalDelimiter(const ui32 indexStart)
-            : IndexStart(indexStart) {
+            : IndexStart(indexStart)
+        {
         }
     };
 
@@ -524,12 +526,14 @@ std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() cons
 
         TPart(const TColumnRecord* record, const ui32 recordsCount)
             : Record(record)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
 
         TPart(const TIndexChunk* record, const ui32 recordsCount)
             : Index(record)
-            , RecordsCount(recordsCount) {
+            , RecordsCount(recordsCount)
+        {
         }
     };
 

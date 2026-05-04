@@ -58,7 +58,8 @@ private:
         TSourceIterator(const std::shared_ptr<NCommon::IDataSource>& source)
             : Source(source)
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
-            , Delta(Reverse ? -1 : 1) {
+            , Delta(Reverse ? -1 : 1)
+        {
             AFL_VERIFY(Source);
             AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
             auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
@@ -72,7 +73,8 @@ private:
             , Delta(Reverse ? -1 : 1)
             , Start(Reverse ? (arrs.front()->GetRecordsCount() - 1) : 0)
             , Finish(Reverse ? 0 : (arrs.front()->GetRecordsCount() - 1))
-            , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter())) {
+            , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()))
+        {
             AFL_VERIFY(arrs.size());
             AFL_VERIFY(arrs.front()->GetRecordsCount());
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));

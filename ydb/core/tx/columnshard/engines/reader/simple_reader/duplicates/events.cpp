@@ -12,7 +12,8 @@ TEvRequestFilter::TEvRequestFilter(const TPortionDataSource& source, const std::
     , RecordsCount(source.GetRecordsCount())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
     , Subscriber(subscriber)
-    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag()) {
+    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag())
+{
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

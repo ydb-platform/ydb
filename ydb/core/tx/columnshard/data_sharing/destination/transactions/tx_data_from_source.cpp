@@ -58,7 +58,8 @@ TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std
     , Session(session)
     , PortionsByPathId(std::move(portionsByPathId))
     , SchemeHistory(std::move(schemas))
-    , SourceTabletId(sourceTabletId) {
+    , SourceTabletId(sourceTabletId)
+{
     for (auto&& i : PortionsByPathId) {
         for (ui32 p = 0; p < i.second.GetPortions().size();) {
             if (Session->TryTakePortionBlobs(Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex(), *i.second.GetPortions()[p])) {

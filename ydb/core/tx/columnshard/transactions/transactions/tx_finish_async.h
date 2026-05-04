@@ -11,7 +11,8 @@ private:
 public:
     TTxFinishAsyncTransaction(TColumnShard& owner, const ui64 txId)
         : TBase(&owner)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

@@ -18,7 +18,8 @@ public:
         : TBase(tabletId,
               TSchemaAdapter::GetPKTrivialRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
               TSchemaAdapter::GetPKTrivialRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
-        , Schemas(std::move(schemas)) {
+        , Schemas(std::move(schemas))
+    {
         if (Schemas.size() > 1) {
             AFL_VERIFY(GetStart() < GetFinish())("start", GetStart().DebugString())("finish", GetFinish().DebugString());
         }

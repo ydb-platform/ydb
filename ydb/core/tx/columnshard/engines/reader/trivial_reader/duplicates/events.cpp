@@ -11,7 +11,8 @@ TEvRequestFilter::TEvRequestFilter(const TPortionDataSource& source, const std::
     , RecordsCount(source.GetRecordsCount())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
     , Subscriber(subscriber)
-    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag()) {
+    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag())
+{
 }
 
 TEvRequestFilter::TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
@@ -23,7 +24,8 @@ TEvRequestFilter::TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow
     , RecordsCount(recordsCount)
     , MaxVersion(maxVersion)
     , Subscriber(subscriber)
-    , AbortionFlag(abortionFlag) {
+    , AbortionFlag(abortionFlag)
+{
 }
 
 TSnapshot TEvRequestFilter::GetMaxVersion() const {

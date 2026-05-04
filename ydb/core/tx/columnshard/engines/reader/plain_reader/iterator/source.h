@@ -185,7 +185,8 @@ public:
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
-        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey)) {
+        , Finish(context->GetReadMetadata()->BuildSortedPosition(FinishReplaceKey))
+    {
         UsageClass =
             GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start.BuildSortablePosition(), finish.BuildSortablePosition());
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
@@ -314,7 +315,8 @@ public:
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
               portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+    {
     }
 };
 

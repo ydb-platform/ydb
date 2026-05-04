@@ -22,7 +22,8 @@ public:
         : TBase(tabletId, TSchemaAdapter::GetPKTrivialRow(externalPathId, tabletId), TSchemaAdapter::GetPKTrivialRow(externalPathId, tabletId))
         , Granule(granule)
         , ExternalPathId(externalPathId)
-        , PortionsCount(Granule->GetPortions().size()) {
+        , PortionsCount(Granule->GetPortions().size())
+    {
     }
 
     std::shared_ptr<NReader::NTrivial::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {

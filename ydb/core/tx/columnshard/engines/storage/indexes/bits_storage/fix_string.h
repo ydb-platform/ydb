@@ -19,7 +19,8 @@ public:
     TFixStringBitsStorage() = default;
 
     TFixStringBitsStorage(const TString& data)
-        : Data(data) {
+        : Data(data)
+    {
     }
 };
 

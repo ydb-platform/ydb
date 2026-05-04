@@ -7,7 +7,8 @@ namespace NKikimr::NOlap::NReader::NCommon {
 TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context)
     : Context(context)
     , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadMetadata>())
-    , ReadyResults(context->GetCounters()) {
+    , ReadyResults(context->GetCounters())
+{
     IndexedData = ReadMetadata->BuildReader(Context);
 }
 

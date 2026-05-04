@@ -12,7 +12,8 @@ private:
 public:
     TEventTxCompleted(const ui64 txId)
         : TBase(EEventType::TxCompleted)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 };
 

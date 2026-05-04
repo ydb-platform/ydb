@@ -37,7 +37,8 @@ protected:
 public:
     TListPortionsLock(
         const TString& lockName, const std::vector<TPortionDataAccessor>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p.GetPortionInfo().GetAddress());
             Granules.emplace(p.GetPortionInfo().GetPathId());
@@ -46,7 +47,8 @@ public:
 
     TListPortionsLock(const TString& lockName, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const ELockCategory category,
         const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace(p->GetPathId());
@@ -55,7 +57,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const std::vector<TPortionInfo::TConstPtr>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace(p->GetPathId());
@@ -64,7 +67,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const std::vector<TPortionInfo>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p.GetAddress());
             Granules.emplace(p.GetPathId());
@@ -74,7 +78,8 @@ public:
     template <class T, class TGetter>
     TListPortionsLock(
         const TString& lockName, const std::vector<T>& portions, const TGetter& g, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             const auto address = g(p);
             Portions.emplace(address);
@@ -85,7 +90,8 @@ public:
     template <class T>
     TListPortionsLock(
         const TString& lockName, const THashMap<TPortionAddress, T>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             const auto address = p.first;
             Portions.emplace(address);
@@ -95,7 +101,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const THashSet<TPortionAddress>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& address : portions) {
             Portions.emplace(address);
             Granules.emplace(address.GetPathId());
@@ -132,7 +139,8 @@ protected:
 public:
     TListTablesLock(const TString& lockName, const THashSet<TInternalPathId>& tables, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
-        , Tables(tables) {
+        , Tables(tables)
+    {
     }
 };
 

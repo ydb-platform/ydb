@@ -184,7 +184,8 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
 TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
     THashMap<ui32, std::shared_ptr<IDataSource>>&& sources)
     : TBase(mergingContext, readContext)
-    , Sources(std::move(sources)) {
+    , Sources(std::move(sources))
+{
     for (auto&& s : Sources) {
         AFL_VERIFY(s.second->IsDataReady());
     }

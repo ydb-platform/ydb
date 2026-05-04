@@ -17,7 +17,8 @@ protected:
 public:
     TTxFinishAckToSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session, const TString& info)
         : TBase(self, info)
-        , Session(session) {
+        , Session(session)
+    {
         AFL_VERIFY(!Session->GetCursorVerified()->IsValid());
     }
 

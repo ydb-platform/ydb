@@ -48,7 +48,8 @@ protected:
 
 public:
     TCleanupTablesColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_TABLES) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_TABLES)
+    {
     }
 
     THashSet<TInternalPathId> TablesToDrop;

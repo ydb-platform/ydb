@@ -86,7 +86,8 @@ public:
     }
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-        : TBase(commonContext) {
+        : TBase(commonContext)
+    {
     }
 
     ~TSpecialReadContext() {

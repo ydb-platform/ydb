@@ -84,7 +84,8 @@ private:
         TPortionSpan(const ui64 portionId, const ui64 first, const ui64 last)
             : PortionId(portionId)
             , FirstIntervalIdx(first)
-            , LastIntervalIdx(last) {
+            , LastIntervalIdx(last)
+        {
             AFL_VERIFY(FirstIntervalIdx <= LastIntervalIdx);
         }
 
@@ -120,7 +121,8 @@ private:
     TIntervalsIterator(
         std::vector<TIntervalInfo>&& intervals, std::set<TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByLeftBorder>&& portions)
         : Intervals(std::move(intervals))
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 
 public:

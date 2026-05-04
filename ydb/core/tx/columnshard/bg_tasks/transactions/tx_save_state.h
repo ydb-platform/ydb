@@ -19,7 +19,8 @@ public:
         const std::shared_ptr<ITabletAdapter>& adapter, const ui64 txInternalId)
         : TBase(progressActorId, txInternalId)
         , Session(session)
-        , Adapter(adapter) {
+        , Adapter(adapter)
+    {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);
     }

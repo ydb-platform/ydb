@@ -121,7 +121,8 @@ private:
             , TxId(txId)
             , Step(step)
             , TabletId(tabletId)
-            , BrokenFlag(broken) {
+            , BrokenFlag(broken)
+        {
         }
     };
 
@@ -160,7 +161,8 @@ private:
         TTxWriteReceivedResultAck(TColumnShard& owner, const ui64 txId, const ui64 tabletId)
             : TBase(&owner, "write_received_result_ack")
             , TxId(txId)
-            , TabletId(tabletId) {
+            , TabletId(tabletId)
+        {
         }
     };
 
@@ -236,7 +238,8 @@ private:
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
             : TBase(owner, "start_preparation")
-            , TxId(txId) {
+            , TxId(txId)
+        {
         }
     };
 
@@ -260,7 +263,8 @@ public:
         const TFullTxInfo& txInfo, const ui64 lockId, const std::set<ui64>& receivingShards, const std::set<ui64>& sendingShards)
         : TBase(txInfo, lockId)
         , ReceivingShards(receivingShards)
-        , SendingShards(sendingShards) {
+        , SendingShards(sendingShards)
+    {
         WaitShardsBrokenFlags = SendingShards;
         WaitShardsResultAck = ReceivingShards;
     }

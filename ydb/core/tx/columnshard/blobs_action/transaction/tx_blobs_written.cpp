@@ -173,7 +173,8 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     : TBase(self, "TTxBlobsWritingFinished")
     , Pack(std::move(pack))
     , WritingActions(writingActions)
-    , StartTime(TInstant::Now()) {
+    , StartTime(TInstant::Now())
+{
 }
 
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TActorContext& /* ctx */) {
@@ -188,8 +189,7 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TAct
             EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
             wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
-                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            wResult.GetErrorMessage());
+                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

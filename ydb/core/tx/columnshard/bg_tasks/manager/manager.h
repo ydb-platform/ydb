@@ -23,7 +23,8 @@ private:
 
 public:
     TSessionsManager(const std::shared_ptr<ITabletAdapter>& adapter)
-        : Adapter(adapter) {
+        : Adapter(adapter)
+    {
         Storage = std::make_shared<TSessionsStorage>();
     }
 

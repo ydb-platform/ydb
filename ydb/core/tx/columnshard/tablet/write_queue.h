@@ -61,7 +61,8 @@ public:
         , Timeout(timeout)
         , TxId(txId)
         , IsBulk(isBulk)
-        , OverloadSubscribeSeqNo(overloadSubscribeSeqNo) {
+        , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
+    {
     }
 
     const TInternalPathId& GetInternalPathId() const {
@@ -85,7 +86,8 @@ private:
 
 public:
     TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner) {
+        : Owner(owner)
+    {
     }
 
     ~TWriteTasksQueue();

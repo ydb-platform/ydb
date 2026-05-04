@@ -48,7 +48,8 @@ public:
         , GCInfo(gcInfo)
         , TabletId(tabletId)
         , Generation(generation)
-        , Step(step) {
+        , Step(step)
+    {
     }
 };
 

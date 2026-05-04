@@ -32,7 +32,8 @@ const std::shared_ptr<arrow::Array>& TDictionaryChunkRestoreInfo::GetDictionaryA
 TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(
     const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
     : ChunkExternalInfo(chunkExternalInfo)
-    , FullChunkRange(fullChunkRange) {
+    , FullChunkRange(fullChunkRange)
+{
     const auto* dictData = dynamic_cast<const NArrow::NAccessor::TDictionaryAccessorData*>(ChunkExternalInfo.GetAdditionalAccessorData().get());
     if (dictData && dictData->DictionaryBlobSize > 0 && fullChunkRange.GetSize() > 0) {
         DictionaryBlobRange = fullChunkRange.BuildSubset(0, dictData->DictionaryBlobSize);
@@ -99,7 +100,8 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
 
 TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
     : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
-    , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount())) {
+    , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
+{
     const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
     AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary)(
         "type", loader->GetAccessorConstructor()->GetType());
@@ -108,7 +110,8 @@ TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::sha
 TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
     const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount)
     : TBase(columnId, storages)
-    , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount)) {
+    , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
+{
     const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
     AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary)(
         "type", loader->GetAccessorConstructor()->GetType());

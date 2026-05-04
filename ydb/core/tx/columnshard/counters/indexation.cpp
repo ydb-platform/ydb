@@ -6,7 +6,8 @@
 namespace NKikimr::NColumnShard {
 
 TIndexationCounters::TIndexationCounters(const TString& module)
-    : TBase(module) {
+    : TBase(module)
+{
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
     ReadBytes = TBase::GetDeriviative("Read/Bytes");
     ReadErrors = TBase::GetDeriviative("Read/Errors/Count");

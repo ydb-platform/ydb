@@ -39,7 +39,8 @@ public:
 
     ISessionLogicControl(const TString& sessionClassName, const TString& sessionIdentifier)
         : SessionClassName(sessionClassName)
-        , SessionIdentifier(sessionIdentifier) {
+        , SessionIdentifier(sessionIdentifier)
+    {
     }
 
     TConclusionStatus DeserializeFromProto(const TProto& data);
@@ -76,7 +77,8 @@ public:
 
     TSessionControlContainer(const TStatusChannelContainer& channel, const TSessionLogicControlContainer& logic)
         : ChannelContainer(channel)
-        , LogicControlContainer(logic) {
+        , LogicControlContainer(logic)
+    {
         AFL_VERIFY(!!ChannelContainer);
         AFL_VERIFY(!!LogicControlContainer);
     }

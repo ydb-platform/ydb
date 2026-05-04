@@ -9,7 +9,8 @@ TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeConte
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
     : MergeContext(mergeContext)
     , Counters(counters)
-    , ReadMetadata(readMetadata) {
+    , ReadMetadata(readMetadata)
+{
     for (const auto& portion : portions) {
         Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
         Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata)].Finish.push_back(portion->GetPortionId());

@@ -26,11 +26,13 @@ private:
     TPortionDataAccessor PortionInfo;
 
     explicit TReadPortionInfoWithBlobs(TPortionDataAccessor&& portionInfo)
-        : PortionInfo(std::move(portionInfo)) {
+        : PortionInfo(std::move(portionInfo))
+    {
     }
 
     explicit TReadPortionInfoWithBlobs(const TPortionDataAccessor& portionInfo)
-        : PortionInfo(portionInfo) {
+        : PortionInfo(portionInfo)
+    {
     }
 
     const TString& GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const;

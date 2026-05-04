@@ -59,7 +59,8 @@ protected:
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS)
+    {
     }
 
     void AddTableToDrop(const TInternalPathId pathId) {

@@ -50,7 +50,8 @@ public:
         , HistogramSwitchToWorkFromActivationDurationMs(
               TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramSwitchToWorkFromCreateDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
+              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+    {
     }
 };
 

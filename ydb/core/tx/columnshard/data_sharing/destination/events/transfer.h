@@ -45,7 +45,8 @@ private:
 public:
     TPathIdData(const TInternalPathId pathId, const std::vector<std::shared_ptr<TPortionDataAccessor>>& portions)
         : PathId(pathId)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,

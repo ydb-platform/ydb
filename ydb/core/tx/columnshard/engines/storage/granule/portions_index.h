@@ -16,7 +16,8 @@ private:
 
 public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& /* counters */)
-        : Owner(owner) {
+        : Owner(owner)
+    {
         Y_UNUSED(Owner);
     }
 

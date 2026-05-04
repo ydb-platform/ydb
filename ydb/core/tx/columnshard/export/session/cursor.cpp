@@ -58,7 +58,8 @@ const std::optional<TOwnedCellVec> &TCursor::GetLastKey() const {
 
 TCursor::TCursor(const TOwnedCellVec &lastKey, const bool finished)
     : LastKey(lastKey)
-    , Finished(finished) {
+    , Finished(finished)
+{
 }
 
 }   // namespace NKikimr::NOlap::NExport

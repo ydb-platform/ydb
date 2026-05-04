@@ -25,7 +25,8 @@ public:
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceIdx, pathId, tabletId, std::move(start), std::move(finish), portions.size(), portions.front()->RecordSnapshotMin(),
               portions.back()->RecordSnapshotMin(), context)
-        , Portions(std::move(portions)) {
+        , Portions(std::move(portions))
+    {
     }
 };
 

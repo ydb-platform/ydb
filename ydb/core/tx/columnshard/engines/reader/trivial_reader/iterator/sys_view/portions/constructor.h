@@ -19,7 +19,8 @@ public:
         : TBase(tabletId, TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portions.front()->GetPortionId()),
               TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portions.back()->GetPortionId()))
         , PathId(pathId)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     std::shared_ptr<NReader::NTrivial::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {

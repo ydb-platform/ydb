@@ -61,7 +61,8 @@ struct TTestSchema {
         NKikimrSchemeOp::TS3Settings S3 = FakeS3();
 
         TStorageTier(const TString& name = {})
-            : Name(name) {
+            : Name(name)
+        {
         }
 
         TString DebugString() const {
@@ -512,7 +513,8 @@ public:
     public:
         TRowBuilder(ui32 index, TTableUpdatesBuilder& owner)
             : Owner(owner)
-            , Index(index) {
+            , Index(index)
+        {
         }
 
         TRowBuilder Add(const char* data) {
@@ -581,7 +583,8 @@ public:
     };
 
     TTableUpdatesBuilder(std::shared_ptr<arrow::Schema> schema)
-        : Schema(schema) {
+        : Schema(schema)
+    {
         Builders = NArrow::MakeBuilders(schema);
         Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
     }

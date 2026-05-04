@@ -126,7 +126,8 @@ public:
         : PathId(pathId)
         , Snapshot(snapshot)
         , LockId(lockId)
-        , ReadOnlyConflicts(readOnlyConflicts) {
+        , ReadOnlyConflicts(readOnlyConflicts)
+    {
         AFL_VERIFY(Snapshot.Valid());
     }
 
@@ -158,7 +159,8 @@ struct TEvProposeTransaction: public TEventPB<TEvProposeTransaction, NKikimrTxCo
 
     TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId, TString txBody,
         const ui32 flags, ui64 subDomainPathId)
-        : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags) {
+        : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
+    {
         //            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
         Record.SetSchemeShardId(ssId);
         if (subDomainPathId != 0) {
@@ -168,7 +170,8 @@ struct TEvProposeTransaction: public TEventPB<TEvProposeTransaction, NKikimrTxCo
 
     TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId, TString txBody,
         const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags, ui64 subDomainPathId)
-        : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags, subDomainPathId) {
+        : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags, subDomainPathId)
+    {
         Record.MutableProcessingParams()->CopyFrom(processingParams);
         *Record.MutableSeqNo() = seqNo.SerializeToProto();
     }

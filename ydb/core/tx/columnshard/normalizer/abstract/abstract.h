@@ -26,7 +26,8 @@ class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
 
 public:
     TNormalizerCounters(const TString& normalizerName)
-        : TBase("Normalizer") {
+        : TBase("Normalizer")
+    {
         DeepSubGroup("normalizer", normalizerName);
 
         ObjectsCount = TBase::GetDeriviative("Objects/Count");
@@ -53,7 +54,7 @@ public:
 };
 
 // DONT REMOVE AND DONT CHANGE PLACES! PERSISTENT! ADD Deprecated PREFIX FOR REMOVED NORMALIZER
-enum class ENormalizerSequentialId : ui32 {
+enum class ENormalizerSequentialId: ui32 {
     Granules = 1,
     Chunks,
     DeprecatedPortionsCleaner,
@@ -126,7 +127,8 @@ class TTrivialNormalizerTask: public INormalizerTask {
 
 public:
     TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
-        : Changes(changes) {
+        : Changes(changes)
+    {
         AFL_VERIFY(Changes);
     }
 
@@ -145,7 +147,8 @@ public:
         TInitContext(TTabletStorageInfo* info, const ui64 tabletId, const NActors::TActorId& actorId)
             : StorageInfo(info)
             , TabletId(tabletId)
-            , TabletActorId(actorId) {
+            , TabletActorId(actorId)
+        {
         }
 
         ui64 GetTabletId() const {
@@ -176,7 +179,8 @@ public:
 
         TNormalizerFullId(const TString& className, const TString& description)
             : ClassName(className)
-            , Description(description) {
+            , Description(description)
+        {
         }
     };
 
@@ -205,7 +209,8 @@ public:
 
         INormalizerComponent(const TInitContext& context)
             : TabletId(context.GetTabletId())
-            , TabletActorId(context.GetTabletActorId()) {
+            , TabletActorId(context.GetTabletActorId())
+        {
         }
 
         TNormalizerFullId GetNormalizerFullId() const {
@@ -293,7 +298,8 @@ public:
     TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager,
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
         : StoragesManager(storagesManager)
-        , TaskSubscription("CS::NORMALIZER", counters) {
+        , TaskSubscription("CS::NORMALIZER", counters)
+    {
         AFL_VERIFY(StoragesManager);
     }
 

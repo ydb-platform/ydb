@@ -89,7 +89,8 @@ public:
     public:
         TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
             : Counters(counters)
-            , Owner(owner) {
+            , Owner(owner)
+        {
         }
 
         ~TEditGuard() {

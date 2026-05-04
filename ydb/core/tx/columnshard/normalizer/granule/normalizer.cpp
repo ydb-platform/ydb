@@ -27,7 +27,8 @@ private:
     }
 
     TNormalizerResult(const THashMap<ui64, TInternalPathId>& g2p)
-        : Granule2Path(g2p) {
+        : Granule2Path(g2p)
+    {
     }
 
 public:

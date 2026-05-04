@@ -69,7 +69,8 @@ TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBa
     : TBase(incoming, actualSchema)
     , Builder({ actualSchema->GetIndexInfo().ArrowSchema().begin(), actualSchema->GetIndexInfo().ArrowSchema().end() })
     , DefaultExists(defaultExists)
-    , InsertDenyReason(insertDenyReason) {
+    , InsertDenyReason(insertDenyReason)
+{
     for (auto&& f : actualSchema->GetIndexInfo().ArrowSchema()) {
         auto fIdx = IncomingData->schema()->GetFieldIndex(f->name());
         if (fIdx == -1) {

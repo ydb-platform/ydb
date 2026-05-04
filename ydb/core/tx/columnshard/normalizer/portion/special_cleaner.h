@@ -33,7 +33,8 @@ private:
 
 public:
     TDeleteTrashImpl(const TNormalizationController::TInitContext& context)
-        : TBase(context) {
+        : TBase(context)
+    {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
@@ -66,7 +67,8 @@ private:
 
 public:
     TRemoveDeleteFlag(const TNormalizationController::TInitContext& context)
-        : TBase(context) {
+        : TBase(context)
+    {
     }
 };
 
@@ -96,7 +98,8 @@ private:
 
 public:
     TRemoveWriteId(const TNormalizationController::TInitContext& context)
-        : TBase(context) {
+        : TBase(context)
+    {
     }
 };
 

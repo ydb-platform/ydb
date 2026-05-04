@@ -21,7 +21,8 @@ private:
 
 public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
-        : Categories(categories) {
+        : Categories(categories)
+    {
         AFL_VERIFY(count);
         const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
         AFL_VERIFY(bitsCount);

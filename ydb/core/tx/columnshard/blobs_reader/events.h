@@ -15,7 +15,8 @@ private:
 
 public:
     explicit TEvStartReadTask(std::shared_ptr<ITask> task)
-        : Task(task) {
+        : Task(task)
+    {
     }
 };
 

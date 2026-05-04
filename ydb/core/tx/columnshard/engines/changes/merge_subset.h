@@ -17,7 +17,8 @@ private:
 public:
     TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter)
         : Batch(batch)
-        , Filter(filter) {
+        , Filter(filter)
+    {
     }
 };
 
@@ -35,7 +36,8 @@ protected:
 
 public:
     ISubsetToMerge(const std::shared_ptr<TGranuleMeta>& granule)
-        : GranuleMeta(granule) {
+        : GranuleMeta(granule)
+    {
         AFL_VERIFY(GranuleMeta);
     }
 
@@ -62,7 +64,8 @@ private:
 public:
     TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta)
         : TBase(granuleMeta)
-        , ReadPortion(std::move(rPortion)) {
+        , ReadPortion(std::move(rPortion))
+    {
     }
 
     virtual ui64 GetColumnMaxChunkMemory() const override {

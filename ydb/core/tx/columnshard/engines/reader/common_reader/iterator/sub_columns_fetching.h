@@ -20,7 +20,8 @@ private:
 public:
     TSubColumnChunkRestoreInfo(const TBlobRange& range, const ui32 columnIdx)
         : BlobRange(range)
-        , ColumnIdx(columnIdx) {
+        , ColumnIdx(columnIdx)
+    {
     }
 
     const std::optional<TBlobRange>& GetBlobRangeOptional() const {
@@ -136,7 +137,8 @@ public:
 
     TColumnChunkRestoreInfo(const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
         : ChunkExternalInfo(chunkExternalInfo)
-        , FullChunkRange(fullChunkRange) {
+        , FullChunkRange(fullChunkRange)
+    {
     }
 
     static TColumnChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo) {
@@ -329,7 +331,8 @@ public:
         : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
         , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
         , SubColumns(subColumns)
-        , Source(source) {
+        , Source(source)
+    {
         const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
             "type", loader->GetAccessorConstructor()->GetType());
@@ -340,7 +343,8 @@ public:
         : TBase(columnId, storages)
         , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
         , SubColumns(subColumns)
-        , Source() {
+        , Source()
+    {
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());

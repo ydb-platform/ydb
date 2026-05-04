@@ -7,7 +7,8 @@
 namespace NKikimr::NColumnShard::NBackup {
 
 TRowWriter::TRowWriter(TVector<TSerializedCellVec>& rows)
-    : Rows(rows) {
+    : Rows(rows)
+{
 }
 
 void TRowWriter::AddRow(const TConstArrayRef<TCell>& cells) {
@@ -85,7 +86,8 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
 
 TExportDriver::TExportDriver(TActorSystem* actorSystem, const TActorId& subscriberActorId)
     : ActorSystem(actorSystem)
-    , SubscriberActorId(subscriberActorId) {
+    , SubscriberActorId(subscriberActorId)
+{
 }
 
 class TUploaderActor: public TActorBootstrapped<TUploaderActor> {
@@ -124,7 +126,8 @@ public:
         , TableColumns(tableColumns)
         , SubscriberActorId(subscriberActorId)
         , TxId(txId)
-        , ColumnTypes(MakeColumnTypes()) {
+        , ColumnTypes(MakeColumnTypes())
+    {
     }
 
     void Bootstrap() {

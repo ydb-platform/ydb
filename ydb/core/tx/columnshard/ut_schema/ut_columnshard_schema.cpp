@@ -387,7 +387,8 @@ private:
 public:
     TEventsCounter(TCountersContainer& counters, TTestBasicRuntime& runtime)
         : Counters(&counters)
-        , Runtime(runtime) {
+        , Runtime(runtime)
+    {
         Y_UNUSED(Runtime);
     }
 

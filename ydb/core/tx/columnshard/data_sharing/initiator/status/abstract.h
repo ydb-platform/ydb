@@ -35,7 +35,8 @@ public:
 
     IStatus(const EStatus status, const TString& sessionId)
         : Status(status)
-        , SessionId(sessionId) {
+        , SessionId(sessionId)
+    {
         AFL_VERIFY(SessionId);
     }
 

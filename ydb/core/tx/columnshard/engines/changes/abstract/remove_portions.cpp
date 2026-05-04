@@ -33,9 +33,8 @@ void TRemovePortionsChange::DoApplyOnExecute(
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
-        context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred,
-                schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+        context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(context.DBWrapper,
+            fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 

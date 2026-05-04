@@ -21,7 +21,8 @@ public:
     TActionReadBlobs() = default;
 
     TActionReadBlobs(THashMap<TBlobRange, TString>&& blobs)
-        : Blobs(std::move(blobs)) {
+        : Blobs(std::move(blobs))
+    {
         for (auto&& i : Blobs) {
             AFL_VERIFY(i.second.size());
         }
@@ -115,7 +116,8 @@ public:
 
     public:
         TBlobGluePolicy(const ui64 blobLimitSize)
-            : BlobLimitSize(blobLimitSize) {
+            : BlobLimitSize(blobLimitSize)
+        {
         }
 
         bool Glue(TBlobRange& currentRange, const TBlobRange& addRange) const {
@@ -211,7 +213,8 @@ public:
     }
 
     IBlobsReadingAction(const TString& storageId)
-        : TBase(storageId) {
+        : TBase(storageId)
+    {
     }
 
     ui64 GetExpectedBlobsSize() const {

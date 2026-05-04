@@ -11,7 +11,8 @@ private:
 
 public:
     TSchemaPresetVersionInfo(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& proto)
-        : Proto(proto) {
+        : Proto(proto)
+    {
     }
 
     const NKikimrTxColumnShard::TSchemaPresetVersionInfo& GetProto() const {

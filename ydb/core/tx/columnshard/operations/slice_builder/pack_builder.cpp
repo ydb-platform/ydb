@@ -33,7 +33,8 @@ public:
         }
 
         TInsertPortion(TWritePortionInfoWithBlobsResult&& portion)
-            : Portion(std::move(portion)) {
+            : Portion(std::move(portion))
+        {
         }
     };
 
@@ -68,7 +69,8 @@ public:
         : Action(action)
         , Portions(std::move(portions))
         , WriteResults(std::move(writeResults))
-        , DstActor(dstActor) {
+        , DstActor(dstActor)
+    {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
@@ -88,7 +90,8 @@ private:
 public:
     TSliceToMerge(const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
-        , ModificationType(modificationType) {
+        , ModificationType(modificationType)
+    {
     }
 
     void Add(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {

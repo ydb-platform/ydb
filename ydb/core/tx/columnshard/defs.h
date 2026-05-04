@@ -46,7 +46,8 @@ public:
     public:
         TMaxBlobSizeGuard(const ui64 value)
             : Size(value)
-            , Original(GetBlobSizeLimit()) {
+            , Original(GetBlobSizeLimit())
+        {
             SetMaxBlobSize(Size);
         }
 
@@ -89,7 +90,8 @@ struct TCompactionLimits {
         , GranuleOverloadSize(20 * TBase::MAX_BLOB_SIZE, TBase::MAX_BLOB_SIZE, 100 * TBase::MAX_BLOB_SIZE)
         , InGranuleCompactSeconds(2 * 60, 10, 3600)
         , GranuleIndexedPortionsSizeLimit(TBase::WARNING_INSERTED_PORTIONS_SIZE)
-        , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT) {
+        , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
+    {
     }
 
     void RegisterControls(TControlBoard& icb) {
@@ -101,8 +103,7 @@ struct TCompactionLimits {
     }
 
     NOlap::TCompactionLimits Get() const {
-        return NOlap::TCompactionLimits{ .GoodBlobSize = (ui32)GoodBlobSize,
-            .GranuleBlobSplitSize = GranuleBlobSplitSize,
+        return NOlap::TCompactionLimits{ .GoodBlobSize = (ui32)GoodBlobSize, .GranuleBlobSplitSize = GranuleBlobSplitSize,
             .InGranuleCompactSeconds = (ui32)InGranuleCompactSeconds,
             .GranuleOverloadSize = (ui32)GranuleOverloadSize,
             .GranuleIndexedPortionsSizeLimit = (ui32)GranuleIndexedPortionsSizeLimit,
@@ -125,7 +126,8 @@ struct TUsage {
 class TCpuGuard {
 public:
     TCpuGuard(TUsage& usage)
-        : Usage(usage) {
+        : Usage(usage)
+    {
     }
 
     ~TCpuGuard() {
@@ -144,7 +146,8 @@ private:
 
 public:
     explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo)
-        : TabletInfo(tabletInfo) {
+        : TabletInfo(tabletInfo)
+    {
     }
 
     ui32 GetGroup(const TLogoBlobID& blobId) const override {

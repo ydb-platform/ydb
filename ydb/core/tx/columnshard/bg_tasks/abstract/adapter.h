@@ -30,7 +30,8 @@ public:
     ITabletAdapter(const NActors::TActorId& tabletActorId, const TTabletId tabletId, NTabletFlatExecutor::TTabletExecutedFlat& tabletExecutor)
         : TabletActorId(tabletActorId)
         , TabletId(tabletId)
-        , TabletExecutor(tabletExecutor) {
+        , TabletExecutor(tabletExecutor)
+    {
         AFL_VERIFY(!!TabletActorId);
         AFL_VERIFY(!!(ui64)TabletId);
     }

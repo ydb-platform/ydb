@@ -6,7 +6,8 @@ TFilterAccumulator::TFilterAccumulator(
     const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
     : OriginalRequest(request)
     , Counters(counters)
-    , StartTime(TInstant::Now()) {
+    , StartTime(TInstant::Now())
+{
     AFL_VERIFY(!!OriginalRequest);
     Counters->OnRequestStart();
 }
@@ -102,7 +103,8 @@ THashMap<ui64, NArrow::TColumnFilter>&& TFiltersBuilder::ExtractReadyFilters() {
 
 TFiltersStore::TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
     : IsReverse(reverse)
-    , Counters(counters) {
+    , Counters(counters)
+{
 }
 
 NArrow::TColumnFilter TFiltersStore::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {

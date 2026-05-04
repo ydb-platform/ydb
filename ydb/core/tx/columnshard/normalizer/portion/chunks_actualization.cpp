@@ -22,7 +22,8 @@ public:
     TPatchItem(TPortionLoadContext&& portion, std::vector<TColumnChunkLoadContext>&& records, std::vector<TIndexChunkLoadContext>&& indexes)
         : PortionInfo(std::move(portion))
         , Records(std::move(records))
-        , Indexes(std::move(indexes)) {
+        , Indexes(std::move(indexes))
+    {
     }
 };
 
@@ -32,7 +33,8 @@ private:
 
 public:
     TChanges(std::vector<TPatchItem>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {

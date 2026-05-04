@@ -108,6 +108,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetVerbose(settings.Verbose);
+    for (const auto& storagePoolType : settings.StoragePoolTypes) {
+        ServerSettings->AddStoragePoolType(storagePoolType);
+    }
+    ServerSettings->SetDynamicNodeCount(settings.DynamicNodeCount);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
@@ -174,7 +178,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
-    Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
+    Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {
         auto options = settings.GrpcServerOptions;
@@ -204,6 +208,33 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     CountersRoot = settings.CountersRoot;
 
     Initialize(settings);
+}
+
+TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
+    TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(databasePath);
+
+    for (auto& [attrName, attrValue] : attributes) {
+        request.mutable_attributes()->emplace(attrName, attrValue);
+    }
+
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolType);
+    storage.set_count(1);
+
+    if (!Tenants) {
+        Tenants = MakeHolder<Tests::TTenants>(Server);
+    }
+    Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
+
+    // Setup discovery
+    for (auto nodeIdx : Tenants->List(databasePath)) {
+        GetTestServer().EnableGRpc(PortManager.GetPort(), nodeIdx, databasePath);
+    }
+
+    return databasePath;
 }
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,

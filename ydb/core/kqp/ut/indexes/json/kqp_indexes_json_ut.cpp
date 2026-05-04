@@ -2516,7 +2516,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Timestamp) > Timestamp("2021-01-01T00:00:00Z"))");
 
             // Nested JSON_* functions as source - specific error message
-            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1'), '$.k2') == "1")", "Nested JSON_* functions are not supported");
+            ValidateError(db, R"(JSON_VALUE(JSON_QUERY(Text, '$.k1'), '$.k2') == "1")");
 
             // JSON_EXISTS TRUE ON ERROR + JE -> JE tokens
             ValidateTokens(db,
@@ -3649,8 +3649,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             // OR with non-indexable predicate
             ValidateError(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == $param OR Data == "d1"u)",
-                utfParam("param"),
-                "JSON index does not support OR with non-indexable predicates");
+                utfParam("param"));
 
             // Variable bound to column reference
             ValidateError(db,
@@ -3663,8 +3662,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             // JSON_QUERY source
             ValidateError(db,
                 R"(JSON_VALUE(JSON_QUERY(Text, '$.k1' WITHOUT ARRAY WRAPPER), '$.k2' RETURNING Utf8) == $param)",
-                utfParam("param"),
-                "Nested JSON_* functions are not supported");
+                utfParam("param"));
 
             // IS NULL / IS NOT NULL on JSON_VALUE
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IS NULL)",

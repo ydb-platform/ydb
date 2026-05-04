@@ -116,8 +116,6 @@ def get_missed_data_for_upload(
             ELSE FALSE
             END) = FALSE
         and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
-        and status in ("failure")
-        and build_type = 'release-asan'
         {dedup_where_clause}
     """
 

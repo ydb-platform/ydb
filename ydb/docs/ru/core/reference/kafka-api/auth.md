@@ -170,7 +170,7 @@ ssl.endpoint.identification.algorithm=
 
 #### Конфигурация YDB
 
-Во-первых, нужно указать нужные поля в конфигурации kafka\_proxy
+Требуется указать нужные поля в конфигурации [kafka_proxy_config](../configuration/kafka_proxy_config.md).
 
 ```yaml
 kafka_proxy_config:
@@ -184,7 +184,7 @@ kafka_proxy_config:
   enable_self_signed_certs: true # разрешаете ли вы самоподписанные сертификаты
 ```
 
-Также укажите в конфигурации client\_certificate\_authorization правила, по которым будет проходить аутентификация:
+Также укажите в конфигурации [client_certificate_authorization](../configuration/client_certificate_authorization.md) правила, по которым будет проходить аутентификация:
 
 ```yaml
 client_certificate_authorization:
@@ -198,7 +198,6 @@ client_certificate_authorization:
         - user@cert # заменить на нужную member группу
   request_client_certificate: true
 ```
-Подробнее про client_certificate_authorization конфигурацию: [{#T}](../configuration/client_certificate_authorization.md)
 
 Для корректной работы нужно использовать тот же сертификат, что и в настройках grpc, поэтому нужно указать путь до этого же серверного сертификата в конфигурации grpc.
 

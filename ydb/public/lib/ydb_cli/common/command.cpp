@@ -6,9 +6,44 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
+#if defined(_linux_)
+#include <sched.h>
+#endif
+
 namespace NLastGetoptPrivate {
     TString& VersionString();
 }
+
+namespace {
+
+// copypaste from TPC-C: because of complicated dependencies, it
+// seems to be better to copypaste this
+#if defined(_linux_)
+size_t NumberOfMyCpus() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+        return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    int count = 0;
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set))
+            count++;
+    }
+
+    return count;
+}
+
+#else // not Linux
+
+size_t NumberOfMyCpus() {
+    return NSystemInfo::CachedNumberOfCpus();
+}
+
+#endif // _linux_
+
+} // anonymous
 
 namespace NYdb::NConsoleClient {
 
@@ -182,6 +217,31 @@ TString TClientCommand::TConfig::GetBuildInfoCommandTag() const {
         return tag;
     }
     return {};
+}
+
+size_t TClientCommand::TConfig::GetNetworkThreadNum() const {
+    if (IsNetworkIntensive) {
+        size_t cpuCount = NumberOfMyCpus();
+        if (cpuCount >= 64) {
+            // doubtfully there is a reason to have more. Even this is too much.
+            return 32;
+        } else if (cpuCount >= 32 && cpuCount < 64) {
+            // leave the half of CPUs to the client's logic
+            return cpuCount / 2;
+        } else if (cpuCount > 16 && cpuCount < 32) {
+            // Originally here we had a constant value 16.
+            // To not break things this heuristic tries to use this constant as well.
+            return 16;
+        } else if (cpuCount == 16) {
+            // Again originally here we had a constant value 16.
+            // But it seems a bad idea to create 16 network threads if we have just 16 cores.
+            // To not break things here we return slightly more than 16 / 2, but not 16.
+            return 12;
+        } else if (cpuCount >= 4 && cpuCount < 16) {
+            return cpuCount / 2;
+        }
+    }
+    return 1; // TODO: check default
 }
 
 std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(TConfig& config) {

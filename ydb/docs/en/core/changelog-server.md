@@ -2,9 +2,9 @@
 
 ## Version 25.4 {#25-4}
 
-### Version 25.4.x.y {#25-4-x-y}
+### Version 25.4.1.14 {#25-4-1-14}
 
-Release date: TBD.
+Release date: April 24, 2026.
 
 #### Functionality
 

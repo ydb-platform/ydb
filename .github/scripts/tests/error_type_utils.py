@@ -165,7 +165,8 @@ def is_not_launched_issue(source_error_type, status_name=None):
 # ---------------------------------------------------------------------------
 
 
-def _failure_like_status(status):
+def is_failure_like_status(status):
+    """Statuses for which we classify ``error_type`` (aligned with ``test_results`` / HTML summary)."""
     return _normalize_text(status).strip().lower() in ("failure", "mute", "error")
 
 
@@ -183,7 +184,7 @@ def _classify_failure_branch(status, status_description, source_error_type, stde
 
 
 def classify_error_type(status, status_description, source_error_type, stderr_text=None, log_text=None):
-    if not _failure_like_status(status):
+    if not is_failure_like_status(status):
         return ""
     return _classify_failure_branch(status, status_description, source_error_type, stderr_text, log_text)
 
@@ -195,7 +196,7 @@ def classify_error_type(status, status_description, source_error_type, stderr_te
 
 def should_prefetch_debug_files_for_verify(status, status_description, source_error_type):
     """True if stderr/log fetch might reveal VERIFY (snippet alone does not finish classification)."""
-    if not _failure_like_status(status):
+    if not is_failure_like_status(status):
         return False
     return _classify_failure_branch(status, status_description, source_error_type, None, None) == ""
 

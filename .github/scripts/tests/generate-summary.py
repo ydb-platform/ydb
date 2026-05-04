@@ -15,7 +15,6 @@ from error_type_utils import (
     classify_failure_row,
     failure_row_from_test_result,
     is_not_launched_issue,
-    is_sanitizer_issue,
     is_timeout_issue,
     is_xfailed_issue,
     prefetch_text_cache_and_urls_for_failure_rows,
@@ -189,7 +188,7 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
+            is_sanitizer_issue=False,  # set in gen_summary from classify_failure_row (same order as VERIFY)
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
             is_verify_issue=False,
@@ -622,7 +621,9 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             existing_cache=stderr_fetch_cache,
         )
         for test, fr in pairs:
-            test.is_verify_issue = classify_failure_row(fr, stderr_fetch_cache) == "VERIFY"
+            tag = classify_failure_row(fr, stderr_fetch_cache)
+            test.is_verify_issue = tag == "VERIFY"
+            test.is_sanitizer_issue = tag == "SANITIZER"
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

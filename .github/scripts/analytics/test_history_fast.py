@@ -11,6 +11,7 @@ if TESTS_DIR not in sys.path:
 from error_type_utils import (  # noqa: E402
     classify_failure_row,
     failure_row_from_ydb,
+    is_failure_like_status,
     merge_classified_error_type,
     normalize_fetch_url,
     prefetch_text_cache_and_urls_for_failure_rows,
@@ -106,8 +107,11 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     print(f'missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
 
-    failure_rows = [failure_row_from_ydb(row) for row in results]
-    fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(failure_rows)
+    failure_rows = [failure_row_from_ydb(row) for row in results if is_failure_like_status(row.get("status"))]
+    fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(
+        failure_rows
+    )
+    failure_row_iter = iter(failure_rows)
     if prefetch_debug_file_urls:
         norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
         total_urls = len(norm)
@@ -119,8 +123,11 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         print("debug file prefetch: no urls to download")
 
     verify_count = 0
-    for row, fr in zip(results, failure_rows):
-        classified = classify_failure_row(fr, fetch_cache)
+    for row in results:
+        if is_failure_like_status(row.get("status")):
+            classified = classify_failure_row(next(failure_row_iter), fetch_cache)
+        else:
+            classified = ""
         error_type = merge_classified_error_type(classified, row.get("error_type"))
         row["error_type"] = error_type
         if error_type == "VERIFY":

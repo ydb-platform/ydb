@@ -318,11 +318,33 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
+<<<<<<< HEAD
         auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
+=======
+        const ui64 rowCount = checker.RowCount();
+        const ui32 portionCount = checker.PortionCount();
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        ui64 snapshotTxId = baseTxId;
+        if (rowCount > 0) {
+            UNIT_ASSERT_C(portionCount > 0, "PortionCount must be > 0 when RowCount > 0");
+            UNIT_ASSERT_C(rowCount % portionCount == 0, "TestNormalizerRowCount must be divisible by PortionCount for multi-portion load");
+            auto batchFull = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(rowCount);
+            const ui64 rowsPerCommit = rowCount / portionCount;
+            ui64 commitTxId = baseTxId;
+            for (ui32 p = 0; p < portionCount; ++p) {
+                auto batch = batchFull->Slice(p * rowsPerCommit, rowsPerCommit);
+                AFL_VERIFY(writer.Write(batch, {1, 2, 3}, commitTxId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                planStep = writer.StartCommit(commitTxId);
+                PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, commitTxId));
+                ++commitTxId;
+            }
+            snapshotTxId = commitTxId - 1;
+        }
+>>>>>>> c0f73c01bb3 ( Make LeakedBlobsNormalizer work with big tables (#37332))
 
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
@@ -446,8 +468,323 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             }
         };
 
+<<<<<<< HEAD
         TTtlPresetsChecker checker;
         TestNormalizerImpl<TTrashUnusedInjector>(checker);
+=======
+        TChecker checker;
+        TestNormalizerImpl<TInit, TVerify>(checker);
+    }
+
+    struct TLeakedBlobsNormalizerTestScenario {
+        ui64 RowCount = 0;
+        ui32 PortionCount = 1;
+        size_t BatchSize = 1;
+    };
+
+    void LeakedBlobsNormalizerTestImpl(TLeakedBlobsNormalizerTestScenario scenario) {
+        class TExpectation {
+            THashSet<TString> BlobIdLegacyKeys;
+
+        public:
+            void Clear() {
+                BlobIdLegacyKeys.clear();
+            }
+
+            void AddKey(const TString& key) {
+                BlobIdLegacyKeys.insert(key);
+            }
+
+            const THashSet<TString>& Keys() const {
+                return BlobIdLegacyKeys;
+            }
+        };
+
+        class TInit;
+        class TVerify;
+
+        class TController: public TInitVerifyDBController<TInit, TVerify> {
+        public:
+            TExpectation Expectation;
+            ui32 ExpectedPortionsCount = 0;
+        };
+
+        // TestNormalizerImpl creates a table (scheme-shard local path SchemeShardPathId), writes rows in
+        // PortionCount() commits (one portion per commit), then reboots. We remove index metadata for half of
+        // those portions and expect BlobsToDeleteWT to list only blob ids belonging to the corrupted portions.
+        class TInit: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                using namespace NColumnShard;
+
+                TController* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
+                UNIT_ASSERT_C(ctrl != nullptr, "LeakedBlobsNormalizer: expected TController registered via RegisterCSControllerGuard");
+                ctrl->Expectation.Clear();
+
+                NIceDb::TNiceDb db(txc.DB);
+                ui64 internalPathId = 0;
+                {
+                    auto rowset = db.Table<Schema::TableInfo>().Select();
+                    UNIT_ASSERT(rowset.IsReady());
+                    while (!rowset.EndOfSet()) {
+                        if (rowset.GetValue<Schema::TableInfo::SchemeShardLocalPathId>() ==
+                            SchemeShardPathId) {
+                            internalPathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                            break;
+                        }
+                        UNIT_ASSERT(rowset.Next());
+                    }
+                }
+                UNIT_ASSERT_C(internalPathId != 0,
+                    "LeakedBlobsNormalizer: no TableInfo row for the test table's scheme-shard local path "
+                    "(cannot map to IndexPortions.PathId)");
+
+                std::set<std::pair<ui64, ui64>> portionSet;
+                {
+                    auto rowset = db.Table<Schema::IndexPortions>().Select();
+                    UNIT_ASSERT(rowset.IsReady());
+                    while (!rowset.EndOfSet()) {
+                        const ui64 pathId = rowset.GetValue<Schema::IndexPortions::PathId>();
+                        if (pathId == internalPathId) {
+                            portionSet.emplace(pathId, rowset.GetValue<Schema::IndexPortions::PortionId>());
+                        }
+                        UNIT_ASSERT(rowset.Next());
+                    }
+                }
+                if (ctrl->ExpectedPortionsCount == 0) {
+                    UNIT_ASSERT_C(portionSet.empty(),
+                        "LeakedBlobsNormalizer: expected no portions for zero-rows scenario");
+                    return;
+                }
+
+                UNIT_ASSERT_C(!portionSet.empty(),
+                    "LeakedBlobsNormalizer: no portions for the test table path before corruption "
+                    "(data must come from TestNormalizerImpl write path)");
+
+                std::vector<std::pair<ui64, ui64>> portionVec(portionSet.begin(), portionSet.end());
+                UNIT_ASSERT_C(portionVec.size() == ctrl->ExpectedPortionsCount,
+                    TStringBuilder() << "LeakedBlobsNormalizer: expected " << ctrl->ExpectedPortionsCount
+                                     << " portions from multi-commit load "
+                    "(adjust row count / commit count if portions merge)");
+                const size_t corruptCount = portionVec.size() / 2;
+                const std::set<std::pair<ui64, ui64>> corruptedPortions(portionVec.begin(), portionVec.begin() + corruptCount);
+
+                {
+                    auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
+                    UNIT_ASSERT(rowset.IsReady());
+                    while (!rowset.EndOfSet()) {
+                        const ui64 pathId = rowset.GetValue<Schema::IndexColumnsV2::PathId>();
+                        const ui64 portionId = rowset.GetValue<Schema::IndexColumnsV2::PortionId>();
+                        if (pathId != internalPathId) {
+                            UNIT_ASSERT(rowset.Next());
+                            continue;
+                        }
+                        UNIT_ASSERT_C(portionSet.contains({pathId, portionId}),
+                            "LeakedBlobsNormalizer: IndexColumnsV2 row without matching IndexPortions for the test table");
+                        if (!corruptedPortions.contains({pathId, portionId})) {
+                            UNIT_ASSERT(rowset.Next());
+                            continue;
+                        }
+
+                        const TString blobIdsProto = rowset.GetValue<Schema::IndexColumnsV2::BlobIds>();
+                        NKikimrTxColumnShard::TIndexPortionBlobsInfo blobsInfo;
+                        UNIT_ASSERT_C(blobsInfo.ParseFromArray(blobIdsProto.data(), blobIdsProto.size()),
+                            "Failed to parse TIndexPortionBlobsInfo");
+                        for (const TString& bin : blobsInfo.GetBlobIds()) {
+                            UNIT_ASSERT_VALUES_EQUAL(bin.size(), NKikimr::TLogoBlobID::BinarySize);
+                            const NKikimr::TLogoBlobID logoId = NKikimr::TLogoBlobID::FromBinary(bin);
+                            ctrl->Expectation.AddKey(logoId.ToString());
+                        }
+                        UNIT_ASSERT(rowset.Next());
+                    }
+                }
+
+                std::vector<std::tuple<ui64, ui64, ui32, ui32>> indexKeysToErase;
+                {
+                    auto rowset = db.Table<Schema::IndexIndexes>().Select();
+                    UNIT_ASSERT(rowset.IsReady());
+                    while (!rowset.EndOfSet()) {
+                        const ui64 pathId = rowset.GetValue<Schema::IndexIndexes::PathId>();
+                        const ui64 portionId = rowset.GetValue<Schema::IndexIndexes::PortionId>();
+                        if (corruptedPortions.contains({pathId, portionId})) {
+                            if (rowset.template HaveValue<Schema::IndexIndexes::Blob>()) {
+                                const TString blobStr = rowset.GetValue<Schema::IndexIndexes::Blob>();
+                                if (blobStr.size() == NKikimr::TLogoBlobID::BinarySize) {
+                                    const NKikimr::TLogoBlobID logoId = NKikimr::TLogoBlobID::FromBinary(blobStr);
+                                    ctrl->Expectation.AddKey(logoId.ToString());
+                                }
+                            }
+                            indexKeysToErase.emplace_back(pathId, portionId, rowset.GetValue<Schema::IndexIndexes::IndexId>(),
+                                rowset.GetValue<Schema::IndexIndexes::ChunkIdx>());
+                        }
+                        UNIT_ASSERT(rowset.Next());
+                    }
+                }
+                for (const auto& key : indexKeysToErase) {
+                    db.Table<Schema::IndexIndexes>()
+                        .Key(std::get<0>(key), std::get<1>(key), std::get<2>(key), std::get<3>(key))
+                        .Delete();
+                }
+                for (const auto& pathPortion : corruptedPortions) {
+                    db.Table<Schema::IndexColumnsV2>().Key(pathPortion.first, pathPortion.second).Delete();
+                    db.Table<Schema::IndexPortions>().Key(pathPortion.first, pathPortion.second).Delete();
+                }
+                UNIT_ASSERT_C(!ctrl->Expectation.Keys().empty(),
+                    "LeakedBlobsNormalizer: no blob ids captured from the test table index before tear-down");
+            }
+        };
+
+        class TVerify: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                using namespace NColumnShard;
+
+                auto* ctrl = NYDBTest::TControllers::GetControllerAs<TController>();
+                UNIT_ASSERT_C(ctrl != nullptr, "LeakedBlobsNormalizer: expected TController registered via RegisterCSControllerGuard");
+
+                NIceDb::TNiceDb db(txc.DB);
+                THashSet<TString> actualKeys;
+                auto rowset = db.Table<Schema::BlobsToDeleteWT>().Select();
+                UNIT_ASSERT(rowset.IsReady());
+                while (!rowset.EndOfSet()) {
+                    const TString blobIdStr = rowset.GetValue<Schema::BlobsToDeleteWT::BlobId>();
+                    const ui64 tabletId = rowset.GetValue<Schema::BlobsToDeleteWT::TabletId>();
+                    UNIT_ASSERT_VALUES_EQUAL_C(tabletId, TTestTxConfig::TxTablet0,
+                        "BlobsToDeleteWT row must reference the column shard tablet under test");
+                    actualKeys.insert(blobIdStr);
+                    UNIT_ASSERT(rowset.Next());
+                }
+                const auto& expected = ctrl->Expectation.Keys();
+                UNIT_ASSERT_VALUES_EQUAL_C(actualKeys.size(), expected.size(),
+                    TStringBuilder() << "BlobsToDeleteWT size mismatch: expected " << expected.size() << " distinct keys, got "
+                                     << actualKeys.size());
+                for (const TString& key : expected) {
+                    UNIT_ASSERT_C(actualKeys.contains(key),
+                        TStringBuilder() << "Expected blob id missing in BlobsToDeleteWT: " << key);
+                }
+            }
+        };
+
+        class TChecker: public TNormalizerChecker {
+            TLeakedBlobsNormalizerTestScenario Scenario;
+
+        public:
+            explicit TChecker(const TLeakedBlobsNormalizerTestScenario& scenario)
+                : Scenario(scenario) {
+            }
+
+            ui64 RowCount() const override {
+                return Scenario.RowCount;
+            }
+
+            ui32 PortionCount() const override {
+                return Scenario.PortionCount;
+            }
+
+            ui64 RowCountAfterReboot() const override {
+                return Scenario.RowCount / 2;
+            }
+
+            void OnControllerRegistered(NYDBTest::NColumnShard::TController& controller) const override {
+                auto& localController = static_cast<TController&>(controller);
+                localController.ExpectedPortionsCount = Scenario.PortionCount;
+
+                // Otherwise blob GC (SetupGC) loads BlobsToDeleteWT, runs CollectGarbage, and EraseBlobToDelete —
+                // rows vanish before TVerify reads the table (see IBlobsGCAction::OnExecuteTxAfterCleaning, blob_manager_db.cpp).
+                controller.DisableBackground(NYDBTest::ICSController::EBackground::GC);
+                // We do not want compaction to interfere. We expect 10 portions in init, but compaction may merge some and we'll get less.
+                controller.DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            }
+
+            void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
+
+            void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("LeakedBlobsNormalizer");
+                repair->SetDescription(TStringBuilder() << "Detecting leaked blobs after index tear-down" << ";batch_size=" << Scenario.BatchSize);
+            }
+        };
+
+        TChecker checker(scenario);
+        TestNormalizerImpl<TInit, TVerify, TController>(checker);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_BatchLargerThanPortionsCount) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 100,
+            .BatchSize = 200,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_BatchSmallerThanPortionsCount) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 33,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_PortionsCountDividesByBatchSize) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 20000,
+            .PortionCount = 200,
+            .BatchSize = 50,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(LeakedBlobsNormalizer_NoPortions) {
+        TLeakedBlobsNormalizerTestScenario scenario{
+            .RowCount = 0,
+            .PortionCount = 0,
+            .BatchSize = 10,
+        };
+        LeakedBlobsNormalizerTestImpl(scenario);
+    }
+
+    Y_UNIT_TEST(CleanIndexColumnsV1Normalizer) {
+        class TInit: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                using namespace NColumnShard;
+
+                NIceDb::TNiceDb db(txc.DB);
+                UNIT_ASSERT_C(db.HaveTable<Schema::IndexColumnsV1>(), "Expected IndexColumnsV1 table to exist for clean-up test");
+                for (size_t i = 0; i < 100; ++i) {
+                    db.Table<Schema::IndexColumnsV1>().Key(1 + i, 2 + i, 3 + i, 4 + i).Update();
+                }
+            }
+        };
+
+        class TVerify: public NYDBTest::ILocalDBModifier {
+        public:
+            void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+                NIceDb::TNiceDb db(txc.DB);
+                auto rowset = db.Table<Schema::IndexColumnsV1>().Select();
+                UNIT_ASSERT(rowset.IsReady());
+                UNIT_ASSERT_C(
+                    rowset.EndOfSet(), "Expected CleanIndexColumnsV1 normalizer to remove all rows from IndexColumnsV1 table");
+            }
+        };
+
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                columnShardConfig.SetColumnChunksV1Usage(false);
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("CleanIndexColumnsV1");
+                repair->SetDescription("Cleaning old table");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TInit, TVerify>(checker);
+>>>>>>> c0f73c01bb3 ( Make LeakedBlobsNormalizer work with big tables (#37332))
     }
 
     Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {

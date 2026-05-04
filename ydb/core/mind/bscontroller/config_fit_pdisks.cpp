@@ -302,6 +302,12 @@ namespace NKikimr {
             state.PDisksToRemove.clear();
             state.PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
                 if (relevantBoxes.contains(pdiskInfo.BoxId)) {
+                    // do not trim a PDisk that is still referenced.
+                    const bool hasStatic = state.StaticPDisks.count(pdiskId) || pdiskInfo.StaticSlotUsage > 0;
+                    const bool hasAnyVSlot = !pdiskInfo.VSlotsOnPDisk.empty();
+                    if (hasStatic || hasAnyVSlot) {
+                        return true;
+                    }
                     state.PDisksToRemove.insert(pdiskId);
                 }
                 return true;

@@ -39,6 +39,8 @@ public:
         auto req = dynamic_cast<TEvNodeRegistrationRequest*>(Request.get());
         Y_ABORT_UNLESS(req, "Unexpected request type for TNodeRegistrationRPC");
 
+        IsNodeAuthorizedByCertificate = !Request->FindClientCert().empty();
+
         if (!CheckAccess()) {
             Status = Ydb::StatusIds::UNAUTHORIZED;
             Request->RaiseIssue(NYql::TIssue("Cannot authorize node. Access denied"));
@@ -175,7 +177,10 @@ public:
 
 private:
     bool CheckAccess() {
-        return IsTokenAllowed(Request->GetInternalToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        return IsRegisterDynamicNodeAccessAllowed(
+            AppData(),
+            IsNodeAuthorizedByCertificate,
+            Request->GetInternalToken().Get());
     }
 
     static void CopyNodeInfo(Ydb::Discovery::NodeInfo* dst, const NKikimrNodeBroker::TNodeInfo& src) {

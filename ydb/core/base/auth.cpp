@@ -1,5 +1,7 @@
 #include <ydb/library/aclib/aclib.h>
 
+#include <ydb/core/protos/auth.pb.h>
+
 #include "auth.h"
 
 namespace NKikimr {
@@ -40,6 +42,17 @@ NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
 }
 
 } // namespace
+
+bool IsRegisterDynamicNodeAccessAllowed(
+    const TAppData* appData,
+    bool authorizedByCertificate,
+    const NACLib::TUserToken* userToken)
+{
+    if (!authorizedByCertificate && !appData->AuthConfig.GetEnableNodeRegistrationByToken()) {
+        return false;
+    }
+    return IsTokenAllowed(userToken, appData->RegisterDynamicNodeAllowedSIDs);
+}
 
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
     return IsTokenAllowedImpl(userToken, allowedSIDs);

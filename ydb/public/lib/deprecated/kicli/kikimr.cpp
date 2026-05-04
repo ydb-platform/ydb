@@ -576,9 +576,6 @@ NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, co
     if (path) {
         request->Record.SetPath(*path);
     }
-    if (SecurityToken) {
-        request->Record.SetSecurityToken(SecurityToken);
-    }
     return ExecuteRequest(request.Release());
 }
 
@@ -587,7 +584,7 @@ NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
                                                     const TString &tenant,
                                                     const TString &nodeType,
                                                     const TString& domain,
-                                                    const TString& token,
+                                                    const TString& /*token*/,
                                                     bool serveYaml,
                                                     ui64 version)
 {
@@ -602,8 +599,6 @@ NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
     node.SetNodeType(nodeType);
     if (domain)
         request->Record.SetDomainName(domain);
-    if (token)
-        request->Record.SetSecurityToken(token);
     return ExecuteRequest(request.Release());
 }
 

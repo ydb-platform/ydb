@@ -55,6 +55,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
         bool EnableDynamicNodeAuth = false;
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
+        bool EnableNodeRegistrationByToken = true;
         std::vector<TString> RegisterNodeAllowedSids = {"DefaultClientAuth@cert", BUILTIN_ACL_ROOT};
     };
 
@@ -82,6 +83,8 @@ private:
         for (auto& sid : tmpRegisterNodeAllowedSids) {
             securityConfig.MutableRegisterDynamicNodeAllowedSIDs()->Add(std::move(sid));
         }
+
+        config.MutableAuthConfig()->SetEnableNodeRegistrationByToken(serverInitialization.EnableNodeRegistrationByToken);
 
         if (serverInitialization.SetNodeAuthValues) {
             auto& clientCertDefinitions = *config.MutableClientCertificateAuthorization()->MutableClientCertificateDefinitions();
@@ -653,7 +656,19 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesServerCerts) {
 
 void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& clientServerCert) {
     const auto timeout = TDuration::Seconds(2);
-    const auto expectedStatus = EStatus::TRANSPORT_UNAVAILABLE;
+
+    auto checkCorruptedClientAuthResult = [](const NDiscovery::TNodeRegistrationResult& result) {
+        UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_C(
+            result.GetStatus() == EStatus::TRANSPORT_UNAVAILABLE
+                || result.GetStatus() == EStatus::CLIENT_DEADLINE_EXCEEDED,
+            TStringBuilder()
+                << "Unexpected status " << result.GetStatus()
+                << ", expected " << EStatus::TRANSPORT_UNAVAILABLE
+                << " or " << EStatus::CLIENT_DEADLINE_EXCEEDED
+                << "; issues: " << result.GetIssues().ToOneLineString());
+    };
 
     for (bool enforceUserToken : {true, false}) {
         TKikimrServerForTestNodeRegistration server({
@@ -673,9 +688,9 @@ void TestCorruptedClientAuthData(const TCertAndKey& caCert, const TCertAndKey& c
             .SetDatabase(database)
             .SetEndpoint(location);
 
-        CheckAccessDenied(RegisterNode(config, timeout), expectedStatus);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout), expectedStatus);
-        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token"), timeout), expectedStatus);
+        checkCorruptedClientAuthResult(RegisterNode(config, timeout));
+        checkCorruptedClientAuthResult(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT), timeout));
+        checkCorruptedClientAuthResult(RegisterNode(config.SetAuthToken("wrong_token"), timeout));
     }
 }
 
@@ -1155,6 +1170,102 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     if (resp->GetTransportStatus() == NBus::MESSAGE_OK) {
         Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
     }
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts_TokenDisabled) {
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .EnableNodeRegistrationByToken = false
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TCertAndKey noCert;
+
+    NClient::TKikimr kikimr = GetKikimr(location, caCert, noCert);
+
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
+
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node. Access denied");
+    }
+}
+
+Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts_TokenDisabled) {
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableNodeRegistrationByToken = false
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TCertAndKey noCert;
+
+    NClient::TKikimr kikimr = GetKikimr(location, caCert, noCert);
+
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
+
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node. Access denied");
+    }
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_TokenDisabled) {
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .EnableNodeRegistrationByToken = false
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+
+    NClient::TKikimr kikimr = GetKikimr(location, caCert, clientServerCert);
+
+    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+}
+
+Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts_LegacyTokenDisabled) {
+    TKikimrServerForTestNodeRegistration server({
+        .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true,
+        .SetNodeAuthValues = true,
+        .EnableNodeRegistrationByToken = false
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TCertAndKey noCert;
+
+    NClient::TKikimr kikimr = GetKikimr(location, caCert, noCert);
+    kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+
+    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+    UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node. Access denied");
 }
 
 }

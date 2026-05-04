@@ -123,6 +123,16 @@ Logical "connections" to the database that maintains the context needed to execu
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
 
+### Streaming queries {#streaming-query}
+
+A **streaming query** is a query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of an unbounded data stream. Unlike regular queries, streaming queries have no fixed execution duration, restart automatically on failures, and periodically persist state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance.
+
+Streaming queries are described in more detail in a dedicated article [{#T}](streaming-query.md).
+
+### Streaming query checkpoints {#streaming-queries-checkpoints}
+
+**Streaming query checkpoints** are periodically saved state of a [streaming query](#streaming-query), used to automatically recover execution after failures in a distributed system. For more on checkpoints, see [{#T}](../dev/streaming-query/checkpoints.md).
+
 ### Topology {#topology}
 
 {{ ydb-short-name }} supports several [cluster](#cluster) topologies, described in more detail in a separate article [{#T}](topology.md). A few related terms are explained below.

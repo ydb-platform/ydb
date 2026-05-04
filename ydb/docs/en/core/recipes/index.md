@@ -4,5 +4,7 @@ This section of {{ ydb-short-name }} documentation contains ready-to-use recipes
 
 * [{#T}](ydb-sdk/index.md)
 * [{#T}](ydb-cli/index.md)
-* [{#T}](transfer/index.md)
 * [{#T}](../yql/reference/recipes/index.md)
+* [{#T}](transfer/index.md)
+* [{#T}](./import-export-column-tables.md)
+* [{#T}](./streaming_queries/index.md)

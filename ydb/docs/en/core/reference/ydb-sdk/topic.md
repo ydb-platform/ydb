@@ -143,8 +143,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   Both provided examples use ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
   It allows to automatically close  client and transport on leaving this block, considering both classes extends `AutoCloseable`.
 
-<<<<<<< HEAD
-=======
 - C#
 
   To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
@@ -228,7 +226,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   For more on [connecting to the database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
 
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}
 
 ## Managing topics {#manage}

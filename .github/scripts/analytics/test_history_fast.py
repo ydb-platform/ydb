@@ -145,6 +145,7 @@ def get_missed_data_for_upload(
         flush=True,
     )
     verify_count = 0
+    sanitizer_count = 0
     t_classify = time.time()
     if nrows > 5000:
         progress_step = max(5000, nrows // 20)
@@ -167,13 +168,16 @@ def get_missed_data_for_upload(
         )
         if source_has_tag(row["error_type"], "VERIFY"):
             verify_count += 1
+        if source_has_tag(row["error_type"], "SANITIZER"):
+            sanitizer_count += 1
         if i < nrows and progress_step > 0 and i % progress_step == 0:
             print(
                 f"[classify] progress {i}/{nrows} rows ({time.time() - t_classify:.1f}s elapsed)",
                 flush=True,
             )
     print(
-        f"[classify] done {nrows} rows in {time.time() - t_classify:.1f}s, verify_tag={verify_count}",
+        f"[classify] done {nrows} rows in {time.time() - t_classify:.1f}s, "
+        f"verify_tag={verify_count}, sanitizer_tag={sanitizer_count}",
         flush=True,
     )
     return results

@@ -673,19 +673,19 @@ private:
             return {};
         }
 
-        if (tree.Empty() || (tree.Min() == std::numeric_limits<ui64>::min() && tree.Max() == std::numeric_limits<ui64>::max())) {
-            NPq::NProto::TOffsetPredicate proto;
-            TString result;
-            YQL_ENSURE(proto.SerializeToString(&result));
-            return result;
-        }
         NPq::NProto::TOffsetPredicate proto;
-        auto* item = proto.AddItem();
-        if (tree.Min() != std::numeric_limits<ui64>::min()) {
-            item->SetBegin(!min ? tree.Min() : std::min(tree.Min(), *min)); 
-        }
-        if (tree.Max() != std::numeric_limits<ui64>::max()) {
-            item->SetEnd(tree.Max());
+        if (tree.Empty()) {
+            auto* item = proto.AddItem();
+            item->SetBegin(0);
+            item->SetEnd(0);
+        } else if (tree.Min() != std::numeric_limits<ui64>::min() || tree.Max() != std::numeric_limits<ui64>::max()) {
+            auto* item = proto.AddItem();
+            if (tree.Min() != std::numeric_limits<ui64>::min()) {
+                item->SetBegin(!min ? tree.Min() : std::min(tree.Min(), *min)); 
+            }
+            if (tree.Max() != std::numeric_limits<ui64>::max()) {
+                item->SetEnd(tree.Max());
+            }
         }
         TString result; 
         YQL_ENSURE(proto.SerializeToString(&result));

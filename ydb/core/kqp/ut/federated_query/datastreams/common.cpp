@@ -293,7 +293,12 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
     }
 }
 
-std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessagesWithWriteTime(const std::string& topicName, size_t messageCount, TInstant disposition, bool local) {
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessagesWithWriteTime(
+    const std::string& topicName,
+    size_t messageCount,
+    TInstant disposition,
+    bool local
+) {
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()

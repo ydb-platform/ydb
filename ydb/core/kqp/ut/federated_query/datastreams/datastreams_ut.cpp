@@ -1236,6 +1236,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         test("SystemMetadata('offset') IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
                 UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
             });
+        test("SystemMetadata('offset') BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        test("SystemMetadata('offset') == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
     }
 
     Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
@@ -1252,7 +1258,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
         WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
         Sleep(TDuration::Seconds(5));
-        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "data3", 0, /* local */ true);                  // wrong schema
 
         auto received = ReadTopicMessagesWithWriteTime(topic, 4, TInstant{}, true);
         UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
@@ -1283,8 +1289,23 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
         });
 
+        // the implementation does not support such a test
         // auto future = received[3].second + TDuration::Seconds(100);
         // test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+
+        auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT SystemMetadata("write_time") as offset, Data FROM `{topic}` WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 2, rowCount, validator);
+        };
+
+        test_raw("SystemMetadata('write_time') > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data3");
+        });
     }
 
     Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {

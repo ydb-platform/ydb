@@ -168,36 +168,4 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
-<<<<<<< HEAD
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
-
-- Java
-
-  {% list tabs %}
-
-  - Native SDK
-
-    ```java
-    import tech.ydb.core.grpc.BalancingSettings;
-    import tech.ydb.core.grpc.GrpcTransport;
-
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.detectLocalDs())
-            .build()) {
-        // ...
-    }
-    ```
-
-  - JDBC
-
-    See [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md); configure balancing via the native transport if needed.
-
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing settings as with the driver directly (for example `spring.datasource.url` or `DataSource` properties).
-
-  {% endlist %}
-
-=======
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

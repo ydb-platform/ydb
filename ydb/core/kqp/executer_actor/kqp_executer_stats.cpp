@@ -1080,16 +1080,17 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
                 }
                 BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
-                constexpr ui64 deadline = 600'000'000; // 10m
-                if (stageStats.CurrentWaitOutputTimeUs.MinValue > deadline) {
-                    for (auto stat : stageStats.OutputStages) {
-                        if (stat->IsDeadlocked(deadline)) {
-                            DeadlockedStageId = stat->StageId.StageId;
-                            break;
+                if (DeadlockTimeoutUs) {
+                    if (stageStats.CurrentWaitOutputTimeUs.MinValue > DeadlockTimeoutUs) {
+                        for (auto stat : stageStats.OutputStages) {
+                            if (stat->IsDeadlocked(DeadlockTimeoutUs)) {
+                                DeadlockedStageId = stat->StageId.StageId;
+                                break;
+                            }
                         }
+                    } else if (stageStats.IsDeadlocked(DeadlockTimeoutUs)) {
+                        DeadlockedStageId = stageStats.StageId.StageId;
                     }
-                } else if (stageStats.IsDeadlocked(deadline)) {
-                    DeadlockedStageId = stageStats.StageId.StageId;
                 }
 
                 if (CollectProfileStats(StatsMode)) {

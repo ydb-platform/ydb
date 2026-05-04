@@ -70,7 +70,4 @@ ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestRead
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

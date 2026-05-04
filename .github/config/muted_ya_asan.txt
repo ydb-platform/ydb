@@ -4040,6 +4040,3 @@ ydb/tests/stress/transfer/tests test_workload.py.TestYdbWorkload.test[row-remote
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestRead
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

@@ -1016,8 +1016,9 @@ private:
 // Adaptive scatter router with lazy channel activation.
 //
 // Routing: producer thread calls PickBest() to choose a destination channel,
-// preferring the least-loaded one. Loads are read from ChannelLevels_ atomics,
-// updated by consumer threads via LevelChangeCallback (release/acquire).
+// preferring the least-loaded one. Loads are read from ChannelLevels_ atomics
+// (owned by TDqFillAggregator) which the buffers update from their own threads
+// inside AddCount/UpdateCount whenever a fill-level transition occurs.
 //
 // Lazy activation: only primaryIdx is active at start; a new channel is activated
 // when all active channels leave NoLimit. Never deactivates. Keeps gRPC streams
@@ -1030,18 +1031,14 @@ class TScatterRouter {
 public:
     static constexpr ui32 kLevelCount = 3u;
 
-    explicit TScatterRouter(ui32 channelCount, ui32 primaryIdx = 0)
+    explicit TScatterRouter(std::shared_ptr<std::atomic<EDqFillLevel>[]> levels,
+                            ui32 channelCount, ui32 primaryIdx = 0)
         : ChannelCount_(channelCount)
+        , ChannelLevels_(std::move(levels))
     {
         Y_ENSURE(channelCount > 0, "TScatterRouter requires at least one channel");
         Y_ENSURE(primaryIdx < channelCount, "primaryIdx out of range");
-
-        ChannelLevels_ = std::shared_ptr<std::atomic<EDqFillLevel>[]>(
-            new std::atomic<EDqFillLevel>[channelCount]
-        );
-        for (ui32 j = 0; j < channelCount; ++j) {
-            ChannelLevels_[j].store(NoLimit, std::memory_order_relaxed);
-        }
+        Y_ENSURE(ChannelLevels_, "ChannelLevels must be initialized by TDqFillAggregator");
 
         ActiveChannels_.reserve(channelCount);
         ActiveChannels_.push_back(primaryIdx);
@@ -1050,10 +1047,6 @@ public:
         for (ui32 i = 1; i < channelCount; ++i) {
             InactiveChannels_.push_back((primaryIdx + i) % channelCount);
         }
-    }
-
-    std::weak_ptr<std::atomic<EDqFillLevel>[]> WeakLevels() const {
-        return ChannelLevels_;
     }
 
     ui32 ChannelCount() const { 
@@ -1161,44 +1154,32 @@ public:
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
-        , Router_(static_cast<ui32>(Outputs.size()), primaryChannelIdx)
     {
         Aggregator = std::make_shared<TDqFillAggregator>();
-        auto weakLevels = Router_.WeakLevels();
+        Aggregator->InitScatterChannels(static_cast<ui32>(Outputs.size()));
+        Router_.emplace(Aggregator->ChannelLevels, static_cast<ui32>(Outputs.size()), primaryChannelIdx);
         for (ui32 i = 0; i < Outputs.size(); ++i) {
-            YQL_ENSURE(Outputs[i]->SupportsLevelChangeCallback(),
-                "TDqOutputScatterConsumer: output " << i << " does not support LevelChangeCallback. "
-                "Only implementations that override SupportsLevelChangeCallback() (e.g. TDqOutputChannel) "
-                "may be used with Scatter.");
-            Outputs[i]->SetFillAggregator(Aggregator);
-            Outputs[i]->SetLevelChangeCallback([weakLevels, i](EDqFillLevel /*from*/, EDqFillLevel to) {
-                if (auto levels = weakLevels.lock()) {
-                    levels[i].store(to, std::memory_order_release);
-                }
-            });
-            // Sync router's view from the actual fill level. Unbound remote channels
-            // (TChannelStub) report HardLimit; initializing to NoLimit would cause the
-            // router to route to a stub and crash.
-            if (auto levels = weakLevels.lock()) {
-                levels[i].store(Outputs[i]->GetFillLevel(), std::memory_order_relaxed);
-            }
+            // SetFillAggregator with channelIdx wires the buffer's level changes
+            // straight into the aggregator's per-channel level array; the router
+            // reads from that array, no separate callback plumbing is needed.
+            Outputs[i]->SetFillAggregator(Aggregator, i);
         }
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Router_.GetFillLevel();
+        return Router_->GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
-        auto [idx, level] = Router_.PickBest();
+        auto [idx, level] = Router_->PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         Outputs[idx]->Push(std::move(value));
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
-        auto [idx, level] = Router_.PickBest();
+        auto [idx, level] = Router_->PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         std::copy(values, values + count, Tmp.begin());
         Outputs[idx]->WidePush(Tmp.data(), count);
@@ -1225,7 +1206,7 @@ public:
         const bool backpressured = total > 0 && PicksByLevel[2] * 10 > total;
         const auto level = backpressured ? NLog::ELevel::WARN : NLog::ELevel::DEBUG;
         YQL_CVLOG(level, NLog::EComponent::ProviderDq) << "[Scatter] outputs=" << Outputs.size()
-            << " active=" << Router_.ActiveCount()
+            << " active=" << Router_->ActiveCount()
             << " picks total=" << total
             << " noLimit=" << PicksByLevel[0]
             << " softLimit=" << PicksByLevel[1]
@@ -1254,7 +1235,7 @@ private:
     const TMaybe<ui32> OutputWidth;
     TUnboxedValueVector Tmp;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    TScatterRouter Router_;
+    std::optional<TScatterRouter> Router_;
     std::array<ui64, TScatterRouter::kLevelCount> PicksByLevel = {};
 };
 

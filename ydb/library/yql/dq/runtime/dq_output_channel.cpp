@@ -87,25 +87,17 @@ public:
         auto result = CalcFillLevel();
         if (FillLevel != result) {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, result);
-            }
-            if (LevelChangeCallback) {
-                LevelChangeCallback(FillLevel, result);
+                Aggregator->UpdateCount(FillLevel, result, ChannelIdx_);
             }
             FillLevel = result;
         }
         return result;
     }
 
-    bool SupportsLevelChangeCallback() const override { return true; }
-
-    void SetLevelChangeCallback(TLevelChangeCallback callback) override {
-        LevelChangeCallback = std::move(callback);
-    }
-
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) override {
         Aggregator = aggregator;
-        Aggregator->AddCount(FillLevel);
+        ChannelIdx_ = channelIdx;
+        Aggregator->AddCount(FillLevel, ChannelIdx_);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -500,8 +492,8 @@ private:
     TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    TLevelChangeCallback LevelChangeCallback;
     EDqFillLevel FillLevel = NoLimit;
+    std::optional<ui32> ChannelIdx_;
 };
 
 } // anonymous namespace

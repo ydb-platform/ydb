@@ -1497,12 +1497,9 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
             default_clusteradmin="root@builtin",
             protected_mode=True,
         )
-        # The branch default for `enable_node_registration_by_token` is False.
-        # We rely on mTLS cert auth (protected_mode=True) for dyn node registration.
-        # Set it explicitly so the intent is clear and stays robust to default changes.
+        # No token-based dyn node registration (mTLS slots only).
         configurator.yaml_config.setdefault('auth_config', {})['enable_node_registration_by_token'] = False
-        # Grant cluster admins ACL on /Root via security_config.default_access so
-        # token-less mTLS-authenticated cluster admin can manage the schema.
+        # /Root +F for clusteradmins@cert (driver without user token).
         configurator.yaml_config['domains_config']['security_config'].setdefault(
             'default_access', []
         ).append('+F:clusteradmins@cert')
@@ -1524,7 +1521,7 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
         cls.database_nodes = cls.cluster.register_and_start_slots(cls.database, count=3)
         cls.cluster.wait_tenant_up(cls.database, cls.cluster.config.default_clusteradmin)
 
-        # Use mTLS cert auth (clusteradmins@cert) instead of token credentials.
+        # Driver: mTLS (clusteradmins@cert), no user token.
         cls.driver = cls._start_driver(cls.database, credentials=None)
 
     @classmethod
@@ -1726,9 +1723,7 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
     def setup_class(cls):
         super().setup_class()
 
-        # Use a separate grpc_tls_data_path for the restore cluster so its
-        # cert/key/ca files don't collide with the primary cluster's TLS files
-        # (both default to yatest.common.output_path()).
+        # Separate TLS dir for restore cluster (no cert clash with primary).
         restore_tls_data_path = os.path.join(yatest.common.output_path(), "restore_cluster_tls")
         os.makedirs(restore_tls_data_path, exist_ok=True)
 
@@ -1759,16 +1754,12 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
 
         cls.restore_root_dir = "/Root2"
         cls.restore_database = os.path.join(cls.restore_root_dir, "db1")
-        # Register dyn nodes with tenant affiliation BEFORE the restore tool runs:
-        # the CLI `admin cluster restore` creates the database and then waits for
-        # available database nodes (up to 240s). Without pre-registered slots
-        # waiting on the tenant, the tool times out.
+        # Pre-register slots (restore CLI waits for DB nodes).
         cls.restore_database_nodes = cls.restore_cluster.register_and_start_slots(
             cls.restore_database, count=3
         )
 
-        # The restore driver is created later (in tests), after the restore
-        # database has been created.
+        # Restore driver starts in tests after the restore DB exists.
         cls.restore_driver = None
 
     @classmethod

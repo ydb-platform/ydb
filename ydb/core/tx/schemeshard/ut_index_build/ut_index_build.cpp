@@ -1669,6 +1669,65 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::IndexesCount(1),
                             NLs::PathVersionEqual(6)});
     }
+
+    // Check that parallel= setting is persisted
+    Y_UNIT_TEST(ParallelIsPersisted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // Just create main table
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index1"   Type: "Uint32" }
+              Columns { Name: "index2"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        FillUniqueData(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table", ++txId, false);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+            const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
+            return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
+        });
+
+        const ui64 buildIndexId = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "test_index", NKikimrSchemeOp::EIndexTypeGlobalUnique, {"index1", "index2"}, {}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(5);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("Index creation request", [&]{ return indexCreationBlocker.size(); });
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            TString getMaxShards = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let fields '( 'MaxShards ) )
+                    (return (AsList
+                        (SetResult 'Result (SelectRow 'IndexBuild key fields))
+                    ))
+                )
+            )", buildIndexId);
+            auto result = LocalMiniKQL(runtime, tenantSchemeShard, getMaxShards);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint32(), 5);
+        }
+        indexCreationBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId);
+    }
 }
 
 

@@ -2,20 +2,24 @@
 
 #include "types.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
-#include <library/cpp/threading/future/future.h>
-
 #include <util/string/builder.h>
-#include <util/system/spinlock.h>
 
 #include <grpcpp/grpcpp.h>
 
+#include <chrono>
+#include <format>
+#include <string>
+
 namespace NYdb::inline Dev {
 
-constexpr TDuration BACKOFF_START = TDuration::MilliSeconds(50);
-constexpr TDuration BACKOFF_MAX = TDuration::Seconds(10);
+constexpr std::chrono::milliseconds BACKOFF_START{50};
+constexpr std::chrono::milliseconds BACKOFF_MAX{10000};
+constexpr std::chrono::milliseconds PERIODIC_TICK{100};
+constexpr std::chrono::milliseconds MINIMUM_REFRESH_INTERVAL{100};
 
 // This file contains internal generic implementation of IAM credentials providers.
 // DO NOT USE THIS CLASS DIRECTLY. Use specialized factory methods for specific cases.
@@ -26,23 +30,28 @@ protected:
     using TAsyncInterface = typename TService::Stub::async_interface;
     using TAsyncRpc = std::function<void(typename TService::Stub*, grpc::ClientContext*, const TRequest*, TResponse*, std::function<void(grpc::Status)>)>;
 
+    using SysClock = std::chrono::system_clock;
+    using SysTimePoint = SysClock::time_point;
+
 private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
     public:
         TImpl(const TIamEndpoint& iamEndpoint,
               const TRequestFiller& requestFiller,
               TAsyncRpc rpc,
-              TCredentialsProviderPtr authTokenProvider = nullptr)
+              std::weak_ptr<ICoreFacility> responseFacility,
+              TCredentialsProviderPtr authTokenProvider)
             : Rpc_(rpc)
             , Ticket_("")
-            , NextTicketUpdate_(TInstant::Zero())
+            , NextTicketUpdate_(SysTimePoint{})
             , IamEndpoint_(iamEndpoint)
             , RequestFiller_(requestFiller)
-            , RequestInflight_(false)
+            , Context_(std::nullopt)
             , LastRequestError_("")
             , NeedStop_(false)
             , BackoffTimeout_(BACKOFF_START)
             , Lock_()
+            , ResponseFacility_(std::move(responseFacility))
             , AuthTokenProvider_(authTokenProvider)
         {
             std::shared_ptr<grpc::ChannelCredentials> creds = nullptr;
@@ -63,24 +72,83 @@ private:
             Stub_ = TService::NewStub(Channel_);
         }
 
-        void UpdateTicket(bool sync = false) {
-            {
-                std::lock_guard guard(Lock_);
-                if (NeedStop_ || RequestInflight_) {
-                    return;
-                }
-                RequestInflight_ = true;
+        void StartPeriodicTask() {
+            auto facility = ResponseFacility_.lock();
+            if (!facility) {
+                return;
             }
 
-            auto resultPromise = NThreading::NewPromise();
+            std::weak_ptr<TImpl> weakSelf = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::weak_from_this();
+            facility->AddPeriodicTask(
+                [weakSelf](NYdb::NIssue::TIssues&&, EStatus status) {
+                    auto self = weakSelf.lock();
+                    if (!self || status != EStatus::SUCCESS) {
+                        return false;
+                    }
+                    return self->OnPeriodicTick();
+                },
+                PERIODIC_TICK
+            );
+        }
+
+        std::string GetTicket() {
+            std::lock_guard guard(Lock_);
+            if (Ticket_.empty()) {
+                ythrow yexception() << "IAM-token not ready yet. " << LastRequestError_;
+            }
+            return Ticket_;
+        }
+
+        void WaitForToken() {
+            std::unique_lock guard(Lock_);
+            TokenReady_.wait_for(guard,
+                std::chrono::microseconds(2 * IamEndpoint_.RequestTimeout.MicroSeconds()),
+                [this]() {
+                    return NeedStop_ || !Ticket_.empty(); 
+                }
+            );
+        }
+
+        void Stop() {
+            {
+                std::unique_lock guard(Lock_);
+                if (NeedStop_) {
+                    return;
+                }
+                NeedStop_ = true;
+                TokenReady_.notify_all();
+                if (Context_.has_value()) {
+                    Context_->TryCancel();
+                }
+                ContextReady_.wait(guard, [this]() { return !Context_.has_value(); });
+            }
+            Stub_.reset();
+            Channel_.reset();
+        }
+
+    private:
+        void UpdateTicket() {
             auto response = std::make_shared<TResponse>();
-            auto context = std::make_shared<grpc::ClientContext>();
 
-            std::shared_ptr<TImpl> self = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::shared_from_this();
+            std::weak_ptr<TImpl> weakSelf = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::weak_from_this();
+            std::weak_ptr<ICoreFacility> weakFacility = ResponseFacility_;
 
-            auto cb = [self, sync, resultPromise, response, context] (grpc::Status status) mutable {
-                self->ProcessIamResponse(std::move(status), std::move(*response), sync);
-                resultPromise.SetValue();
+            auto cb = [weakSelf, weakFacility, response] (grpc::Status status) mutable {
+                auto work = [weakSelf, response, status = std::move(status)]() mutable {
+                    if (auto self = weakSelf.lock()) {
+                        self->ProcessIamResponse(std::move(status), std::move(*response));
+                    }
+                };
+                auto facility = weakFacility.lock();
+                auto self = weakSelf.lock();
+
+                if (facility && self) {
+                    facility->PostToResponseQueue(std::move(work));
+                } else if (self){
+                    std::lock_guard guard(self->Lock_);
+                    self->Context_.reset();
+                    self->ContextReady_.notify_all();
+                }
             };
 
             TRequest req;
@@ -91,79 +159,68 @@ private:
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
-            context->set_deadline(deadline);
+            Context_->set_deadline(deadline);
             if (AuthTokenProvider_) {
-                context->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
+                Context_->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
             }
 
-            Rpc_(Stub_.get(), context.get(), &req, response.get(), std::move(cb));
-
-            if (sync) {
-                resultPromise.GetFuture().Wait(2 * IamEndpoint_.RequestTimeout);
-            }
+            Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
         }
 
-        std::string GetTicket() {
-            TInstant nextTicketUpdate;
-            std::string ticket;
-            {
-                std::lock_guard guard(Lock_);
-                ticket = Ticket_;
-                nextTicketUpdate = NextTicketUpdate_;
-                if (ticket.empty())
-                    ythrow yexception() << "IAM-token not ready yet. " << LastRequestError_;
-            }
-            if (TInstant::Now() >= nextTicketUpdate) {
-                UpdateTicket();
-            }
-            return ticket;
+        static std::string FormatSysTimeUtcIsoMicros(SysTimePoint tp) {
+            const auto t = std::chrono::time_point_cast<std::chrono::microseconds>(tp);
+            const auto secs = std::chrono::floor<std::chrono::seconds>(t);
+            const auto frac = std::chrono::duration_cast<std::chrono::microseconds>(t - secs).count();
+            return std::format("{:%Y-%m-%dT%H:%M:%S}.{:06}Z", secs, frac);
         }
 
-        void Stop() {
+        bool OnPeriodicTick() {
             {
                 std::lock_guard guard(Lock_);
                 if (NeedStop_) {
-                    return;
+                    return false;
                 }
-                NeedStop_ = true;
+                if (Context_.has_value() || SysClock::now() < NextTicketUpdate_) {
+                    return true;
+                }
+                Context_.emplace();
             }
-            Stub_.reset();
-            Channel_.reset();
+            UpdateTicket();
+            return true;
         }
 
-    private:
-        void ProcessIamResponse(grpc::Status&& status, TResponse&& result, bool sync) {
+        void ProcessIamResponse(grpc::Status&& status, TResponse&& result) {
+            std::lock_guard guard(Lock_);
+
             if (!status.ok()) {
-                TDuration sleepDuration;
-                {
-                    std::lock_guard guard(Lock_);
-                    LastRequestError_ = TStringBuilder()
-                        << "Last request error was at " << TInstant::Now()
-                        << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
-                        << " Message: \"" << status.error_message()
-                        << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
+                LastRequestError_ = TStringBuilder()
+                    << "Last request error was at " << FormatSysTimeUtcIsoMicros(SysClock::now())
+                    << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
+                    << " Message: \"" << status.error_message()
+                    << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                    RequestInflight_ = false;
-                    sleepDuration = std::min(BackoffTimeout_, BACKOFF_MAX);
-                    BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
-                }
-
-                Sleep(sleepDuration);
-
-                UpdateTicket(sync);
+                Context_.reset();
+                ContextReady_.notify_all();
+                const auto now = SysClock::now();
+                const auto retryDelay = std::min(BackoffTimeout_, BACKOFF_MAX);
+                NextTicketUpdate_ = now + retryDelay;
+                BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
             } else {
-                std::lock_guard guard(Lock_);
                 LastRequestError_ = "";
                 Ticket_ = result.iam_token();
-                RequestInflight_ = false;
+                Context_.reset();
                 BackoffTimeout_ = BACKOFF_START;
 
-                const auto now = Now();
-                NextTicketUpdate_ = std::min(
-                    now + IamEndpoint_.RefreshPeriod,
-                    TInstant::Seconds(result.expires_at().seconds())
-                ) - IamEndpoint_.RequestTimeout;
-                NextTicketUpdate_ = std::max(NextTicketUpdate_, now + TDuration::MilliSeconds(100));
+                const auto now = SysClock::now();
+                const auto refreshAt = now + std::chrono::microseconds(IamEndpoint_.RefreshPeriod.MicroSeconds());
+                const auto expiresAt = SysTimePoint{} + std::chrono::seconds(result.expires_at().seconds());
+                const auto requestMargin = std::chrono::microseconds(IamEndpoint_.RequestTimeout.MicroSeconds());
+
+                NextTicketUpdate_ = std::min(refreshAt, expiresAt) - requestMargin;
+                NextTicketUpdate_ = std::max(NextTicketUpdate_, now + MINIMUM_REFRESH_INTERVAL);
+
+                TokenReady_.notify_all();
+                ContextReady_.notify_all();
             }
         }
 
@@ -173,14 +230,17 @@ private:
         TAsyncRpc Rpc_;
 
         std::string Ticket_;
-        TInstant NextTicketUpdate_;
+        SysTimePoint NextTicketUpdate_;
         const TIamEndpoint IamEndpoint_;
         const TRequestFiller RequestFiller_;
-        bool RequestInflight_;
+        std::optional<grpc::ClientContext> Context_;
+        std::condition_variable ContextReady_;
+        std::condition_variable TokenReady_;
         std::string LastRequestError_;
         bool NeedStop_;
-        TDuration BackoffTimeout_;
-        TAdaptiveLock Lock_;
+        std::chrono::milliseconds BackoffTimeout_;
+        std::mutex Lock_;
+        std::weak_ptr<ICoreFacility> ResponseFacility_;
         TCredentialsProviderPtr AuthTokenProvider_;
     };
 
@@ -188,10 +248,12 @@ public:
     TGrpcIamCredentialsProvider(const TIamEndpoint& endpoint,
                                 const TRequestFiller& requestFiller,
                                 TAsyncRpc rpc,
+                                std::weak_ptr<ICoreFacility> responseFacility,
                                 TCredentialsProviderPtr authTokenProvider = nullptr)
-        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc, authTokenProvider))
+        : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc, std::move(responseFacility), authTokenProvider))
     {
-        Impl_->UpdateTicket(true);
+        Impl_->StartPeriodicTask();
+        Impl_->WaitForToken();
     }
 
     ~TGrpcIamCredentialsProvider() {
@@ -213,25 +275,25 @@ private:
 template<typename TRequest, typename TResponse, typename TService>
 class TIamJwtCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
-    TIamJwtCredentialsProvider(const TIamJwtParams& params)
+    TIamJwtCredentialsProvider(const TIamJwtParams& params, std::weak_ptr<ICoreFacility> responseFacility)
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [jwtParams = params.JwtParams](TRequest& req) {
                 req.set_jwt(MakeSignedJwt(jwtParams));
             }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                 stub->async()->Create(context, request, response, std::move(cb));
-            }) {}
+            }, std::move(responseFacility), nullptr) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
 class TIamOAuthCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
-    TIamOAuthCredentialsProvider(const TIamOAuth& params)
+    TIamOAuthCredentialsProvider(const TIamOAuth& params, std::weak_ptr<ICoreFacility> responseFacility)
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
                 req.set_yandex_passport_oauth_token(TStringType{token});
             }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                 stub->async()->Create(context, request, response, std::move(cb));
-            }) {}
+            }, std::move(responseFacility), nullptr) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -240,7 +302,11 @@ public:
     TIamJwtCredentialsProviderFactory(const TIamJwtParams& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
-        return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_);
+        ythrow yexception() << "Not supported";
+    }
+
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:
@@ -253,7 +319,11 @@ public:
     TIamOAuthCredentialsProviderFactory(const TIamOAuth& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
-        return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_);
+        ythrow yexception() << "Not supported";
+    }
+
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:

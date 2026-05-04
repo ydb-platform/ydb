@@ -199,7 +199,8 @@ bool TKqpQueryState::TryGetFromCache(
     TKqpQueryCache& cache,
     const TGUCSettings::TPtr& gUCSettingsPtr,
     TIntrusivePtr<TKqpCounters>& counters,
-    const TActorId& sender)
+    const TActorId& sender,
+    TKqpTransactionContext* txCtx)
 {
     if (QueryPhysicalGraph) {
         YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -221,7 +222,7 @@ bool TKqpQueryState::TryGetFromCache(
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
-    settings.IsolationLevel = GetIsolationLevel();
+    settings.IsolationLevel = GetIsolationLevel(txCtx);
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     bool keepInCache = false;
@@ -273,11 +274,11 @@ bool TKqpQueryState::TryGetFromCache(
     return false;
 }
 
-std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
-    auto isolationLevel = GetIsolationLevel();
+    auto isolationLevel = GetIsolationLevel(txCtx);
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
@@ -334,13 +335,13 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
         false, nullptr, nullptr, IsWarmupCompilation_, isolationLevel);
 }
 
-std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
+std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
     YQL_ENSURE(CompileResult);
     YQL_ENSURE(!QueryPhysicalGraph);
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
-    auto isolationLevel = GetIsolationLevel();
+    auto isolationLevel = GetIsolationLevel(txCtx);
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
@@ -386,11 +387,11 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std
     return request;
 }
 
-std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
-    const auto isolationLevel = GetIsolationLevel();
+    const auto isolationLevel = GetIsolationLevel(txCtx);
 
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
@@ -617,10 +618,10 @@ bool TKqpQueryState::HasImplicitTx() const {
     return true;
 }
 
-NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel() const {
+NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionContext* txCtx) const {
     auto isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
-    if (TxCtx && TxCtx->EffectiveIsolationLevel.Defined()) {
-        isolationLevel = *TxCtx->EffectiveIsolationLevel;
+    if (txCtx && txCtx->EffectiveIsolationLevel.Defined()) {
+        isolationLevel = *txCtx->EffectiveIsolationLevel;
     } else if (HasTxControl() && GetTxControl().has_begin_tx()) {
         const auto& txSettings = GetTxControl().begin_tx();
         switch (txSettings.tx_mode_case()) {

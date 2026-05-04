@@ -705,10 +705,10 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        //EnsureTxContextForCompilation();
+        auto txCtx = GetTxContextForCompilation();
 
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx.Get()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             // even if we have successfully compilation result, it doesn't mean anything
@@ -728,7 +728,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
         STLOG_D("Sending CompileQuery request",
             (trace_id, TraceId()));
 
@@ -738,7 +738,8 @@ public:
 
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
-        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings);
+        auto txCtx = GetTxContextForCompilation();
+        auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings, txCtx.Get());
         STLOG_D("Sending CompileSplittedQuery request",
             (trace_id, TraceId()));
 
@@ -769,7 +770,8 @@ public:
                 return;
             }
 
-            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings);
+            auto txCtx = GetTxContextForCompilation();
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
             return;
@@ -832,8 +834,10 @@ public:
     }
 
     void CompileStatement() {
+        auto txCtx = GetTxContextForCompilation();
+
         // quick path
-        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
+        if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId(), txCtx.Get()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
             QueryState->CompileResult->IncUsage();
@@ -853,7 +857,7 @@ public:
         // TODO: in some cases we could reply right here (e.g. there is uid and query is missing), but
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
-        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
+        auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings, txCtx.Get());
         STLOG_D("Sending CompileQuery request (statement)",
             (trace_id, TraceId()));
 
@@ -1195,23 +1199,22 @@ public:
         return control;
     }
 
-    void EnsureTxContextForCompilation() {
+    TIntrusivePtr<TKqpTransactionContext> GetTxContextForCompilation() {
         if (QueryState->TxCtx) {
-            return;
+            return QueryState->TxCtx;
         }
 
         if (!QueryState->HasTxControl()) {
-            return;
+            return nullptr;
         }
 
         const auto& txControl = QueryState->GetTxControl();
         if (txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId) {
             auto txId = TTxId::FromString(txControl.tx_id());
-            auto txCtx = Transactions.Find(txId);
-            if (txCtx) {
-                QueryState->TxCtx = txCtx;
-            }
+            return Transactions.Find(txId);
         }
+
+        return nullptr;
     }
 
     bool PrepareQueryTransaction() {

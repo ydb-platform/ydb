@@ -31,7 +31,37 @@ ALTER TABLE `/Root/events`
   );
 ```
 
+## Queries and the effect
+
+After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index can skip fragments that very likely do not contain the requested values (compared to reading the full column without this filter).
+
+Sample data and queries for the table above:
+
+```yql
+INSERT INTO `/Root/events` (id, resource_id, payload, message) VALUES
+    (1, "res-1", "{}", "started"),
+    (2, "res-42", "{}", "error: timeout"),
+    (3, "res-2", "{}", "done");
+```
+
+Equality on the column protected by `bloom_filter` — the engine can prune irrelevant fragments when reading `resource_id` and related columns:
+
+```yql
+SELECT id, message
+FROM `/Root/events`
+WHERE resource_id = "res-42";
+```
+
+Substring search on the column with `bloom_ngram_filter` — the n-gram index helps drop fragments that cannot contain matching n-grams in `message`:
+
+```yql
+SELECT id, message
+FROM `/Root/events`
+WHERE message LIKE '%timeout%';
+```
+
 Further reading:
 
 * Details and limitations: [Bloom skip indexes](../../dev/bloom-skip-indexes.md)
+* Parameter tuning: [Parameter tuning](../../dev/bloom-skip-indexes.md#tuning)
 * Full syntax: [`ALTER TABLE ADD INDEX`](../../yql/reference/syntax/alter_table/indexes.md#local-bloom)

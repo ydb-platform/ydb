@@ -39,6 +39,10 @@ Parameters specific to fulltext indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
+Parameters specific to local Bloom skip indexes:
+
+{% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
+
 {% if backend_name == "YDB" %}
 
 You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
@@ -47,7 +51,11 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` supports only local Bloom skip indexes, see [Bloom skip indexes](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` [supports only local Bloom skip indexes](#local-bloom).
+
+The following limitations apply to local Bloom skip indexes {#local-bloom}:
+
+{% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
 
 ### Examples
 
@@ -79,25 +87,7 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-### Bloom skip indexes {#local-bloom}
-
-Bloom skip indexes allow the engine to skip data fragments that do not contain the requested values and speed up selective queries. For an overview and usage patterns, see [Bloom skip indexes](../../../../dev/bloom-skip-indexes.md).
-
-Local Bloom skip indexes have additional limitations:
-
-* For column-oriented tables, the `ON (...)` expression must contain exactly one column.
-* `COVER (...)` and data columns are not supported for these indexes.
-
-Supported index types:
-
-* `bloom_filter`: Bloom filter by column values. Parameters:
-  * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1` for column-oriented tables and `0.0001` for row-oriented tables.
-* `bloom_ngram_filter`: N-gram Bloom filter for string-typed columns. Parameters:
-  * `ngram_size`: N-gram size from `3` to `8` (for example, `3`). Default: `3`.
-  * `false_positive_probability`: Target false-positive probability (for example, `0.01`). Default: `0.1`.
-  * `case_sensitive`: Optional, `true` or `false` (`true` by default).
-
-#### Example: add a Bloom filter index
+A bloom index:
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -106,7 +96,7 @@ ALTER TABLE `/Root/Table`
   WITH (false_positive_probability = 0.01);
 ```
 
-#### Example: add an N-gram Bloom filter index
+A bloom ngram index:
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -145,8 +135,8 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
         * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
         * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
     * for local Bloom skip indexes:
-        * `false_positive_probability`
-        * `ngram_size` and `case_sensitive` (for `bloom_ngram_filter` only)
+        * `FALSE_POSITIVE_PROBABILITY`
+        * `NGRAM_SIZE` and `CASE_SENSITIVE` (for `bloom_ngram_filter` only)
 
 
 {% note info %}
@@ -159,9 +149,9 @@ For global secondary index settings, `RESET` is not supported.
     * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
     * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
     * An integer of `Uint64` type for the other settings
-    * A floating-point value in `(0, 1)` for `false_positive_probability`; smaller values usually reduce false positives but increase index size
-    * An integer value from `3` to `8` for `ngram_size` (a typical starting point is `3`)
-    * `true` or `false` for `case_sensitive`
+    * A floating-point value in `(0, 1)` for `FALSE_POSITIVE_PROBABILITY`; smaller values usually reduce false positives but increase index size
+    * An integer value from `3` to `8` for `NGRAM_SIZE` (a typical starting point is `3`)
+    * `true` or `false` for `CASE_SENSITIVE`
 
 ### Example
 

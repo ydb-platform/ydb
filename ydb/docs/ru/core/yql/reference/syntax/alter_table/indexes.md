@@ -40,6 +40,10 @@ ALTER TABLE `<table_name>`
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
+Параметры, специфичные для локальных Блум индексов:
+
+{% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
+
 {% if backend_name == "YDB" and oss == true %}
 
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
@@ -48,7 +52,11 @@ ALTER TABLE `<table_name>`
 
 ### Ограничения
 
-Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` поддерживаются только локальные Bloom skip индексы, см. [Bloom skip индексы](#local-bloom).
+Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` [поддерживаются только локальные Блум индексы](#local-bloom).
+
+Для локальных блум-индексов действуют следующие ограничения {#local-bloom}:
+
+{% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
 
 ### Примеры
 
@@ -80,25 +88,7 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-### Bloom skip индексы {#local-bloom}
-
-Bloom skip индексы позволяют пропускать фрагменты данных, которые не содержат искомых значений, и ускоряют селективные запросы. Обзор и сценарии использования см. в разделе [Bloom skip индексы](../../../../dev/bloom-skip-indexes.md).
-
-Для локальных Bloom skip индексов действуют дополнительные ограничения:
-
-* для колоночных таблиц выражение `ON (...)` должно содержать одну колонку;
-* секции `COVER (...)` и data columns для таких индексов не поддерживаются.
-
-Поддерживаются следующие типы индексов:
-
-* `bloom_filter` — фильтр Блума по значениям колонки. Параметры:
-  * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`). По умолчанию: `0.1` для колоночных таблиц и `0.0001` для строковых таблиц.
-* `bloom_ngram_filter` — n-граммный фильтр Блума для колонок строковых типов. Параметры:
-  * `ngram_size` — размер n-граммы от `3` до `8` (например, `3`). По умолчанию: `3`;
-  * `false_positive_probability` — целевая вероятность ложноположительного срабатывания (например, `0.01`). По умолчанию: `0.1`;
-  * `case_sensitive` — необязательный, `true` или `false` (по умолчанию `true`).
-
-#### Пример: добавление индекса Bloom filter
+Блум индекс:
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -107,7 +97,7 @@ ALTER TABLE `/Root/Table`
   WITH (false_positive_probability = 0.01);
 ```
 
-#### Пример: добавление индекса N-gram Bloom filter
+Блум n-граммный индекс:
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -146,9 +136,9 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
     * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
     * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
     * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
-  * для локальных Bloom skip индексов:
-    * `false_positive_probability`
-    * `ngram_size` и `case_sensitive` (только для `bloom_ngram_filter`)
+  * для локальных Блум индексов:
+    * `FALSE_POSITIVE_PROBABILITY`
+    * `NGRAM_SIZE` и `CASE_SENSITIVE` (только для `bloom_ngram_filter`)
 
 {% note info %}
 
@@ -161,9 +151,9 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
   * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
   * `"PER_AZ:<count>"` или `"ANY_AZ:<count>"` где `<count>` — число реплик для `READ_REPLICAS_SETTINGS`
   * для остальных параметров — целое число типа `Uint64`
-  * для `false_positive_probability` — число с плавающей точкой в диапазоне `(0, 1)`; меньшее значение обычно уменьшает число ложноположительных срабатываний, но увеличивает размер индекса
-  * для `ngram_size` — целое число в диапазоне от `3` до `8` (обычно рекомендуется начинать с `3`)
-  * для `case_sensitive` — `true` или `false`
+  * для `FALSE_POSITIVE_PROBABILITY` — число с плавающей точкой в диапазоне `(0, 1)`; меньшее значение обычно уменьшает число ложноположительных срабатываний, но увеличивает размер индекса
+  * для `NGRAM_SIZE` — целое число в диапазоне от `3` до `8` (обычно рекомендуется начинать с `3`)
+  * для `CASE_SENSITIVE` — `true` или `false`
 
 ### Пример
 
@@ -177,7 +167,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 );
 ```
 
-Для локальных Bloom skip индексов можно изменять типовые параметры индекса, например:
+Для локальных Блум индексов можно изменять типовые параметры индекса, например:
 
 ```yql
 ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (

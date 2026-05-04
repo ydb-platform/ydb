@@ -15,8 +15,8 @@
     * `vector_kmeans_tree` — векторный индекс. Подробнее описан в разделе [{#T}](../create_table/vector_index.md).
     * `fulltext_plain` — базовый полнотекстовый индекс. Подробнее описан в [{#T}](../create_table/fulltext_index.md).
     * `fulltext_relevance` — полнотекстовый индекс со статистикой [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) для расчёта релевантности. Подробнее описан в [{#T}](../create_table/fulltext_index.md).
-    * `bloom_filter` — локальный Bloom skip индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
-    * `bloom_ngram_filter` — локальный N-граммный Bloom skip индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
+    * `bloom_filter` — локальный Блум индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
+    * `bloom_ngram_filter` — локальный N-граммный Блум индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
 
 * `<index_columns>` — список имён колонок создаваемой таблицы через запятую, по которому определяется состав и порядок включения колонок в ключ индекса. Обязательно должен быть указан. Ключ индекса будет состоять из этих колонок с добавлением колонок первичного ключа таблицы.
 * `<cover_columns>` — список имён колонок создаваемой таблицы через запятую, которые будут сохранены в индексе дополнительно к колонкам ключа индекса, давая возможность получить дополнительные данные без обращения за ними в таблицу. По умолчанию пуст.

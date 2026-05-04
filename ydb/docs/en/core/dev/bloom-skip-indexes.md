@@ -2,8 +2,6 @@
 
 Bloom skip indexes are local auxiliary structures that speed up selective queries by skipping data fragments that very likely do not contain the requested values. Unlike global [secondary indexes](../concepts/glossary.md#secondary-index), they work as local read-time filters and reduce the amount of data that must be actually read.
 
-For how they fit into query execution, see [Bloom skip indexes and filtering](../concepts/query_execution/bloom_skip_indexes.md).
-
 ## Types {#types}
 
 {{ ydb-short-name }} supports two local Bloom skip index types:
@@ -11,20 +9,15 @@ For how they fit into query execution, see [Bloom skip indexes and filtering](..
 * `bloom_filter`: A Bloom filter over exact values of the indexed column (useful for equality and point lookups).
 * `bloom_ngram_filter`: A Bloom filter over n-grams of a string column.
 
-Creation syntax and parameters are documented in [CREATE TABLE: Bloom skip index](../yql/reference/syntax/create_table/bloom_skip_index.md) and in [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
-
-## Limitations {#limitations}
-
-* The index is always local (`LOCAL`); there is no global variant.
-* `COVER (...)` and data columns are not supported.
-* For column-oriented tables, exactly one indexed column is allowed. For row-oriented tables, multiple indexed columns are allowed.
-* Queries do not use the `VIEW <index>` syntax (unlike, for example, [fulltext indexes](fulltext-indexes.md)).
+Creation syntax and parameters are documented in [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md) and in [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 ## Parameters and defaults {#parameters}
 
 Summary of `WITH (...)` parameters and defaults:
 
 {% include [bloom_skip_index_parameters.md](../yql/reference/syntax/_includes/bloom_skip_index_parameters.md) %}
+
+Detailed parameter description for index creation: [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 To change parameters after creation, use [`ALTER INDEX`](../yql/reference/syntax/alter_table/indexes.md#alter-index).
 
@@ -33,7 +26,7 @@ To change parameters after creation, use [`ALTER INDEX`](../yql/reference/syntax
 Create a table with a `bloom_filter` index:
 
 ```yql
-CREATE TABLE events (
+CREATE TABLE /Root/events (
     id Uint64,
     resource_id Utf8,
     message Utf8,
@@ -67,10 +60,26 @@ ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
 );
 ```
 
+## Parameter tuning {#tuning}
+
+If queries still read too much data after deploying the index, try lowering `false_positive_probability`. If the index uses too much space, try raising it.
+
+Use [`ALTER INDEX`](../yql/reference/syntax/alter_table/indexes.md#alter-index) to change values, as in the [example above](#examples).
+
+Tips:
+
+* Start with `false_positive_probability = 0.01`, then adjust based on real read metrics and index size.
+* For `bloom_ngram_filter`, `ngram_size` typically starts at `3`; increasing it can make filtering stricter for longer substrings.
+* Change one parameter at a time and compare results under the same workload.
+
+## Limitations {#limitations}
+
+{% include [bloom_skip_index_limitations.md](../yql/reference/syntax/_includes/bloom_skip_index_limitations.md) %}
+
 ## Additional Materials {#see-also}
 
 * [Secondary indexes](secondary-indexes.md)
-* [YQL reference: `CREATE TABLE` / Bloom skip index](../yql/reference/syntax/create_table/bloom_skip_index.md)
-* [YQL reference: `SELECT`](../yql/reference/syntax/select/index.md)
-* [YQL reference: `ALTER TABLE` / indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
-* [Recipes: Bloom skip indexes](../recipes/bloom-skip-indexes/index.md)
+* [YQL reference: CREATE TABLE — Bloom skip index](../yql/reference/syntax/create_table/bloom_skip_index.md)
+* [YQL reference: SELECT](../yql/reference/syntax/select/index.md)
+* [YQL reference: ALTER TABLE — indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
+* [Quickstart recipe](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)

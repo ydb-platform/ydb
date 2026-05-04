@@ -624,7 +624,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             existing_cache=stderr_fetch_cache,
         )
         for test, fr in pairs:
-            # Badges are independent; same text sources as build_error_type_csv_for_storage (multi-tag in YDB).
+            # Independent badge predicates (not one “primary” tag); same texts as build_error_type_csv_for_storage.
             need = should_prefetch_debug_files(fr.status, fr.stderr_url, fr.log_url)
             stderr_text, log_text = debug_file_texts_from_cache(
                 need, fr.stderr_url, fr.log_url, stderr_fetch_cache

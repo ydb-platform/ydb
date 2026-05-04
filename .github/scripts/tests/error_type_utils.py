@@ -1,18 +1,7 @@
-"""
-Test failure classification for CI analytics.
+"""Classify test failures: union row ``error_type`` (TIMEOUT, XFAILED, …) with VERIFY/SANITIZER from text.
 
-In each **test run row** (``test_results``), ``error_type`` may already be e.g. ``TIMEOUT``,
-``XFAILED``, ``NOT_LAUNCHED`` — but **not** ``VERIFY``. ``VERIFY`` is detected only from text
-(snippet, stderr, log) and written when we classify for storage / summaries.
-
-Pipeline (shared by ``test_history_fast`` and ``generate-summary``):
-
-1. Build a :class:`FailureRow` (status, snippet, ``error_type`` from the run row, stderr/log URLs).
-2. For failure/mute/error rows, prefetch stderr/log whenever at least one URL is present
-   (:func:`should_prefetch_debug_files`) so VERIFY and SANITIZER can use log text, not only the snippet.
-3. :func:`build_error_type_csv_for_storage` → all applicable tags, comma-separated, for YDB
-   (``test_history_fast``). HTML summary uses the same text sources for independent badges.
-"""
+VERIFY/SANITIZER use snippet + stderr + log. Failure rows with stderr/log URLs prefetch both;
+there is no skip-when-TIMEOUT shortcut. CSV storage and HTML badges both keep all applicable tags."""
 
 # ---------------------------------------------------------------------------
 # Imports
@@ -80,10 +69,7 @@ def source_has_tag(source_error_type, tag: str) -> bool:
 
 
 def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
+    """True if ``error_text`` matches sanitizer / UBSan / leak patterns."""
     error_text = _normalize_text(error_text)
     if not error_text:
         return False
@@ -122,11 +108,7 @@ def is_verify_issue(error_text):
 
 
 def is_verify_classification(status_description=None, stderr_text=None, log_text=None):
-    """
-    Detect VERIFY only from text: ``status_description`` first, then fetched ``stderr_text``,
-    then ``log_text``. ``stderr_text`` / ``log_text``: None means URL was absent or not fetched;
-    otherwise body string (may be empty after fetch).
-    """
+    """VERIFY from snippet, then stderr, then log. ``None`` = missing URL or failed fetch."""
     if is_verify_issue(status_description):
         return True
     if stderr_text is not None and is_verify_issue(stderr_text):
@@ -137,9 +119,7 @@ def is_verify_classification(status_description=None, stderr_text=None, log_text
 
 
 def is_sanitizer_classification(status_description=None, stderr_text=None, log_text=None):
-    """
-    Like :func:`is_verify_classification`, but sanitizer heuristics on the same text sources.
-    """
+    """Same source order as :func:`is_verify_classification` but sanitizer patterns."""
     if is_sanitizer_issue(status_description):
         return True
     if stderr_text is not None and is_sanitizer_issue(stderr_text):
@@ -186,12 +166,7 @@ def build_error_type_csv_for_storage(
     log_text,
     status_name_for_not_launched=None,
 ):
-    """
-    All applicable error-type tags for a test run row, comma-separated, for YDB (e.g. ``test_history_fast``).
-
-    Unions tokens already present in ``source_error_type`` (possibly comma-separated) with tags
-    from the field (TIMEOUT, XFAILED, NOT_LAUNCHED) and from text (VERIFY, SANITIZER).
-    """
+    """Comma-separated tags for storage: existing ``source_error_type`` plus field + text-derived tags."""
     tags = set()
     raw = _normalize_text(source_error_type).strip()
     for part in re.split(r"\s*,\s*", raw):
@@ -221,12 +196,7 @@ def build_error_type_csv_for_storage(
 
 
 def should_prefetch_debug_files(status, stderr_url, log_url):
-    """
-    Fetch stderr/log for every failure-like row that has at least one URL.
-
-    This matches VERIFY and SANITIZER detection in logs (not only the snippet) without a second
-    prefetch policy. Rows with no URLs only ever use the snippet.
-    """
+    """Whether to prefetch stderr/log: failure-like status and at least one URL (snippet-only otherwise)."""
     if not is_failure_like_status(status):
         return False
     return bool(normalize_fetch_url(stderr_url) or normalize_fetch_url(log_url))
@@ -245,10 +215,7 @@ def urls_for_debug_prefetch_if_needed(need_prefetch, stderr_url, log_url):
 
 
 def debug_file_texts_from_cache(need_prefetch, stderr_url, log_url, fetch_cache):
-    """
-    Map stderr/log URLs to fetched text. ``None`` for a component means URL absent or fetch failed;
-    empty string means successful fetch with empty body.
-    """
+    """Stderr and log from ``fetch_cache``; ``None`` if missing/failed, ``""`` if empty body."""
     if not need_prefetch:
         return None, None
     se = normalize_fetch_url(stderr_url)
@@ -374,11 +341,7 @@ def prefetch_text_cache_and_urls_for_failure_rows(
     existing_cache: Optional[Dict[str, Any]] = None,
     max_workers: Optional[int] = None,
 ) -> Tuple[Dict[str, Any], List[Any]]:
-    """
-    Merge stderr/log URLs for all rows, run :func:`prefetch_texts_by_urls`, return ``(cache, url_list)``.
-    Ignore ``url_list`` if you only need the cache: ``cache, _ = prefetch_text_cache_and_urls_for_failure_rows(...)``.
-    ``max_workers``: optional override for parallel HTTP (default :data:`DEFAULT_PREFETCH_MAX_WORKERS`).
-    """
+    """Prefetch merged URLs from ``failure_rows``; returns ``(cache, url_list)``. Optional ``max_workers``."""
     urls = []
     for fr in failure_rows:
         urls.extend(

@@ -3768,14 +3768,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
-<<<<<<< HEAD
                     appConfig.MutableFeatureFlags()->SetEnableColumnTablesBackup(true);
-=======
-                    appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
                     appConfig.MutableFeatureFlags()->SetEnableShowCreate(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
->>>>>>> df920d876b1 (Add dictionary tests (#37016))
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))

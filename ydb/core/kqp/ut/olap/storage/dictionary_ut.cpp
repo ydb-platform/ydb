@@ -35,6 +35,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardBool(true);
         return settings;
     }
 

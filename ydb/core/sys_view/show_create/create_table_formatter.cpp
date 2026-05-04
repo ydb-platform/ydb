@@ -2,11 +2,8 @@
 #include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
-<<<<<<< HEAD
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
-=======
->>>>>>> b8744e7d637 (Add Dictionary Encoding support (#34784))
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>

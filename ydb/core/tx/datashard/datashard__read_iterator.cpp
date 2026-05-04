@@ -3413,15 +3413,13 @@ public:
             }
         }
 
-        // Return read quota after reading
-        Y_DEFER {
+        if (Reader->Read(txc)) {
+            // Call before sending result, because `schedulableRead` gets deleted
             if (schedulableRead) {
                 Reader->UpdateCycles();
                 schedulableRead->ReturnQuota(Reader->ElapsedCycles());
             }
-        };
 
-        if (Reader->Read(txc)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
                 state.ReadContinuePending = true;
@@ -3444,6 +3442,11 @@ public:
                 SendResult(ctx);
             }
             return true;
+        }
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
         }
         return false;
     }

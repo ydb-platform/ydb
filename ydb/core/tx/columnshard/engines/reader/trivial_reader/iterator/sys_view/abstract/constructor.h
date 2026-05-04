@@ -15,6 +15,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return 0;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return TabletId;
     }
@@ -22,8 +23,7 @@ private:
 public:
     TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
         : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false), false)
-        , TabletId(tabletId)
-    {
+        , TabletId(tabletId) {
     }
 };
 
@@ -33,17 +33,21 @@ private:
     virtual void DoClear() override {
         Constructors.Clear();
     }
+
     virtual void DoAbort() override {
         Constructors.Clear();
     }
+
     virtual bool DoIsFinished() const override {
         return Constructors.IsEmpty();
     }
+
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override final {
         auto constructor = Constructors.PopFront();
         return constructor.Construct(context);
     }
+
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
         while (Constructors.GetSize()) {
             bool usage = false;
@@ -56,6 +60,7 @@ private:
             break;
         }
     }
+
     virtual TString DoDebugString() const override {
         return Default<TString>();
     }

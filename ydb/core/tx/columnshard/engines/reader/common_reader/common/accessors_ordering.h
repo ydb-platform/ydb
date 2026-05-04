@@ -42,13 +42,13 @@ public:
     TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool isOutOfOrder)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , IsOutOfOrder(isOutOfOrder)
-    {
+        , IsOutOfOrder(isOutOfOrder) {
     }
 
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
+
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
@@ -61,8 +61,7 @@ public:
         , Finish(std::move(other.Finish))
         , IsOutOfOrder(other.IsOutOfOrder)
         , SourceIdx(other.SourceIdx)
-        , SourceIdxInitialized(other.SourceIdxInitialized)
-    {
+        , SourceIdxInitialized(other.SourceIdxInitialized) {
     }
 
     TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
@@ -101,8 +100,7 @@ public:
 
     public:
         TReversedComparator(const ERequestSorting sorting)
-            : Sorting(sorting)
-        {
+            : Sorting(sorting) {
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
@@ -137,8 +135,7 @@ private:
 
 public:
     TOrderedObjects(const ERequestSorting sorting)
-        : Sorting(sorting)
-    {
+        : Sorting(sorting) {
     }
 
     ERequestSorting GetSorting() const {
@@ -251,7 +248,8 @@ public:
         }
 
         if (accessors.HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
         }
 
         AFL_VERIFY(InFlightRequests);
@@ -294,10 +292,12 @@ private:
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual void DoAbort() override {
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual bool DoIsFinished() const override {
         return Constructors.IsEmpty();
     }

@@ -22,6 +22,7 @@ private:
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+
     virtual TString DoDebugString() const {
         return "";
     }
@@ -138,9 +139,11 @@ public:
             : Owner(owner) {
             Owner.StartInitialization();
         }
+
         void InitializationFinished(std::shared_ptr<TFetchingScript>&& script) {
             Owner.FinishInitialization(std::move(script));
         }
+
         ~TInitializationGuard() {
             AFL_VERIFY(!Owner.NeedInitialization());
         }

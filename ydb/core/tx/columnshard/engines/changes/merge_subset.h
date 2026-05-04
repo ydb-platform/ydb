@@ -38,12 +38,15 @@ public:
         : GranuleMeta(granule) {
         AFL_VERIFY(GranuleMeta);
     }
+
     virtual ~ISubsetToMerge() = default;
+
     std::vector<TPortionToMerge> BuildPortionsToMerge(const TConstructionContext& context, const std::set<ui32>& seqDataColumnIds,
         const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const THashSet<ui64>& usedPortionIds,
         const bool useDeletionFilter) const {
         return DoBuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletionFilter);
     }
+
     virtual ui64 GetColumnMaxChunkMemory() const = 0;
 };
 

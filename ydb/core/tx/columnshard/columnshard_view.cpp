@@ -96,10 +96,10 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
             while (!queue.empty()) {
                 const auto& element = queue.front();
                 html << "<tr>"
-                    << "<td>" << TEscapeHtml(tier) << "</td>"
-                    << "<td>" << element.Time.ToString() << "</td>"
-                    << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.Reason) << "</td>"
-                    << "</tr>";
+                     << "<td>" << TEscapeHtml(tier) << "</td>"
+                     << "<td>" << element.Time.ToString() << "</td>"
+                     << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.Reason) << "</td>"
+                     << "</tr>";
                 queue.pop();
             }
         }
@@ -172,7 +172,6 @@ TString TTxMonitoring::RenderMainPage() {
 
     return html.Str();
 }
-
 
 TString TTxMonitoring::RenderCompactionPage() {
     TStringStream html;

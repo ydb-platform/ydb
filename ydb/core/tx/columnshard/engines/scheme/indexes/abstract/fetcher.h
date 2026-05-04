@@ -40,6 +40,7 @@ public:
         , BlobRange(range) {
         AFL_VERIFY(BlobRange->IsValid());
     }
+
     explicit TRangeFetchingState(const TString& blobData)
         : BlobData(blobData) {
     }
@@ -92,9 +93,11 @@ private:
         TFetchingState(const TRangeFetchingState& headerFetching)
             : HeaderFetching(headerFetching) {
         }
+
         TFetchingState(const std::vector<TRangeFetchingState>& colsFetching)
             : ColumnsFetching(colsFetching) {
         }
+
         void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs::TGuard& blobs) {
             if (HeaderFetching && !HeaderFetching->HasData()) {
                 HeaderFetching->FillDataFrom(blobs);

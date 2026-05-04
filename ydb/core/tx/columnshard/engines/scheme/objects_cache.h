@@ -95,6 +95,7 @@ private:
         explicit operator size_t() const {
             return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
         }
+
         bool operator==(const TColumnOwnerId& other) const {
             return Tenant == other.Tenant && Owner == other.Owner;
         }

@@ -10,6 +10,7 @@ private:
     const TString Data;
 
     virtual bool DoGet(const ui32 idx) const override;
+
     virtual ui32 DoGetBitsCount() const override {
         return Data.size() * 8;
     }
@@ -35,10 +36,12 @@ private:
     virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override {
         return std::make_shared<TFixStringBitsStorage>(data);
     }
+
     static inline const auto Registrator = TFactory::TRegistrator<TFixStringBitsStorageConstructor>(GetClassNameStatic());
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IBitsStorageConstructor, TString>;
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

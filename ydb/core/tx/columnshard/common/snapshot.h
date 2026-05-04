@@ -1,9 +1,10 @@
 #pragma once
-#include <ydb/library/conclusion/status.h>
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/conclusion/status.h>
+
+#include <util/datetime/base.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
-#include <util/datetime/base.h>
 
 namespace NKikimrColumnShardProto {
 class TSnapshot;
@@ -117,4 +118,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

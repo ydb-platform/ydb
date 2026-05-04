@@ -19,9 +19,10 @@ void TRemovePortionsChange::DoApplyOnExecute(
     if (fetchedDataAccessors.HasErrors()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + fetchedDataAccessors.GetErrorMessage());
     }
-    
+
     if (fetchedDataAccessors.HasRemovedData()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+            "error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
     }
 
     THashSet<ui64> usedPortionIds;

@@ -56,7 +56,8 @@ public:
     }
 };
 
-bool TCleanInsertedPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TCleanInsertedPortionsNormalizer::CheckPortion(
+    const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
     return false;
 }
 

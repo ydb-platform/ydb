@@ -23,8 +23,7 @@ public:
               TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, Max<ui64>()))
         , Granule(std::move(granule))
         , ExternalPathId(externalPathId)
-        , PortionsCount(Granule->GetPortions().size())
-    {
+        , PortionsCount(Granule->GetPortions().size()) {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
@@ -44,8 +43,7 @@ private:
     using TBase = NAbstract::TConstructor<TDataSourceConstructor>;
 
 public:
-    TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
-        const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-        const ERequestSorting sorting);
+    TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine,
+        const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer

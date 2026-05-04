@@ -33,6 +33,7 @@ public:
     void OnActivateExecutor(const TDuration fromCreate) const {
         HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
     }
+
     void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
         HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
         HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
@@ -53,4 +54,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -1,12 +1,12 @@
 #include "indexation.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 
 namespace NKikimr::NColumnShard {
 
 TIndexationCounters::TIndexationCounters(const TString& module)
-    : TBase(module)
-{
+    : TBase(module) {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
     ReadBytes = TBase::GetDeriviative("Read/Bytes");
     ReadErrors = TBase::GetDeriviative("Read/Errors/Count");
@@ -35,7 +35,8 @@ TIndexationCounters::TIndexationCounters(const TString& module)
 
     SplittedPortionLargestColumnSize = TBase::GetHistogram("SplittedPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     SplittedPortionColumnSize = TBase::GetHistogram("SplittedPortionColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
-    SimpleSplitPortionLargestColumnSize = TBase::GetHistogram("SimpleSplitPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
+    SimpleSplitPortionLargestColumnSize =
+        TBase::GetHistogram("SimpleSplitPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     TooSmallBlob = TBase::GetDeriviative("TooSmallBlob/Count");
     TooSmallBlobFinish = TBase::GetDeriviative("TooSmallBlobFinish/Count");
     TooSmallBlobStart = TBase::GetDeriviative("TooSmallBlobStart/Count");
@@ -43,4 +44,4 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     SplitterCounters = std::make_shared<TSplitterCounters>(*this);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

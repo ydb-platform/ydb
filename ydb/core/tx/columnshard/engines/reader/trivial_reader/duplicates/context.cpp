@@ -26,12 +26,11 @@ ui64 TFilterBuildingGuard::GetMemoryGroupId() const {
 TFilterBuildingGuard::TFilterBuildingGuard()
     : ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(GetStageFeatures()))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
-    , GroupGuard(ScopeGuard->BuildGroupGuard())
-{
+    , GroupGuard(ScopeGuard->BuildGroupGuard()) {
 }
 
-TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TSnapshot& maxVersion,
-    TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag,
+    const TSnapshot& maxVersion, TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
     const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
@@ -47,8 +46,7 @@ TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared
     , DataAccessorsManager(dataAccessorsManager)
     , Counters(counters)
     , RequestGuard(std::move(requestGuard))
-    , SelfMemory(contextMemory)
-{
+    , SelfMemory(contextMemory) {
     AFL_VERIFY(Owner);
     AFL_VERIFY(Columns.size());
     AFL_VERIFY(PKSchema);

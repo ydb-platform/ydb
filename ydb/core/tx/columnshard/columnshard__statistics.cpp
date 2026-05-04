@@ -181,6 +181,7 @@ public:
         const std::shared_ptr<TResultAccumulator> Result;
         std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
+
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
         }
@@ -190,13 +191,14 @@ public:
             for (auto id : ColumnTagsRequested) {
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());
             }
-            
+
             if (result.HasErrors()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + result.GetErrorMessage());
             }
-            
+
             if (result.HasRemovedData()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetRemovedData().size());
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                    "error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetRemovedData().size());
             }
 
             THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumn;
@@ -213,7 +215,8 @@ public:
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
-                    if (!indexMeta->IsInplaceData(portionInfo->GetPortionInfo().GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId))) {
+                    if (!indexMeta->IsInplaceData(
+                            portionInfo->GetPortionInfo().GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId))) {
                         portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
                         const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());

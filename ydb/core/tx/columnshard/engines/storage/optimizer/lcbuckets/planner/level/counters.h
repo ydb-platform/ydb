@@ -48,6 +48,7 @@ public:
 class TLevelCounters {
 public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
+
     TLevelCounters(const ui32 levelId)
         : Portions(TGlobalCounters::BuildPortionsCounter(levelId)) {
     }

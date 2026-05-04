@@ -29,8 +29,8 @@ const std::shared_ptr<arrow::Array>& TDictionaryChunkRestoreInfo::GetDictionaryA
     return DictionaryArray;
 }
 
-TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange,
-    const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
+TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(
+    const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
     : ChunkExternalInfo(chunkExternalInfo)
     , FullChunkRange(fullChunkRange) {
     const auto* dictData = dynamic_cast<const NArrow::NAccessor::TDictionaryAccessorData*>(ChunkExternalInfo.GetAdditionalAccessorData().get());
@@ -81,8 +81,7 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
         AFL_VERIFY(!itFinished);
         if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
             const TBlobRange range = source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
-            auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount())
-                .WithAdditionalAccessorData(meta.GetAdditionalAccessorData());
+            auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount()).WithAdditionalAccessorData(meta.GetAdditionalAccessorData());
             ColumnChunks.emplace_back(range, chunkInfo);
             const auto dictBlobRange = ColumnChunks.back().GetDictionaryBlobRangeOptional();
             AFL_VERIFY(dictBlobRange.has_value());

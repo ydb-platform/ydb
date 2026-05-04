@@ -63,7 +63,8 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
             Source->MutableStageData().AddFetcher(i.second);
         }
         auto convProcessId = Source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
+        auto task = std::make_shared<TStepAction>(
+            std::move(Source), std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcessId);
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_next"));

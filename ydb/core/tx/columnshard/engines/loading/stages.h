@@ -50,6 +50,7 @@ private:
     using TBase = ITxReader;
     TColumnEngineForLogs* Self = nullptr;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }

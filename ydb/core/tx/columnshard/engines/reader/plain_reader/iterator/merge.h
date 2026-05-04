@@ -76,6 +76,7 @@ private:
     virtual bool DoApply(IDataReader& indexedDataRead) override;
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         Context->GetCommonContext()->AbortWithError("cannot allocate memory for merge task: '" + errorMessage + "'");
     }

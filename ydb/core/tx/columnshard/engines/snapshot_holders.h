@@ -37,8 +37,12 @@ public:
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
         return CouldUse(
-            [&portion](const TSnapshot& snapshot) { return portion->IsRemovedFor(snapshot); },
-            [&portion](const TSnapshot& snapshot) { return portion->IsVisible(snapshot, true); });
+            [&portion](const TSnapshot& snapshot) {
+                return portion->IsRemovedFor(snapshot);
+            },
+            [&portion](const TSnapshot& snapshot) {
+                return portion->IsVisible(snapshot, true);
+            });
     }
 
     template <class TIsRemovedFor, class TIsVisible>

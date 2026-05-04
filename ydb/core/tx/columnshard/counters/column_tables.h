@@ -1,11 +1,13 @@
 #pragma once
 
-#include <ydb/core/protos/table_stats.pb.h>
-#include <util/datetime/base.h>
 #include <ydb/core/base/appdata_fwd.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include <ydb/library/accessor/accessor.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/accessor/accessor.h>
+
+#include <library/cpp/time_provider/time_provider.h>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -83,4 +85,4 @@ private:
     }
 };
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

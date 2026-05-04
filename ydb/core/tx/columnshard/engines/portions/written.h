@@ -81,7 +81,7 @@ public:
 
     TWrittenPortionInfo(TPortionMeta&& meta)
         : TBase(std::move(meta)) {
-//        AFL_VERIFY(!GetMeta().GetTierName());
+        //        AFL_VERIFY(!GetMeta().GetTierName());
     }
 
     bool HasCommitSnapshot() const {
@@ -96,13 +96,16 @@ public:
         AFL_VERIFY(!!CommitSnapshot);
         return *CommitSnapshot;
     }
+
     const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
         return CommitSnapshot;
     }
+
     TInsertWriteId GetInsertWriteId() const {
         AFL_VERIFY(!!InsertWriteId);
         return *InsertWriteId;
     }
+
     void SetCommitSnapshot(const TSnapshot& value) {
         AFL_VERIFY(!!InsertWriteId);
         AFL_VERIFY(!CommitSnapshot);

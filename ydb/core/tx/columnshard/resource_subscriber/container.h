@@ -36,6 +36,7 @@ public:
         : Value(std::move(other.Value))
         , ResourcesGuard(std::move(other.ResourcesGuard)) {
     }
+
     TResourceContainer& operator=(TResourceContainer<T>&& other) {
         std::swap(Value, other.Value);
         std::swap(ResourcesGuard, other.ResourcesGuard);

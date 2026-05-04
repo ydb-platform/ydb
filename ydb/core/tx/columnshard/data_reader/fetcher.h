@@ -68,8 +68,8 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
+    ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 
@@ -82,8 +82,7 @@ public:
         , Script(script)
         , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
-        , ConveyorCategory(conveyorCategory)
-    {
+        , ConveyorCategory(conveyorCategory) {
         AFL_VERIFY(Environment);
         AFL_VERIFY(Callback);
     }

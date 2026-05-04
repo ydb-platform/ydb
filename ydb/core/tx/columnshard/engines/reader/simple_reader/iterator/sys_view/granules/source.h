@@ -28,8 +28,7 @@ public:
         : TBase(sourceIdx, tabletId, std::move(start), std::move(finish), granules.size(), TSnapshot::Zero(), TSnapshot::Zero(), context)
         , Granules(std::move(granules))
         , ExternalPathIds(std::move(externalPathIds))
-        , PortionsCount(std::move(portionsCount))
-    {
+        , PortionsCount(std::move(portionsCount)) {
     }
 };
 

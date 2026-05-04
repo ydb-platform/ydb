@@ -1,11 +1,11 @@
 #include "memory.h"
+
 #include <util/system/guard.h>
 
 namespace NKikimr::NOlap {
 
 TScanMemoryCounter::TScanMemoryCounter(const TString& limitName, const ui64 memoryLimit)
-    : TBase(limitName)
-{
+    : TBase(limitName) {
     AvailableMemory = TBase::GetValue("Available");
     MinimalMemory = TBase::GetValue("Minimal");
     DeriviativeTake = TBase::GetDeriviative("Take");
@@ -62,11 +62,11 @@ void TScanMemoryLimiter::Take(const ui64 size) {
     const i64 val = AvailableMemory.Sub(size);
     Counters.Take(size);
     AFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("current_memory", val)("min", MinMemory)("event", "take");
-//    ::TGuard<TMutex> g(Mutex);
-//    if (MinMemory > val) {
-//        MinMemory = val;
-//        Counters.OnMinimal(val);
-//    }
+    //    ::TGuard<TMutex> g(Mutex);
+    //    if (MinMemory > val) {
+    //        MinMemory = val;
+    //        Counters.OnMinimal(val);
+    //    }
 }
 
 void TScanMemoryLimiter::TGuard::FreeAll() {
@@ -99,4 +99,4 @@ void TScanMemoryLimiter::TGuard::Take(const ui64 size) {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

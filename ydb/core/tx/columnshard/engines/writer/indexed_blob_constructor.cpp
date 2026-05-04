@@ -34,21 +34,21 @@ void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
 }
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic /*instant*/) {
-//     for (auto&& aggr : Aggregations) {
-//        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
-//     }
+    //     for (auto&& aggr : Aggregations) {
+    //        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
+    //     }
 }
 
 void TWritingBuffer::InitStartSending(const TMonotonic /*instant*/) {
-//     for (auto&& aggr : Aggregations) {
-//         aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
-//     }
+    //     for (auto&& aggr : Aggregations) {
+    //         aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
+    //     }
 }
 
 void TWritingBuffer::InitReplyReceived(const TMonotonic /*instant*/) {
-//    for (auto&& aggr : Aggregations) {
-//        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
-//    }
+    //    for (auto&& aggr : Aggregations) {
+    //        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
+    //    }
 }
 
 std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {

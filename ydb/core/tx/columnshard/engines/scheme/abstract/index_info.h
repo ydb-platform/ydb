@@ -146,11 +146,13 @@ public:
     }
 
     static std::optional<ui32> GetColumnIdOptional(const std::string& name);
+
     static ui32 GetColumnIdVerified(const std::string& name) {
         auto result = GetColumnIdOptional(name);
         AFL_VERIFY(!!result);
         return *result;
     }
+
     std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
     TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);
@@ -169,7 +171,8 @@ public:
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+        static std::shared_ptr<arrow::Schema> result =
+            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
                 arrow::field(SPEC_COL_TX_ID, arrow::uint64()), arrow::field(SPEC_COL_WRITE_ID, arrow::uint64()) });
         return result;
     }

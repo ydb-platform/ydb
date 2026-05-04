@@ -1,4 +1,5 @@
 #include "range.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -41,10 +42,8 @@ bool TPKRangeFilter::IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema
         return false;
     }
     return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
-            PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL &&
-            PredicateFrom.IsEqualPointTo(PredicateTo);
+           PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo);
 }
-
 
 std::set<ui32> TPKRangeFilter::GetColumnIds(const TIndexInfo& indexInfo) const {
     std::set<ui32> result;
@@ -128,8 +127,8 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(
         }
     }
 
-//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
-//        "to", PredicateTo.DebugString());
+    //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("start", start.DebugString())("end", end.DebugString())("from", PredicateFrom.DebugString())(
+    //        "to", PredicateTo.DebugString());
 
     return EUsageClass::PartialUsage;
 }
@@ -157,4 +156,4 @@ bool TPKRangeFilter::CheckPoint(const NArrow::NMerger::TSortableBatchPosition& p
                              (equalityToWithPoint == std::partial_ordering::equivalent && PredicateTo.IsInclude());
     return startInternal && endInternal;
 }
-}
+}   // namespace NKikimr::NOlap

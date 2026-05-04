@@ -25,6 +25,7 @@ private:
 protected:
     virtual TConclusionStatus DoStart(
         NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) override;
+
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
         THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {

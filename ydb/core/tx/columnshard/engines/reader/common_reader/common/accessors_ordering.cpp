@@ -30,6 +30,7 @@ private:
     const NActors::TActorId ScanActorId;
     NColumnShard::TCounterGuard Guard;
     const std::shared_ptr<const TAtomicCounter> AbortFlag;
+
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return AbortFlag;
     }

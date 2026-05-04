@@ -33,6 +33,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_INIT;
     }
@@ -120,6 +121,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_UPDATE_SCHEMA;
     }
@@ -153,8 +155,8 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxUpdateSchema::Complete");
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
+        "process", "TTxUpdateSchema::Complete");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
     Self->Counters.GetCSCounters().Initialization.OnTxUpdateSchemaFinished(TMonotonic::Now() - StartInstant);
     if (NormalizerTasks.empty()) {
@@ -183,6 +185,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_APPLY_NORMALIZER;
     }
@@ -194,8 +197,8 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "TTxApplyNormalizer::Execute");
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
+        "event", "TTxApplyNormalizer::Execute");
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString())(
         "dry_run", IsDryRun);
     if (!IsDryRun) {
@@ -248,14 +251,15 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_INIT_SCHEMA;
     }
 };
 
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
-        "process", "TTxInitSchema::Execute");
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("process", "TTxInitSchema::Execute");
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();

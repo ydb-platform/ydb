@@ -1,7 +1,7 @@
 #include "compacted_blob_constructor.h"
 
-#include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -10,8 +10,7 @@ namespace NKikimr::NOlap {
 
 TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv)
     : WriteIndexEv(writeEv)
-    , DstActor(dstActor)
-{
+    , DstActor(dstActor) {
     auto& changes = *WriteIndexEv->IndexChanges;
     for (ui32 i = 0; i < changes.GetWritePortionsCount(); ++i) {
         if (!changes.NeedWritePortion(i)) {
@@ -21,7 +20,8 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         Y_ABORT_UNLESS(pInfo);
         TWritePortionInfoWithBlobsResult& portionWithBlobs = *pInfo;
         for (auto&& b : portionWithBlobs.MutableBlobs()) {
-            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
+            auto& task = AddWriteTask(
+                TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
             WriteVolume += b.GetSize();
         }
@@ -47,4 +47,4 @@ void TCompactedWriteController::DoAbort(const TString& reason) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "TCompactedWriteController::DoAbort")("reason", reason);
 }
 
-}
+}   // namespace NKikimr::NOlap

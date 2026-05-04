@@ -53,7 +53,8 @@ public:
     }
 };
 
-bool TCleanSubColumnsPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TCleanSubColumnsPortionsNormalizer::CheckPortion(
+    const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
     return false;
 }
 
@@ -64,7 +65,7 @@ INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
 
     for (auto&& portion : portions) {
         if (portion.GetPortionInfo().HasRemoveSnapshot()) {
-             continue;
+            continue;
         }
         auto it = schemas->find(portion.GetPortionInfo().GetPortionId());
         AFL_VERIFY(it != schemas->end());

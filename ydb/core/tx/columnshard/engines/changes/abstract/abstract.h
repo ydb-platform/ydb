@@ -124,9 +124,11 @@ public:
     ui64 NextGranuleId() {
         return ++(*LastGranuleId);
     }
+
     ui64 NextPortionId() {
         return ++(*LastPortionId);
     }
+
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
     }
@@ -145,6 +147,7 @@ class TChangesFinishContext {
 public:
     const bool FinishedSuccessfully = true;
     const TString ErrorMessage;
+
     TChangesFinishContext(const TString& errorMessage)
         : FinishedSuccessfully(false)
         , ErrorMessage(errorMessage) {
@@ -164,6 +167,7 @@ public:
     const TDuration Duration;
     TColumnEngineForLogs& EngineLogs;
     const TSnapshot Snapshot;
+
     TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
         TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
         : ActorContext(actorContext)
@@ -262,16 +266,21 @@ protected:
     virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
+
     virtual void DoOnAfterCompile(const TFinalizationContext& /*context*/) {
     }
+
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
+
     virtual bool NeedConstruction() const {
         return true;
     }
+
     virtual void DoStart(NColumnShard::TColumnShard& context) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
+
     virtual void OnAbortEmergency() {
     }
 
@@ -281,6 +290,7 @@ protected:
 
     virtual ui64 DoCalcMemoryForUsage() const = 0;
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
+
     std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
         return DoBuildDataLock();
     }
@@ -387,6 +397,7 @@ public:
         //        Y_ABORT_UNLESS(result.size());
         return result;
     }
+
     virtual TString TypeString() const = 0;
     TString DebugString() const;
 

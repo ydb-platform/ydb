@@ -13,6 +13,7 @@
 namespace NKikimr::NColumnShard {
 class TTablesManager;
 }
+
 namespace NKikimr::NOlap {
 
 template <class TConveyorTask>

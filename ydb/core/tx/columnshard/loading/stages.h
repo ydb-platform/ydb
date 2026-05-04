@@ -66,6 +66,7 @@ class TBackgroundSessionsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -78,6 +79,7 @@ class TSharingSessionsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -90,6 +92,7 @@ class TInFlightReadsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }

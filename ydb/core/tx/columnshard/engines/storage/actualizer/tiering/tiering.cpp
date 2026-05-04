@@ -266,7 +266,9 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
+
+    virtual void DoApplyResult(
+        NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;
@@ -277,7 +279,8 @@ private:
         }
 
         if (result.GetValue().HasRemovedData()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                "error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetValue().GetRemovedData().size());
         }
 
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());

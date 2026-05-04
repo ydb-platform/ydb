@@ -31,6 +31,7 @@ private:
         auto operator<=>(const TPortionKey& other) const {
             return std::tie(PathId, PortionId) <=> std::tie(other.PathId, other.PortionId);
         }
+
         explicit operator size_t() const {
             return CombineHashes(PathId, PortionId);
         }
@@ -101,6 +102,7 @@ public:
 
     public:
         TUpdate() = default;
+
         TUpdate(NKikimrTxColumnShard::TIndexPortionMeta&& portionMeta)
             : PortionMeta(std::move(portionMeta)) {
         }

@@ -1,15 +1,13 @@
-#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.h>
-#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/filters.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
@@ -17,7 +15,7 @@ namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 namespace {
 
 // Test implementation of IFilterSubscriber that records calls
-class TTestFilterSubscriber : public IFilterSubscriber {
+class TTestFilterSubscriber: public IFilterSubscriber {
 public:
     bool FilterReady = false;
     bool Failed = false;
@@ -37,52 +35,41 @@ public:
 
 // Helper to create a trivial arrow RecordBatch with a single int32 "key" column and a "version" column
 std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const std::vector<int32_t>& keys, const std::vector<int32_t>& versions) {
-    return NColumnShard::MakeTestBatch<arrow::Int32Type, arrow::Int32Type>({"key", "version"}, keys, versions);
+    return NColumnShard::MakeTestBatch<arrow::Int32Type, arrow::Int32Type>({ "key", "version" }, keys, versions);
 }
 
 std::shared_ptr<arrow::Schema> MakeKeySchema() {
-    return arrow::schema({arrow::field("key", arrow::int32())});
+    return arrow::schema({ arrow::field("key", arrow::int32()) });
 }
 
 std::shared_ptr<arrow::Schema> MakeDataSchema() {
-    return arrow::schema({arrow::field("key", arrow::int32())});
+    return arrow::schema({ arrow::field("key", arrow::int32()) });
 }
 
 std::vector<std::string> GetVersionColumns() {
-    return {"version"};
+    return { "version" };
 }
 
 // Helper to create a TBatchIterator from a batch with a given sourceId
-NArrow::NMerger::TBatchIterator MakeIterator(
-    const std::shared_ptr<arrow::RecordBatch>& batch,
-    ui64 sourceId)
-{
+NArrow::NMerger::TBatchIterator MakeIterator(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 sourceId) {
     auto keySchema = MakeKeySchema();
     auto dataSchema = MakeDataSchema();
-    return NArrow::NMerger::TBatchIterator(
-        batch, nullptr, *keySchema, *dataSchema, GetVersionColumns(), sourceId);
+    return NArrow::NMerger::TBatchIterator(batch, nullptr, *keySchema, *dataSchema, GetVersionColumns(), sourceId);
 }
 
 // Helper to create TEvRequestFilter::TPtr for testing
-TEvRequestFilter::TPtr MakeTestRequest(
-    ui64 portionId,
-    ui64 recordsCount,
-    const std::shared_ptr<IFilterSubscriber>& subscriber)
-{
+TEvRequestFilter::TPtr MakeTestRequest(ui64 portionId, ui64 recordsCount, const std::shared_ptr<IFilterSubscriber>& subscriber) {
     // Create a minimal arrow batch for TSimpleRow construction
-    auto batch = MakeTestBatch({0}, {0});
+    auto batch = MakeTestBatch({ 0 }, { 0 });
     NArrow::TSimpleRow minPK(batch, 0);
     NArrow::TSimpleRow maxPK(batch, 0);
 
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
 
     auto* ev = new TEvRequestFilter(
-        minPK, maxPK, portionId, recordsCount,
-        TSnapshot(1, 1), subscriber,
-        std::shared_ptr<const TAtomicCounter>(abortionFlag));
+        minPK, maxPK, portionId, recordsCount, TSnapshot(1, 1), subscriber, std::shared_ptr<const TAtomicCounter>(abortionFlag));
 
-    auto handle = new NActors::IEventHandle(
-        NActors::TActorId(), NActors::TActorId(), ev);
+    auto handle = new NActors::IEventHandle(NActors::TActorId(), NActors::TActorId(), ev);
 
     return TEvRequestFilter::TPtr(static_cast<TEvRequestFilter::THandle*>(handle));
 }
@@ -91,10 +78,9 @@ std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> MakeTestCounters() {
     return std::make_shared<NColumnShard::TDuplicateFilteringCounters>();
 }
 
-}  // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
-
     Y_UNIT_TEST(IsBufferExhaustedAlwaysFalse) {
         TFiltersBuilder builder;
         UNIT_ASSERT(!builder.IsBufferExhausted());
@@ -105,7 +91,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
     Y_UNIT_TEST(ValidateDataSchemaDoesNothing) {
         TFiltersBuilder builder;
-        auto schema = arrow::schema({arrow::field("key", arrow::int32())});
+        auto schema = arrow::schema({ arrow::field("key", arrow::int32()) });
         UNIT_ASSERT_NO_EXCEPTION(builder.ValidateDataSchema(schema));
     }
 
@@ -113,7 +99,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
         TFiltersBuilder builder;
         builder.AddSource(1, 5);
 
-        auto batch = MakeTestBatch({1, 2, 3, 4, 5}, {1, 1, 1, 1, 1});
+        auto batch = MakeTestBatch({ 1, 2, 3, 4, 5 }, { 1, 1, 1, 1, 1 });
         auto iter = MakeIterator(batch, /*sourceId=*/1);
 
         UNIT_ASSERT_VALUES_EQUAL(builder.GetRowsAdded(), 0);
@@ -125,7 +111,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
         TFiltersBuilder builder;
         builder.AddSource(1, 5);
 
-        auto batch = MakeTestBatch({1, 2, 3, 4, 5}, {1, 1, 1, 1, 1});
+        auto batch = MakeTestBatch({ 1, 2, 3, 4, 5 }, { 1, 1, 1, 1, 1 });
         auto iter = MakeIterator(batch, /*sourceId=*/1);
 
         UNIT_ASSERT_VALUES_EQUAL(builder.GetRowsSkipped(), 0);
@@ -138,8 +124,8 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
         builder.AddSource(1, 2);
         builder.AddSource(2, 2);
 
-        auto batch1 = MakeTestBatch({10, 20}, {1, 1});
-        auto batch2 = MakeTestBatch({30, 40}, {1, 1});
+        auto batch1 = MakeTestBatch({ 10, 20 }, { 1, 1 });
+        auto batch2 = MakeTestBatch({ 30, 40 }, { 1, 1 });
 
         // Add records for portion 1: add, skip
         {
@@ -186,7 +172,6 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 }
 
 Y_UNIT_TEST_SUITE(TFilterAccumulatorTests) {
-
     Y_UNIT_TEST(ConstructorSetsInitialState) {
         auto subscriber = std::make_shared<TTestFilterSubscriber>();
         auto counters = MakeTestCounters();
@@ -311,4 +296,4 @@ Y_UNIT_TEST_SUITE(TFilterAccumulatorTests) {
     }
 }
 
-}  // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering
+}   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

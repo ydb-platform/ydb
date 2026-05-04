@@ -124,15 +124,11 @@ public:
         }
     }
 
-    TPortionsChain(
-        const std::vector<TPortionInfo::TConstPtr>& portions, 
-        const TPortionInfo::TConstPtr& notIncludedNextPortion,
-        const bool consistBlockedPortions
-    ): 
-        Portions(portions), 
-        NotIncludedNextPortion(notIncludedNextPortion),
-        ConsistBlockedPortions(consistBlockedPortions)
-    {
+    TPortionsChain(const std::vector<TPortionInfo::TConstPtr>& portions, const TPortionInfo::TConstPtr& notIncludedNextPortion,
+        const bool consistBlockedPortions)
+        : Portions(portions)
+        , NotIncludedNextPortion(notIncludedNextPortion)
+        , ConsistBlockedPortions(consistBlockedPortions) {
         AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
@@ -287,7 +283,8 @@ public:
                Portions.size() < PortionsCountLimit;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit = std::nullopt, std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
+    TCompactionTaskData(const ui64 targetCompactionLevel, std::optional<ui64> compactionTaskMemoryLimit = std::nullopt,
+        std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
         : TargetCompactionLevel(targetCompactionLevel)
         , ExpectedPortionSize(expectedPortionSize)
         , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit))
@@ -298,7 +295,7 @@ public:
 class IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const = 0;
-    
+
     virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const = 0;
 
 public:
@@ -307,7 +304,7 @@ public:
     bool IsOverloaded(const TSimplePortionsGroupInfo& portionsData) const {
         return DoIsOverloaded(portionsData);
     }
-    
+
     bool IsHighPriority(const TSimplePortionsGroupInfo& portionsData) const {
         return DoIsHighPriority(portionsData);
     }
@@ -318,7 +315,7 @@ private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& /*portionsData*/) const override {
         return false;
     }
-    
+
     virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& /* portionsData */) const override {
         return false;
     }
@@ -328,20 +325,21 @@ class TLimitsOverloadChecker: public IOverloadChecker {
 private:
     const std::optional<ui64> PortionsCountLimit;
     const std::optional<ui64> PortionBlobsSizeLimit;
+
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
-           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-                   ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+            ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
             return true;
         }
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
-           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-                   ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+            ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
             return true;
         }
         return false;
     }
-    
+
     virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && 0.7 * *PortionsCountLimit < (ui64)portionsData.GetCount()) {
             return true;
@@ -416,7 +414,7 @@ public:
     bool IsOverloaded() const {
         return NextLevel && OverloadChecker->IsOverloaded(GetPortionsInfo());
     }
-    
+
     bool IsHighPriority() const {
         return NextLevel && OverloadChecker->IsHighPriority(GetPortionsInfo());
     }
@@ -441,6 +439,7 @@ public:
 
     virtual ~IPortionsLevel() {
     }
+
     IPortionsLevel(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel,
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TLevelCounters levelCounters,
         const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName)

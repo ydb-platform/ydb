@@ -107,4 +107,4 @@ private:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

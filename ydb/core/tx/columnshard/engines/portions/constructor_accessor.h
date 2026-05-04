@@ -33,6 +33,7 @@ private:
             , BlobIdx(blobIdx) {
         }
     };
+
     std::vector<TAddressBlobId> BlobIdxs;
     bool NeedBlobIdxsSort = false;
 

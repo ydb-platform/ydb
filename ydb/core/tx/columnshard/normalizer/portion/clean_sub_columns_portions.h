@@ -18,7 +18,8 @@ public:
     }
 
 private:
-    static inline TFactory::TRegistrator<TCleanSubColumnsPortionsNormalizer> Registrator = TFactory::TRegistrator<TCleanSubColumnsPortionsNormalizer>(GetClassNameStatic());
+    static inline TFactory::TRegistrator<TCleanSubColumnsPortionsNormalizer> Registrator =
+        TFactory::TRegistrator<TCleanSubColumnsPortionsNormalizer>(GetClassNameStatic());
 
 public:
     class TNormalizerResult;

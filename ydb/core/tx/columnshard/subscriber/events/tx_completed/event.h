@@ -8,12 +8,12 @@ private:
     using TBase = ISubscriptionEvent;
     YDB_READONLY_DEF(ui64, TxId);
     virtual TString DoDebugString() const override;
+
 public:
     TEventTxCompleted(const ui64 txId)
         : TBase(EEventType::TxCompleted)
-        , TxId(txId)
-    {
+        , TxId(txId) {
     }
 };
 
-} //namespace NKikimr::NColumnShard::NSubscriber
+}   //namespace NKikimr::NColumnShard::NSubscriber

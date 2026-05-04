@@ -1,12 +1,13 @@
 #pragma once
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/library/signals/object_counter.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap::NWritingPortions {
 
@@ -41,8 +42,8 @@ public:
         return "Write::ConstructBlobs::PackSlices";
     }
 
-    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const TInternalPathId pathId, const ui64 tabletId,
-        const NEvWrite::EModificationType modificationType)
+    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const TInternalPathId pathId,
+        const ui64 tabletId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , TabletId(tabletId)
         , ModificationType(modificationType)

@@ -14,6 +14,7 @@ public:
     explicit TChunkOriginalData(const TBlobRange& range)
         : Range(range) {
     }
+
     explicit TChunkOriginalData(const TString& data)
         : Data(data) {
     }
@@ -29,6 +30,7 @@ public:
     bool HasData() const {
         return !!Data;
     }
+
     const TBlobRange& GetBlobRangeVerified() const;
     const TString& GetDataVerified() const;
 };

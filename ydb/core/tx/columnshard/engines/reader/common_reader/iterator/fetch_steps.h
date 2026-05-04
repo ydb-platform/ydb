@@ -8,6 +8,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TAllocateMemoryStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
+
     class TColumnsPack {
     private:
         YDB_READONLY_DEF(TColumnsSetIds, Columns);
@@ -19,16 +20,19 @@ private:
             , MemType(memType) {
         }
     };
+
     std::vector<TColumnsPack> Packs;
     THashMap<ui32, THashSet<EMemType>> Control;
     const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
     const std::optional<ui64> PredefinedSize;
 
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
+        const ui64 size) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+
     virtual TString DoDebugString() const override {
         std::vector<TString> columns;
         for (const auto& pack : Packs) {
@@ -56,6 +60,7 @@ public:
         TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
             const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true);
     };
+
     void AddAllocation(const TColumnsSetIds& ids, const EMemType memType) {
         if (!ids.GetColumnsCount()) {
             return;
@@ -65,6 +70,7 @@ public:
         }
         Packs.emplace_back(ids, memType);
     }
+
     NArrow::NSSA::IMemoryCalculationPolicy::EStage GetStage() const {
         return StageIndex;
     }
@@ -86,14 +92,18 @@ class TAssemblerStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, Columns);
+
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesAssembled) const;
+
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
+        const ui64 bytesAssembled) const;
 
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns) {
@@ -108,6 +118,7 @@ private:
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+
     TBuildStageResultStep()
         : TBase("BUILD_STAGE_RESULT") {
     }
@@ -117,6 +128,7 @@ class TOptionalAssemblerStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, Columns);
+
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
     }
@@ -125,6 +137,7 @@ public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
 
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns) {
@@ -137,16 +150,19 @@ class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     YDB_READONLY_DEF(TColumnsSetIds, Columns);
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs,
+        const ui64 blobBytes, const ui64 rawBytes) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
     }
 
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {

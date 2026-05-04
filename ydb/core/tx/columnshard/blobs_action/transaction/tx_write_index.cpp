@@ -1,4 +1,5 @@
 #include "tx_write_index.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -9,7 +10,8 @@ namespace NKikimr::NColumnShard {
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
-    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
+    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+        "external_task_id", changes->GetTaskIdentifier());
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
@@ -32,9 +34,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             const auto* portion = changes->GetWritePortionInfo(i);
-            LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion->DebugString() << ") blob cannot apply changes: " << TxSuffix());
+            LOG_S_WARN(
+                TxPrefix() << "(" << changes->TypeString() << ":" << portion->DebugString() << ") blob cannot apply changes: " << TxSuffix());
         }
-        NOlap::TChangesFinishContext context("cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
+        NOlap::TChangesFinishContext context(
+            "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
         changes->Abort(*Self, context);
         LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
     }
@@ -94,4 +98,4 @@ void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

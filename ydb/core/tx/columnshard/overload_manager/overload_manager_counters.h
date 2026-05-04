@@ -32,4 +32,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

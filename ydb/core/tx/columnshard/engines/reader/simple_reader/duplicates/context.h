@@ -27,9 +27,11 @@ public:
     ui64 GetMemoryProcessId() const {
         return ProcessGuard->GetProcessId();
     }
+
     ui64 GetMemoryScopeId() const {
         return ScopeGuard->GetScopeId();
     }
+
     ui64 GetMemoryGroupId() const {
         return GroupGuard->GetGroupId();
     }
@@ -136,8 +138,7 @@ public:
 
     public:
         TResultInFlightGuard(const std::shared_ptr<TJobStatus>& owner)
-            : Owner(owner)
-        {
+            : Owner(owner) {
             AFL_VERIFY(Owner);
             Owner->ResultsInFlight.Inc();
         }
@@ -203,8 +204,7 @@ public:
         , Counters(counters)
         , RequestGuard(std::move(requestGuard))
         , Status(std::make_shared<TJobStatus>())
-        , SelfMemory(contextMemory)
-    {
+        , SelfMemory(contextMemory) {
         AFL_VERIFY(Owner);
         AFL_VERIFY(RequiredPortions.size());
         AFL_VERIFY(Columns.size());
@@ -247,6 +247,7 @@ public:
         return intersectionCount *
                (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
+
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
     }

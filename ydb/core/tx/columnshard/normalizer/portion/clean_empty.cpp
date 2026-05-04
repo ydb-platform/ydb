@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
@@ -17,6 +18,7 @@ class TRemoveV0: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TColumnChunkLoadContext> Chunks;
+
     virtual TString GetId() const override {
         return "V0";
     }
@@ -26,8 +28,8 @@ private:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
                 "portion_id", PortionAddress.GetPortionId())("chunk", i.GetAddress().DebugString());
             db.Table<NColumnShard::Schema::IndexColumns>()
-                .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(),
-                    i.GetMinSnapshotDeprecated().GetTxId(), PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
+                .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(), i.GetMinSnapshotDeprecated().GetTxId(),
+                    PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
                 .Delete();
         }
     }
@@ -43,6 +45,7 @@ class TRemoveV1: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return "V1";
     }
@@ -68,6 +71,7 @@ class TRemoveV2: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return "V2";
     }
@@ -89,6 +93,7 @@ private:
     const TPortionAddress PortionAddress;
     const ui64 PlanStep = 0;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return TString("P::") + (PlanStep ? "DEL" : "EXIST");
     }
@@ -102,8 +107,7 @@ private:
 public:
     TRemovePortion(const TPortionAddress& portionAddress, const ui64 planStep)
         : PortionAddress(portionAddress)
-        , PlanStep(planStep)
-    {
+        , PlanStep(planStep) {
     }
 };
 
@@ -154,7 +158,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress address(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
+            TPortionAddress address(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()),
+                rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
             TChunkAddress cAddress(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(), rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>());
             usedPortions[address].emplace_back(cAddress);
             if (!rowset.Next()) {
@@ -174,8 +179,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddress(
-                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
+            TPortionAddress portionAddress(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()),
+                rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
             usedPortions.emplace(portionAddress, std::make_shared<TRemoveV2>(portionAddress));
             if (!rowset.Next()) {
                 return false;
@@ -191,8 +196,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddress(
-                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            TPortionAddress portionAddress(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()),
+                rowset.GetValue<Schema::IndexPortions::PortionId>());
             usedPortions.emplace(portionAddress,
                 std::make_shared<TRemovePortion>(portionAddress,
                     rowset.HaveValue<Schema::IndexPortions::XPlanStep>() ? rowset.GetValue<Schema::IndexPortions::XPlanStep>() : 0));
@@ -218,6 +223,7 @@ public:
         : Current(source.begin())
         , End(source.end()) {
     }
+
     bool Next() {
         AFL_VERIFY(IsValid());
         ++Current;
@@ -330,6 +336,7 @@ public:
     TChanges(std::vector<std::shared_ptr<IDBModifier>>&& modifications)
         : Modifications(std::move(modifications)) {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);

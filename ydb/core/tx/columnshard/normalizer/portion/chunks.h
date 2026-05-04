@@ -94,6 +94,7 @@ public:
         std::shared_ptr<TColumnLoader> GetLoader() const {
             return Schema->GetColumnLoaderVerified(Key.GetColumnIdx());
         }
+
         void InitSchema(const NColumnShard::TTablesManager& tm);
 
         bool operator<(const TChunkInfo& other) const {

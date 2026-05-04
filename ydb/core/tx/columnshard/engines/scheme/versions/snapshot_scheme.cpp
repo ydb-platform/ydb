@@ -1,4 +1,5 @@
 #include "snapshot_scheme.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 
 namespace NKikimr::NOlap {
@@ -49,4 +50,4 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo->GetVersion();
 }
 
-}
+}   // namespace NKikimr::NOlap

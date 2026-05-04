@@ -37,8 +37,7 @@ private:
 public:
     TColumnFetchingCallback(TBuildFilterTaskContext&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
         : Request(std::move(request))
-        , AllocationGuard(allocationGuard)
-    {
+        , AllocationGuard(allocationGuard) {
         AFL_VERIFY(allocationGuard);
     }
 
@@ -60,6 +59,7 @@ private:
             new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
@@ -76,8 +76,7 @@ private:
 public:
     TColumnDataAllocation(TBuildFilterTaskContext&& request, const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
-        , Request(std::move(request))
-    {
+        , Request(std::move(request)) {
     }
 };
 
@@ -98,7 +97,8 @@ private:
         if (result.HasRemovedData()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 new NPrivate::TEvFilterConstructionResult(
-                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()),
+                    Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
@@ -112,6 +112,7 @@ private:
             Request.GetGlobalContext().GetRequestGuard()->GetMemoryGroupId(),
             { std::make_shared<TColumnDataAllocation>(std::move(Request), mem) }, (ui64)TFilterAccumulator::EFetchingStage::COLUMN_DATA);
     }
+
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Request.GetGlobalContext().GetAbortionFlag();
     }
@@ -120,8 +121,7 @@ public:
     TColumnDataAccessorFetching(
         TBuildFilterTaskContext&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& accessorsMemoryGuard)
         : Request(std::move(request))
-        , AccessorsMemoryGuard(accessorsMemoryGuard)
-    {
+        , AccessorsMemoryGuard(accessorsMemoryGuard) {
     }
 
     static ui64 GetRequiredMemory(const THashSet<ui64>& portions, const TBuildFilterContext& context) {
@@ -143,6 +143,7 @@ private:
             new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         std::shared_ptr<TDataAccessorsRequest> request =
@@ -159,8 +160,7 @@ private:
 public:
     TDataAccessorAllocation(TBuildFilterTaskContext&& request, const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
-        , Request(std::move(request))
-    {
+        , Request(std::move(request)) {
     }
 };
 
@@ -188,8 +188,9 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     const ui64 scopeId = context.GetRequestGuard()->GetMemoryScopeId();
     const ui64 groupId = context.GetRequestGuard()->GetMemoryGroupId();
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(processId, scopeId, groupId,
-        { std::make_shared<TDataAccessorAllocation>(TBuildFilterTaskContext(std::move(context), shared_from_this(), std::move(intervals),
-                                                        std::move(portionIds)), mem) }, (ui64)TFilterAccumulator::EFetchingStage::ACCESSORS);
+        { std::make_shared<TDataAccessorAllocation>(
+            TBuildFilterTaskContext(std::move(context), shared_from_this(), std::move(intervals), std::move(portionIds)), mem) },
+        (ui64)TFilterAccumulator::EFetchingStage::ACCESSORS);
     return true;
 }
 

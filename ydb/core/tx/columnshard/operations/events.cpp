@@ -16,8 +16,7 @@ void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTrans
 }
 
 TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize,
-    const std::shared_ptr<arrow::RecordBatch>& pkBatch,
-    const bool noDataToWrite, const ui32 recordsCount)
+    const std::shared_ptr<arrow::RecordBatch>& pkBatch, const bool noDataToWrite, const ui32 recordsCount)
     : WriteMeta(writeMeta)
     , DataSize(dataSize)
     , NoDataToWrite(noDataToWrite)

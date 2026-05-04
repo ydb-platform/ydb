@@ -24,12 +24,15 @@ public:
     NArrow::NAccessor::TAccessorsCollection& GetAccessors() {
         return Accessors;
     }
+
     NIndexes::TIndexesCollection& GetIndexes() const {
         return Indexes;
     }
+
     const std::shared_ptr<IDataSource>& GetSource() const {
         return Source;
     }
+
     ui32 GetRecordsCount() const {
         return Source->GetPortionAccessor().GetPortionInfo().GetRecordsCount();
     }
@@ -73,9 +76,11 @@ public:
     void Start(TReadActionsCollection& nextRead, TFetchingResultContext& context) {
         DoStart(nextRead, context);
     }
+
     void OnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
         DoOnDataReceived(nextRead, blobs);
     }
+
     void OnDataCollected(TFetchingResultContext& context) {
         DoOnDataCollected(context);
     }
@@ -90,6 +95,7 @@ private:
     NBlobOperations::NRead::TCompositeReadBlobs ProvidedBlobs;
     NColumnShard::TCounterGuard Guard;
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
+
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
             "scan_actor_id", Source->GetContext()->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())(

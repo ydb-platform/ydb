@@ -1,4 +1,5 @@
 #include "context.h"
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NDataSharing {
@@ -49,24 +50,22 @@ NKikimr::TConclusionStatus TTransferContext::DeserializeFromProto(const NKikimrC
 }
 
 bool TTransferContext::IsEqualTo(const TTransferContext& context) const {
-    return
-        DestinationTabletId == context.DestinationTabletId &&
-        SourceTabletIds == context.SourceTabletIds &&
-        Moving == context.Moving &&
-        SnapshotBarrier == context.SnapshotBarrier;
+    return DestinationTabletId == context.DestinationTabletId && SourceTabletIds == context.SourceTabletIds && Moving == context.Moving &&
+           SnapshotBarrier == context.SnapshotBarrier;
 }
 
 TString TTransferContext::DebugString() const {
-    return TStringBuilder() << "{from=" << (ui64)DestinationTabletId << ";moving=" << Moving << ";snapshot=" << SnapshotBarrier.DebugString() << "}";
+    return TStringBuilder() << "{from=" << (ui64)DestinationTabletId << ";moving=" << Moving << ";snapshot=" << SnapshotBarrier.DebugString()
+                            << "}";
 }
 
-TTransferContext::TTransferContext(const TTabletId destination, const THashSet<TTabletId>& sources, const TSnapshot& snapshotBarrier, const bool moving, const std::optional<ui64> txId)
+TTransferContext::TTransferContext(const TTabletId destination, const THashSet<TTabletId>& sources, const TSnapshot& snapshotBarrier,
+    const bool moving, const std::optional<ui64> txId)
     : DestinationTabletId(destination)
     , SourceTabletIds(sources)
     , Moving(moving)
     , SnapshotBarrier(snapshotBarrier)
-    , TxId(txId)
-{
+    , TxId(txId) {
     AFL_VERIFY(!TxId || *TxId);
     AFL_VERIFY(!sources.contains(destination));
 }
@@ -76,4 +75,4 @@ const NKikimr::NOlap::TSnapshot& TTransferContext::GetSnapshotBarrierVerified() 
     return SnapshotBarrier;
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

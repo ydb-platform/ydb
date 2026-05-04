@@ -31,6 +31,7 @@ protected:
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
@@ -39,6 +40,7 @@ public:
     IPortionColumnChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
         : TBase(entityId, chunkIdx) {
     }
+
     virtual ~IPortionColumnChunk() = default;
 
     TSimpleChunkMeta BuildSimpleChunkMeta() const {
@@ -61,7 +63,6 @@ private:
     ui32 CurrentRecordIndex = 0;
 
 public:
-
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
         : Chunks(chunks)
         , Loader(loader) {

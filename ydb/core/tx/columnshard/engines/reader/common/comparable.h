@@ -5,10 +5,11 @@
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+
 namespace NReader {
 class TReadMetadataBase;
 }
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -24,9 +25,11 @@ public:
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow CopyValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow&& ExtractValue() && {
         return std::move(Value);
     }
@@ -41,7 +44,7 @@ public:
     bool operator<(const TReplaceKeyAdapter& item) const {
         return Compare(item) == std::partial_ordering::less;
     }
-    
+
     bool operator<=(const TReplaceKeyAdapter& item) const {
         auto compareResult = Compare(item);
         return compareResult == std::partial_ordering::less || compareResult == std::partial_ordering::equivalent;
@@ -64,8 +67,7 @@ public:
 
     explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceIdx)
         : Key(key)
-        , SourceIdx(sourceIdx)
-    {
+        , SourceIdx(sourceIdx) {
     }
 
     static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {

@@ -24,6 +24,7 @@ private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         Request->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterRequestResourcesAllocated(Request, guard, std::move(RequestGuard)));
@@ -36,8 +37,7 @@ public:
         : NGroupedMemoryManager::IAllocation(mem)
         , Owner(owner)
         , Request(request)
-        , RequestGuard(std::move(requestGuard))
-    {
+        , RequestGuard(std::move(requestGuard)) {
     }
 };
 }   // namespace
@@ -57,8 +57,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , FiltersCache(FILTER_CACHE_SIZE)
     , MaterializedBordersCache(BORDER_CACHE_SIZE_COUNT)
-    , AbortionFlag(std::make_shared<TAtomicCounter>(0))
-{
+    , AbortionFlag(std::make_shared<TAtomicCounter>(0)) {
 }
 
 bool TDuplicateManager::IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const {

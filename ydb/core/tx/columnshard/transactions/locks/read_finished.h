@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract.h"
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -22,8 +23,7 @@ private:
 public:
     TEvReadFinishedWriter(const TInternalPathId pathId, const TTxConflicts& conflicts)
         : PathId(pathId)
-        , Conflicts(conflicts)
-    {
+        , Conflicts(conflicts) {
         AFL_VERIFY(PathId);
     }
 };

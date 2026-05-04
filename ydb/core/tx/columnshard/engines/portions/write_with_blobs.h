@@ -4,8 +4,8 @@
 #include "data_accessor.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -41,6 +41,7 @@ public:
                 : OwnerBlob(&blob)
                 , OwnerPortion(&portion) {
             }
+
             ui64 GetSize() const {
                 return OwnerBlob->GetSize();
             }
@@ -152,7 +153,7 @@ private:
 
     TString GetBlobByAddressVerified(const ui32 entityId, const ui32 chunkIdx) const {
         for (auto&& i : Blobs) {
-            for (auto&& b: i.GetChunks()) {
+            for (auto&& b : i.GetChunks()) {
                 if (b.GetEntityId() == entityId && b.GetChunkIdx() == chunkIdx) {
                     auto* recordInfo = GetPortionResult().GetRecordPointer(TChunkAddress(entityId, chunkIdx));
                     AFL_VERIFY(recordInfo);
@@ -199,7 +200,6 @@ public:
         for (auto&& i : Blobs) {
             i.RegisterBlobId(*this, TUnifiedBlobId(1, 1, 1, ++idx, 1, 1, i.GetSize()));
         }
-
     }
 
     void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {

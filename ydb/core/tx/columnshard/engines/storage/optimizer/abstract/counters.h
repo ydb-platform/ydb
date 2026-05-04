@@ -18,8 +18,7 @@ public:
         : TBase("CompactionOptimizer")
         , NodePortionsCount(TBase::GetValue("Node/Portions/Count"))
         , NodePortionsCountLimit(TBase::GetValue("Node/Portions/Limit/Count"))
-        , BadPortionsCountLimit(TBase::GetValue("Node/BadPortions/Limit/Count"))
-    {
+        , BadPortionsCountLimit(TBase::GetValue("Node/BadPortions/Limit/Count")) {
     }
 
     static const NMonitoring::TDynamicCounters::TCounterPtr& GetNodePortionsCount() {
@@ -44,8 +43,7 @@ public:
     TCounters()
         : NodePortionsCount(TGlobalCounters::GetNodePortionsCount())
         , NodePortionsCountLimit(TGlobalCounters::GetNodePortionsCountLimit())
-        , BadPortionsCountLimit(TGlobalCounters::GetNodeBadPortionsCountLimit())
-    {
+        , BadPortionsCountLimit(TGlobalCounters::GetNodeBadPortionsCountLimit()) {
     }
 };
 

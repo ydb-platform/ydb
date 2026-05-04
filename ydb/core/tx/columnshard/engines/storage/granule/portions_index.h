@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
@@ -16,8 +16,7 @@ private:
 
 public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& /* counters */)
-        : Owner(owner)
-    {
+        : Owner(owner) {
         Y_UNUSED(Owner);
     }
 
@@ -25,6 +24,7 @@ public:
         AFL_VERIFY(p);
         AFL_VERIFY(Portions.emplace(p->GetPortionId(), p).second);
     }
+
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         AFL_VERIFY(p);
         AFL_VERIFY(Portions.erase(p->GetPortionId()));
@@ -33,5 +33,4 @@ public:
     bool HasOlderIntervals(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const;
 };
 
-
-}
+}   // namespace NKikimr::NOlap::NGranule::NPortionsIndex

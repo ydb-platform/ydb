@@ -1,5 +1,6 @@
-#include "filter.h"
 #include "defs.h"
+#include "filter.h"
+
 #include "scheme/abstract/index_info.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
@@ -13,9 +14,9 @@ private:
     const typename TArrayView::value_type* RawView;
     arrow::ArrayVector::const_iterator CurrentChunkIt;
     ui32 CurrentChunkPosition = 0;
+
 public:
-    TChunkedArrayIterator(const std::shared_ptr<arrow::ChunkedArray>& chunks)
-    {
+    TChunkedArrayIterator(const std::shared_ptr<arrow::ChunkedArray>& chunks) {
         AFL_VERIFY(!!chunks);
         Chunks = &chunks->chunks();
         AFL_VERIFY(Chunks->size());
@@ -54,12 +55,13 @@ private:
     mutable TChunkedArrayIterator<arrow::UInt64Array> Steps;
     mutable TChunkedArrayIterator<arrow::UInt64Array> Ids;
     mutable i64 CurrentIdx = -1;
+
 public:
-    TTableSnapshotGetter(const std::shared_ptr<arrow::ChunkedArray>& steps, const std::shared_ptr<arrow::ChunkedArray>& ids, const TSnapshot& snapshot)
+    TTableSnapshotGetter(
+        const std::shared_ptr<arrow::ChunkedArray>& steps, const std::shared_ptr<arrow::ChunkedArray>& ids, const TSnapshot& snapshot)
         : Snapshot(snapshot)
         , Steps(steps)
-        , Ids(ids)
-    {
+        , Ids(ids) {
         Y_ABORT_UNLESS(steps->length() == ids->length());
     }
 
@@ -88,8 +90,7 @@ NArrow::TColumnFilter MakeSnapshotFilterImpl(const std::shared_ptr<TData>& batch
     return result;
 }
 
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::Table>& batch,
-    const TSnapshot& snapshot) {
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::Table>& batch, const TSnapshot& snapshot) {
     return MakeSnapshotFilterImpl<TTableSnapshotGetter>(batch, snapshot);
 }
 
@@ -98,10 +99,10 @@ private:
     const arrow::UInt64Array::value_type* RawSteps;
     const arrow::UInt64Array::value_type* RawIds;
     const TSnapshot Snapshot;
+
 public:
     TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
-        : Snapshot(snapshot)
-    {
+        : Snapshot(snapshot) {
         Y_ABORT_UNLESS(steps);
         Y_ABORT_UNLESS(ids);
         Y_ABORT_UNLESS(steps->length() == ids->length());
@@ -116,9 +117,8 @@ public:
     }
 };
 
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                     const TSnapshot& snapshot) {
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
     return MakeSnapshotFilterImpl<TSnapshotGetter>(batch, snapshot);
 }
 
-}
+}   // namespace NKikimr::NOlap

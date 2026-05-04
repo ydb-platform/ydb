@@ -9,7 +9,7 @@ namespace NKikimr::NOlap {
 
 bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs) {
     AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize())(
-                                        "event", "we need be sure that 2 * small < big");
+                                                                   "event", "we need be sure that 2 * small < big");
     const auto pred = [](const TSplittedEntity* l, const TSplittedEntity* r) {
         return r->GetSize() < l->GetSize();
     };
@@ -26,7 +26,8 @@ bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& fe
     for (auto&& i : dataPtr) {
         count += i->GetChunks().size() * 2;
         TSplittedEntity::TNormalizedBlobChunks normalizedChunks(features.GetSplitSettings().GetMinBlobSize(),
-            features.GetSplitSettings().GetMaxBlobSize(), features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters, InternalSplitsCount);
+            features.GetSplitSettings().GetMaxBlobSize(), features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters,
+            InternalSplitsCount);
         normalizedChunks.Reserve(i->GetChunks().size() * 2);
         auto chunksInit = i->BuildBlobChunks(features.GetSplitSettings().GetMaxBlobSize(), Schema, Counters, InternalSplitsCount);
         for (auto&& c : chunksInit) {

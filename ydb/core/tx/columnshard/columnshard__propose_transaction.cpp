@@ -108,7 +108,6 @@ public:
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);
         }
-
     }
 
     TTxType GetTxType() const override {
@@ -116,7 +115,6 @@ public:
     }
 
 private:
-
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {

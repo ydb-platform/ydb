@@ -13,8 +13,7 @@ private:
 
 public:
     TBuildFilterTaskExecutor(TIntervalsIterator&& portions)
-        : Portions(std::move(portions))
-    {
+        : Portions(std::move(portions)) {
     }
 
     bool ScheduleNext(TBuildFilterContext&& context);

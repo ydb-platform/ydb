@@ -22,6 +22,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return Portion->GetPortionId();
     }
@@ -30,6 +31,7 @@ public:
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }
+
     bool GetIsStartedByCursor() const {
         return IsStartedByCursorFlag;
     }
@@ -39,13 +41,14 @@ public:
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                   sorting == NReader::ERequestSorting::DESC),
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC), !isVisible)
+                  sorting == NReader::ERequestSorting::DESC),
+              !isVisible)
         , Portion(std::move(portion))
-        , RecordsCount(portion->GetRecordsCount())
-    {
+        , RecordsCount(portion->GetRecordsCount()) {
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
+    std::shared_ptr<TPortionDataSource> Construct(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
 
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();

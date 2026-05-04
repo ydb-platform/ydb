@@ -56,7 +56,9 @@ public:
     TColumnsSetIds(const std::set<ui32>& ids)
         : ColumnIds(ids) {
     }
+
     TColumnsSetIds() = default;
+
     TColumnsSetIds(std::set<ui32>&& ids)
         : ColumnIds(std::move(ids)) {
     }
@@ -94,6 +96,7 @@ public:
     bool operator!() const {
         return IsEmpty();
     }
+
     ui32 GetColumnsCount() const {
         return ColumnIds.size();
     }
@@ -170,6 +173,7 @@ private:
 
 public:
     TColumnsSet() = default;
+
     const std::vector<TString>& GetColumnNamesVector() const {
         return ColumnNamesVector;
     }
@@ -213,4 +217,4 @@ public:
     TColumnsSet operator-(const TColumnsSet& external) const;
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NCommon

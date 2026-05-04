@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
+
 namespace NKikimr::NOlap::NDataFetcher {
 
 class TPortionsDataFetcher;

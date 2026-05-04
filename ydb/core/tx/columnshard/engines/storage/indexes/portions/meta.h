@@ -55,9 +55,10 @@ public:
     const std::set<ui32>& GetColumnIds() const {
         return ColumnIds;
     }
+
     TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId,
-        const TString& storageId, const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor);
+    TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
+        const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

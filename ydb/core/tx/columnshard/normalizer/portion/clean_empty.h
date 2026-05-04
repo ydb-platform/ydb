@@ -4,12 +4,14 @@
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
-class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormalizerComponent {
+class TCleanEmptyPortionsNormalizer: public TNormalizationController::INormalizerComponent {
 private:
     using TBase = TNormalizationController::INormalizerComponent;
+
     static TString ClassName() {
         return "EmptyPortionsCleaner";
     }
+
     static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanEmptyPortionsNormalizer>(ClassName());
 
     NColumnShard::TBlobGroupSelector DsGroupSelector;
@@ -28,7 +30,8 @@ public:
         return ClassName();
     }
 
-    TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
+        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 
-} //namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NSyncChunksWithPortions

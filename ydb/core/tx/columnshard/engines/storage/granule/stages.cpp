@@ -16,7 +16,7 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
                 portions.emplace_back(portion->Build());
                 return true;
             },
-        Self->GetPathId())) {
+            Self->GetPathId())) {
         return false;
     }
     for (auto&& i : portions) {
@@ -32,9 +32,11 @@ bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionCo
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    return db.LoadColumns([&](TColumnChunkLoadContextV2&& loadContext) {
-        Context->Add(std::move(loadContext));
-    }, Self->GetPathId());
+    return db.LoadColumns(
+        [&](TColumnChunkLoadContextV2&& loadContext) {
+            Context->Add(std::move(loadContext));
+        },
+        Self->GetPathId());
 }
 
 bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -47,9 +49,8 @@ bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
     return db.LoadIndexes(
         [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
             Context->Add(std::move(loadContext));
-        }, 
-        Self->GetPathId()
-    );
+        },
+        Self->GetPathId());
 }
 
 bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

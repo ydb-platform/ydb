@@ -6,8 +6,7 @@ TEvFilterRequestResourcesAllocated::TEvFilterRequestResourcesAllocated(const std
     const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard, std::unique_ptr<TFilterBuildingGuard>&& requestGuard)
     : Request(request)
     , AllocationGuard(guard)
-    , RequestGuard(std::move(requestGuard))
-{
+    , RequestGuard(std::move(requestGuard)) {
     AFL_VERIFY(RequestGuard);
 }
 
@@ -28,8 +27,7 @@ TBuildFilterTaskContext::TBuildFilterTaskContext(
     TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, TBordersBatch&& batch)
     : Context(std::move(context))
     , Executor(executor)
-    , Batch(std::move(batch))
-{
+    , Batch(std::move(batch)) {
 }
 
 const TBuildFilterContext& TBuildFilterTaskContext::GetGlobalContext() const {
@@ -41,8 +39,7 @@ TBuildFilterContext&& TBuildFilterTaskContext::ExtractGlobalContext() {
 }
 
 TDuplicateSourceCacheResult::TDuplicateSourceCacheResult(TColumnData&& data)
-    : DataByAddress(std::move(data))
-{
+    : DataByAddress(std::move(data)) {
 }
 
 THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> TDuplicateSourceCacheResult::ExtractDataByPortion(
@@ -65,8 +62,7 @@ THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> TDuplicateSourceCache
             AFL_VERIFY(column);
             sortedColumns.emplace_back(*column);
         }
-        std::shared_ptr<NArrow::TGeneralContainer> container =
-            std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
+        std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
         AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
     }
 
@@ -78,16 +74,16 @@ TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskConte
     const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
     : Context(std::move(context))
     , Result(std::move(columns))
-    , AllocationGuard(allocationGuard)
-{}
+    , AllocationGuard(allocationGuard) {
+}
 
-TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
-    TConclusion<TDuplicateSourceCacheResult>&& error)
+TEvBordersConstructionResult::TEvBordersConstructionResult(TBuildFilterTaskContext&& context, TConclusion<TDuplicateSourceCacheResult>&& error)
     : Context(std::move(context))
-    , Result(std::move(error))
-{}
+    , Result(std::move(error)) {
+}
 
-TEvMergeBordersResult::TEvMergeBordersResult(TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
+TEvMergeBordersResult::TEvMergeBordersResult(
+    TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
     : Context(std::move(context))
     , ReadyFilters(std::move(readyFilters))
     , Result(std::move(conclusion)) {

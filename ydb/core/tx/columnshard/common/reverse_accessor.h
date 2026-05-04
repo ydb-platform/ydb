@@ -8,26 +8,25 @@ class TContainerAccessorWithDirection {
 private:
     const TContainer& Container = nullptr;
     const bool Reverse = false;
+
 public:
     TContainerAccessorWithDirection(const TContainer& c, const bool reverse)
         : Container(c)
         , Reverse(reverse) {
-
     }
 
     class TIterator {
     private:
         std::optional<typename TContainer::const_iterator> ForwardIterator;
         std::optional<typename TContainer::const_reverse_iterator> ReverseIterator;
+
     public:
         TIterator(typename TContainer::const_iterator it)
             : ForwardIterator(it) {
-
         }
 
         TIterator(typename TContainer::const_reverse_iterator it)
             : ReverseIterator(it) {
-
         }
 
         TIterator operator++() {
@@ -93,4 +92,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

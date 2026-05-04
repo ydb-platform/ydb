@@ -1,13 +1,14 @@
 #pragma once
 #include "session.h"
 #include "status_channel.h"
-#include <ydb/services/bg_tasks/abstract/interface.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
 
 namespace NKikimrTxBackgroundProto {
 class TSessionControlContainer;
 class TSessionLogicControlContainer;
-}
+}   // namespace NKikimrTxBackgroundProto
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -19,24 +20,26 @@ private:
 
     virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
     virtual TString DoSerializeToString() const = 0;
+
 protected:
     TConclusionStatus DeserializeFromString(const TString& data) {
         return DoDeserializeFromString(data);
     }
+
     TString SerializeToString() const {
         return DoSerializeToString();
     }
+
 public:
     using TProto = NKikimrTxBackgroundProto::TSessionLogicControlContainer;
     using TFactory = NObjectFactory::TObjectFactory<ISessionLogicControl, TString>;
 
     virtual ~ISessionLogicControl() = default;
     ISessionLogicControl() = default;
+
     ISessionLogicControl(const TString& sessionClassName, const TString& sessionIdentifier)
         : SessionClassName(sessionClassName)
-        , SessionIdentifier(sessionIdentifier)
-    {
-
+        , SessionIdentifier(sessionIdentifier) {
     }
 
     TConclusionStatus DeserializeFromProto(const TProto& data);
@@ -55,6 +58,7 @@ public:
 class TSessionLogicControlContainer: public NBackgroundTasks::TInterfaceProtoContainer<ISessionLogicControl> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<ISessionLogicControl>;
+
 public:
     using TBase::TBase;
 };
@@ -63,6 +67,7 @@ class TSessionControlContainer {
 private:
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TSessionLogicControlContainer, LogicControlContainer);
+
 public:
     NKikimrTxBackgroundProto::TSessionControlContainer SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& proto);
@@ -77,4 +82,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

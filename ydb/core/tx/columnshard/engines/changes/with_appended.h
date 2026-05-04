@@ -86,10 +86,12 @@ public:
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }
+
     virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) override {
         Y_ABORT_UNLESS(index < AppendedPortions.size());
         return &AppendedPortions[index];
     }
+
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
         return true;
     }

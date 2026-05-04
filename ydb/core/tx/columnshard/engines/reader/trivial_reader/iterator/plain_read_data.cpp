@@ -11,8 +11,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
     SpecialReadContext->RegisterActors(*constructor);
-    Scanner =
-        std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
+    Scanner = std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }

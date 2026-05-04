@@ -21,6 +21,7 @@ public:
         AFL_VERIFY(it != IndexByBlob.end());
         return it->second;
     }
+
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
     }
@@ -54,6 +55,7 @@ public:
     TChangesAddV1(std::vector<TPatchItemAddV1>&& patches)
         : Patches(std::move(patches)) {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -114,6 +116,7 @@ public:
     TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
         : Patches(std::move(patches)) {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);

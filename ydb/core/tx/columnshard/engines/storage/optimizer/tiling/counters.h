@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
@@ -16,7 +17,7 @@ public:
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")){
+        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")) {
     }
 };
 
@@ -61,10 +62,7 @@ public:
     }
 
     static std::shared_ptr<TPortionCategoryCounters> BuildClient(
-        const std::vector<std::shared_ptr<TLevelAgents>>& agentList,
-        const ui32 idx,
-        const TString& debugName)
-    {
+        const std::vector<std::shared_ptr<TLevelAgents>>& agentList, const ui32 idx, const TString& debugName) {
         AFL_VERIFY(idx < agentList.size())("idx", idx)("limit", agentList.size())("type", debugName);
         return std::make_shared<TPortionCategoryCounters>(*agentList[idx]->Portions);
     }
@@ -111,4 +109,4 @@ public:
     }
 };
 
-}  // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

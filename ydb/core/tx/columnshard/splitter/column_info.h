@@ -168,14 +168,17 @@ public:
 
     public:
         TBlobChunk() = default;
+
         TBlobChunk(std::vector<TBlobChunk>&& chunks) {
             for (auto&& i : chunks) {
                 Merge(std::move(i));
             }
         }
+
         TBlobChunk(TEntityChunk&& chunk) {
             AddChunk(std::move(chunk));
         }
+
         TEntityChunk ExtractChunk(const ui32 id) {
             auto it = Entities.find(id);
             AFL_VERIFY(it != Entities.end());
@@ -206,7 +209,8 @@ public:
         }
 
         bool TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize,
-            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, ui32& internalSplitsCount);
+            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+            ui32& internalSplitsCount);
 
         const THashMap<ui32, TEntityChunk>& GetEntities() const {
             return Entities;
@@ -254,15 +258,15 @@ public:
             Small.reserve(count);
         }
 
-        TNormalizedBlobChunks(const ui32 minSize, const ui32 maxSize, const ui32 tolerance, const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        TNormalizedBlobChunks(const ui32 minSize, const ui32 maxSize, const ui32 tolerance,
+            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
             ui32& internalSplitsCount)
             : MinSize(minSize)
             , MaxSize(maxSize)
             , Tolerance(tolerance)
             , Schema(schema)
             , Counters(counters)
-            , InternalSplitsCount(&internalSplitsCount)
-        {
+            , InternalSplitsCount(&internalSplitsCount) {
             AFL_VERIFY(MinSize * 2 < MaxSize);
         }
 

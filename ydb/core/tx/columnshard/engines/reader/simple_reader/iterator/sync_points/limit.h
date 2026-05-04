@@ -21,6 +21,7 @@ private:
         }
         return false;
     }
+
     class TSourceIterator {
     private:
         std::shared_ptr<NCommon::IDataSource> Source;
@@ -118,7 +119,6 @@ private:
         std::partial_ordering ComparePrefix(const TSourceIterator& item, const ui32 prefixSize) const {
             return SortableRecord->ComparePrefix(*item.SortableRecord, prefixSize);
         }
-
     };
 
     std::vector<TSourceIterator> FilledIterators;

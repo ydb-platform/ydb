@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {
@@ -126,4 +126,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

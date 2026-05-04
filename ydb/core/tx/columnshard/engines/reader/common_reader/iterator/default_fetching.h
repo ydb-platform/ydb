@@ -61,6 +61,7 @@ private:
 
     std::vector<TChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
+
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
@@ -106,7 +107,8 @@ private:
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(source->RestoreBlobRange(c->BlobRange));
-                ColumnChunks.emplace_back(c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
+                ColumnChunks.emplace_back(
+                    c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),

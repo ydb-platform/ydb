@@ -44,8 +44,7 @@ private:
     public:
         TIntervalFilterCallback(const ui32 intervalIdx, const std::shared_ptr<TFilterAccumulator>& constructor)
             : IntervalIdx(intervalIdx)
-            , Constructor(constructor)
-        {
+            , Constructor(constructor) {
         }
 
         void OnFilterReady(const NArrow::TColumnFilter& filter) {
@@ -85,6 +84,7 @@ private:
             }
             return false;
         }
+
         void OnError(const TString& error) {
             for (auto&& [_, subscribers] : SubscribersByPortion) {
                 for (auto&& subscriber : subscribers) {
@@ -107,7 +107,7 @@ private:
     };
 
 private:
-    inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
+    inline static const ui64 FILTER_CACHE_SIZE = 10000000;   // 10 MiB
     inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
 
     const std::shared_ptr<ISnapshotSchema> LastSchema;
@@ -129,8 +129,7 @@ private:
     static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {
-            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true,
-                                   portion->IndexKeyEnd(), true), portion);
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true, portion->IndexKeyEnd(), true), portion);
         }
         return intervals;
     }
@@ -146,6 +145,7 @@ private:
     }
 
     bool IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const;
+
     void ValidateInFlightProgress() const {
         for (const auto& [_, inFlight] : IntervalsInFlight) {
             inFlight.ValidateProgress();
@@ -167,6 +167,7 @@ private:
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
+
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         AbortAndPassAway("aborted by actor system");
     }

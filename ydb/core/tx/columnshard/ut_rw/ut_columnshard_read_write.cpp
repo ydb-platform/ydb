@@ -1431,8 +1431,8 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = { 100 };
 };
 
-void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob, bool addProjection, const bool simpleReader,
-    const std::vector<ui32>& aggKeys = {}, const TReadAggregateResult& expectedResult = {},
+void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob, bool addProjection,
+    const bool simpleReader, const std::vector<ui32>& aggKeys = {}, const TReadAggregateResult& expectedResult = {},
     const TReadAggregateResult& expectedFiltered = { 1, { 1 }, { 1 }, { 1 } }) {
     addProjection = true;
     TTestBasicRuntime runtime;
@@ -2108,10 +2108,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 From = border;
                 return *this;
             }
+
             TTestCaseOptions& SetTo(const TBorder& border) {
                 To = border;
                 return *this;
             }
+
             TTestCaseOptions& SetExpectedCount(ui32 count) {
                 ExpectedCount = count;
                 return *this;

@@ -22,13 +22,12 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
 
 public:
-    TBuildFilterTaskContext(
-        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+    TBuildFilterTaskContext(TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor,
+        std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
         : Context(std::move(context))
         , Executor(executor)
         , Intervals(std::move(intervals))
-        , RequiredPortions(std::move(portions))
-    {
+        , RequiredPortions(std::move(portions)) {
     }
 
     const TBuildFilterContext& GetGlobalContext() const {
@@ -49,8 +48,7 @@ private:
 
     public:
         TDuplicateSourceCacheResult(TColumnData&& data)
-            : DataByAddress(std::move(data))
-        {
+            : DataByAddress(std::move(data)) {
         }
 
         THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion(
@@ -99,6 +97,7 @@ private:
 
     THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
+
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }
@@ -117,8 +116,7 @@ public:
         , ColumnData(std::move(columns))
         , AllocationGuard(allocationGuard)
         , ScanSnapshotBatch(GetVersionBatch(Context.GetGlobalContext().GetMaxVersion(), std::numeric_limits<ui64>::max()))
-        , MinUncommittedSnapshotBatch(GetVersionBatch(TSnapshot::Max(), 0))
-    {
+        , MinUncommittedSnapshotBatch(GetVersionBatch(TSnapshot::Max(), 0)) {
     }
 
     TString DebugString() const {

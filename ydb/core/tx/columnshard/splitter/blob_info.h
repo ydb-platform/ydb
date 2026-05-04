@@ -1,5 +1,6 @@
 #pragma once
 #include "chunks.h"
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
@@ -26,6 +27,5 @@ public:
     TSplittedBlob(const TString& groupName)
         : GroupName(groupName) {
     }
-
 };
-}
+}   // namespace NKikimr::NOlap

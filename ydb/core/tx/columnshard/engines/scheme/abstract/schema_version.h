@@ -24,7 +24,7 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NOlap::TSchemaVersionId> {

@@ -89,8 +89,7 @@ public:
     }
 
     TCurrentContext(const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
-        : MemoryProcessGuard(memoryProcessGuard)
-    {
+        : MemoryProcessGuard(memoryProcessGuard) {
         if (memoryProcessGuard) {
             MemoryScopeGuard = MemoryProcessGuard->BuildScopeGuard(MemoryScopeIdCounter.Inc());
             MemoryGroupGuard = MemoryScopeGuard->BuildGroupGuard();
@@ -128,8 +127,8 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
-    virtual ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
         return 0;
     }
 

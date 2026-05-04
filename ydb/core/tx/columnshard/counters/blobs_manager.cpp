@@ -1,6 +1,8 @@
 #include "blobs_manager.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NColumnShard {
@@ -15,14 +17,12 @@ TBlobsManagerCounters::TBlobsManagerCounters(const TString& module)
     , GCCounters(*this, "GC")
 
 {
-
 }
 
 TBlobsManagerGCCounters::TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName)
     : TBase(sameAs, componentName)
     , SkipCollectionEmpty(TBase::GetDeriviative("Skip/Empty/Count"))
-    , SkipCollectionThrottling(TBase::GetDeriviative("Skip/Throttling/Count"))
-{
+    , SkipCollectionThrottling(TBase::GetDeriviative("Skip/Throttling/Count")) {
     KeepsCountTasks = TBase::GetHistogram("Tasks/Keeps/Count", NMonitoring::ExponentialHistogram(16, 2, 100));
     KeepsCountBlobs = TBase::GetHistogram("Tasks/Keeps/Blobs", NMonitoring::ExponentialHistogram(16, 2, 100));
     KeepsCountBytes = TBase::GetHistogram("Tasks/Keeps/Bytes", NMonitoring::ExponentialHistogram(16, 2, 1024));
@@ -36,7 +36,8 @@ TBlobsManagerGCCounters::TBlobsManagerGCCounters(const TCommonCountersOwner& sam
     EmptyGCTasks = TBase::GetDeriviative("Tasks/Empty/Count");
 }
 
-void TBlobsManagerGCCounters::OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes, const bool isFull, const bool moveBarrier) const {
+void TBlobsManagerGCCounters::OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes,
+    const bool isFull, const bool moveBarrier) const {
     GCTasks->Add(1);
     if (isFull) {
         FullGCTasks->Add(1);
@@ -54,4 +55,4 @@ void TBlobsManagerGCCounters::OnGCTask(const ui32 keepsCount, const ui32 keepByt
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -42,6 +42,7 @@ public:
     void SetAdditionalAccessorData(std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> value) {
         AdditionalAccessorData = std::move(value);
     }
+
     const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& GetAdditionalAccessorData() const {
         return AdditionalAccessorData;
     }
@@ -318,10 +319,12 @@ public:
         AFL_VERIFY(Records);
         return std::move(*Records);
     }
+
     std::vector<TColumnRecord> ExtractRecords() {
         AFL_VERIFY(Records);
         return std::move(*Records);
     }
+
     std::vector<TIndexChunk> ExtractIndexes() {
         AFL_VERIFY(Indexes);
         return std::move(*Indexes);
@@ -456,7 +459,6 @@ public:
                     ++schemaIdx;
                 }
             }
-        
         }
         return result;
     }

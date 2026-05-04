@@ -1,7 +1,6 @@
 #pragma once
-#include <ydb/library/signals/owner.h>
-
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -20,6 +19,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SkipEraseBytes;
     std::shared_ptr<TValueAggregationClient> DataSize;
     std::shared_ptr<TValueAggregationClient> ChunksCount;
+
 public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
@@ -52,12 +52,11 @@ public:
         SkipEraseCount->Add(1);
         SkipEraseBytes->Add(size);
     }
-
 };
 
 class TLoadTimeSignals: public TCommonCountersOwner {
 public:
-    class TLoadTimer : public TNonCopyable {
+    class TLoadTimer: public TNonCopyable {
     private:
         const TLoadTimeSignals& Signals;
         TInstant Start;
@@ -67,8 +66,7 @@ public:
     public:
         TLoadTimer(const TLoadTimeSignals& signals, const TString& name)
             : Signals(signals)
-            , Name(name)
-        {
+            , Name(name) {
             Start = TInstant::Now();
         }
 
@@ -81,6 +79,7 @@ public:
     private:
         TRWMutex Mutex;
         THashMap<TString, TLoadTimeSignals> Signals;
+
         TLoadTimeSignals GetSignalImpl(const TString& name) {
             TReadGuard rg(Mutex);
             auto it = Signals.find(name);
@@ -152,4 +151,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

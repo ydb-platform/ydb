@@ -4,7 +4,6 @@
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
-
 std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(const TString& resourceType) {
     TGuard lock(Mutex);
     auto it = ResourceTypeCounters.find(resourceType);
@@ -15,8 +14,7 @@ std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(co
 }
 
 TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owner, const TString& resourceType)
-    : TBase(owner)
-{
+    : TBase(owner) {
     DeepSubGroup("ResourceType", resourceType);
 
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
@@ -32,4 +30,4 @@ TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owne
     CountAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Count");
 }
 
-}
+}   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

@@ -1,8 +1,9 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/util/backoff.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -21,7 +22,8 @@ public:
         : TabletId(tabletId)
         , WriteController(writeController)
         , Deadline(deadline) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)("debug", writeController->DebugString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)(
+            "debug", writeController->DebugString());
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -39,7 +41,8 @@ public:
 
         if (status != NKikimrProto::OK) {
             ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
-            WriteController->Abort("cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
+            WriteController->Abort(
+                "cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
             return SendResultAndDie(ctx, status);
         }
 
@@ -63,9 +66,7 @@ public:
             }
         }
 
-        auto putResult = std::make_shared<TBlobPutResult>(putStatus,
-            std::move(YellowMoveChannels),
-            std::move(YellowStopChannels));
+        auto putResult = std::make_shared<TBlobPutResult>(putStatus, std::move(YellowMoveChannels), std::move(YellowStopChannels));
 
         WriteController->OnReadyResult(ctx, putResult);
         Die(ctx);
@@ -104,10 +105,10 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline) {
     return new TWriteActor(tabletId, writeController, deadline);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

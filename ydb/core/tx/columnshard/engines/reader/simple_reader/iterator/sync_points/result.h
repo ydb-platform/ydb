@@ -6,6 +6,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSyncPointResult: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
+
     virtual void DoAbort() override {
     }
 

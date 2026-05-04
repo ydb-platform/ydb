@@ -81,8 +81,8 @@ public:
                 i.second.GetBlobDataVerified().size());
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
                 deserialize ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
-                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader,
-                                  i.second.GetBlobDataVerified(), true);
+                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
+                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {
@@ -171,6 +171,7 @@ private:
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
     bool NeedToAddResource = false;
+
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
@@ -184,8 +185,7 @@ private:
             for (auto&& i : ColumnChunks) {
                 const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
                 if (appliedFilter) {
-                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())),
-                        context.GetSource());
+                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())), context.GetSource());
                 } else {
                     i.Finish(nullptr, context.GetSource());
                 }
@@ -217,18 +217,9 @@ private:
                         TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                         const ui64 blobBytes = blob.size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetHeaderSize();
-                        LWTRACK(SubColumnsHeaderRead,
-                            source->GetDataSourceOrbit(),
-                            source->GetRawPathId(),
-                            source->GetTabletId(),
-                            source->GetTxId(),
-                            source->GetDeprecatedPortionId(),
-                            GetEntityId(),
-                            columnName,
-                            headerDuration,
-                            chunkIndex,
-                            blobBytes,
-                            rawBytes);
+                        LWTRACK(SubColumnsHeaderRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                            source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, headerDuration, chunkIndex,
+                            blobBytes, rawBytes);
                         source->AddBytesRead(blobBytes);
                     }
                 } else {
@@ -254,19 +245,9 @@ private:
                         TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                         const ui64 blobBytes = i.GetOthersBlobs()->size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetOthersSize();
-                        LWTRACK(SubColumnsDataRead,
-                            source->GetDataSourceOrbit(),
-                            source->GetRawPathId(),
-                            source->GetTabletId(),
-                            source->GetTxId(),
-                            source->GetDeprecatedPortionId(),
-                            GetEntityId(),
-                            columnName,
-                            dataDuration,
-                            "others",
-                            chunkIndex,
-                            blobBytes,
-                            rawBytes);
+                        LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                            source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration, "others", chunkIndex,
+                            blobBytes, rawBytes);
                         source->AddBytesRead(blobBytes);
                     }
                 }
@@ -281,19 +262,9 @@ private:
                             const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
                             const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
                             const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(colIndex);
-                            LWTRACK(SubColumnsDataRead,
-                                source->GetDataSourceOrbit(),
-                                source->GetRawPathId(),
-                                source->GetTabletId(),
-                                source->GetTxId(),
-                                source->GetDeprecatedPortionId(),
-                                GetEntityId(),
-                                columnName,
-                                dataDuration,
-                                subColName,
-                                chunkIndex,
-                                blobBytes,
-                                rawBytes);
+                            LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                                source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration, subColName,
+                                chunkIndex, blobBytes, rawBytes);
                             source->AddBytesRead(blobBytes);
                         }
                     }

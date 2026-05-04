@@ -94,6 +94,7 @@ class TNormalizationController;
 class INormalizerTask {
 public:
     using TPtr = std::shared_ptr<INormalizerTask>;
+
     virtual ~INormalizerTask() {
     }
 
@@ -103,15 +104,18 @@ public:
 class INormalizerChanges {
 public:
     using TPtr = std::shared_ptr<INormalizerChanges>;
+
     virtual ~INormalizerChanges() {
     }
 
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
+
     virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
         Y_UNUSED(normalizationContext);
     }
 
     virtual ui64 GetSize() const = 0;
+
     virtual TString DebugString() const {
         return TStringBuilder() << "size=" << GetSize();
     }
@@ -198,6 +202,7 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<INormalizerComponent, TString, TInitContext>;
 
         virtual ~INormalizerComponent() = default;
+
         INormalizerComponent(const TInitContext& context)
             : TabletId(context.GetTabletId())
             , TabletActorId(context.GetTabletActorId()) {
@@ -267,6 +272,7 @@ public:
 
         TAtomic ActiveTasksCount = 0;
     };
+
     using TPtr = std::shared_ptr<INormalizerComponent>;
 
 private:

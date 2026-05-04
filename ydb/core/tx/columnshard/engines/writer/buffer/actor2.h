@@ -1,10 +1,10 @@
 #pragma once
 #include "events.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/pack_builder.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -29,11 +29,13 @@ public:
     }
 
     bool operator==(const TAggregationId& item) const {
-        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType && IsBulk == item.IsBulk;
+        return PathId == item.PathId && SchemaVersion == item.SchemaVersion && ModificationType == item.ModificationType &&
+               IsBulk == item.IsBulk;
     }
 
     explicit operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
+        return CombineHashes<ui64>(
+            CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType), ui64(IsBulk));
     }
 };
 

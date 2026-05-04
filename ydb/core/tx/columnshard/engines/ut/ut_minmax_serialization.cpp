@@ -2,7 +2,6 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -25,7 +24,6 @@ void CheckRoundTrip(const TMinMax& original) {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TMinMaxSerializationTests) {
-
     Y_UNIT_TEST(NullRoundTrip) {
         auto type = arrow::int32();
         TMinMax minmax = TMinMax::MakeNull(type);
@@ -39,7 +37,6 @@ Y_UNIT_TEST_SUITE(TMinMaxSerializationTests) {
         TMinMax minmax = *arrow::StructScalar::Make({ minScalar, maxScalar }, { "min", "max" }).ValueOrDie();
         CheckRoundTrip(minmax);
     }
-
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

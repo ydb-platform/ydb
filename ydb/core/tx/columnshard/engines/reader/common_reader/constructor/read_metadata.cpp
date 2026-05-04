@@ -11,7 +11,8 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass) {
+TConclusionStatus TReadMetadata::Init(
+    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
@@ -117,8 +118,8 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
             conflicts.Add(lockIdToCommit, lock);
         }
         if (!conflicts.IsEmpty()) {
-            auto writer =
-                std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
+            auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(
+                TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
             owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
         }
     }

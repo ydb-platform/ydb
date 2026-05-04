@@ -1,6 +1,7 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/signals/owner.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -18,10 +19,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
     NMonitoring::THistogramPtr CorrectDataSerializationHistogramBytes;
+
 public:
     TSplitterCaseCounters(const TCommonCountersOwner& owner, const TString& splitterType)
-        : TBase(owner)
-    {
+        : TBase(owner) {
         DeepSubGroup("splitter_type", splitterType);
 
         SmallDataSerializationBytes = TBase::GetDeriviative("SmallDataSerialization/Bytes");
@@ -34,7 +35,8 @@ public:
             TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
         CorrectDataSerializationBytes = TBase::GetDeriviative("CorrectDataSerialization/Bytes");
         CorrectDataSerialization = TBase::GetDeriviative("CorrectDataSerialization/Count");
-        CorrectDataSerializationHistogramBytes = TBase::GetHistogram("CorrectDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+        CorrectDataSerializationHistogramBytes =
+            TBase::GetHistogram("CorrectDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
     }
 
     void OnSmallSerialized(const ui64 bytes) const {
@@ -62,6 +64,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr BlobsBytes;
     NMonitoring::THistogramPtr BlobsBytesHistogram;
+
 public:
     TBlobResultCounters(const TCommonCountersOwner& owner, const TString& blobsType)
         : TBase(owner) {
@@ -77,12 +80,12 @@ public:
         BlobsBytes->Add(size);
         BlobsBytesHistogram->Collect(size);
     }
-
 };
 
 class TSplitterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
+
 public:
     TSplitterCounters(const TCommonCountersOwner& owner);
     const TSplitterCaseCounters SimpleSplitter;
@@ -91,4 +94,4 @@ public:
     const TBlobResultCounters MonoBlobs;
 };
 
-}
+}   // namespace NKikimr::NColumnShard

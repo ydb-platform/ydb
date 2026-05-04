@@ -19,8 +19,7 @@ private:
 public:
     TPartialSourceAddress(const ui32 sourceIdx, const ui32 syncPointIndex)
         : SourceIdx(sourceIdx)
-        , SyncPointIndex(syncPointIndex)
-    {
+        , SyncPointIndex(syncPointIndex) {
     }
 };
 

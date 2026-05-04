@@ -10,8 +10,7 @@ private:
 
 public:
     TColumnDataManager(const TActorId& columnShardActorId)
-        : ColumnShardActorId(columnShardActorId)
-    {
+        : ColumnShardActorId(columnShardActorId) {
     }
 
     void AskColumnData(const NBlobOperations::EConsumer consumer, const THashSet<TPortionAddress>& portions, const std::set<ui32>& columns,

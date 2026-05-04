@@ -56,6 +56,7 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TFetchingStepSignals>> Collection;
+
     std::shared_ptr<TFetchingStepSignals> GetSignalsImpl(const TString& name) {
         TGuard<TMutex> g(Mutex);
         auto it = Collection.find(name);

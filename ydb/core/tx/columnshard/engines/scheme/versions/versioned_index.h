@@ -39,6 +39,7 @@ private:
         TSchemaInfoByVersion(const ISnapshotSchema::TPtr& schema)
             : Schema(schema) {
         }
+
         void AddIgnoreSchemaVersionTo(const ui64 to) {
             AFL_VERIFY(!IgnoreToVersion);
             IgnoreToVersion = to;

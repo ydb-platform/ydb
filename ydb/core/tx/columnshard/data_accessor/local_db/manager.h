@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 class TManager: public IMetadataMemoryManager {
@@ -18,9 +18,7 @@ public:
 
     TManager(const NActors::TActorId& actorId, const ui64 /* memoryCacheSize */, const bool fetchOnStart)
         : TabletActorId(actorId)
-        , FetchOnStart(fetchOnStart)
-    {
-
+        , FetchOnStart(fetchOnStart) {
     }
 };
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB

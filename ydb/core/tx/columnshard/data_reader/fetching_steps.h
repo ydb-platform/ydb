@@ -25,6 +25,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -83,6 +84,7 @@ private:
             Fetcher->MutableScript().Next();
             Fetcher->Resume(Fetcher);
         }
+
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
         }
@@ -119,6 +121,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -220,6 +223,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -262,6 +266,7 @@ private:
             FetchingContext->MutableScript().Next();
             FetchingContext->Resume(FetchingContext);
         }
+
         virtual bool DoOnError(
             const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
             FetchingContext->OnError("cannot read blob range: " + storageId + "::" + range.ToString() + "::" + status.GetErrorMessage());
@@ -334,9 +339,7 @@ private:
             AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i])
-                    .AssembleToGeneralContainer({})
-                    .DetachResult();
+                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}).DetachResult();
             result.emplace_back(std::move(*container));
         }
         context.SetAssembledData(std::move(result));
@@ -345,8 +348,7 @@ private:
 
 public:
     TAssembleDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds)
-    {
+        : ColumnIds(columnIds) {
     }
 };
 

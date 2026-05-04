@@ -42,37 +42,45 @@ public:
         AFL_VERIFY(index - *MinSourceIndex < Remapper.size());
         return Remapper[index - *MinSourceIndex];
     }
+
     bool IsEmpty() const {
         return Remapper.empty();
     }
+
     ui32 GetMinSourceIndex() const {
         AFL_VERIFY(MinSourceIndex);
         return *MinSourceIndex;
     }
+
     ui32 GetMaxSourceIndex() const {
         AFL_VERIFY(MaxSourceIndex);
         return *MaxSourceIndex;
     }
+
     ui32 GetMinResultIndex() const {
         AFL_VERIFY(MinResultIndex);
         return *MinResultIndex;
     }
+
     ui32 GetMaxResultIndex() const {
         AFL_VERIFY(MaxResultIndex);
         return *MaxResultIndex;
     }
+
     bool ContainsResult(const ui32 position) const {
         if (IsEmpty()) {
             return false;
         }
         return *MinResultIndex <= position && position <= *MaxResultIndex;
     }
+
     bool ContainsSource(const ui32 position) const {
         if (IsEmpty()) {
             return false;
         }
         return *MinSourceIndex <= position && position <= *MaxSourceIndex;
     }
+
     void AddRemap(const ui32 sourceIndex, const ui32 resultIndex) {
         if (!MinSourceIndex) {
             MinSourceIndex = sourceIndex;
@@ -159,6 +167,7 @@ public:
             sb << "{" << "offset=" << Offset << ";size=" << Size << ";owner=" << Owner->DebugString() << "}";
             return sb;
         }
+
         ui32 GetRecordsCount() const {
             return Size;
         }
@@ -186,6 +195,7 @@ public:
         const arrow::UInt16Array& GetIdxArray() const {
             return *IdxArray;
         }
+
         const arrow::UInt32Array& GetRecordIdxArray() const {
             return *RecordIdxArray;
         }
@@ -267,7 +277,8 @@ public:
                 if (CurrentChunk->GetArray()->GetType() == TArrayImpl::GetTypeStatic()) {
                     CurrentArray = std::static_pointer_cast<TArrayImpl>(CurrentChunk->GetArray());
                 } else {
-                    CurrentArray = std::static_pointer_cast<TArrayImpl>(Loader->GetAccessorConstructor()
+                    CurrentArray = std::static_pointer_cast<TArrayImpl>(
+                        Loader->GetAccessorConstructor()
                             ->Construct(CurrentChunk->GetArray(), Loader->BuildAccessorContext(CurrentChunk->GetArray()->GetRecordsCount()))
                             .DetachResult());
                 }
@@ -283,7 +294,6 @@ public:
         }
 
         virtual void OnInitArray(const std::shared_ptr<TArrayImpl>& /*arr*/) {
-        
         }
 
     public:
@@ -370,6 +380,7 @@ public:
     IColumnMerger(const TColumnMergeContext& context)
         : Context(context) {
     }
+
     virtual ~IColumnMerger() = default;
 
     void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext);

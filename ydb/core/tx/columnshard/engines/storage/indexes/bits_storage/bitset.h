@@ -10,6 +10,7 @@ private:
     const TDynBitMap Bits;
 
     virtual bool DoGet(const ui32 idx) const override;
+
     virtual ui32 DoGetBitsCount() const override {
         return Bits.Size();
     }
@@ -37,6 +38,7 @@ private:
 
 public:
     using TFactory = NObjectFactory::TObjectFactory<IBitsStorageConstructor, TString>;
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

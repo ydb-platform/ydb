@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap {
 
 template <typename TKey, typename TObject>
-class TObjectCache : std::enable_shared_from_this<TObjectCache<TKey, TObject>> {
+class TObjectCache: std::enable_shared_from_this<TObjectCache<TKey, TObject>> {
 private:
     THashMap<TKey, std::weak_ptr<const TObject>> Objects;
     mutable TMutex Mutex;
@@ -31,6 +31,7 @@ public:
         const TObject* operator->() const {
             return Object.get();
         }
+
         const TObject& operator*() const {
             return *Object;
         }

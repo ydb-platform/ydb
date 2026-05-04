@@ -43,6 +43,7 @@ public:
     const NArrow::TSimpleRow& GetFirstPK() const {
         return FirstPK;
     }
+
     const NArrow::TSimpleRow& GetLastPK() const {
         return LastPK;
     }

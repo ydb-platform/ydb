@@ -52,6 +52,7 @@ public:
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FINISHED;
     }
@@ -90,6 +91,7 @@ public:
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FAILED;
     }

@@ -39,8 +39,7 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
         std::pop_heap(heap.begin(), heap.end(), heapComparator);
         AFL_VERIFY(heap.back()->IsValid());
         AFL_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount())(
-                                                                   "cursor", heap.back()->DebugString())(
-                                                                   "context", chunkContext.DebugString());
+                                                                   "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
         AFL_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "stopped_source")("idx", heap.back()->GetCursorIdx());

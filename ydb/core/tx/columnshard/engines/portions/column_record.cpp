@@ -23,8 +23,8 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
         const auto& add = proto.GetAdditionalAccessorData();
         if (add.Accessor_case() == NKikimrTxColumnShard::TAdditionalAccessorData::kDictionaryAccessorData) {
             const auto& acc = add.GetDictionaryAccessorData();
-            AdditionalAccessorData = std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(
-                acc.GetDictionaryBlobSize(), acc.GetPositionsBlobSize());
+            AdditionalAccessorData =
+                std::make_shared<NArrow::NAccessor::TDictionaryAccessorData>(acc.GetDictionaryBlobSize(), acc.GetPositionsBlobSize());
         }
     }
     return TConclusionStatus::Success();

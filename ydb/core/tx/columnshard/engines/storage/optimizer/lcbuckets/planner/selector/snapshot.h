@@ -16,6 +16,7 @@ public:
     bool operator==(const TDataSnapshotInterval& item) const = default;
 
     TDataSnapshotInterval() = default;
+
     TDataSnapshotInterval(const std::optional<TInstant>& start, const std::optional<TInstant>& finish)
         : StartInstant(start)
         , FinishInstant(finish) {

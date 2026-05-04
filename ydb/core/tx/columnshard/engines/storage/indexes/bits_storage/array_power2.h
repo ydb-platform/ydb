@@ -32,7 +32,7 @@ private:
     }
 
     Y_FORCE_INLINE ui64 ItemMaskForHash(ui64 hash) const {
-        return (ui64{1} << (hash & ItemMask));
+        return (ui64{ 1 } << (hash & ItemMask));
     }
 
     Y_FORCE_INLINE ui64 IndexForHash(ui64 hash) const {

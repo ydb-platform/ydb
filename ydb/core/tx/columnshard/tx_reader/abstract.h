@@ -23,6 +23,7 @@ private:
 
 public:
     virtual ~ITxReader() = default;
+
     void AddNamePrefix(const TString& prefix) {
         StageName = prefix + StageName;
     }

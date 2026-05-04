@@ -18,7 +18,8 @@ public:
     }
 
 private:
-    static inline TFactory::TRegistrator<TCleanInsertedPortionsNormalizer> Registrator = TFactory::TRegistrator<TCleanInsertedPortionsNormalizer>(GetClassNameStatic());
+    static inline TFactory::TRegistrator<TCleanInsertedPortionsNormalizer> Registrator =
+        TFactory::TRegistrator<TCleanInsertedPortionsNormalizer>(GetClassNameStatic());
 
 public:
     class TNormalizerResult;

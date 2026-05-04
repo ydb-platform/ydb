@@ -18,8 +18,7 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , RequestLatency(TBase::GetHistogram("DuplicateFiltering/Request/LatencyMs", NMonitoring::ExponentialHistogram(18, 2, 1)))
     , ExclusiveFilters(TBase::GetValue("DuplicateFiltering/Filters/Exclusive"))
     , ReadyFiltersCount(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersCount"))
-    , ReadyFiltersSize(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersSize"))
-{
+    , ReadyFiltersSize(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersSize")) {
 }
 
 TSimpleDuplicateFilteringCounters::TSimpleDuplicateFilteringCounters()
@@ -29,7 +28,6 @@ TSimpleDuplicateFilteringCounters::TSimpleDuplicateFilteringCounters()
     , MergeRowsBulkAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsBulkAccepted"))
     , IntersectingPortionsPerRequest(TBase::GetHistogram("DuplicateFiltering/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 1)))
     , FilterCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Hits"))
-    , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
-{
+    , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses")) {
 }
 }   // namespace NKikimr::NColumnShard

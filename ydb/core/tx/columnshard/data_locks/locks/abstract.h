@@ -28,7 +28,7 @@ enum class ELockCategory : ui32 {
 
 static const inline std::array<std::set<ELockCategory>, (ui32)ELockCategory::MAX> LockCategoriesInteraction = {
     //Compaction
-    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any}),
+    std::set<ELockCategory>({ ELockCategory::Compaction, ELockCategory::Actualization, ELockCategory::Tables, ELockCategory::Any }),
     //Cleanup
     std::set<ELockCategory>({ ELockCategory::Cleanup, ELockCategory::Sharing, ELockCategory::Tables, ELockCategory::Any }),
     //Sharing
@@ -75,6 +75,7 @@ public:
         }
         return DoIsLocked(portion, portionForLock, excludedLocks);
     }
+
     std::optional<TString> IsLocked(const TGranuleMeta& g, const ELockCategory portionForLock, const THashSet<TString>& excludedLocks = {},
         const bool readOnly = false) const {
         if (IsReadOnly() && readOnly) {
@@ -85,6 +86,7 @@ public:
         }
         return DoIsLocked(g, portionForLock, excludedLocks);
     }
+
     bool IsEmpty() const {
         return DoIsEmpty();
     }

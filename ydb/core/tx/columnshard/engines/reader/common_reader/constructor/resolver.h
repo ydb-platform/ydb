@@ -25,4 +25,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NPlain
+}   // namespace NKikimr::NOlap::NReader::NCommon

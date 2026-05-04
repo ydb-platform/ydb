@@ -37,4 +37,4 @@ void TOverloadManager::Handle(const NOverload::TEvOverloadColumnShardDied::TPtr&
     OverloadSubscribers.NotifyColumnShardSubscribers(record->GetColumnShardInfo());
 }
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

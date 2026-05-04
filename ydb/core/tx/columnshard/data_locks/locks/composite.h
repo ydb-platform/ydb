@@ -7,8 +7,10 @@ class TCompositeLock: public ILock {
 private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
+
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const ELockCategory category, const THashSet<TString>& excludedLocks) const override {
+    virtual std::optional<TString> DoIsLocked(
+        const TPortionInfo& portion, const ELockCategory category, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
@@ -19,6 +21,7 @@ protected:
         }
         return {};
     }
+
     virtual std::optional<TString> DoIsLocked(
         const TGranuleMeta& granule, const ELockCategory category, const THashSet<TString>& excludedLocks) const override {
         for (auto&& i : Locks) {
@@ -31,9 +34,11 @@ protected:
         }
         return {};
     }
+
     bool DoIsEmpty() const override {
         return Locks.empty();
     }
+
 public:
     static std::shared_ptr<ILock> Build(const TString& lockName, const std::initializer_list<std::shared_ptr<ILock>>& locks) {
         std::vector<std::shared_ptr<ILock>> locksUseful;
@@ -51,8 +56,7 @@ public:
 
     TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks,
         const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
-        : TBase(lockName, category, readOnly)
-    {
+        : TBase(lockName, category, readOnly) {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -63,8 +67,7 @@ public:
 
     TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks,
         const ELockCategory category = NDataLocks::ELockCategory::Any, const bool readOnly = false)
-        : TBase(lockName, category, readOnly)
-    {
+        : TBase(lockName, category, readOnly) {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -74,4 +77,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataLocks

@@ -24,8 +24,7 @@ private:
     std::optional<NOlap::TPredicate> Object;
 
     TPredicateContainer(std::optional<NOlap::TPredicate> object)
-        : Object(object)
-    {
+        : Object(object) {
     }
 
     TPredicateContainer() {
@@ -80,6 +79,7 @@ public:
     int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;
 
     std::vector<std::string> GetColumnNames() const;
+
     ui32 NumColumns() const {
         return Object ? Object->NumColumns() : 0;
     }

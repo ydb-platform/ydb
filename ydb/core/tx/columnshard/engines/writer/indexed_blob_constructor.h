@@ -7,9 +7,10 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/data_events/write_data.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -60,6 +61,7 @@ private:
 
 public:
     TWritingBlob() = default;
+
     bool AddData(TWideSerializedBatch& batch) {
         AFL_VERIFY(!Extracted);
         if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
@@ -157,6 +159,7 @@ private:
 
 public:
     TWritingBuffer() = default;
+
     TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
         : BlobsAction(action)
         , Aggregations(std::move(aggregations)) {

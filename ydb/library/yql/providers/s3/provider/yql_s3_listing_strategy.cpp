@@ -41,8 +41,8 @@ TListError MakeLimitExceededError(
         << '[' << componentName << "] Limit exceeded. Limit: " << limit
         << " Actual: " << actual;
     auto issue = TIssue(
-        TStringBuilder{} << "The number of files in S3 source exceeds the limit of "
-                         << limit << ". Found at least " << actual << " files");
+        TStringBuilder{} << "The number of S3 listing entries exceeds the limit of "
+                         << limit << ". Found at least " << actual << " entries");
     return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
 }
 

@@ -80,14 +80,6 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
         return EncodeValueToJsonPath(node.Cast<TCoJust>().Input(), negative);
     }
 
-    if (node.Maybe<TCoCoalesce>()) {
-        return EncodeValueToJsonPath(node.Cast<TCoCoalesce>().Predicate(), negative);
-    }
-
-    if (node.Maybe<TCoOptionalIf>()) {
-        return EncodeValueToJsonPath(node.Cast<TCoOptionalIf>().Predicate(), negative);
-    }
-
     if (node.Maybe<TCoSafeCast>()) {
         return EncodeValueToJsonPath(node.Cast<TCoSafeCast>().Value(), negative);
     }
@@ -277,6 +269,16 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
             }
 
             auto wrappedValue = TExprBase(applyExpr.Ref().ChildPtr(1));
+            auto innerValue = UnwrapOptionalNodes(wrappedValue);
+
+            if (innerValue.Maybe<TCoSafeCast>()) {
+                innerValue = UnwrapOptionalNodes(innerValue.Cast<TCoSafeCast>().Value());
+            }
+
+            if (innerValue.Maybe<TCoStrictCast>()) {
+                innerValue = UnwrapOptionalNodes(innerValue.Cast<TCoStrictCast>().Value());
+            }
+
             if (wrappedValue.Maybe<TCoNothing>()) {
                 TString encoded;
                 AppendJsonIndexLiteral(encoded, NBinaryJson::EEntryType::Null);
@@ -284,35 +286,24 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
                 continue;
             }
 
-            if (wrappedValue.Maybe<TCoJust>()) {
-                auto innerValue = TExprBase(wrappedValue.Cast<TCoJust>().Input());
-                if (innerValue.Maybe<TCoSafeCast>()) {
-                    innerValue = innerValue.Cast<TCoSafeCast>().Value();
-                }
-
-                if (innerValue.Maybe<TCoParameter>()) {
-                    auto paramName = TString(innerValue.Cast<TCoParameter>().Name().Value());
-                    auto paramType = innerValue.Cast<TCoParameter>().Ref().GetTypeAnn();
-                    if (!IsSupportedJsonParamType(paramType)) {
-                        return std::unexpected(TStringBuilder() << "Variable '" << varName
-                            << "' is bound to a parameter with unsupported type");
-                    }
-                    paramVariables.emplace(varName, paramName);
-                    continue;
-                }
-
-                auto encoded = EncodeValueToJsonPath(innerValue);
-                if (!encoded) {
+            if (innerValue.Maybe<TCoParameter>()) {
+                auto paramName = TString(innerValue.Cast<TCoParameter>().Name().Value());
+                auto paramType = innerValue.Cast<TCoParameter>().Ref().GetTypeAnn();
+                if (!IsSupportedJsonParamType(paramType)) {
                     return std::unexpected(TStringBuilder() << "Variable '" << varName
-                        << "' is bound to unsupported expression");
+                        << "' is bound to a parameter with unsupported type");
                 }
-
-                variables.emplace(varName, *encoded);
+                paramVariables.emplace(varName, paramName);
                 continue;
             }
 
-            return std::unexpected(TStringBuilder() << "Variable '" << varName
-                << "' is bound to unsupported expression");
+            auto encoded = EncodeValueToJsonPath(innerValue);
+            if (!encoded) {
+                return std::unexpected(TStringBuilder() << "Variable '" << varName
+                    << "' is bound to unsupported expression");
+            }
+
+            variables.emplace(varName, *encoded);
         }
     } else if (!nodeVariables.GetTypeAnn() || nodeVariables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
         return std::unexpected("Expected empty dict as variables");

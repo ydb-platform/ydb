@@ -247,7 +247,7 @@ def main():
     args = parse_args()
 
     # Auto-extract static files before settings are loaded.
-    # TODO: use it by deafault in all cases 
+    # TODO: use it by default in all cases
     if args.command == 'run':
         static_path = args.static_location or os.environ.get('STATIC_LOCATION', 'static')
         if not os.path.isdir(static_path):

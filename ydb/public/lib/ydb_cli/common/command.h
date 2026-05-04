@@ -294,6 +294,10 @@ public:
 
         TDriverConfig CreateDriverConfig();
 
+        // Same as CreateDriverConfig() but uses an explicit build info command
+        // tag without mutating the BuildInfoCommandTag field.
+        TDriverConfig CreateDriverConfig(const TString& buildInfoCommandTag);
+
         TString GetBuildInfoCommandTag() const;
 
         size_t GetNetworkThreadNum() {

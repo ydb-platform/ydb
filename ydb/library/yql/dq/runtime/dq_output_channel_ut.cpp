@@ -1107,13 +1107,11 @@ public:
     EDqFillLevel GetFillLevel() const override { return Level; }
     EDqFillLevel UpdateFillLevel() override { return Level; }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg, std::optional<ui32> channelIdx = {}) override {
         Aggregator = std::move(agg);
-        Aggregator->AddCount(Level);
+        ChannelIdx_ = channelIdx;
+        Aggregator->AddCount(Level, channelIdx);
     }
-
-    bool SupportsLevelChangeCallback() const override { return true; }
-    void SetLevelChangeCallback(TLevelChangeCallback cb) override { Callback = std::move(cb); }
 
     void Push(NUdf::TUnboxedValue&&) override {
         if (Finished_) return;
@@ -1132,10 +1130,12 @@ public:
     bool IsEarlyFinished() const override { return false; }
     NKikimr::NMiniKQL::TType* GetOutputType() const override { return nullptr; }
 
-    // Simulates external consumer Pop: updates fill level, aggregator, and fires LevelChangeCallback.
+    // Simulates external consumer Pop: drops the fill level back to NoLimit and
+    // propagates the change to the aggregator (which is what the scatter router
+    // observes through its per-channel level array).
     void Drain() {
         InflightBytes = 0;
-        ApplyLevel(EDqFillLevel::NoLimit, /*fireCallback=*/true);
+        ApplyLevel(EDqFillLevel::NoLimit);
     }
 
     // Simulates a downstream EarlyFinish on this channel: pin the fill level at
@@ -1143,7 +1143,7 @@ public:
     // see TLocalBuffer::EarlyFinish, which keeps FillLevel frozen to prevent
     // silent data drops).
     void PinHardLimit() {
-        ApplyLevel(EDqFillLevel::HardLimit, /*fireCallback=*/true);
+        ApplyLevel(EDqFillLevel::HardLimit);
         Pinned = true;
     }
 
@@ -1157,16 +1157,13 @@ private:
         InflightBytes += BytesPerPush;
         if (Pinned) return;
         auto newLevel = InflightBytes >= HardLimitBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
-        ApplyLevel(newLevel, /*fireCallback=*/true);
+        ApplyLevel(newLevel);
     }
 
-    void ApplyLevel(EDqFillLevel newLevel, bool fireCallback) {
+    void ApplyLevel(EDqFillLevel newLevel) {
         if (newLevel == Level) return;
         if (Aggregator) {
-            Aggregator->UpdateCount(Level, newLevel);
-        }
-        if (fireCallback && Callback) {
-            Callback(Level, newLevel);
+            Aggregator->UpdateCount(Level, newLevel, ChannelIdx_);
         }
         Level = newLevel;
     }
@@ -1177,8 +1174,8 @@ private:
     EDqFillLevel Level = EDqFillLevel::NoLimit;
     bool Pinned = false;
     bool Finished_ = false;
+    std::optional<ui32> ChannelIdx_;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    TLevelChangeCallback Callback;
     mutable TDqOutputStats Stats;
 };
 
@@ -1208,7 +1205,7 @@ void ConsumeOne(IDqOutputConsumer::TPtr& consumer) {
 Y_UNIT_TEST_SUITE(ScatterConsumer) {
 
 
-Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
+Y_UNIT_TEST(AdaptiveRoutingFillLevelOnPush) {
     TScopedAlloc alloc(__LOCATION__);
     // ch0: one push fills it (200 bytes >= 100-byte limit)
     // ch1: stays NoLimit (1 byte per push, 1000-byte limit)
@@ -1225,8 +1222,9 @@ Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
 
     auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
 
-    // First consume: round-robin → ch0. Push fills it; callback fires synchronously
-    // inside Push, moving ch0 to HardLimit bucket before UpdateFillLevel() is called.
+    // First consume: round-robin → ch0. Push fills it; the aggregator updates the
+    // per-channel level synchronously inside Push, moving ch0 to the HardLimit
+    // bucket so the next pick avoids it.
     ConsumeOne(consumer);
     UNIT_ASSERT_VALUES_EQUAL(1u, mocks[0]->PushCount);
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, mocks[0]->GetFillLevel());
@@ -1239,8 +1237,8 @@ Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
     UNIT_ASSERT_VALUES_EQUAL(2u, mocks[1]->PushCount);
 }
 
-// Verify that draining a channel (via callback) updates the per-channel atomic,
-// so GetFillLevel() on the consumer correctly returns NoLimit.
+// Verify that draining a channel updates the per-channel atomic in the
+// aggregator, so GetFillLevel() on the consumer correctly returns NoLimit.
 Y_UNIT_TEST(DrainUpdatesFillLevel) {
     TScopedAlloc alloc(__LOCATION__);
     auto s = MakeScatter(/*channelCount=*/2, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
@@ -1250,7 +1248,7 @@ Y_UNIT_TEST(DrainUpdatesFillLevel) {
     ConsumeOne(s.Consumer);
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel());
 
-    // Drain ch0: callback fires, updating ChannelLevels_[0] to NoLimit.
+    // Drain ch0: aggregator updates ChannelLevels[0] to NoLimit, which the router observes.
     s.Mocks[0]->Drain();
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
 }

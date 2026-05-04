@@ -90,9 +90,9 @@ public:
         return result;
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) override {
         Aggregator = aggregator;
-        Aggregator->AddCount(FillLevel);
+        Aggregator->AddCount(FillLevel, channelIdx);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {

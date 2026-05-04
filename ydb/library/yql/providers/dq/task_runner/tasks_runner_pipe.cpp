@@ -1074,7 +1074,7 @@ public:
         ythrow yexception() << "unimplemented";
     };
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>, std::optional<ui32> = {}) override {
         Y_ABORT("Unimplemented");
     }
 
@@ -1338,7 +1338,7 @@ public:
         Y_ABORT("Unimplemented");
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>, std::optional<ui32> = {}) override {
         Y_ABORT("Unimplemented");
     }
 

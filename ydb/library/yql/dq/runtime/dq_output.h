@@ -43,17 +43,31 @@ struct TDqFillAggregator {
     std::atomic<ui64> EarlyFinishedCount;
     std::atomic<ui64> FinishedCount;
 
+    // Per-channel levels for scatter routing. Null for non-scatter consumers.
+    std::shared_ptr<std::atomic<EDqFillLevel>[]> ChannelLevels;
+
+    void InitScatterChannels(ui32 count) {
+        ChannelLevels = std::shared_ptr<std::atomic<EDqFillLevel>[]>(
+            new std::atomic<EDqFillLevel>[count]);
+        for (ui32 i = 0; i < count; ++i) {
+            ChannelLevels[i].store(NoLimit, std::memory_order_relaxed);
+        }
+    }
+
     ui64 GetCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         return Counts[index].load();
     }
 
-    void AddCount(EDqFillLevel level) {
+    void AddCount(EDqFillLevel level, std::optional<ui32> channelIdx = {}) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]++;
         TotalCount++;
+        if (ChannelLevels && channelIdx) {
+            ChannelLevels[*channelIdx].store(level, std::memory_order_relaxed);
+        }
     }
 
     void SubCount(EDqFillLevel level) { // deprecated
@@ -63,13 +77,16 @@ struct TDqFillAggregator {
         TotalCount--;
     }
 
-    void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level) {
+    void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level, std::optional<ui32> channelIdx = {}) {
         ui32 index1 = static_cast<ui32>(prevLevel);
         ui32 index2 = static_cast<ui32>(level);
         YQL_ENSURE(index1 < FILL_COUNTERS_SIZE && index2 < FILL_COUNTERS_SIZE);
         if (index1 != index2) {
             Counts[index2]++;
             Counts[index1]--;
+        }
+        if (ChannelLevels && channelIdx) {
+            ChannelLevels[*channelIdx].store(level, std::memory_order_release);
         }
     }
 
@@ -111,18 +128,9 @@ public:
     virtual const TDqOutputStats& GetPushStats() const = 0;
 
     // <| producer methods
-    using TLevelChangeCallback = std::function<void(EDqFillLevel from, EDqFillLevel to)>;
-
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
-    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
-    // Should be overridden to return true if the implementation supports level change callback.
-    virtual bool SupportsLevelChangeCallback() const { return false; }
-    // Called on every fill level transition. Required by Scatter consumer.
-    // Implementations that override this must also override SupportsLevelChangeCallback()
-    // to return true.
-    // LevelCallback should be fast because it takes buffer internal mutex
-    virtual void SetLevelChangeCallback(TLevelChangeCallback /*callback*/) {}
+    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, std::optional<ui32> channelIdx = {}) = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;

@@ -132,7 +132,7 @@ public:
             mon->RegisterActorHandler({
                 .Path = "/healthcheck",
                 .Handler = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::RelaxedMonitoring,
+                .AuthMode = TMon::EAuthMode::Relaxed,
                 // No AllowedSIDs: access is enforced in the handler when required.
             });
             mon->RegisterActorPage({

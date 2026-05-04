@@ -505,7 +505,7 @@ public:
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
-        if (NKikimr::IsTabletDevUiSecurePathInfo(Container.GetPathInfo())) {
+        if (NKikimr::IsTabletDevUiSecurePath(Container.GetPathInfo())) {
             const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
             if (!NKikimr::IsAdministrator(AppData(), userToken)) {
                 return ReplyForbiddenAndPassAway(TStringBuilder()
@@ -553,7 +553,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (ActorMonPage->AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
             // No AllowedSIDs or auth-RPC failure gate here; SendRequest still requires admin for secure tablet DevUI.
             SendRequest(&result);
             return;
@@ -1153,7 +1153,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = result ? result->UserToken->GetUserSID() : "anonymous";
+            TString user = result && result->UserToken ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
@@ -1187,7 +1187,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (Fields.AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+        if (Fields.AuthMode == TMon::EAuthMode::Relaxed) {
             // No AllowedSIDs or auth-RPC failure gate here; Fields.Handler enforces access if needed.
             SendRequest(&result);
             return;
@@ -1383,7 +1383,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (AuthMode == TMon::EAuthMode::RelaxedMonitoring) {
+        if (AuthMode == TMon::EAuthMode::Relaxed) {
             // No AllowedSIDs or auth-RPC failure gate here; static page only (no tablet actor hop).
             ProcessRequest();
             return;

@@ -6,38 +6,32 @@ namespace NKikimr {
 
 namespace {
 
-inline constexpr TStringBuf TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = "/app/secure";
+const TString TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX = TStringBuilder() << "/" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
 
 } // namespace
 
-bool IsTabletDevUiSecurePathInfo(TStringBuf pathInfo) {
+bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
     if (!pathInfo.SkipPrefix(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX)) {
         return false;
     }
     return pathInfo.empty() || pathInfo[0] == '/';
 }
 
-bool IsAdministratorForTabletMonHttp(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg)
+bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg)
 {
-    if (!msg) {
-        return IsAdministrator(AppData(ctx), nullptr);
+    const auto* ext = msg ? msg->ExtendedQuery.get() : nullptr;
+    if (!ext) {
+        return false;
     }
-    if (const auto* ext = msg->ExtendedQuery.get()) {
-        return IsAdministrator(AppData(ctx), ext->GetUserToken());
-    }
-    return IsAdministrator(AppData(ctx), nullptr);
+    return IsAdministrator(AppData(ctx), ext->GetUserToken());
 }
 
 bool TabletMonDevUIReplyForbiddenUnlessSecureAdmin(const NActors::TActorContext& ctx,
     const NActors::TActorId& httpSender,
     const NActors::NMon::TEvRemoteHttpInfo* msg,
-    TStringBuf pathInfo,
-    bool isRelaxedRoute)
+    TStringBuf pathInfo)
 {
-    if (isRelaxedRoute) {
-        return false;
-    }
-    if (!IsTabletDevUiSecurePathInfo(pathInfo) || !IsAdministratorForTabletMonHttp(ctx, msg)) {
+    if (!IsTabletDevUiSecurePath(pathInfo) || !HasAdminAccessToTabletMon(ctx, msg)) {
         ctx.Send(httpSender, new NActors::NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }

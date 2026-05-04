@@ -34,11 +34,6 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 namespace NDataShard {
 
 namespace {
-// AllowListed(page, action) may skip the secure DevUI admin gate. By default there are none.
-bool IsDataShardMonDevUiBypassAllowListed(TStringBuf page, TStringBuf action, bool hasPage, bool hasAction) {
-    Y_UNUSED(page, action, hasPage, hasAction);
-    return false;
-}
 
 } // namespace
 
@@ -2364,13 +2359,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
 
     auto cgi = ev->Get()->Cgi();
-    const bool hasAction = cgi.Has("action");
-    const bool hasPage = cgi.Has("page");
-    const TStringBuf action = hasAction ? TStringBuf(cgi.Get("action")) : TStringBuf();
-    const TStringBuf page = hasPage ? TStringBuf(cgi.Get("page")) : TStringBuf();
-    if (TabletMonDevUIReplyForbiddenUnlessSecureAdmin(ctx, ev->Sender, ev->Get(), ev->Get()->PathInfo(),
-            IsDataShardMonDevUiBypassAllowListed(page, action, hasPage, hasAction)))
-    {
+    if (TabletMonDevUIReplyForbiddenUnlessSecureAdmin(ctx, ev->Sender, ev->Get(), ev->Get()->PathInfo())) {
         return true;
     }
 

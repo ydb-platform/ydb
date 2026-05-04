@@ -86,6 +86,7 @@ private:
 
 TString HmacSHA256(TStringBuf key, TStringBuf data);
 TString HmacSHA1(TStringBuf key, TStringBuf data);
+TString CreateFlowId(TStringBuf key, TStringBuf requestedAddress);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId);
 TString CreateNameYdbOidcCookie(TStringBuf suffix = "");

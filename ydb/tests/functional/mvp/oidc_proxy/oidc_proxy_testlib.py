@@ -104,6 +104,16 @@ def assert_cookie_is_cleared(response, expected_status, cookie_marker):
     assert "Max-Age=0" in set_cookie
 
 
+def assert_redirect_target(response, expected_target):
+    assert response.status_code == 302, response.text
+    redirect_url = response.headers["Location"]
+    parsed_redirect = urlparse(redirect_url)
+    actual_target = parsed_redirect.path
+    if parsed_redirect.query:
+        actual_target += f"?{parsed_redirect.query}"
+    assert actual_target == expected_target, response.headers
+
+
 def assert_successful_multipart_counter_response(response):
     assert response.status_code == 200, response.text
     content_type = response.headers["Content-Type"]
@@ -199,8 +209,7 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
         },
     )
 
-    assert callback_response.status_code == 302, callback_response.text
-    assert callback_response.headers["Location"] == start_path, callback_response.headers
+    assert_redirect_target(callback_response, start_path)
     assert "__Host_session_cookie_" in callback_response.headers["Set-Cookie"], callback_response.headers["Set-Cookie"]
 
     return callback_response.headers["Set-Cookie"].split(";", 1)[0]

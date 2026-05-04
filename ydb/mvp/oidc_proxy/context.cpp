@@ -29,9 +29,7 @@ TString TContext::GetState(const TString& key) const {
     TState payload;
     payload.AntiForgeryToken = State;
     payload.ExpirationTime = TInstant::Now() + STATE_LIFE_TIME;
-    if (!NavigationRequest) {
-        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
-    }
+    payload.CookieSuffix = CreateFlowId(key, RequestedAddress);
     return EncodeState(payload, key);
 }
 
@@ -45,7 +43,7 @@ TString TContext::GetRequestedAddress() const {
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
     static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
-    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
+    return TStringBuilder() << CreateNameYdbOidcCookie(CreateFlowId(secret, RequestedAddress)) << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
                             " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"

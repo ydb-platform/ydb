@@ -73,6 +73,13 @@ TString HmacSHA1(TStringBuf key, TStringBuf data) {
     return TString{reinterpret_cast<const char*>(res), hl};
 }
 
+TString CreateFlowId(TStringBuf key, TStringBuf requestedAddress) {
+    static constexpr size_t FLOW_ID_BYTES = 8;
+
+    const TString digest = HmacSHA256(key, requestedAddress);
+    return "_" + Base64EncodeUrlNoPadding(TStringBuf(digest.data(), FLOW_ID_BYTES));
+}
+
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value) {
     for (auto& [exname, exvalue] : meta.Aux) {
         if (exname == name) {
@@ -134,14 +141,14 @@ const TString& GetAuthCallbackUrl() {
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds) {
     TStringBuilder cookieBuilder;
     cookieBuilder << name << "=" << value
-            << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned"
+            << "; Path=/; Secure; HttpOnly; SameSite=None"
             << "; Max-Age=" << expiredSeconds;
     return cookieBuilder;
 }
 
 TString ClearSecureCookie(const TString& name) {
     TStringBuilder cookieBuilder;
-    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=0";
+    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Max-Age=0";
     return cookieBuilder;
 }
 

@@ -695,7 +695,7 @@ TString TKqpPlanner::GetEstimationsInfo() const {
     }
     ss.Text << nodeTasks.Str();
 
-    ss.Struct.AppendValue({"NodeTasks"}, nodeTasks.Str());
+    ss.Structured.AppendValue({"NodeTasks"}, nodeTasks.Str());
 
     return ss.Text.Str();
 }

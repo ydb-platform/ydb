@@ -52,10 +52,10 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
             }
         }
         ss.Text << victimQuerySpanIdsStr.Str() << "], ";
-        ss.Struct.AppendValue({"VictimQuerySpanIds"}, victimQuerySpanIdsStr.Str());
+        ss.Structured.AppendValue({"VictimQuerySpanIds"}, victimQuerySpanIdsStr.Str());
 
         ss.Text << messageBody;
-        ss.Struct.AppendValue({"MessageBody"}, messageBody);
+        ss.Structured.AppendValue({"MessageBody"}, messageBody);
 
         LOG_TLI(ctx, ss);
     }
@@ -75,10 +75,10 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
             }
         }
         ss.Text << brokenLocksStr.Str() << "], ";
-        ss.Struct.AppendValue({"BrokenLocks"}, brokenLocksStr.Str());
+        ss.Structured.AppendValue({"BrokenLocks"}, brokenLocksStr.Str());
 
         ss.Text << messageBody;
-        ss.Struct.AppendValue({"MessageBody"}, messageBody);
+        ss.Structured.AppendValue({"MessageBody"}, messageBody);
 
         LOG_INTEGRITY_TRAILS(ctx, ss);
     }
@@ -113,7 +113,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         TTLILogMessage ss;
         LogKeyValue("Component", "DataShard", ss);
         ss.Text << messageBody;
-        ss.Struct.AppendSubMessage({"message_body"}, bodySs.Struct);
+        ss.Structured.AppendSubMessage({"message_body"}, bodySs.Structured);
         LOG_TLI(ctx, ss);
     }
 
@@ -124,7 +124,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         LogKeyValue("Type", "Locks", ss);
 
         ss.Text << messageBody;
-        ss.Struct.AppendSubMessage({"message_body"}, bodySs.Struct);
+        ss.Structured.AppendSubMessage({"message_body"}, bodySs.Structured);
 
         LOG_INTEGRITY_TRAILS(ctx, ss);
     }

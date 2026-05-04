@@ -10,42 +10,26 @@ namespace NDataIntegrity {
 
 struct TTLILogMessage {
     TStringStream Text;
-    NStructuredLog::TStructuredMessage Struct;
+    NStructuredLog::TStructuredMessage Structured;
 };
 
-/*
 #define LOG_INTEGRITY_TRAILS(CTX, MSG) \
     do { \
         auto tliMessage = MSG; \
-        LOG_TRACE_S(CTX, NKikimrServices::DATA_INTEGRITY, tliMessage.Text.Str() ); \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::DATA_INTEGRITY, tliMessage.Text.Str(), tliMessage.Struct); \
+        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::DATA_INTEGRITY, tliMessage.Text.Str(), tliMessage.Structured); \
     } while (false)
 
 #define LOG_TLI(CTX, MSG) \
     do { \
         auto tliMessage = MSG; \
-        LOG_TRACE_S(CTX, NKikimrServices::TLI, MSG.Text.Str() ); \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::TLI, tliMessage.Text.Str(), tliMessage.Struct); \
-    } while (false)
-*/
-
-#define LOG_INTEGRITY_TRAILS(CTX, MSG) \
-    do { \
-        auto tliMessage = MSG; \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::DATA_INTEGRITY, tliMessage.Text.Str(), tliMessage.Struct); \
-    } while (false)
-
-#define LOG_TLI(CTX, MSG) \
-    do { \
-        auto tliMessage = MSG; \
-        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::TLI, tliMessage.Text.Str(), tliMessage.Struct); \
+        YDBLOG_CTX_COMP_TRACE(CTX, NKikimrServices::TLI, tliMessage.Text.Str(), tliMessage.Structured); \
     } while (false)
 
 inline void LogKeyValue(const TStringBuf key, const TStringBuf value, TTLILogMessage& ss, bool last = false) {
     ss.Text << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ", ");
 
     NKikimr::NStructuredLog::TKeyName keyName(key);
-    ss.Struct.AppendValue({std::move(keyName)}, TString(value));
+    ss.Structured.AppendValue({std::move(keyName)}, TString(value));
 }
 
 template <class TransactionSettings>

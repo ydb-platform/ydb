@@ -124,7 +124,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     ss.Text << keyValue.Str();
 
-                    ss.Struct.AppendValue({"Key"}, keyValue.Str());
+                    ss.Structured.AppendValue({"Key"}, keyValue.Str());
                 }
 
                 LOG_INTEGRITY_TRAILS(ctx, ss);
@@ -153,7 +153,7 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
             lockStr << lock << " ";
         }
         ss.Text << lockStr.Str() << "]";
-        ss.Struct.AppendValue({"BrokenLocks"}, lockStr.Str());
+        ss.Structured.AppendValue({"BrokenLocks"}, lockStr.Str());
 
         return ss;
     };

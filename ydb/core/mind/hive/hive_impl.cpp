@@ -65,6 +65,14 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         RestartRootHivePipe();
         return;
     }
+    if (msg->Status != NKikimrProto::OK) {
+        for (auto& [_, domain] : Domains) {
+            if (domain.HivePipeClient == msg->ClientId) {
+                domain.ClosePipeToHive(SelfId());
+                return;
+            }
+        }
+    }
     if (!PipeClientCache->OnConnect(ev)) {
         BLOG_ERROR("Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
         RestartPipeTx(ev->Get()->TabletId);
@@ -82,6 +90,12 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     if (msg->ClientId == RootHivePipeClient) {
         RestartRootHivePipe();
         return;
+    }
+    for (auto& [_, domain] : Domains) {
+        if (domain.HivePipeClient == msg->ClientId) {
+            domain.ClosePipeToHive(SelfId());
+            return;
+        }
     }
     BLOG_D("Client pipe to tablet " << ev->Get()->TabletId << " from " << TabletID() << " is reset");
     PipeClientCache->OnDisconnect(ev);

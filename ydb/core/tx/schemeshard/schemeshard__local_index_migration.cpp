@@ -1,6 +1,8 @@
 #include "schemeshard__local_index_migration.h"
 
 #include "schemeshard_impl.h"
+#include "schemeshard_path.h"
+#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
@@ -38,12 +40,38 @@ public:
             auto& record = request->Record;
             record.SetTxId(static_cast<ui64>(txId));
 
+            // Extract table name from working directory
+            auto pathParts = SplitPath(item.WorkingDir);
+            if (pathParts.empty()) {
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator: failed to split path '" << item.WorkingDir << "'");
+                Done(txId);
+                continue;
+            }
+
+            TString tableName = pathParts.back();
+            pathParts.pop_back();
+            TString parentDir = JoinPath(pathParts);
+
             auto& modifyScheme = *record.AddTransaction();
-            modifyScheme.SetWorkingDir(item.WorkingDir);
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTableIndex);
+            modifyScheme.SetWorkingDir(parentDir);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
             modifyScheme.SetInternal(true);
             modifyScheme.SetFailOnExist(false);
-            *modifyScheme.MutableCreateTableIndex() = item.IndexConfig;
+
+            auto& alterColumnTable = *modifyScheme.MutableAlterColumnTable();
+            alterColumnTable.SetName(tableName);
+
+            auto& alterSchema = *alterColumnTable.MutableAlterSchema();
+            auto& upsertIndex = *alterSchema.AddUpsertIndexes();
+
+            // Convert TIndexCreationConfig to TOlapIndexRequested
+            if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator: failed to convert index config for '" << item.WorkingDir << "'");
+                Done(txId);
+                continue;
+            }
 
             Send(SelfActorId, request.Release());
         }

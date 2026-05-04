@@ -184,4 +184,74 @@ inline bool ConvertRequestedIndexToCreationConfig(
     return false;
 }
 
+inline bool ConvertCreationConfigToRequested(
+    const NKikimrSchemeOp::TIndexCreationConfig& config,
+    NKikimrSchemeOp::TOlapIndexRequested& requested)
+{
+    requested.SetName(config.GetName());
+
+    switch (config.GetType()) {
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+            requested.SetClassName("BLOOM_FILTER");
+            auto* bf = requested.MutableBloomFilter();
+            if (config.HasBloomFilterDescription()) {
+                const auto& desc = config.GetBloomFilterDescription();
+                if (desc.HasFalsePositiveProbability()) {
+                    bf->SetFalsePositiveProbability(desc.GetFalsePositiveProbability());
+                }
+                if (desc.HasDataExtractor()) {
+                    *bf->MutableDataExtractor() = desc.GetDataExtractor();
+                }
+                if (desc.HasBitsStorage()) {
+                    *bf->MutableBitsStorage() = desc.GetBitsStorage();
+                }
+            }
+            for (const auto& colName : config.GetKeyColumnNames()) {
+                bf->AddColumnNames(colName);
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+            requested.SetClassName("BLOOM_NGRAMM_FILTER");
+            auto* ng = requested.MutableBloomNGrammFilter();
+            if (config.HasBloomNGrammFilterDescription()) {
+                const auto& desc = config.GetBloomNGrammFilterDescription();
+                if (desc.HasNGrammSize()) {
+                    ng->SetNGrammSize(desc.GetNGrammSize());
+                }
+                if (desc.HasFilterSizeBytes()) {
+                    ng->SetFilterSizeBytes(desc.GetFilterSizeBytes());
+                }
+                if (desc.HasHashesCount()) {
+                    ng->SetHashesCount(desc.GetHashesCount());
+                }
+                if (desc.HasRecordsCount()) {
+                    ng->SetRecordsCount(desc.GetRecordsCount());
+                }
+                if (desc.HasCaseSensitive()) {
+                    ng->SetCaseSensitive(desc.GetCaseSensitive());
+                }
+                if (desc.HasFalsePositiveProbability()) {
+                    ng->SetFalsePositiveProbability(desc.GetFalsePositiveProbability());
+                }
+                if (desc.HasDataExtractor()) {
+                    *ng->MutableDataExtractor() = desc.GetDataExtractor();
+                }
+                if (desc.HasBitsStorage()) {
+                    *ng->MutableBitsStorage() = desc.GetBitsStorage();
+                }
+            }
+            for (const auto& colName : config.GetKeyColumnNames()) {
+                ng->SetColumnName(colName);
+                break; // Only one column for ngram filter
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+
+    return false;
+}
+
 } // namespace NKikimr::NSchemeShard::NOlap

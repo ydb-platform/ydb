@@ -12,14 +12,13 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
+    classify_failure_row,
+    failure_row_from_test_result,
+    is_not_launched_issue,
     is_sanitizer_issue,
     is_timeout_issue,
     is_xfailed_issue,
-    is_not_launched_issue,
-    is_verify_classification,
-    normalize_fetch_url,
-    prefetch_texts_by_urls,
-    should_prefetch_stderr_for_verify,
+    prefetch_text_cache_and_urls_for_failure_rows,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -66,6 +65,7 @@ class TestResult:
     owners: str
     status_description: str
     stderr_url: str = ""
+    log_url: str = ""
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
@@ -168,7 +168,8 @@ class TestResult:
             'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
-        
+        log_url = get_link_url("log") or get_link_url("Log") or ""
+
         # Get duration from result (same as upload_tests_results.py)
         duration = result.get("duration", 0)
         try:
@@ -186,6 +187,7 @@ class TestResult:
             owners='',
             status_description=status_description or '',
             stderr_url=log_urls.get('stderr', ''),
+            log_url=log_url,
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
             is_timeout_issue=is_timeout_issue(error_type),
@@ -587,47 +589,20 @@ def _status_string_for_error_utils(st: TestStatus) -> str:
     }.get(st, "")
 
 
-def _collect_stderr_urls_for_verify_badges(tests):
-    """stderr URLs only when VERIFY might depend on log text (aligned with test_history_fast)."""
-    urls = []
-    for test in tests:
-        st = getattr(test, "status", None)
-        if st is None or not getattr(st, "is_error", False):
-            continue
-        raw = getattr(test, "stderr_url", None) or ""
-        if not normalize_fetch_url(raw):
-            continue
-        status_str = _status_string_for_error_utils(st)
-        if not status_str:
-            continue
-        if should_prefetch_stderr_for_verify(
-            status_str,
-            getattr(test, "status_description", None),
-            getattr(test, "error_type", None),
-        ):
-            urls.append(raw)
-    return urls
-
-
-def _apply_verify_badges(tests, stderr_fetch_cache):
+def _failure_row_pairs_for_summary_tests(tests):
+    """``TestResult`` → ``FailureRow`` only for failing statuses we classify; clears VERIFY badge on others."""
+    pairs = []
     for test in tests:
         st = getattr(test, "status", None)
         if st is None or not getattr(st, "is_error", False):
             test.is_verify_issue = False
             continue
-        su = normalize_fetch_url(getattr(test, "stderr_url", None) or "")
         status_str = _status_string_for_error_utils(st)
-        use_stderr = bool(su) and bool(status_str) and should_prefetch_stderr_for_verify(
-            status_str,
-            getattr(test, "status_description", None),
-            getattr(test, "error_type", None),
-        )
-        stderr_text = stderr_fetch_cache.get(su, "") if use_stderr else None
-        test.is_verify_issue = is_verify_classification(
-            getattr(test, "error_type", None),
-            getattr(test, "status_description", None),
-            error_file_text=stderr_text,
-        )
+        if not status_str:
+            test.is_verify_issue = False
+            continue
+        pairs.append((test, failure_row_from_test_result(test, status_str)))
+    return pairs
 
 
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
@@ -641,9 +616,13 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
 
-        urls_to_fetch = _collect_stderr_urls_for_verify_badges(summary_line.tests)
-        stderr_fetch_cache = prefetch_texts_by_urls(urls_to_fetch, existing_cache=stderr_fetch_cache)
-        _apply_verify_badges(summary_line.tests, stderr_fetch_cache)
+        pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
+        stderr_fetch_cache, _ = prefetch_text_cache_and_urls_for_failure_rows(
+            [fr for _, fr in pairs],
+            existing_cache=stderr_fetch_cache,
+        )
+        for test, fr in pairs:
+            test.is_verify_issue = classify_failure_row(fr, stderr_fetch_cache) == "VERIFY"
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

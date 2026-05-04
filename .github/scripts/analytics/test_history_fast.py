@@ -9,11 +9,11 @@ TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file
 if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
 from error_type_utils import (  # noqa: E402
-    classify_error_type,
+    classify_failure_row,
+    failure_row_from_ydb,
     merge_classified_error_type,
     normalize_fetch_url,
-    prefetch_texts_by_urls,
-    should_prefetch_stderr_for_verify,
+    prefetch_text_cache_and_urls_for_failure_rows,
 )
 
 
@@ -106,40 +106,21 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     print(f'missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
 
-    stderr_urls = []
-    prefetch_stderr = []
-    for row in results:
-        need = should_prefetch_stderr_for_verify(
-            row.get("status"),
-            row.get("status_description"),
-            row.get("error_type"),
-        )
-        prefetch_stderr.append(need)
-        if need:
-            stderr_urls.append(row.get("stderr"))
-
-    stderr_fetch_cache = prefetch_texts_by_urls(stderr_urls)
-    if stderr_urls:
-        norm = {normalize_fetch_url(u) for u in stderr_urls if normalize_fetch_url(u)}
+    failure_rows = [failure_row_from_ydb(row) for row in results]
+    fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(failure_rows)
+    if prefetch_debug_file_urls:
+        norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
         total_urls = len(norm)
-        failed_count = sum(1 for u in norm if not stderr_fetch_cache.get(u))
+        failed_count = sum(1 for u in norm if fetch_cache.get(u) is None)
         print(
-            f"stderr prefetch: done, total={total_urls}, success={total_urls - failed_count}, failed={failed_count}"
+            f"debug file prefetch: total={total_urls}, fetch_failed={failed_count}"
         )
     else:
-        print("stderr prefetch: no urls to download")
+        print("debug file prefetch: no urls to download")
 
     verify_count = 0
-    for row, need_stderr in zip(results, prefetch_stderr):
-        error_file_text = None
-        if need_stderr:
-            error_file_text = stderr_fetch_cache.get(normalize_fetch_url(row.get("stderr")), "")
-        classified = classify_error_type(
-            row.get("status"),
-            row.get("status_description"),
-            row.get("error_type"),
-            error_file_text=error_file_text,
-        )
+    for row, fr in zip(results, failure_rows):
+        classified = classify_failure_row(fr, fetch_cache)
         error_type = merge_classified_error_type(classified, row.get("error_type"))
         row["error_type"] = error_type
         if error_type == "VERIFY":

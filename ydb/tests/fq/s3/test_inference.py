@@ -204,9 +204,9 @@ Pear,15,33,2024-05-06'''
         logging.debug(str(result_set))
 
         assert len(result_set.columns) == len(columns)
-        for actual, (name, _arr, expected_type, expected_optional) in zip(result_set.columns, columns):
+        for actual, (name, _arr, expected_type, nullable) in zip(result_set.columns, columns):
             assert actual.name == name, f"unexpected column name: got {actual.name}, want {name}"
-            if expected_optional:
+            if nullable:
                 assert actual.type.optional_type.item.type_id == expected_type, \
                     f"column {name}: got {actual.type}, want Optional<{expected_type}>"
             else:
@@ -836,11 +836,14 @@ Pear,15,33'''
         s3_helpers.create_bucket_and_put_object(s3.s3_url, bucket_name, object_key, body, content_type)
         kikimr.control_plane.wait_bootstrap(1)
 
-    def _validate_result_inference(self, result_set):
+    def _validate_result_inference(self, result_set, fruit_nullable=False):
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "Fruit"
-        assert result_set.columns[0].type.type_id == ydb.Type.UTF8
+        if fruit_nullable:
+            assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.UTF8
+        else:
+            assert result_set.columns[0].type.type_id == ydb.Type.UTF8
         assert result_set.columns[1].name == "Price"
         assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
         assert result_set.columns[2].name == "Weight"
@@ -883,7 +886,7 @@ Pear,15,33'''
 
         data = client.get_result_data(query_id)
         result_set = data.result.result_set
-        self._validate_result_inference(result_set)
+        self._validate_result_inference(result_set, fruit_nullable=(type_format == "parquet"))
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

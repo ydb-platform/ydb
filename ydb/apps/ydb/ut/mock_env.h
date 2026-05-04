@@ -30,8 +30,6 @@
 #include <typeinfo>
 #include <unordered_map>
 
-using namespace yandex::cloud::iam::v1;
-
 extern const TString TEST_DATABASE;
 
 class TChecker {
@@ -254,9 +252,9 @@ public:
     }
 };
 
-class TIamTokenServiceImpl : public TMockGrpcServiceBase<IamTokenService::Service> {
+class TIamTokenServiceImpl : public TMockGrpcServiceBase<yandex::cloud::iam::v1::IamTokenService::Service> {
 public:
-    grpc::Status Create(grpc::ServerContext* context, const CreateIamTokenRequest* request, CreateIamTokenResponse* response) override {
+    grpc::Status Create(grpc::ServerContext* context, const yandex::cloud::iam::v1::CreateIamTokenRequest* request, yandex::cloud::iam::v1::CreateIamTokenResponse* response) override {
         Y_UNUSED(context);
         Y_UNUSED(request);
         // We don't test here the quality of credentials provider itself,

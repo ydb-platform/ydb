@@ -1158,6 +1158,10 @@ public:
         }
     }
 
+    ui32 GetEntityId() const {
+        return Address.GetEntityId();
+    }
+
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
         AFL_VERIFY(BlobRangeAddress);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRangeAddress->BuildLink(blobLinkId));

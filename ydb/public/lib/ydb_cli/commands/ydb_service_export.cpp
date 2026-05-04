@@ -450,7 +450,11 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     if (expandItems) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
         if (settings.Item_.empty()) {
-            Cerr << "No items to export after applying exclude filters" << Endl;
+            if (!ExclusionPatterns.empty()) {
+                Cerr << "No items to export after applying exclude filters" << Endl;
+            } else {
+                Cerr << "No items to export" << Endl;
+            }
             return EXIT_FAILURE;
         }
     }

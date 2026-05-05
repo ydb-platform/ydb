@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorid.h>
+
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -123,5 +125,32 @@ struct TFloatingTypeSupport : public TNativePlainTypeSupport<T>
 template<> struct TNativeTypeSupport<float> : public TFloatingTypeSupport<float>{};
 template<> struct TNativeTypeSupport<double> : public TFloatingTypeSupport<double>{};
 template<> struct TNativeTypeSupport<long double> : public TFloatingTypeSupport<long double>{};
+
+template<> struct TNativeTypeSupport<NActors::TActorId> : public std::true_type
+{
+    static inline void Serialize(const NActors::TActorId& value, TBinaryData& data) {
+        auto from = reinterpret_cast<const std::uint8_t*>(&value);
+        auto oldSize = data.size();
+        data.resize(oldSize + sizeof(NActors::TActorId));
+        auto to = data.data() + oldSize;
+        std::memcpy(to, from, sizeof(NActors::TActorId));
+    }
+
+    static bool Deserialize(NActors::TActorId& value, const void* data, std::size_t length) {
+        if (sizeof(NActors::TActorId) != length) {
+            return false;
+        }
+        value =  *(reinterpret_cast<const NActors::TActorId*>(data));
+        return true;
+    }
+
+    static TString ToString(const NActors::TActorId& value) {
+        return value.ToString();
+    }
+
+    static void AppendToString(const NActors::TActorId& value, TStringBuilder& stringBuffer) {
+        stringBuffer.append(value.ToString());
+    }
+};
 
 }

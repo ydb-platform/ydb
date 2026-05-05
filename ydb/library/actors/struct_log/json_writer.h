@@ -136,6 +136,7 @@ protected:
     void AppendValue(const float& value) { JsonWriter.WriteFloat(value); }
     void AppendValue(const double& value) { JsonWriter.WriteDouble(value); }
     void AppendValue(const long double& value) { JsonWriter.WriteDouble(value); }
+    void AppendValue(const NActors::TActorId& value) { JsonWriter.WriteString(value.ToString()); }
 };
 
 class TJsonWriter {

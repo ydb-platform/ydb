@@ -155,10 +155,6 @@ std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSinglet
 }
 
 TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
-    return CreateDriverConfig(GetBuildInfoCommandTag());
-}
-
-TDriverConfig TClientCommand::TConfig::CreateDriverConfig(const TString& buildInfoCommandTag) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(Address)
         .SetDatabase(Database)
@@ -184,8 +180,13 @@ TDriverConfig TClientCommand::TConfig::CreateDriverConfig(const TString& buildIn
 
     driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
 
-    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), buildInfoCommandTag);
+    return driverConfig;
+}
 
+TDriverConfig TClientCommand::TConfig::CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag) {
+    auto driverConfig = CreateDriverConfig();
+    TString tag = buildInfoCommandTag.empty() ? GetBuildInfoCommandTag() : buildInfoCommandTag;
+    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), tag);
     return driverConfig;
 }
 

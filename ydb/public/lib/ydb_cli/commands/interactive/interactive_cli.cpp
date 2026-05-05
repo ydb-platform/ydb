@@ -156,7 +156,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Probe driver: only used for the connectivity check and welcome message.
     {
-        TDriver probeDriver(config.CreateDriverConfig("interactive"));
+        TDriver probeDriver(config.CreateDriverConfigWithBuildInfo("interactive"));
         Y_DEFER { probeDriver.Stop(true); };
         if (auto code = PrintWelcomeMessage(config, probeDriver, configManager)) {
             return code;
@@ -164,11 +164,11 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     }
 
     auto completerLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig("interactive-sql-completer")); });
+        [&config] { return TDriver(config.CreateDriverConfig()); });
     auto sqlLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig("interactive-sql")); });
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
     auto aiLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig("interactive-ai")); });
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-ai")); });
 
     Y_DEFER {
         aiLazyDriver->Stop(true);

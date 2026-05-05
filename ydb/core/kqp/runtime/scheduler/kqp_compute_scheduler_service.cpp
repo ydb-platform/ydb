@@ -356,7 +356,7 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
         return queryIt->second;
     }
 
-    return {}; // TODO: no such pool?
+    return {};
 }
 
 bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {

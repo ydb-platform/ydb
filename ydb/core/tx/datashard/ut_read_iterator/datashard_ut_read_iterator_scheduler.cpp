@@ -372,6 +372,30 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
     }
 
+    // When the datashard receives a read request with a pool ID that is not registered
+    // in ComputeScheduler, the read must succeed without quota enforcement.
+    //
+    // For the leader: SchedulableRead is nullptr, quota check is bypassed.
+    // For the follower: quota is never applied regardless of pool registration.
+    Y_UNIT_TEST_TWIN(ShouldReadWithUnknownPoolId, WithFollower) {
+        TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,
+                                    /*blockSchedulerFactory=*/false,
+                                    /*withFollower=*/WithFollower);
+        helper.Upsert(1, 100);
+
+        const TString unknownPoolId = "unknown_pool";
+        auto request = helper.MakeReadRequest(1, unknownPoolId);
+        AddKeyQuery(*request, {1, 1, 1});
+
+        auto result = helper.SendRead(request.release());
+        UNIT_ASSERT_C(result, "Expected read to succeed with unknown pool ID");
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsCount(), 1);
+        auto cells = result->GetCells(0);
+        UNIT_ASSERT_VALUES_EQUAL(cells.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(cells[3].AsValue<ui32>(), 100u);
+    }
+
     // When the datashard never receives a factory response from the scheduler
     // (e.g. the scheduler is temporarily unavailable), it falls back to reading
     // without quota after the built-in 1-second fail-safe timer fires.

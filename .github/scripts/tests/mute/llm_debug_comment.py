@@ -25,7 +25,7 @@ from mute.update_mute_issues import (
 from mute.fast_unmute_github import add_label_to_issue
 
 
-AI_REVIEW_LABEL = 'needs-ai-review'
+AI_REVIEW_LABEL = 'need-ai-review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
 

@@ -699,9 +699,9 @@ public:
     }
 
 private:
-    size_t MaxHandlers = 1024U;
+    size_t MaxHandlers = 2048U;
     size_t MaxSimulatenousDownloadsSize = 8_GB;
-    size_t BuffersSizePerStream = CURL_MAX_WRITE_SIZE << 3U;
+    size_t BuffersSizePerStream = 5_MB;
     TCurlInitConfig InitConfig;
 
     void InitCurl() {

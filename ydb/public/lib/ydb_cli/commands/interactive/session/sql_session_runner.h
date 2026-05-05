@@ -11,8 +11,8 @@ struct TSqlSessionSettings {
     // every HandleLine and re-created on the next turn.
     TLazyDriver::TPtr SqlLazyDriver;
 
-    // Lazy driver used by the YQL completer for schema lookups; may be null
-    // when schema completion is not needed.
+    // Lazy driver used by the YQL completer for schema lookups; must be set,
+    // since SQL session always enables YQL completion.
     TLazyDriver::TPtr CompleterLazyDriver;
 
     TString Database;

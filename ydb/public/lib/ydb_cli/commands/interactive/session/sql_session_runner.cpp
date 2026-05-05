@@ -83,6 +83,7 @@ public:
         , EnableAiInteractive(settings.EnableAiInteractive)
     {
         Y_VALIDATE(SqlLazyDriver, "TSqlSessionRunner requires a non-null SqlLazyDriver");
+        Y_VALIDATE(settings.CompleterLazyDriver, "TSqlSessionRunner requires a non-null CompleterLazyDriver");
     }
 
     void HandleLine(const TString& line) final {

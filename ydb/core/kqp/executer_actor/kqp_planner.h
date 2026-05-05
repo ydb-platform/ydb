@@ -68,7 +68,6 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
-        const bool EnableStreamingPartitionBalancing;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -150,7 +149,6 @@ private:
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;
-    const bool EnableStreamingPartitionBalancing;
     bool CheckpointsReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

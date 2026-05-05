@@ -870,13 +870,14 @@ private:
                 StreamLockWorker->AddInputRow(std::move(row));
             } else {
                 StreamLookupWorker->AddInputRow(std::move(row));
-                ++fetchCount;
-                // Avoid fetching too many rows at once: limit both the number of rows and
-                // the allocator growth since the start of this fetch loop. GetAllocated()
-                // is only a heuristic for memory pressure here, not a precise retained-memory metric.
-                if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
-                    break;
-                }
+            }
+
+            ++fetchCount;
+            // Avoid fetching too many rows at once: limit both the number of rows and
+            // the allocator growth since the start of this fetch loop. GetAllocated()
+            // is only a heuristic for memory pressure here, not a precise retained-memory metric.
+            if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
+                break;
             }
         }
     }

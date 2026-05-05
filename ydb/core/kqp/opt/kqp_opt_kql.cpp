@@ -1016,9 +1016,6 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
             return BuildInsertTable(write, op == TYdbOperation::InsertAbort, inputColumns, autoincrement, isSink, tableData, ctx);
         case TYdbOperation::UpdateOn:
             return BuildUpdateOnTable(write, inputColumns, tableData, ctx);
-        case TYdbOperation::Delete:
-            AFL_ENSURE(false);
-            return BuildDeleteTable(write, tableData, ctx);
         case TYdbOperation::DeleteOn:
             return BuildDeleteTable(write, tableData, ctx);
         default:

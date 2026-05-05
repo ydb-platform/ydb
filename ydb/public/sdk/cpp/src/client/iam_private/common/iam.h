@@ -21,8 +21,9 @@ private:
                 [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                     stub->async()->CreateForService(context, request, response, std::move(cb));
                 },
-                std::move(responseFacility),
-                params.SystemServiceAccountCredentials->CreateProvider()) {}
+                responseFacility,
+                params.SystemServiceAccountCredentials->CreateProvider(responseFacility))
+        {}
     };
 
 public:
@@ -31,7 +32,7 @@ public:
     {}
 
     TCredentialsProviderPtr CreateProvider() const override final {
-        return std::make_shared<TCredentialsProvider>(Params_);
+        ythrow yexception() << "Not supported";
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {

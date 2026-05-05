@@ -74,6 +74,6 @@ void TTestCoreFacility::PeriodicWorkerLoop(TDeadline::Duration period) {
         }
         std::this_thread::sleep_for(period);
     }
-}    
+}
 
 } // namespace NYdb::inline Dev

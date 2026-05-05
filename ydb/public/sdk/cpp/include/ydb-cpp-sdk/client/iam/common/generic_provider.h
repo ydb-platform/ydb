@@ -142,12 +142,17 @@ private:
                 auto facility = weakFacility.lock();
                 auto self = weakSelf.lock();
 
-                if (facility && self) {
-                    facility->PostToResponseQueue(std::move(work));
-                } else if (self){
+                try {
+                    if (facility) {
+                        facility->PostToResponseQueue(std::move(work));
+                        return;
+                    }
+                } catch (...) {
+                }
+
+                if (self) {
                     std::lock_guard guard(self->Lock_);
-                    self->Context_.reset();
-                    self->ContextReady_.notify_all();
+                    self->ResetContextImpl();
                 }
             };
 
@@ -155,16 +160,29 @@ private:
 
             RequestFiller_(req);
 
+            Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
+        }
+
+        void FillContext(std::unique_lock<std::mutex>& guard) {
+            auto& context = Context_.emplace();
             auto deadline = gpr_time_add(
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
-            Context_->set_deadline(deadline);
-            if (AuthTokenProvider_) {
-                Context_->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
-            }
+            context.set_deadline(deadline);
 
-            Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
+            if (AuthTokenProvider_) {
+                guard.unlock();
+                auto token = AuthTokenProvider_->GetAuthInfo();
+                guard.lock();
+
+                context.AddMetadata("authorization", "Bearer " + token);
+            }
+        }
+
+        void ResetContextImpl() {
+            Context_.reset();
+            ContextReady_.notify_all();
         }
 
         static std::string FormatSysTimeUtcIsoMicros(SysTimePoint tp) {
@@ -176,14 +194,14 @@ private:
 
         bool OnPeriodicTick() {
             {
-                std::lock_guard guard(Lock_);
+                std::unique_lock guard(Lock_);
                 if (NeedStop_) {
                     return false;
                 }
                 if (Context_.has_value() || SysClock::now() < NextTicketUpdate_) {
                     return true;
                 }
-                Context_.emplace();
+                FillContext(guard);
             }
             UpdateTicket();
             return true;
@@ -199,8 +217,6 @@ private:
                     << " Message: \"" << status.error_message()
                     << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                Context_.reset();
-                ContextReady_.notify_all();
                 const auto now = SysClock::now();
                 const auto retryDelay = std::min(BackoffTimeout_, BACKOFF_MAX);
                 NextTicketUpdate_ = now + retryDelay;
@@ -208,7 +224,6 @@ private:
             } else {
                 LastRequestError_ = "";
                 Ticket_ = result.iam_token();
-                Context_.reset();
                 BackoffTimeout_ = BACKOFF_START;
 
                 const auto now = SysClock::now();
@@ -220,8 +235,9 @@ private:
                 NextTicketUpdate_ = std::max(NextTicketUpdate_, now + MINIMUM_REFRESH_INTERVAL);
 
                 TokenReady_.notify_all();
-                ContextReady_.notify_all();
             }
+
+            ResetContextImpl();
         }
 
     private:

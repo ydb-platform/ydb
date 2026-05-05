@@ -191,20 +191,45 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         TRcBuf original(str);
 
         TRcBuf byCtor = original;
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), original.size());
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 100);
         UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 0);
         UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 0);
         UNIT_ASSERT_EQUAL(::memcmp(byCtor.data(), str.data(), str.size()), 0);
 
         TRcBuf byAssign;
         byAssign = original;
-        UNIT_ASSERT_VALUES_EQUAL(byAssign.size(), original.size());
-        UNIT_ASSERT_VALUES_EQUAL(byAssign.Headroom(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(byAssign.Tailroom(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(byAssign.size(), 100);
         UNIT_ASSERT_EQUAL(::memcmp(byAssign.data(), str.data(), str.size()), 0);
 
-        byCtor.GrowFront(4);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 104);
+        byCtor.GrowFront(10);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 110);
+        UNIT_ASSERT_EQUAL(::memcmp(byCtor.data() + 10, str.data(), str.size()), 0);
+        UNIT_ASSERT_VALUES_EQUAL(original.size(), 100);
+
+        byCtor.ReserveBidi(20, 30);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 110);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
+
+        byCtor.GrowFront(5);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 115);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
+
+        byCtor.GrowBack(10);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 125);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
+
+        byCtor.GrowFront(20);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 145);
+        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            byCtor.GetOccupiedMemorySize(),
+            byCtor.size() + byCtor.Headroom() + byCtor.Tailroom());
     }
 
     Y_UNIT_TEST(Reserve) {

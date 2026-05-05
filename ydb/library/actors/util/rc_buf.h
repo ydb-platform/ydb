@@ -819,10 +819,10 @@ public:
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
     {
-        ptrdiff_t begin_offset = other.Begin - other.Backend.GetData().data();
-        ptrdiff_t end_offset = other.End - other.Backend.GetData().data();
-        Begin = Backend.GetData().data() + begin_offset;
-        End = Backend.GetData().data() + end_offset;
+        ptrdiff_t beginOffset = other.Begin - other.Backend.GetData().data();
+        ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Backend.GetData().data() + endOffset;
     }
 
     TRcBuf(TRcBuf&& other)
@@ -834,11 +834,11 @@ public:
     TRcBuf& operator =(const TRcBuf& other) {
         if (this != &other) {
             Backend = other.Backend;
-            ptrdiff_t begin_offset =
+            ptrdiff_t beginOffset =
                 other.Begin - other.Backend.GetData().data();
-            ptrdiff_t end_offset = other.End - other.Backend.GetData().data();
-            Begin = Backend.GetData().data() + begin_offset;
-            End = Backend.GetData().data() + end_offset;
+            ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+            Begin = Backend.GetData().data() + beginOffset;
+            End = Backend.GetData().data() + endOffset;
         }
         return *this;
     }

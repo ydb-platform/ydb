@@ -17,8 +17,7 @@ from error_type_utils import (  # noqa: E402
     failure_row_from_ydb,
     get_debug_texts_from_cache,
     is_failure_like_status,
-    normalize_fetch_url,
-    prefetch_text_cache_and_urls_for_failure_rows,
+    prefetch_text_cache_for_failure_rows,
     source_has_tag,
 )
 
@@ -125,16 +124,10 @@ def get_missed_data_for_upload(
         if is_failure_like_status(row.get("status"))
     ]
 
-    fetch_cache, prefetch_urls = prefetch_text_cache_and_urls_for_failure_rows(
+    fetch_cache = prefetch_text_cache_for_failure_rows(
         [fr for _, fr in row_pairs],
         max_workers=prefetch_max_workers,
     )
-    if prefetch_urls:
-        norm = {normalize_fetch_url(u) for u in prefetch_urls}
-        failed_count = sum(1 for u in norm if fetch_cache.get(u) is None)
-        print(f"prefetch: unique_urls={len(norm)}, failed={failed_count}", flush=True)
-    else:
-        print("prefetch: no urls", flush=True)
 
     # Classify failure rows and write error_type back into the row dict in-place
     # (the same dict is later passed to bulk_upsert_batches).

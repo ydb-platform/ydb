@@ -19,7 +19,7 @@ from error_type_utils import (
     is_timeout_issue,
     is_verify_classification,
     is_xfailed_issue,
-    prefetch_text_cache_and_urls_for_failure_rows,
+    prefetch_text_cache_for_failure_rows,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -616,7 +616,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             summary_line.add(test_result)
 
         pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
-        stderr_fetch_cache, _ = prefetch_text_cache_and_urls_for_failure_rows(
+        stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
             [fr for _, fr in pairs],
             existing_cache=stderr_fetch_cache,
         )

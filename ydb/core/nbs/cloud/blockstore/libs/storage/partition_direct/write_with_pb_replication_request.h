@@ -28,8 +28,10 @@ public:
 
 private:
     const TDuration PbufferReplyTimeout;
+    ui32 PlannedRequests = 0;
+    ui32 FinishedRequests = 0;
 
-    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
+    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations, bool isHedge = false);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
 

@@ -52,7 +52,13 @@ public:
 protected:
     void Reply(NProto::TError error);
 
-    void SendWriteRequest(ELocation location);
+    using SendWriteRequestCallback = std::function<void(
+        ELocation location,
+        const TDBGWriteBlocksResponse& response,
+        std::shared_ptr<NWilson::TSpan> span)>;
+    void SendWriteRequest(
+        ELocation location,
+        SendWriteRequestCallback customCallback = nullptr);
 
     void OnWriteResponse(
         ELocation location,
@@ -81,6 +87,8 @@ protected:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
+
+    ui32 ResponsesOfHandOffs = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -57,6 +57,13 @@ TBaseWriteRequestExecutor::GetFuture() const
 
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TBaseWriteRequestExecutor::Reply %s, %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str());
+
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,
@@ -64,7 +71,9 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .CompletedWrites = CompletedWrites});
 }
 
-void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
+void TBaseWriteRequestExecutor::SendWriteRequest(
+    ELocation location,
+    SendWriteRequestCallback customCallback)
 {
     if (Promise.IsReady()) {
         return;
@@ -87,8 +96,15 @@ void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
-        [self = shared_from_this(), location, span = std::move(span)]       //
+        [self = shared_from_this(),
+         location,
+         span = std::move(span),
+         callback = std::move(customCallback)]                              //
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
+            if (callback) {
+                callback(location, f.GetValue(), std::move(span));
+                return;
+            }
             self->OnWriteResponse(location, f.GetValue(), std::move(span));
         });
 }
@@ -100,6 +116,11 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
 {
     if (Promise.IsReady()) {
         return;
+    }
+
+    if (location == ELocation::HOPBuffer0 || location == ELocation::HOPBuffer1)
+    {
+        ++ResponsesOfHandOffs;
     }
 
     if (!HasError(response.Error)) {
@@ -118,7 +139,9 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer0);
-    } else if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
+        return;
+    }
+    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -126,17 +149,23 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer1);
-    } else {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor. All hand-offs attempts are over. %s",
-            FormatError(response.Error).c_str());
-
-        Reply(response.Error);
-
-        auto ender = TEndSpanWithError(std::move(span), response.Error);
+        return;
     }
+
+    bool stillWaitingAnotherResponse = ResponsesOfHandOffs != 2;
+    if (stillWaitingAnotherResponse) {
+        return;
+    }
+
+    LOG_ERROR(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TBaseWriteRequestExecutor. All hand-offs attempts are over. %s",
+        FormatError(response.Error).c_str());
+
+    Reply(response.Error);
+
+    auto ender = TEndSpanWithError(std::move(span), response.Error);
 }
 
 void TBaseWriteRequestExecutor::ScheduleRequestTimeoutCallback()

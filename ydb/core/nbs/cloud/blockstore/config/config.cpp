@@ -11,7 +11,8 @@ namespace {
 
 const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
 const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MicroSeconds(1000);
+const auto DefaultHedgingDelay =
+    TDuration::MicroSeconds(1000);   // TODO увеличить
 const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
 
 }   // namespace

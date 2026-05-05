@@ -303,11 +303,56 @@ int main(int argc, char **argv) {
     }
     printer->EndTest();
 
+    auto overridePBufferInFlight = [](NDevicePerfTest::TPersistentBufferTest& testProto, ui32 inFlight) {
+        for (size_t j = 0; j < testProto.PersistentBufferTestListSize(); ++j) {
+            auto* record = testProto.MutablePersistentBufferTestList(j);
+            if (record->Command_case() == NKikimr::TEvLoadTestRequest::CommandCase::kPersistentBufferWriteLoad) {
+                record->MutablePersistentBufferWriteLoad()->SetInFlightWrites(inFlight);
+            }
+        }
+    };
+    auto overridePBufferMeasureType = [](NDevicePerfTest::TPersistentBufferTest& testProto, ui32 measure) {
+        for (size_t j = 0; j < testProto.PersistentBufferTestListSize(); ++j) {
+            auto* record = testProto.MutablePersistentBufferTestList(j);
+            if (record->Command_case() == NKikimr::TEvLoadTestRequest::CommandCase::kPersistentBufferWriteLoad) {
+                switch (measure) {
+                    case 0:
+                        record->MutablePersistentBufferWriteLoad()->SetMeasureType(NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::WRITE);
+                        break;
+                    case 1:
+                        record->MutablePersistentBufferWriteLoad()->SetMeasureType(NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::READ);
+                        break;
+                    case 2:
+                        record->MutablePersistentBufferWriteLoad()->SetMeasureType(NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::ERASE);
+                        break;
+                }
+            }
+        }
+    };
     for (ui32 i = 0; i < protoTests.PersistentBufferTestListSize(); ++i) {
         NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        if (config.HasInFlightOverride()) {
+            for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+                overridePBufferInFlight(testProto, inFlight);
+                for (ui32 run = 0; run < config.RunCount; ++run) {
+                    for (ui32 measureType : xrange(3)) {
+                        overridePBufferMeasureType(testProto, measureType);
+                        THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+                        test->SetPrinter(printer);
+                        test->RunTest();
+                    }
+                }
+            }
+        } else {
+            for (ui32 run = 0; run < config.RunCount; ++run) {
+                for (ui32 measureType : xrange(3)) {
+                    overridePBufferMeasureType(testProto, measureType);
+                    THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
+                    test->SetPrinter(printer);
+                    test->RunTest();
+                }
+            }
+        }
     }
     printer->EndTest();
 

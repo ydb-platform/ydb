@@ -7,8 +7,6 @@ import time
 import yatest
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
-from ydb.tests.library.harness.tls_tools import driver_tls_kwargs
-
 
 NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
 

@@ -47,7 +47,7 @@ message TIndexBuildSettings {
     reserved 3; // max_batch_rows
     reserved 4; // max_batch_bytes
 
-    optional uint32 max_shards_in_flight = 5 [ default = 32 ];
+    optional uint32 max_shards_in_flight = 5;
     reserved 6; // max_retries_upload_batch
 
     optional google.protobuf.Any AlterMainTablePayload = 10;

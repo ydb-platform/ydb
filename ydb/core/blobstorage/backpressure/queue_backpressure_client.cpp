@@ -425,34 +425,6 @@ private:
                     const auto& actualWindowSize = F(window, ActualWindowSize);
                     const auto& maxWindowSize = F(window, MaxWindowSize);
 
-                    QLOG_CRIT_S("BSQ06", "T# " << TypeName<TEv>()
-                        << " failed message"
-                        << " deviceType# " << NPDisk::DeviceTypeStr(DeviceType, false)
-                        << " status# " << NKikimrProto::EReplyStatus_Name(status)
-                        << " ws# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)
-                        << " msgId# " << msgId << " sequenceId# " << sequenceId
-                        << " expectedMsgId# " << expectedMsgId << " expectedSequenceId# " << expectedSequenceId
-                        << " actualWindowSize# " << actualWindowSize << " maxWindowSize# " << maxWindowSize
-                        << " InFlightCost# " << Queue.GetInFlightCost()
-                        << " InFlightCount# " << Queue.InFlightCount()
-                        << " ItemsWaiting# " << Queue.GetItemsWaiting()
-                        << " BytesWaiting# " << Queue.GetBytesWaiting());
-
-                    switch (ws) {
-                        case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:
-                            ++*Queue.QueueItemsIncorrectMsgId;
-                            break;
-
-                        case NKikimrBlobStorage::TWindowFeedback::HighWatermarkOverflow:
-                            ++*Queue.QueueItemsWatermarkOverflow;
-                            break;
-
-                        default:
-                            Y_ABORT();
-                    }
-
-                    Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
-
                     auto now = ctx.Now();
                     auto timeSinceLastPostpone = now - PostponePumpLastInstant;
                     PostponePumpLastInstant = now;
@@ -471,8 +443,39 @@ private:
                                 break;
                         }
                     } else {
-                        PostponePumpDelay *= 2;
+                        PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
                     }
+
+                    QLOG_CRIT_S("BSQ06", "T# " << TypeName<TEv>()
+                        << " failed message"
+                        << " deviceType# " << NPDisk::DeviceTypeStr(DeviceType, false)
+                        << " status# " << NKikimrProto::EReplyStatus_Name(status)
+                        << " ws# " << NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)
+                        << " msgId# " << msgId << " sequenceId# " << sequenceId
+                        << " expectedMsgId# " << expectedMsgId << " expectedSequenceId# " << expectedSequenceId
+                        << " actualWindowSize# " << actualWindowSize << " maxWindowSize# " << maxWindowSize
+                        << " InFlightCost# " << Queue.GetInFlightCost()
+                        << " InFlightCount# " << Queue.InFlightCount()
+                        << " ItemsWaiting# " << Queue.GetItemsWaiting()
+                        << " BytesWaiting# " << Queue.GetBytesWaiting()
+                        << " timeSinceLastPostpone# " << timeSinceLastPostpone
+                        << " PostponePump# " << PostponePump
+                        << " PostponePumpDelay# " << PostponePumpDelay);
+
+                    switch (ws) {
+                        case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:
+                            ++*Queue.QueueItemsIncorrectMsgId;
+                            break;
+
+                        case NKikimrBlobStorage::TWindowFeedback::HighWatermarkOverflow:
+                            ++*Queue.QueueItemsWatermarkOverflow;
+                            break;
+
+                        default:
+                            Y_ABORT();
+                    }
+
+                    Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
 
                     if (PostponePumpDelay) {
                         if (!std::exchange(PostponePump, true)) {

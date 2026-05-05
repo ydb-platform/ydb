@@ -28,6 +28,40 @@ static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10)
 NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 NActors::TActorId FollowersPipeCacheId = NKikimr::MakePipePerNodeCacheID(true);
 
+TKqpStreamLockSettings BuildStreamLockSettings(
+    const NMiniKQL::THolderFactory& holderFactory,
+    const NKikimrKqp::TKqpStreamLookupSettings& settings,
+    TMaybe<ui64> lockTxId,
+    TMaybe<ui32> nodeLockId,
+    NKqpProto::EIsolationLevel isolationLevel,
+    TMaybe<NKikimrDataEvents::ELockMode> lockMode,
+    const TString& database,
+    ui64 querySpanId)
+{
+    AFL_ENSURE(isolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
+    AFL_ENSURE(lockMode);
+    AFL_ENSURE(*lockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE);
+
+    TKqpStreamLockSettings lockSettings(holderFactory);
+    lockSettings.Table = settings.GetTable();
+    for (const auto& col : settings.GetKeyColumns()) {
+        lockSettings.KeyColumns.push_back(col);
+    }
+    for (const auto& col : settings.GetColumns()) {
+        lockSettings.Columns.push_back(col);
+    }
+    lockSettings.LockTxId = lockTxId ? *lockTxId : 0;
+    lockSettings.LockNodeId = nodeLockId ? *nodeLockId : 0;
+    lockSettings.LockMode = (isolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW)
+        ? NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE
+        : *lockMode;
+    lockSettings.Database = database;
+    lockSettings.Snapshot.SetStep(settings.GetSnapshot().GetStep());
+    lockSettings.Snapshot.SetTxId(settings.GetSnapshot().GetTxId());
+    lockSettings.QuerySpanId = querySpanId;
+    return lockSettings;
+}
+
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
     TKqpStreamLookupActor(NYql::NDq::IDqAsyncIoFactory::TInputTransformArguments&& args, NKikimrKqp::TKqpStreamLookupSettings&& settings,
@@ -52,6 +86,18 @@ public:
         , LookupStrategy(settings.GetLookupStrategy())
         , IsolationLevel(settings.GetIsolationLevel())
         , Database(settings.GetDatabase())
+        , StreamLockWorker(
+            LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP
+                ? CreateStreamLockWorker(BuildStreamLockSettings(
+                    args.HolderFactory, settings, LockTxId, NodeLockId,
+                    IsolationLevel, LockMode, Database, QuerySpanId))
+                : nullptr)
+        , StreamLookupWorker(CreateStreamLookupWorker(
+            std::move(settings),
+            args.TaskId,
+            args.TypeEnv,
+            args.HolderFactory,
+            args.InputDesc))
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
@@ -60,40 +106,6 @@ public:
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
         IngressStats.Level = args.StatsLevel;
-
-        if (LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP) {
-            AFL_ENSURE(IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
-            AFL_ENSURE(LockMode);
-            AFL_ENSURE(*LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE);
-            TKqpStreamLockSettings lockSettings(args.HolderFactory);
-            lockSettings.Table = settings.GetTable();
-            for (const auto& col : settings.GetKeyColumns()) {
-                lockSettings.KeyColumns.push_back(col);
-            }
-            for (const auto& col : settings.GetColumns()) {
-                lockSettings.Columns.push_back(col);
-            }
-            lockSettings.LockTxId = LockTxId ? *LockTxId : 0;
-            lockSettings.LockNodeId = NodeLockId ? *NodeLockId : 0;
-            lockSettings.LockMode = (IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW)
-                ? NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE
-                : *LockMode;
-            lockSettings.Database = Database;
-            lockSettings.Snapshot.SetStep(settings.GetSnapshot().GetStep());
-            lockSettings.Snapshot.SetTxId(settings.GetSnapshot().GetTxId());
-            lockSettings.QuerySpanId = QuerySpanId;
-
-            StreamLockWorker = CreateStreamLockWorker(
-                std::move(lockSettings)
-            );
-        }
-
-        StreamLookupWorker = CreateStreamLookupWorker(
-            std::move(settings),
-            args.TaskId,
-            args.TypeEnv,
-            args.HolderFactory,
-            args.InputDesc);
     }
 
     virtual ~TKqpStreamLookupActor() {
@@ -1006,7 +1018,6 @@ private:
                 if (modified) {
                     StreamLookupWorker->AddInputRow(std::move(row));
                     hasModifiedRows = true;
-                    AFL_ENSURE(false);
                 } else {
                     UnmodifiedOutputRows.emplace_back(std::move(row));
                     hasUnmodifiedRows = true;
@@ -1270,8 +1281,6 @@ private:
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
     ui64 DeferredVictimQuerySpanId = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
-    std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
-    std::unique_ptr<TKqpStreamLockWorker> StreamLockWorker;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
     size_t TotalRetryAttempts = 0;
@@ -1279,6 +1288,8 @@ private:
     bool ResolveShardsInProgress = false;
     NKqpProto::EIsolationLevel IsolationLevel;
     const TString Database;
+    std::unique_ptr<TKqpStreamLockWorker> StreamLockWorker;
+    std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
 
     // stats
     ui64 ReadRowsCount = 0;

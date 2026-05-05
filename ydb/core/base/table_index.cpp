@@ -174,7 +174,6 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
-        case Ydb::Table::TableIndex::kGlobalJsonIndex:
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             return false;
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:

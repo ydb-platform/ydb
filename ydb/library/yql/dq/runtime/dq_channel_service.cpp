@@ -1706,7 +1706,7 @@ void TNodeState::HandleCleanup() {
         }
         UnboundOutputs.pop();
     }
-    if (LastActivity && (TInstant::Now() - LastActivity) > TDuration::Seconds(30)) {
+    if (LastActivity && (now - LastActivity) > TDuration::Seconds(30)) {
         if (OutputDescriptors.empty() && InputDescriptors.empty()) {
             ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, false));
         } else {
@@ -1829,6 +1829,7 @@ void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
     }
 
     ActorSystem->Send(new NActors::IEventHandle(actorId, NodeActorId, evDiscovery.Release(), flags));
+    LastActivity = TInstant::Now();
 }
 
 TString TNodeState::GetDebugInfo() {
@@ -1989,8 +1990,10 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
 void TDqChannelService::FreeNodeSession(ui32 nodeId, bool force) {
     std::lock_guard lock(Mutex);
     if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
-        if (force || (it->second->OutputDescriptors.empty() && it->second->InputDescriptors.empty())) {
-            ActorSystem->Send(it->second->NodeActorId, new NActors::TEvents::TEvPoison());
+        auto& nodeState = it->second;
+        std::lock_guard lock(nodeState->Mutex);
+        if (force || (nodeState->OutputDescriptors.empty() && nodeState->InputDescriptors.empty())) {
+            ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
             NodeStates.erase(it);
         }
     }

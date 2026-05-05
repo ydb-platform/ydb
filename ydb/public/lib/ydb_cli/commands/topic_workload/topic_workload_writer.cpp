@@ -7,6 +7,8 @@
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
+#include <string>
+
 using namespace NYdb::NConsoleClient;
 
 TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params)
@@ -162,6 +164,10 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     }
 
     settings.DirectWriteToPartition(Params.Direct);
+
+    if (Params.UseTransactions) {
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
+    }
 
     producer->SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
 

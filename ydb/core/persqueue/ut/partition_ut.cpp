@@ -295,7 +295,7 @@ protected:
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
                    bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false);
-    void SendGetWriteInfo();
+    void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
 
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
@@ -694,8 +694,8 @@ void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::SendGetWriteInfo() {
-    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>();
+void TPartitionFixture::SendGetWriteInfo(bool skipSrcIdInfo) {
+    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(skipSrcIdInfo);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1251,7 +1251,7 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     }
     TVector<ui64> msgSizesExpected{2, 2, 1, 1, 1, 1, 1, 1};
     CompareVectors(msgSizesExpected, finalCounters.GetMessagesSizes());
-    SendGetWriteInfo();
+    SendGetWriteInfo(false);
     {
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -2678,7 +2678,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
-    SendGetWriteInfo();
+    SendGetWriteInfo(false);
     {
         {
             auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
@@ -2751,7 +2751,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
 
     {
-        SendGetWriteInfo();
+        SendGetWriteInfo(false);
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -2762,7 +2762,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
         UNIT_ASSERT(event != nullptr);
     }
     {
-        SendGetWriteInfo();
+        SendGetWriteInfo(false);
         Cerr << "Wait write info error(2)\n";
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -4550,6 +4550,65 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
         return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
     });
     Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
+    CreatePartition({
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}}
+    );
+
+    ui64 cookie = 1;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    auto truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+
+    TString data = "data for write";
+
+    for (auto i = 0; i < 3; i++) {
+        SendWrite(++cookie, i, ownerCookie, i + 100, data, true, (i+1)*2);
+        SendDiskStatusResponse();
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendWrite(++cookie, 3, ownerCookie, 110, data, true, 7);
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendGetWriteInfo(true);
+    {
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(event->BodyKeys.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.size(), 0);
+
+        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
+    }
 }
 
 } // End of suite

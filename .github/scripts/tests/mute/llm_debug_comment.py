@@ -69,6 +69,13 @@ def _format_ts(value) -> str:
     return str(value or 'unknown')
 
 
+def _format_ts_for_table(value) -> str:
+    """Format timestamp as non-wrapping HTML for GitHub markdown table cell."""
+    text = _format_ts(value)
+    text = text.replace('-', '&#8209;').replace(' ', '&nbsp;')
+    return f"<code>{text}</code>"
+
+
 def _history_link(full_name: str, branch: str, build_type: str) -> str:
     return (
         f"{CURRENT_TEST_HISTORY_DASHBOARD}"
@@ -181,7 +188,7 @@ def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
             f"| `{short}` "
             f"| `{_normalize_table_cell(row.get('status') or 'unknown', max_len=32)}` "
             f"| `{type_text}` "
-            f"| `{_format_ts(row.get('run_timestamp'))}` "
+            f"| {_format_ts_for_table(row.get('run_timestamp'))} "
             f"| {_link(history)} "
             f"| {_link(run_url)} "
             f"| {_link(row.get('stderr'))} "

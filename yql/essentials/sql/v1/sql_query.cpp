@@ -2883,9 +2883,7 @@ bool TSqlQuery::AlterTableSetTableSetting(
 namespace {
 
 bool IsIndexSpecificSettingName(TStringBuf name) {
-    return AsciiEqualsIgnoreCase(name, "false_positive_probability")
-        || AsciiEqualsIgnoreCase(name, "ngram_size")
-        || AsciiEqualsIgnoreCase(name, "case_sensitive");
+    return AsciiEqualsIgnoreCase(name, "false_positive_probability") || AsciiEqualsIgnoreCase(name, "ngram_size") || AsciiEqualsIgnoreCase(name, "case_sensitive");
 }
 
 bool ParseAlterIndexSettingValue(
@@ -2946,11 +2944,10 @@ bool StoreAlterIndexSettingValue(
     }
 
     indexSettings.emplace(name, TIndexDescription::TIndexSetting{
-        .Name = name,
-        .NamePosition = id.Pos,
-        .Value = std::move(parsedValue),
-        .ValuePosition = ctx.Pos()
-    });
+                                    .Name = name,
+                                    .NamePosition = id.Pos,
+                                    .Value = std::move(parsedValue),
+                                    .ValuePosition = ctx.Pos()});
 
     return true;
 }

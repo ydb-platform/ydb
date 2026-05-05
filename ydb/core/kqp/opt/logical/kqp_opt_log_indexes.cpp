@@ -786,6 +786,11 @@ void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read)
     .Done().Ptr();
 }
 
+ui32 GetKMeansTreeSearchTopSize(const TKqpOptimizeContext& kqpCtx, const bool withOverlap) {
+    const ui32 defaultLevelTop = withOverlap ? 4 : 10;
+    return kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(defaultLevelTop);
+}
+
 // FIXME Most of this rewriting should probably be handled in kqp/opt/physical
 // Logical optimizer should only rewrite it to something like TKqlReadTableVectorIndex
 // This would remove the need for skipping KqpApplyExtractMembersToReadTable based on settings.VectorTopDistinct
@@ -852,10 +857,9 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Build()
     .Done();
 
-    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
-
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+    const auto levelTop = GetKMeansTreeSearchTopSize(kqpCtx, withOverlap);
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
@@ -1051,7 +1055,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
 
-    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
+    const auto levelTop = GetKMeansTreeSearchTopSize(kqpCtx, withOverlap);
     const auto levelTopTotal = levelTop * numPrefixGroups;
 
     TKqpStreamLookupSettings firstLevelSettings;

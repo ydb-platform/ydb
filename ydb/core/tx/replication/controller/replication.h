@@ -7,7 +7,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -107,7 +106,7 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
-        virtual const TMaybe<TDuration> GetLag() const = 0;
+        virtual const std::optional<TDuration> GetLag() const = 0;
 
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
@@ -160,7 +159,7 @@ public:
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
-    const TMaybe<TDuration> GetLag() const;
+    const std::optional<TDuration> GetLag() const;
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);

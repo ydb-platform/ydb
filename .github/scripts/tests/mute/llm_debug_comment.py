@@ -21,6 +21,7 @@ from urllib.parse import quote_plus
 from mute.update_mute_issues import (
     CURRENT_TEST_HISTORY_DASHBOARD,
     add_issue_comment,
+    get_issue_comments,
 )
 from mute.fast_unmute_github import add_label_to_issue
 
@@ -28,6 +29,7 @@ from mute.fast_unmute_github import add_label_to_issue
 AI_REVIEW_LABEL = 'need_ai_review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
+_COMMENT_MARKER = '<!-- mute-llm-debug-links:v1 -->'
 
 # CI jobs whose artifacts are meaningful for debugging mutes. Restricting to
 # this allowlist keeps PR / manual reruns out of the "latest failing run".
@@ -158,6 +160,7 @@ def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
     lines = [
         '### Failed test run details',
         _LLM_HINT,
+        _COMMENT_MARKER,
         '',
         '| test | status | type | last_run | history | run | stderr | stdout | log | logsdir |',
         '|---|---|---|---|---|---|---|---|---|---|',
@@ -199,6 +202,16 @@ def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
     return body[:cutoff] + suffix
 
 
+def _already_posted(issue_id: str) -> bool:
+    """Best-effort duplicate guard by hidden marker in issue comments."""
+    try:
+        comments = get_issue_comments(issue_id)
+    except Exception as exc:
+        logging.warning('Failed to check existing comments for %s: %s', issue_id, exc)
+        return False
+    return any(_COMMENT_MARKER in str(comment or '') for comment in comments)
+
+
 def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
                            full_names: Sequence[str], branch: str, build_type: str) -> None:
     """Post the debug-links comment and attach the AI review label. Best-effort."""
@@ -207,9 +220,15 @@ def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
         return
     try:
         rows = _load_latest_failures(ydb_wrapper, branch, build_type, full_names)
-        add_issue_comment(issue_id, _build_comment(full_names, rows, branch, build_type))
+        if _already_posted(issue_id):
+            logging.info('LLM debug comment already exists for %s, skipping duplicate post', issue_url)
+        else:
+            add_issue_comment(issue_id, _build_comment(full_names, rows, branch, build_type))
     except Exception as exc:
         logging.warning('Failed to post LLM debug comment to %s: %s', issue_url, exc)
         return
-    # add_label_to_issue caches the label id and silently no-ops on failures.
-    add_label_to_issue(issue_id, AI_REVIEW_LABEL)
+    try:
+        # add_label_to_issue caches the label id and silently no-ops on most failures.
+        add_label_to_issue(issue_id, AI_REVIEW_LABEL)
+    except Exception as exc:
+        logging.warning('Failed to add AI review label to %s: %s', issue_url, exc)

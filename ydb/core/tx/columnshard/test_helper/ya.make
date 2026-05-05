@@ -9,6 +9,7 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     yql/essentials/minikql
     yql/essentials/minikql/invoke_builtins
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max/
     yql/essentials/core/arrow_kernels/request
     ydb/core/tx/columnshard
     ydb/core/wrappers

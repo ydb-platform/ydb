@@ -855,7 +855,6 @@ public:
         return clusterConfiguration;
     }
 
-<<<<<<< HEAD
     bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
         std::string_view format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
@@ -878,8 +877,6 @@ public:
         return useSharedReading;
     }
 
-=======
->>>>>>> f36168c2b7d (read csv support (#37284))
 private:
     TPqState* State_; // State owns dq integration, so back reference must be not smart.
 };

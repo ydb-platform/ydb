@@ -254,7 +254,25 @@ public:
             }
         }
 
-<<<<<<< HEAD
+        if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
+            YQL_ENSURE(userSchemaColumnsArg->IsList(),
+                "UserSchemaColumns must be a list of column name atoms (userschema order)");
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                if (!EnsureAtom(*atomNode, ctx)) {
+                    return TStatus::Error;
+                }
+            }
+            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
+                ->GetItemType()->Cast<TStructExprType>();
+            // Internal invariant for TPqReadTopic before DQ-level rewrites:
+            // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                const TString columnName(atomNode->Content());
+                YQL_ENSURE(rowSpecType->FindItem(columnName),
+                    "userschemacolumns: unknown data column: " << columnName);
+            }
+        }
+
         if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {
             auto& watermark = input->ChildRef(TPqReadTopic::idx_Watermark);
             const auto status = ConvertToLambda(watermark, ctx, 1, 1);
@@ -278,59 +296,6 @@ public:
                 ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
                     << "Bad watermark expression"));
                 return TStatus::Error;
-=======
-        if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
-            YQL_ENSURE(userSchemaColumnsArg->IsList(),
-                "UserSchemaColumns must be a list of column name atoms (userschema order)");
-            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
-                if (!EnsureAtom(*atomNode, ctx)) {
-                    return TStatus::Error;
-                }
-            }
-            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
-                ->GetItemType()->Cast<TStructExprType>();
-            // Internal invariant for TPqReadTopic before DQ-level rewrites:
-            // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
-            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
-                const TString columnName(atomNode->Content());
-                YQL_ENSURE(rowSpecType->FindItem(columnName),
-                    "userschemacolumns: unknown data column: " << columnName);
-            }
-        }
-
-        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
-            auto& watermarkNode = input->ChildRef(TPqReadTopic::idx_Watermark);
-            if (!TCoVoid::Match(watermarkNode.Get())) {
-                const auto status = ConvertToLambda(watermarkNode, ctx, 1, 1);
-                if (status != TStatus::Ok) {
-                    return status;
-                }
-                if (!UpdateLambdaAllArgumentsTypes(watermarkNode, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
-                    return TStatus::Error;
-                }
-                if (!watermarkNode->GetTypeAnn()) {
-                    return TStatus::Repeat;
-                }
-                if (!EnsureSpecificDataType(*watermarkNode, EDataSlot::Timestamp, ctx, true)) {
-                    return TStatus::Error;
-                }
-
-                const TCoLambda lambda(watermarkNode);
-                const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
-                const auto lambdaBody = lambda.Body();
-                if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                    TStringBuilder err;
-                    err << "Bad watermark expression: ";
-                    NYql::NConnector::NApi::TExpression watermarkExprProto;
-                    // SerializeWatermarkExpr is for more sensible error message
-                    if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
-                        // SerializeWatermarkExpr unexpectedly succeed
-                        err << "[unspecified error, please report to support]";
-                    }
-                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), err));
-                    return TStatus::Error;
-                }
->>>>>>> f36168c2b7d (read csv support (#37284))
             }
         }
 

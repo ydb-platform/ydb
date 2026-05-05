@@ -5,13 +5,11 @@
 
 namespace NKikimr::NReplication::NController {
 
-
 class TTargetBaseStats: public TReplication::ITargetStats {
 protected:
     virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) = 0;
     virtual void RemoveWorker(ui64 workerId) = 0;
 };
-
 
 class TTargetBase
     : public TReplication::ITarget

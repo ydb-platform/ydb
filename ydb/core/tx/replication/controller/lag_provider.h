@@ -4,6 +4,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 
+#include <optional>
+
 namespace NKikimr::NReplication::NController {
 
 struct TItemWithLag {

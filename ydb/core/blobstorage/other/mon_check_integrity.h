@@ -7,7 +7,7 @@
 namespace NKikimr {
 
     inline TActorId MakeMonCheckIntegrityId() {
-        return TActorId(0, TStringBuf("check_integ", 11));
+        return TActorId(0, TStringBuf("check_integr", 12));
     }
 
     IActor *CreateMonCheckIntegrityActor();

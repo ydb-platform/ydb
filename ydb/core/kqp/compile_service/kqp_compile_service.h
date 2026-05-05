@@ -211,10 +211,10 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     ECompileActorAction compileAction = ECompileActorAction::COMPILE,
     TMaybe<TQueryAst> queryAst = {},
     bool collectFullDiagnostics = false,
-    bool PerStatementResult = false,
+    bool perStatementResult = false,
     std::shared_ptr<NYql::TExprContext> ctx = nullptr,
     NYql::TExprNode::TPtr expr = nullptr,
-    NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED);
+    bool usePessimisticLocks = false);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

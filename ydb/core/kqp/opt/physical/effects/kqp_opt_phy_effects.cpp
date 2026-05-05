@@ -264,7 +264,7 @@ NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node,
     if (!node.Maybe<TKqpLockAndCheck>()) {
         return node;
     }
-    AFL_ENSURE(kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+    AFL_ENSURE(kqpCtx.UsePessimisticLocks);
 
     auto lockAndCheck = node.Cast<TKqpLockAndCheck>();
 

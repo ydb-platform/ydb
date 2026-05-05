@@ -22,7 +22,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool isWarmupCompilation = false, NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
+        bool isWarmupCompilation = false, bool usePessimisticLocks = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -44,7 +44,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , IsWarmupCompilation(isWarmupCompilation)
-        , IsolationLevel(isolationLevel)
+        , UsePessimisticLocks(usePessimisticLocks)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -78,7 +78,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     NYql::TExprNode::TPtr SplitExpr = nullptr;
 
     bool IsWarmupCompilation = false;
-    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
+    bool UsePessimisticLocks = false;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -88,7 +88,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        NKqpProto::EIsolationLevel isolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED)
+        bool usePessimisticLocks = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -106,7 +106,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , Split(split)
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
-        , IsolationLevel(isolationLevel)
+        , UsePessimisticLocks(usePessimisticLocks)
     {
     }
 
@@ -132,7 +132,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
 
     std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
-    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
+    bool UsePessimisticLocks = false;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

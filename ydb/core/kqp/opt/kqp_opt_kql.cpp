@@ -647,7 +647,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
         withSystemColumns,
         del.Filter(),
         del.IsBatch(),
-        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        kqpCtx.UsePessimisticLocks,
         del.Pos(),
         ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
@@ -671,7 +671,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         withSystemColumns,
         del.Filter(),
         del.IsBatch(),
-        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        kqpCtx.UsePessimisticLocks,
         del.Pos(),
         ctx);
     return Build<TKqlDeleteRowsIndex>(ctx, del.Pos())
@@ -768,7 +768,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         withSystemColumns,
         update.Filter(),
         update.IsBatch(),
-        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        kqpCtx.UsePessimisticLocks,
         update.Pos(),
         ctx);
 
@@ -807,7 +807,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         withSystemColumns,
         update.Filter(),
         update.IsBatch(),
-        kqpCtx.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW,
+        kqpCtx.UsePessimisticLocks,
         update.Pos(),
         ctx);
 
@@ -851,7 +851,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
     const bool isSink = NeedSinks(tableData, kqpCtx);
 
     const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
-    AFL_ENSURE(kqpCtx.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW || useStreamIndex);
+    AFL_ENSURE(!kqpCtx.UsePessimisticLocks || useStreamIndex);
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect || useStreamIndex) {

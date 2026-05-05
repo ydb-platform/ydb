@@ -20,7 +20,7 @@ struct TKqpQuerySettings {
 
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
+    bool UsePessimisticLocks = false;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
@@ -31,7 +31,7 @@ struct TKqpQuerySettings {
             IsInternalCall == other.IsInternalCall &&
             QueryType == other.QueryType &&
             Syntax == other.Syntax &&
-            IsolationLevel == other.IsolationLevel &&
+            UsePessimisticLocks == other.UsePessimisticLocks &&
             RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
             RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
     }
@@ -48,7 +48,7 @@ struct TKqpQuerySettings {
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(
             DocumentApiRestricted, IsInternalCall, QueryType, Syntax,
-            IsolationLevel, RuntimeParameterSizeLimitSatisfied);
+            UsePessimisticLocks, RuntimeParameterSizeLimitSatisfied);
         return THash<decltype(tuple)>()(tuple);
     }
 
@@ -58,7 +58,7 @@ struct TKqpQuerySettings {
             << "IsInternalCall: " << IsInternalCall << ", "
             << "QueryType: " << QueryType << ", "
             << "Syntax: " << static_cast<int>(Syntax) << ", "
-            << "IsolationLevel: " << static_cast<int>(IsolationLevel) << ", "
+            << "UsePessimisticLocks: " << UsePessimisticLocks << ", "
             << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit << ", "
             << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
             << "}";

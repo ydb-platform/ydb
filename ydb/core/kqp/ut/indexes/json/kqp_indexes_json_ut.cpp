@@ -4085,21 +4085,112 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) NOT BETWEEN 1 AND 10)", {"\3k1"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) NOT BETWEEN "a" AND "z")", {"\3k1"});
 
-            // NOT IN
-            // ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) NOT IN ("a", "b", "c"))", {"\3k1"});
-            // ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) NOT IN (1, 2, 3))", {"\3k1"});
-            // ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') NOT IN ("a", "b"))", {"\3k1"});
+            // NOT IN - negation
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) NOT IN ("a", "b", "c"))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) NOT IN (1, 2, 3))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1') NOT IN ("a", "b"))");
 
             // IN
-            // ValidateTokens(db,
-            //     R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN ("a", "b", "c"))",
-            //     {"\3k1" + strSuffix("a"), "\3k1" + strSuffix("b"), "\3k1" + strSuffix("c")}, "or");
-            // ValidateTokens(db,
-            //     R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2, 3))",
-            //     {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3)}, "or");
-            // ValidateTokens(db,
-            //     R"(JSON_VALUE(Text, '$.k1') IN ("a", "b"))",
-            //     {"\3k1" + strSuffix("a"), "\3k1" + strSuffix("b")}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN ("a", "b", "c"))",
+                {"\3k1" + strSuffix("a"), "\3k1" + strSuffix("b"), "\3k1" + strSuffix("c")}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2, 3))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1') IN ("a", "b"))",
+                {"\3k1" + strSuffix("a"), "\3k1" + strSuffix("b")}, "or");
+
+            // IN with all supported scalars
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int8) IN (1t, 2t))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint8) IN (1ut, 2ut))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int16) IN (1s, 2s))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint16) IN (1us, 2us))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint32) IN (1u, 2u))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (1l, 2l))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Uint64) IN (1ul, 2ul))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Float) IN (1.0f, 2.5f))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2.5)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Double) IN (1.0, -2.5))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(-2.5)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN ("x"s, "y"s))",
+                {"\3k1" + strSuffix("x"), "\3k1" + strSuffix("y")}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1.k2' RETURNING Int32) IN (7, 8))",
+                {"\3k1\3k2" + numSuffix(7), "\3k1\3k2" + numSuffix(8)}, "or");
+
+            // IN with Just (unwrapped transparently)
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (42))",
+                {"\3k1" + numSuffix(42)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (Just(5), 6))",
+                {"\3k1" + numSuffix(5), "\3k1" + numSuffix(6)}, "or");
+
+            // TODO: CAST type mismatch
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (CAST("7" AS Int32), 8))", {"\3k1" + strSuffix("7"), "\3k1" + numSuffix(8)}, "or");
+
+            // IN with mixed types
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2u, 3l))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3)}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) IN ("x", "y"u))",
+                {"\3k1" + strSuffix("x"), "\3k1" + strSuffix("y")}, "or");
+
+            // IN with AND/OR and other indexed predicates
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2, 3)
+                   AND JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3), "\3k2"}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2)
+                   OR JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k2"}, "or");
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2))
+                   OR (JSON_VALUE(Text, '$.k2' RETURNING Int32) IN (10, 20)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k2" + numSuffix(10), "\3k2" + numSuffix(20)}, "or");
+            ValidateTokens(db,
+                R"((JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2))
+                   AND (JSON_VALUE(Text, '$.k2' RETURNING Int32) IN (10, 20)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k2" + numSuffix(10), "\3k2" + numSuffix(20)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, 2)
+                   OR JSON_VALUE(Text, '$.k2' RETURNING Int32) == 5)",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k2" + numSuffix(5)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) == 3
+                   AND JSON_VALUE(Text, '$.k2' RETURNING Int32) IN (7, 8))",
+                {"\3k1" + numSuffix(3), "\3k2" + numSuffix(7), "\3k2" + numSuffix(8)}, "or");
+
+            // RETURNING Bool with IN
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Bool) IN (true, false))",
+                "SQL IN with JSON_VALUE with RETURNING Bool is not supported");
+
+            // NULL and nullable values in list
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, NULL))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (NULL, 2))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (NULL))");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (NULL, NULL))");
+
+            // Members in list
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') IN ("1"u, Data))", {"\3k1"}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') IN (Data, "2"u))", {"\3k1"}, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') IN (Data))", {"\3k1"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') IN (Data, Data || "data"u))", {"\3k1"}, "and");
+
+            // Parameters in list
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN ($p))",
+                {NJsonIndex::TToken{"\3k1", "$p"}},
+                TParamsBuilder().AddParam("$p").Int32(1).Build().Build());
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN (1, $p))",
+                {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k1" + numSuffix(1)}},
+                TParamsBuilder().AddParam("$p").Int32(2).Build().Build(), "or");
 
             // BETWEEN combined with other indexable predicates
             ValidateTokens(db,

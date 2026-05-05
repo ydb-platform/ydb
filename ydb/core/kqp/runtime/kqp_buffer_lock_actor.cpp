@@ -219,8 +219,8 @@ public:
             callback(row, modified);
         }
 
-        state.CollectedRows.clear();
         LockRowsCount += state.CollectedRows.size();
+        state.CollectedRows.clear();
     }
 
     TTableId GetTableId() const override {

@@ -75,7 +75,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
     }
 
     // Validate all index upserts and drops before pushing any operation parts
-    TVector<std::pair<TString, NKikimrSchemeOp::TIndexCreationConfig>> validatedIndexConfigs;
+    TVector<std::pair<TString, NKikimrSchemeOp::TIndexAlteringConfig>> validatedIndexConfigs;
     THashSet<TString> validatedDropIndexes;
 
     if (hasAlterSchema) {
@@ -85,10 +85,10 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
         for (const auto& upsertIdx : alterSchema.GetUpsertIndexes()) {
             const TString& indexName = upsertIdx.GetName();
 
-            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
-            if (!NOlap::ConvertRequestedIndexToCreationConfig(upsertIdx, indexConfig)) {
+            NKikimrSchemeOp::TIndexAlteringConfig indexConfig;
+            if (!NOlap::ConvertRequestedIndexToAlteringConfig(upsertIdx, indexConfig)) {
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Failed to convert index '" << indexName << "' to creation config")};
+                    TStringBuilder() << "Failed to convert index '" << indexName << "' to altering config")};
             }
 
             validatedIndexConfigs.emplace_back(indexName, std::move(indexConfig));
@@ -183,17 +183,23 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
             if (existingIndexNames.contains(indexName)) {
                 auto scheme = TransactionTemplate(
                     parentPathStr + "/" + tableName,
-                    NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+                    NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
                 scheme.SetInternal(true);
-                *scheme.MutableCreateTableIndex() = indexConfig;
+                *scheme.MutableAlterTableIndex() = indexConfig;
 
                 result.push_back(CreateAlterLocalIndex(NextPartId(nextId, result), scheme));
             } else {
+                NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+                if (!NOlap::ConvertAlteringConfigToCreationConfig(indexConfig, creationConfig)) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
+                        TStringBuilder() << "Failed to convert altering config to creation config for index '" << indexName << "'")};
+                }
+
                 auto scheme = TransactionTemplate(
                     parentPathStr + "/" + tableName,
                     NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
                 scheme.SetInternal(true);
-                *scheme.MutableCreateTableIndex() = indexConfig;
+                *scheme.MutableCreateTableIndex() = creationConfig;
 
                 result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
             }

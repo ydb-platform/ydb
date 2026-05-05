@@ -108,22 +108,22 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        if (!Transaction.HasCreateTableIndex()) {
+        if (!Transaction.HasAlterTableIndex()) {
             auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "CreateTableIndex is not present");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "AlterTableIndex is not present");
             return result;
         }
 
-        const auto& tableIndexCreation = Transaction.GetCreateTableIndex();
+        const auto& tableIndexAlter = Transaction.GetAlterTableIndex();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        if (!tableIndexCreation.HasName()) {
+        if (!tableIndexAlter.HasName()) {
             auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(OperationId.GetTxId()), ui64(ssId));
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in CreateTableIndex");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Name is not present in AlterTableIndex");
             return result;
         }
 
-        const TString& name = tableIndexCreation.GetName();
+        const TString& name = tableIndexAlter.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterLocalIndex Propose"
@@ -176,7 +176,7 @@ public:
         }
 
         TString errStr;
-        TTableIndexInfo::TPtr newIndexData = TTableIndexInfo::Create(tableIndexCreation, errStr);
+        TTableIndexInfo::TPtr newIndexData = TTableIndexInfo::Create(tableIndexAlter, errStr);
         if (!newIndexData) {
             result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, errStr);
             return result;

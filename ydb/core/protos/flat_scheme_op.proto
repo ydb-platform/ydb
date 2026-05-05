@@ -1384,6 +1384,12 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    repeated string KeyColumnNames = 3;
+    optional EIndexType Type = 4;
+    oneof SpecializedIndexDescription {
+        TBloomFilter BloomFilterDescription = 8;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+    }
 }
 
 message TIndexedTableCreationConfig {

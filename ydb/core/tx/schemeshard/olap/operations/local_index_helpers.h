@@ -184,6 +184,84 @@ inline bool ConvertRequestedIndexToCreationConfig(
     return false;
 }
 
+inline bool ConvertRequestedIndexToAlteringConfig(
+    const NKikimrSchemeOp::TOlapIndexRequested& indexProto,
+    NKikimrSchemeOp::TIndexAlteringConfig& config)
+{
+    config.SetName(indexProto.GetName());
+    config.SetState(NKikimrSchemeOp::EIndexStateReady);
+
+    switch (indexProto.GetImplementationCase()) {
+        case NKikimrSchemeOp::TOlapIndexRequested::kBloomFilter: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            const auto& bf = indexProto.GetBloomFilter();
+            for (const auto& colName : bf.GetColumnNames()) {
+                config.AddKeyColumnNames(colName);
+            }
+            auto* desc = config.MutableBloomFilterDescription();
+            if (bf.HasFalsePositiveProbability()) {
+                desc->SetFalsePositiveProbability(bf.GetFalsePositiveProbability());
+            }
+            if (bf.HasDataExtractor()) {
+                *desc->MutableDataExtractor() = bf.GetDataExtractor();
+            }
+            if (bf.HasBitsStorage()) {
+                *desc->MutableBitsStorage() = bf.GetBitsStorage();
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::TOlapIndexRequested::kBloomNGrammFilter: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
+            const auto& nf = indexProto.GetBloomNGrammFilter();
+            config.AddKeyColumnNames(nf.GetColumnName());
+            auto* desc = config.MutableBloomNGrammFilterDescription();
+            if (nf.HasFalsePositiveProbability()) {
+                desc->SetFalsePositiveProbability(nf.GetFalsePositiveProbability());
+            }
+            if (nf.HasDataExtractor()) {
+                *desc->MutableDataExtractor() = nf.GetDataExtractor();
+            }
+            if (nf.HasBitsStorage()) {
+                *desc->MutableBitsStorage() = nf.GetBitsStorage();
+            }
+            if (nf.HasNGrammSize()) {
+                desc->SetNGrammSize(nf.GetNGrammSize());
+            }
+            if (nf.HasCaseSensitive()) {
+                desc->SetCaseSensitive(nf.GetCaseSensitive());
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+
+    return false;
+}
+
+inline bool ConvertAlteringConfigToCreationConfig(
+    const NKikimrSchemeOp::TIndexAlteringConfig& alterConfig,
+    NKikimrSchemeOp::TIndexCreationConfig& creationConfig)
+{
+    creationConfig.SetName(alterConfig.GetName());
+    creationConfig.SetType(alterConfig.GetType());
+    creationConfig.SetState(alterConfig.GetState());
+
+    for (const auto& keyCol : alterConfig.GetKeyColumnNames()) {
+        creationConfig.AddKeyColumnNames(keyCol);
+    }
+
+    // Note: DataColumnNames is not supported in TIndexAlteringConfig for local indexes
+
+    if (alterConfig.HasBloomFilterDescription()) {
+        *creationConfig.MutableBloomFilterDescription() = alterConfig.GetBloomFilterDescription();
+    } else if (alterConfig.HasBloomNGrammFilterDescription()) {
+        *creationConfig.MutableBloomNGrammFilterDescription() = alterConfig.GetBloomNGrammFilterDescription();
+    }
+
+    return true;
+}
+
 inline bool ConvertCreationConfigToRequested(
     const NKikimrSchemeOp::TIndexCreationConfig& config,
     NKikimrSchemeOp::TOlapIndexRequested& requested)

@@ -26,7 +26,7 @@
 Создание таблицы с индексом `bloom_filter`:
 
 ```yql
-CREATE TABLE /Root/events (
+CREATE TABLE `/Root/events` (
     id Uint64,
     resource_id Utf8,
     message Utf8,
@@ -79,7 +79,7 @@ ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
 ## Дополнительные материалы {#see-also}
 
 * [Вторичные индексы](secondary-indexes.md)
-* [Справочник YQL: CREATE TABLE — Блум индекс](../yql/reference/syntax/create_table/bloom_skip_index.md)
+* [Справочник YQL: CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md)
 * [Справочник YQL: SELECT](../yql/reference/syntax/select/index.md)
-* [Справочник YQL: ALTER TABLE — индексы](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
+* [Справочник YQL: ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
 * [Быстрый старт (рецепт)](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)

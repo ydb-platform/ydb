@@ -26,7 +26,7 @@ To change parameters after creation, use [`ALTER INDEX`](../yql/reference/syntax
 Create a table with a `bloom_filter` index:
 
 ```yql
-CREATE TABLE /Root/events (
+CREATE TABLE `/Root/events` (
     id Uint64,
     resource_id Utf8,
     message Utf8,
@@ -79,7 +79,7 @@ Tips:
 ## Additional Materials {#see-also}
 
 * [Secondary indexes](secondary-indexes.md)
-* [YQL reference: CREATE TABLE — Bloom skip index](../yql/reference/syntax/create_table/bloom_skip_index.md)
+* [YQL reference: CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md)
 * [YQL reference: SELECT](../yql/reference/syntax/select/index.md)
-* [YQL reference: ALTER TABLE — indexes](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
+* [YQL reference: ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
 * [Quickstart recipe](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)

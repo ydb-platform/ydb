@@ -757,6 +757,7 @@ public:
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
+        queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 

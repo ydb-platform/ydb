@@ -156,7 +156,7 @@ props.put("ssl.key.password", "changeit");
 props.put("ssl.endpoint.identification.algorithm", "");
 ```
 
-##### Пример для kafka cli
+##### Пример для Kafka cli
 
 ```
 security.protocol=SSL
@@ -201,7 +201,7 @@ client_certificate_authorization:
 
 Для корректной работы нужно использовать тот же сертификат, что и в настройках grpc, поэтому нужно указать путь до этого же серверного сертификата в конфигурации grpc.
 
-Сейчас настроить конфигурации kafka и grpc с разными серверными сертификатами или указать серверный сертификат только в настройках kafka_proxy_config при использовании mtls нельзя.
+Сейчас настроить конфигурации Kafka и grpc с разными серверными сертификатами или указать серверный сертификат только в настройках kafka_proxy_config при использовании mtls нельзя.
 ```yaml
 grpc_config:
   cert: "/path/to/server-cert.pem"

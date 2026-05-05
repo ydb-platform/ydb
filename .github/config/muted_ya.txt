@@ -22,7 +22,6 @@ ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test

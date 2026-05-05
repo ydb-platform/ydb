@@ -38,12 +38,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
-          sparse-checkout: |
-            .github/config/mute_issue_and_digest_config.json
-            .github/config/mute_config.json
-            .github/scripts/tests/mute/mute_helper.py
-            .github/scripts/tests/mute/mute_utils.py
-          sparse-checkout-cone-mode: false
 
       - name: Resolve build types matrix
         id: resolve
@@ -94,7 +88,6 @@ jobs:
       - name: Resolve and load muted YA from base branch
         run: |
           set -euo pipefail
-          git sparse-checkout disable || true
           MUTED_YA_RELATIVE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ matrix.build_type }}")"
           git fetch origin "${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}"
           git show "origin/${{ env.BASE_BRANCH }}:${MUTED_YA_RELATIVE}" > base_muted_ya.txt

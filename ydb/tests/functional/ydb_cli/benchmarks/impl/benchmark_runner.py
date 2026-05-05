@@ -255,7 +255,9 @@ class BenchmarkRunner:
         if not models:
             raise ValueError('Models are not configured, please provide `"models": {...models configuration...}`')
         if not isinstance(models, dict):
-            raise ValueError('Invalid `"models"` configuration, please provide a name-to-config mapping like `"models": {"model_name": {...}}`')
+            raise ValueError(
+                'Invalid `"models"` configuration, please provide a name-to-config mapping like `"models": {"model_name": {...}}`'
+            )
 
         for model_name, model_config in models.items():
             if not isinstance(model_config, dict):

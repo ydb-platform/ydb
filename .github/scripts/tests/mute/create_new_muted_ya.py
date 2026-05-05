@@ -37,6 +37,11 @@ from mute.constants import (
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
 from mute.mute_utils import dedicated_relative
+from mute.llm_debug_comment import (
+    DEFAULT_FAILURE_LOOKBACK_DAYS,
+    DEFAULT_LABEL as DEFAULT_AI_REVIEW_LABEL,
+    post_llm_debug_comment,
+)
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -1043,6 +1048,10 @@ def create_mute_issues(
     close_issues=True,
     branch='main',
     build_type=DEFAULT_BUILD_TYPE,
+    ydb_wrapper=None,
+    add_debug_info=False,
+    ai_review_label=DEFAULT_AI_REVIEW_LABEL,
+    failures_window_days=DEFAULT_FAILURE_LOOKBACK_DAYS,
 ):
     tests_from_file = read_tests_from_file(file_path)
     issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
@@ -1181,26 +1190,42 @@ def create_mute_issues(
     results = []
     queue_items = []
     for item in prepared_tests_by_suite:
-        title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        tests_in_issue = prepared_tests_by_suite[item]
+        first_test = tests_in_issue[0]
+        title, body = generate_github_issue_title_and_body(tests_in_issue)
+        raw_owner = first_test['owner']
         owner_value = canonical_team_slug(raw_owner)
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
             issue_url = result['issue_url']
+            issue_id = result.get('issue_id')
             results.append(
                 {
                     'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+
+            if add_debug_info and issue_id:
+                test_full_names = [t['full_name'] for t in tests_in_issue if t.get('full_name')]
+                post_llm_debug_comment(
+                    ydb_wrapper,
+                    issue_id=issue_id,
+                    issue_url=issue_url,
+                    full_names=test_full_names,
+                    branch=first_test.get('branch', branch),
+                    build_type=first_test.get('build_type', build_type),
+                    label=ai_review_label,
+                    window_days=failures_window_days,
+                )
+
             try:
                 issue_number = int(issue_url.rstrip('/').split('/')[-1])
             except (ValueError, IndexError):
                 issue_number = None
             if issue_number:
-                first_test = prepared_tests_by_suite[item][0]
                 queue_items.append({
                     'github_issue_number': issue_number,
                     'github_issue_url': issue_url,
@@ -1555,6 +1580,10 @@ def mute_worker(args):
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,
+                ydb_wrapper=ydb_wrapper,
+                add_debug_info=args.add_debug_info,
+                ai_review_label=args.ai_review_label,
+                failures_window_days=mute_window_days,
             )
 
             try:
@@ -1614,6 +1643,24 @@ if __name__ == "__main__":
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',
         help='tests_monitor build_type when loading monitor rows (default: relwithdebinfo)',
+    )
+    create_issues_parser.add_argument(
+        '--add_debug_info',
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            'For each newly created mute issue post a debug-links comment '
+            'targeted at an LLM reviewer and attach an AI review label '
+            '(default: False).'
+        ),
+    )
+    create_issues_parser.add_argument(
+        '--ai_review_label',
+        default=DEFAULT_AI_REVIEW_LABEL,
+        help=(
+            'GitHub label to attach to mute issues that received the '
+            f'debug-links comment (default: {DEFAULT_AI_REVIEW_LABEL!r}).'
+        ),
     )
 
     args = parser.parse_args()

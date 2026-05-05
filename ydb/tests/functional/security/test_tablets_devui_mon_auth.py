@@ -45,12 +45,19 @@ def ydb_cluster_with_enforce_user_token_and_datashard_tablet(ydb_cluster_with_en
                 .with_column(ydb.Column('id', ydb.OptionalType(ydb.PrimitiveType.Uint64)))
                 .with_primary_key('id'),
             )
+            # Force the first DataShard activity right after table creation.
+            session.transaction().execute(
+                f'UPSERT INTO `{table_path}` (id) VALUES (1);',
+                commit_tx=True,
+            )
 
         with ydb.SessionPool(driver) as pool:
             pool.retry_operation_sync(create_table)
 
     datashard_tablet_id = None
-    for _ in range(120):
+    poll_deadline = time.time() + 45
+    poll_interval_seconds = 0.1
+    while time.time() < poll_deadline:
         described = _scheme_describe_with_table_partitions(cluster, table_path, 'root@builtin')
         partitions = described.PathDescription.TablePartitions
         tid = None
@@ -60,8 +67,9 @@ def ydb_cluster_with_enforce_user_token_and_datashard_tablet(ydb_cluster_with_en
         if tid:
             datashard_tablet_id = tid
             break
-        time.sleep(1)
-    assert datashard_tablet_id, 'DataShard tablet id not available after CREATE TABLE'
+        time.sleep(poll_interval_seconds)
+        poll_interval_seconds = min(1.0, poll_interval_seconds * 2)
+    assert datashard_tablet_id, 'DataShard tablet id not available after CREATE TABLE and UPSERT'
     cluster.datashard_tablet_id = datashard_tablet_id
 
     yield cluster

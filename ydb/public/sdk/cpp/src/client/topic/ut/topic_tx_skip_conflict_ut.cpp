@@ -237,11 +237,15 @@ protected:
     X(true, True, SkipConflictOn_MetaTrue, EStatus::ABORTED)                                                           \
     X(true, False, SkipConflictOn_MetaFalse, EStatus::SUCCESS)
 
-#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                          \
+#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix)                                          \
     using TFixture_##Suffix##_Table = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureTable>; \
     using TFixture_##Suffix##_Query = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureQuery>;
 
-FOR_EACH_TOPIC_TX_MATRIX_ROW(DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES)
+#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                 \
+    DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix)
+
+FOR_EACH_TOPIC_TX_MATRIX_ROW(DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW)
+#undef DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW
 #undef DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES
 
 } // namespace

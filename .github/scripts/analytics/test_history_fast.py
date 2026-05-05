@@ -118,51 +118,32 @@ def get_missed_data_for_upload(
     print('missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
 
-    # -----------------------------------------------------------------------
-    # Build FailureRow objects (only for rows that need classification).
-    # Each row is paired with its FailureRow so we can look up cached texts
-    # without repeating URL normalization.
-    # -----------------------------------------------------------------------
-    print(f"scan done: {len(results)} rows; building failure rows for stderr/log prefetch...", flush=True)
+    print(f"scan done: {len(results)} rows; building failure rows for prefetch...", flush=True)
     row_pairs = [
         (row, failure_row_from_ydb(row))
         for row in results
         if is_failure_like_status(row.get("status"))
     ]
 
-    fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(
+    fetch_cache, prefetch_urls = prefetch_text_cache_and_urls_for_failure_rows(
         [fr for _, fr in row_pairs],
         max_workers=prefetch_max_workers,
     )
-    if prefetch_debug_file_urls:
-        norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
+    if prefetch_urls:
+        norm = {normalize_fetch_url(u) for u in prefetch_urls}
         failed_count = sum(1 for u in norm if fetch_cache.get(u) is None)
-        print(
-            f"debug file prefetch: unique_urls={len(norm)}, fetch_failed={failed_count}",
-            flush=True,
-        )
+        print(f"prefetch: unique_urls={len(norm)}, failed={failed_count}", flush=True)
     else:
-        print("debug file prefetch: no urls to download", flush=True)
+        print("prefetch: no urls", flush=True)
 
-    # -----------------------------------------------------------------------
-    # Classify: build comma-separated error_type for failure rows, then write
-    # it back into the row dict (intentional in-place update — the same dict
-    # is later handed to bulk_upsert_batches).
-    # -----------------------------------------------------------------------
-    nrows = len(results)
-    print(
-        f"[classify] building comma-separated error_type for {len(row_pairs)} failure rows (CPU, no network)...",
-        flush=True,
-    )
+    # Classify failure rows and write error_type back into the row dict in-place
+    # (the same dict is later passed to bulk_upsert_batches).
+    total = len(row_pairs)
+    print(f"[classify] {total} failure rows...", flush=True)
     verify_count = 0
     sanitizer_count = 0
     t_classify = time.time()
-    if nrows > 5000:
-        progress_step = max(5000, nrows // 20)
-    elif nrows > 200:
-        progress_step = max(200, nrows // 5)
-    else:
-        progress_step = 0
+    progress_step = max(200, total // 10) if total > 200 else 0
 
     for i, (row, fr) in enumerate(row_pairs, 1):
         stderr_text, log_text = get_debug_texts_from_cache(fr, fetch_cache)
@@ -178,14 +159,11 @@ def get_missed_data_for_upload(
             verify_count += 1
         if source_has_tag(row["error_type"], "SANITIZER"):
             sanitizer_count += 1
-        if i < len(row_pairs) and progress_step > 0 and i % progress_step == 0:
-            print(
-                f"[classify] progress {i}/{len(row_pairs)} rows ({time.time() - t_classify:.1f}s elapsed)",
-                flush=True,
-            )
+        if progress_step and i % progress_step == 0 and i < total:
+            print(f"[classify] {i}/{total} ({time.time() - t_classify:.1f}s)", flush=True)
     print(
-        f"[classify] done {len(row_pairs)} rows in {time.time() - t_classify:.1f}s, "
-        f"verify_tag={verify_count}, sanitizer_tag={sanitizer_count}",
+        f"[classify] done {total} rows in {time.time() - t_classify:.1f}s, "
+        f"verify={verify_count}, sanitizer={sanitizer_count}",
         flush=True,
     )
     return results
@@ -206,34 +184,28 @@ def main():
     args = parser.parse_args()
 
     with YDBWrapper() as ydb_wrapper:
-
-        # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
-        
-        # Get table paths from config
+
         test_runs_table = ydb_wrapper.get_table_path("test_results")
         test_history_fast_table = ydb_wrapper.get_table_path("test_history_fast")
-        
-        table_path = test_history_fast_table
         batch_size = 1000
 
-        # Create table if it doesn't exist (wrapper will add database_path automatically)
-        create_test_history_fast_table(ydb_wrapper, table_path)
+        create_test_history_fast_table(ydb_wrapper, test_history_fast_table)
         
         prefetch_max_workers = (
             DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH if args.full_day_refresh else DEFAULT_PREFETCH_MAX_WORKERS
         )
-        prepared_for_upload_rows = get_missed_data_for_upload(
+        rows = get_missed_data_for_upload(
             ydb_wrapper,
             test_runs_table,
             test_history_fast_table,
             full_day_refresh=args.full_day_refresh,
             prefetch_max_workers=prefetch_max_workers,
         )
-        print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
-        
-        if prepared_for_upload_rows:
+        print(f'Preparing to upsert: {len(rows)} rows')
+
+        if rows:
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -258,7 +230,7 @@ def main():
                 .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
+            ydb_wrapper.bulk_upsert_batches(test_history_fast_table, rows, column_types, batch_size)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

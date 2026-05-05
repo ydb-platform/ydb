@@ -328,7 +328,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
-    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:

@@ -323,4 +323,3 @@ It is not recommended to mix OLTP and OLAP loads in one database. OLAP loads can
 ### Solution
 
 To ensure stable and predictable performance for both loops, use two separate databases {{ ydb-short-name }}: one for OLTP, one for OLAP. Use the Change Data Capture (CDC) mechanism and the [{#T}](../concepts/transfer.md) service to deliver changes from the OLTP database to the OLAP database in a streaming mode.
-

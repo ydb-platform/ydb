@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/protos
+    ydb/core/security/external_idp
     ydb/core/security/util
     ydb/library/aclib
     ydb/library/aclib/protos
@@ -38,6 +39,7 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     certificate_check
+    external_idp
     ldap_auth_provider
     sasl
     util

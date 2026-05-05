@@ -17,6 +17,10 @@ PEERDIR(
     ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/scheme
+    contrib/libs/jwt-cpp
+    contrib/libs/openssl
+    library/cpp/json
+    library/cpp/string_utils/base64
 )
 
 YQL_LAST_ABI_VERSION()

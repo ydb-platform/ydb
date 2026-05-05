@@ -63,6 +63,8 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+    optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
+    optional TExternalIdpConfig ExternalIdp = 91;
 }
 
 message TUserRegistryConfig {
@@ -185,4 +187,46 @@ message TTokenManager {
     optional string RefreshCheckPeriod = 2 [default = "1s"];
     optional TVmMetadataProvider VmMetadataProvider = 3;
     optional TTokenAgentProvider TokenAgentProvider = 4;
+}
+
+message TExternalIdpConfig {
+    message TPeriodicSettings {
+        optional string SuccessRefreshPeriod = 1 [default = "1h"];
+        optional string MinErrorRefreshPeriod = 2 [default = "1s"];
+        optional string MaxErrorRefreshPeriod = 3 [default = "5m"];
+        optional string RequestTimeout = 4 [default = "15s"];
+    }
+
+    message TJWKsCacheSettings {
+       optional string Timeout = 1 [default = "2h"];
+    }
+
+    // OpenID Connect Discovery URL (e.g. https://idp.example.com/.well-known/openid-configuration)
+    // `jwks_uri` is fetched from the discovery document
+    // `issuer` must be configured and must match discovery `issuer`.
+    optional string DiscoveryUrl = 1;
+
+    // Expected issuer (iss) claim value in the JWT token
+    optional string Issuer = 2;
+
+    // Expected audience (aud) claim value in the JWT token
+    optional string Audience = 3;
+
+    // Allowed clock skew for JWT validation (exp, nbf, iat claims)
+    optional string AllowedClockSkew = 4 [default = "30s"];
+
+    // JWT claim name to use as the user subject identifier
+    optional string SubjectClaimName = 5 [default = "sub"];
+
+    // JWT claim name to use as the list of groups
+    optional string GroupsClaimName = 6 [default = "groups"];
+
+    // How often to refresh discovery info from the IdP
+    optional TPeriodicSettings DiscoveryPeriodicSettings = 7;
+
+    // How often to refresh the JWKS keys from the IdP
+    optional TPeriodicSettings JwksPeriodicSettings = 8;
+
+    // Cache settings for JWKS keys
+    optional TJWKsCacheSettings JwksCacheSettings = 9;
 }

@@ -60,8 +60,8 @@ PRAGMA pq.Consumer="my_consumer";
 
 В примере:
 
-- `ext_source` — это заранее созданный external data source
-- `input_topic` и `output_topic` — локальные или внешние [топики](../../../concepts/datamodel/topic.md)
+- `ext_source` — это заранее созданный [`external data source`](../../../concepts/datamodel/external_data_source.md);
+- `input_topic` и `output_topic` — локальные или внешние [топики](../../../concepts/datamodel/topic.md).
 
 {% endnote %}
 

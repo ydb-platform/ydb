@@ -292,6 +292,12 @@ private:
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is not supported.");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
+        if (UsePessimisticLocks
+                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+                && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+            NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
 
         auto prepareSettings = PrepareCompilationSettings(ctx);
         StartCompilationWithSettings(prepareSettings);

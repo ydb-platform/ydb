@@ -1,5 +1,6 @@
 #include "json_index.h"
 
+#include <library/cpp/json/json_writer.h>
 #include <util/string/join.h>
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -813,9 +814,9 @@ TCollectResult MergeOr(TCollectResult left, TCollectResult right) {
 }
 
 TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName) {
-    TStringBuilder sb;
-    sb << '{';
-    bool first = true;
+    TStringStream ss;
+    NJson::TJsonWriter writer(&ss, /* formatOutput */ false);
+    writer.OpenMap();
 
     size_t nullPos = pathToken.find('\0');
     size_t pathEnd = (nullPos == TString::npos) ? pathToken.size() : nullPos;
@@ -851,59 +852,47 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
         }
 
         if (!path.empty()) {
-            sb << "\"path\": \"" << JoinSeq(".", path) << '"';
-            first = false;
+            writer.Write("path", JoinSeq(".", path));
         }
     }
 
     // Decode literal suffix
     if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
         auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
-        TMaybe<TString> literalValue;
 
         switch (typeCode) {
             case NBinaryJson::EEntryType::BoolFalse:
-                literalValue = "false";
+                writer.Write("literal", false);
                 break;
             case NBinaryJson::EEntryType::BoolTrue:
-                literalValue = "true";
+                writer.Write("literal", true);
                 break;
             case NBinaryJson::EEntryType::Null:
-                literalValue = "null";
+                writer.Write("literal", NJson::TJsonValue(NJson::JSON_NULL));
                 break;
             case NBinaryJson::EEntryType::String:
-                literalValue = TStringBuilder() << '"' << pathToken.substr(nullPos + 2) << '"';
+                writer.Write("literal", pathToken.substr(nullPos + 2));
                 break;
             case NBinaryJson::EEntryType::Number:
                 if (nullPos + 2 + sizeof(double) <= pathToken.size()) {
                     double d;
                     memcpy(&d, pathToken.data() + nullPos + 2, sizeof(double));
-                    literalValue = TStringBuilder() << d;
+                    writer.Write("literal", d);
                 }
                 break;
             default:
                 break;
         }
-
-        if (literalValue) {
-            if (!first) {
-                sb << ", ";
-            }
-            sb << "\"literal\": " << *literalValue;
-            first = false;
-        }
     }
 
     // Param name
     if (!paramName.empty()) {
-        if (!first) {
-            sb << ", ";
-        }
-        sb << "\"param\": \"" << paramName << '"';
+        writer.Write("param", paramName);
     }
 
-    sb << '}';
-    return TString(sb);
+    writer.CloseMap();
+    writer.Flush();
+    return ss.Str();
 }
 
 }  // namespace NJsonIndex

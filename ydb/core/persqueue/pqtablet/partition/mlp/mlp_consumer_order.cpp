@@ -38,9 +38,9 @@ namespace NKikimr::NPQ::NMLP {
                 if (LastSend->GroupsCount == groupsCount) {
                     return false; // no change in commited groups count
                 }
-                constexpr TDuration maxDelayBatchInverval = TDuration::Minutes(5);
+                constexpr TDuration maxDelayBatchInterval = TDuration::Minutes(5);
                 bool shrinked = groupsCount * 2 <= LastSend->GroupsCount; // Send an update to the child as soon as the number of groups has been reduced by at least half
-                bool outdated = now - LastSend->Timestamp > maxDelayBatchInverval; // Send even single update if commit progress stalled
+                bool outdated = now - LastSend->Timestamp > maxDelayBatchInterval; // Send even single update if commit progress stalled
                 if (!shrinked && !outdated) {
                     return false;
                 }

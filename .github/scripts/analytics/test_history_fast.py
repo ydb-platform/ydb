@@ -12,19 +12,15 @@ if TESTS_DIR not in sys.path:
     sys.path.insert(0, TESTS_DIR)
 from error_type_utils import (  # noqa: E402
     DEFAULT_PREFETCH_MAX_WORKERS,
+    DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH,
     build_error_type_csv_for_storage,
-    debug_file_texts_from_cache,
     failure_row_from_ydb,
+    get_debug_texts_from_cache,
     is_failure_like_status,
     normalize_fetch_url,
     prefetch_text_cache_and_urls_for_failure_rows,
-    should_prefetch_debug_files,
     source_has_tag,
 )
-
-# stderr/log HTTP prefetch parallelism (same numbers as error_type_utils.DEFAULT_PREFETCH_MAX_WORKERS).
-_DEFAULT_PREFETCH_WORKERS = DEFAULT_PREFETCH_MAX_WORKERS
-_FULL_DAY_REFRESH_PREFETCH_WORKERS = 200
 
 
 def create_test_history_fast_table(ydb_wrapper, table_path):
@@ -119,29 +115,43 @@ def get_missed_data_for_upload(
         {dedup_where_clause}
     """
 
-    print(f'missed data capturing')
+    print('missed data capturing')
     results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
 
+    # -----------------------------------------------------------------------
+    # Build FailureRow objects (only for rows that need classification).
+    # Each row is paired with its FailureRow so we can look up cached texts
+    # without repeating URL normalization.
+    # -----------------------------------------------------------------------
     print(f"scan done: {len(results)} rows; building failure rows for stderr/log prefetch...", flush=True)
-    failure_rows = [failure_row_from_ydb(row) for row in results if is_failure_like_status(row.get("status"))]
+    row_pairs = [
+        (row, failure_row_from_ydb(row))
+        for row in results
+        if is_failure_like_status(row.get("status"))
+    ]
+
     fetch_cache, prefetch_debug_file_urls = prefetch_text_cache_and_urls_for_failure_rows(
-        failure_rows,
+        [fr for _, fr in row_pairs],
         max_workers=prefetch_max_workers,
     )
     if prefetch_debug_file_urls:
         norm = {normalize_fetch_url(u) for u in prefetch_debug_file_urls}
-        total_urls = len(norm)
         failed_count = sum(1 for u in norm if fetch_cache.get(u) is None)
         print(
-            f"debug file prefetch: unique_urls={total_urls}, fetch_failed={failed_count}",
+            f"debug file prefetch: unique_urls={len(norm)}, fetch_failed={failed_count}",
             flush=True,
         )
     else:
         print("debug file prefetch: no urls to download", flush=True)
 
+    # -----------------------------------------------------------------------
+    # Classify: build comma-separated error_type for failure rows, then write
+    # it back into the row dict (intentional in-place update — the same dict
+    # is later handed to bulk_upsert_batches).
+    # -----------------------------------------------------------------------
     nrows = len(results)
     print(
-        f"[classify] building comma-separated error_type for {nrows} rows (CPU, no network)...",
+        f"[classify] building comma-separated error_type for {len(row_pairs)} failure rows (CPU, no network)...",
         flush=True,
     )
     verify_count = 0
@@ -153,30 +163,28 @@ def get_missed_data_for_upload(
         progress_step = max(200, nrows // 5)
     else:
         progress_step = 0
-    for i, row in enumerate(results, 1):
-        need = should_prefetch_debug_files(row.get("status"), row.get("stderr"), row.get("log"))
-        stderr_text, log_text = debug_file_texts_from_cache(
-            need, row.get("stderr"), row.get("log"), fetch_cache
-        )
+
+    for i, (row, fr) in enumerate(row_pairs, 1):
+        stderr_text, log_text = get_debug_texts_from_cache(fr, fetch_cache)
         row["error_type"] = build_error_type_csv_for_storage(
-            row.get("status"),
-            row.get("status_description"),
-            row.get("error_type"),
+            fr.status,
+            fr.status_description,
+            fr.source_error_type,
             stderr_text,
             log_text,
-            row.get("status"),
+            status_name_for_not_launched=fr.status,
         )
         if source_has_tag(row["error_type"], "VERIFY"):
             verify_count += 1
         if source_has_tag(row["error_type"], "SANITIZER"):
             sanitizer_count += 1
-        if i < nrows and progress_step > 0 and i % progress_step == 0:
+        if i < len(row_pairs) and progress_step > 0 and i % progress_step == 0:
             print(
-                f"[classify] progress {i}/{nrows} rows ({time.time() - t_classify:.1f}s elapsed)",
+                f"[classify] progress {i}/{len(row_pairs)} rows ({time.time() - t_classify:.1f}s elapsed)",
                 flush=True,
             )
     print(
-        f"[classify] done {nrows} rows in {time.time() - t_classify:.1f}s, "
+        f"[classify] done {len(row_pairs)} rows in {time.time() - t_classify:.1f}s, "
         f"verify_tag={verify_count}, sanitizer_tag={sanitizer_count}",
         flush=True,
     )
@@ -191,8 +199,8 @@ def main():
         action="store_true",
         help=(
             "Re-upload all data for the last day (disable dedup by existing test_id in fast table). "
-            f"Uses {_FULL_DAY_REFRESH_PREFETCH_WORKERS} parallel workers for stderr/log prefetch "
-            f"(default run uses {_DEFAULT_PREFETCH_WORKERS})."
+            f"Uses {DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH} parallel workers for stderr/log prefetch "
+            f"(default run uses {DEFAULT_PREFETCH_MAX_WORKERS})."
         ),
     )
     args = parser.parse_args()
@@ -213,9 +221,8 @@ def main():
         # Create table if it doesn't exist (wrapper will add database_path automatically)
         create_test_history_fast_table(ydb_wrapper, table_path)
         
-        # Get missed data for upload
         prefetch_max_workers = (
-            _FULL_DAY_REFRESH_PREFETCH_WORKERS if args.full_day_refresh else _DEFAULT_PREFETCH_WORKERS
+            DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH if args.full_day_refresh else DEFAULT_PREFETCH_MAX_WORKERS
         )
         prepared_for_upload_rows = get_missed_data_for_upload(
             ydb_wrapper,
@@ -227,7 +234,6 @@ def main():
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
-            # Prepare column_types once (same fields as returned by get_missed_data_for_upload)
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -252,7 +258,6 @@ def main():
                 .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            # Use bulk_upsert_batches for aggregated statistics (wrapper will add database_path automatically)
             ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:

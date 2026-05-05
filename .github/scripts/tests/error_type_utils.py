@@ -1,7 +1,23 @@
 """Classify test failures: union row ``error_type`` (TIMEOUT, XFAILED, …) with VERIFY/SANITIZER from text.
 
-VERIFY/SANITIZER use snippet + stderr + log. Failure rows with stderr/log URLs prefetch both;
-there is no skip-when-TIMEOUT shortcut. CSV storage and HTML badges both keep all applicable tags."""
+VERIFY/SANITIZER use snippet + stderr + log. All applicable tags accumulate — a test can carry
+multiple badges simultaneously (e.g. TIMEOUT + SANITIZER). CSV storage and HTML badges both
+keep all applicable tags.
+
+Pipeline overview
+-----------------
+1. Build ``FailureRow`` objects for every failure-like row (status failure|mute|error).
+2. Call ``prefetch_text_cache_and_urls_for_failure_rows`` to download stderr/log in parallel.
+3. For each row call ``get_debug_texts_from_cache`` to retrieve cached text.
+4. Call ``build_error_type_csv_for_storage`` (DB write) or individual ``is_*_classification``
+   functions (HTML badges) with the fetched texts.
+
+Adding a new classifier
+-----------------------
+- Add an ``is_<name>_classification(status_description, stderr_text, log_text)`` function.
+- In ``build_error_type_csv_for_storage`` add ``tags.add("<NAME>")`` where appropriate.
+- In ``generate-summary.py`` add ``test.is_<name>_issue`` field and set it in the badge loop.
+"""
 
 # ---------------------------------------------------------------------------
 # Imports
@@ -22,13 +38,15 @@ from urllib import request as urllib_request
 DEFAULT_FETCH_TIMEOUT_SEC = 5
 DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
 DEFAULT_PREFETCH_MAX_WORKERS = 30
-DEFAULT_FETCH_MAX_ATTEMPTS = 10
-DEFAULT_FETCH_RETRY_DELAY_SEC = 0.5
+# Used by test_history_fast.py --full-day-refresh which processes an order of magnitude more rows.
+DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH = 200
+DEFAULT_FETCH_MAX_ATTEMPTS = 3
+DEFAULT_FETCH_RETRY_DELAY_SEC = 1.0
 
-# After classify+merge: drop these tags from stored error_type (case-insensitive). Keep NOT_LAUNCHED etc.
+# After classify+merge: drop these tags from stored error_type (case-insensitive).
 _ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
 
-# Order of known tags in comma-separated ``error_type`` written to storage
+# Order of known tags in comma-separated ``error_type`` written to storage.
 _STORAGE_TAG_ORDER = ("TIMEOUT", "XFAILED", "NOT_LAUNCHED", "VERIFY", "SANITIZER")
 _KNOWN_STORAGE_TAGS = frozenset(_STORAGE_TAG_ORDER)
 
@@ -48,7 +66,7 @@ def _normalize_text(value):
 
 
 def normalize_fetch_url(url):
-    """Utf8 cells from YDB may be bytes; urlopen requires str."""
+    """YDB Utf8 cells may arrive as bytes; urlopen requires str."""
     return _normalize_text(url).strip()
 
 
@@ -64,7 +82,7 @@ def source_has_tag(source_error_type, tag: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Tag heuristics (also used outside this module, e.g. HTML templates)
+# Tag heuristics (used both for storage and HTML badges)
 # ---------------------------------------------------------------------------
 
 
@@ -82,11 +100,9 @@ def is_sanitizer_issue(error_text):
         r'detected memory leaks',
         r'==\d+==.*detected memory leaks',
     ]
-
     for pattern in sanitizer_patterns:
         if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
             return True
-
     return False
 
 
@@ -103,12 +119,26 @@ def is_verify_issue(error_text):
     error_text = _normalize_text(error_text)
     if not error_text:
         return False
-
     return bool(re.search(r'\bVERIFY\s+failed\b', error_text, re.IGNORECASE))
 
 
+def is_not_launched_issue(source_error_type, status_name=None):
+    if not source_has_tag(source_error_type, "NOT_LAUNCHED"):
+        return False
+    return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
+
+
+# ---------------------------------------------------------------------------
+# Multi-source classification helpers (snippet → stderr → log)
+#
+# Each function accepts the three text sources in priority order.
+# ``None`` means the source was not fetched (URL missing or fetch failed);
+# ``""`` means the fetch succeeded but the file was empty.
+# ---------------------------------------------------------------------------
+
+
 def is_verify_classification(status_description=None, stderr_text=None, log_text=None):
-    """VERIFY from snippet, then stderr, then log. ``None`` = missing URL or failed fetch."""
+    """VERIFY from snippet, then stderr, then log."""
     if is_verify_issue(status_description):
         return True
     if stderr_text is not None and is_verify_issue(stderr_text):
@@ -119,7 +149,7 @@ def is_verify_classification(status_description=None, stderr_text=None, log_text
 
 
 def is_sanitizer_classification(status_description=None, stderr_text=None, log_text=None):
-    """Same source order as :func:`is_verify_classification` but sanitizer patterns."""
+    """Sanitizer from snippet, then stderr, then log."""
     if is_sanitizer_issue(status_description):
         return True
     if stderr_text is not None and is_sanitizer_issue(stderr_text):
@@ -129,21 +159,19 @@ def is_sanitizer_classification(status_description=None, stderr_text=None, log_t
     return False
 
 
-def is_not_launched_issue(source_error_type, status_name=None):
-    if not source_has_tag(source_error_type, "NOT_LAUNCHED"):
-        return False
-
-    return _normalize_text(status_name).upper() in ("SKIP", "SKIPPED", "MUTE")
-
-
 # ---------------------------------------------------------------------------
-# Core classification (status + fields → tag string)
+# Status helpers
 # ---------------------------------------------------------------------------
 
 
 def is_failure_like_status(status):
     """Statuses for which we classify ``error_type`` (aligned with ``test_results`` / HTML summary)."""
     return _normalize_text(status).strip().lower() in ("failure", "mute", "error")
+
+
+# ---------------------------------------------------------------------------
+# Storage formatting
+# ---------------------------------------------------------------------------
 
 
 def format_error_type_tags_csv(tag_set):
@@ -166,68 +194,102 @@ def build_error_type_csv_for_storage(
     log_text,
     status_name_for_not_launched=None,
 ):
-    """Comma-separated tags for storage: existing ``source_error_type`` plus field + text-derived tags."""
+    """Return comma-separated tags for storage.
+
+    Starts from ``source_error_type`` (already-known tags from the upstream row),
+    then overlays text-derived tags for failure-like statuses.  Blacklisted tags
+    (e.g. ``REGULAR``) are stripped from both sources.
+    """
+    # Seed from upstream field (covers TIMEOUT, XFAILED, and any other raw tags).
     tags = set()
-    raw = _normalize_text(source_error_type).strip()
-    for part in re.split(r"\s*,\s*", raw):
+    for part in re.split(r"\s*,\s*", _normalize_text(source_error_type).strip()):
         p = part.strip().upper()
-        if not p or p in _ERROR_TYPE_BLACKLIST:
-            continue
-        tags.add(p)
+        if p and p not in _ERROR_TYPE_BLACKLIST:
+            tags.add(p)
+
+    # Overlay text-derived tags only for failure-like statuses.
     if is_failure_like_status(status):
         if is_verify_classification(status_description, stderr_text, log_text):
             tags.add("VERIFY")
         if is_sanitizer_classification(status_description, stderr_text, log_text):
             tags.add("SANITIZER")
-    if is_timeout_issue(source_error_type):
-        tags.add("TIMEOUT")
-    if is_xfailed_issue(source_error_type):
-        tags.add("XFAILED")
-    if status_name_for_not_launched is not None and is_not_launched_issue(
-        source_error_type, status_name_for_not_launched
-    ):
-        tags.add("NOT_LAUNCHED")
+        if status_name_for_not_launched is not None and is_not_launched_issue(
+            source_error_type, status_name_for_not_launched
+        ):
+            tags.add("NOT_LAUNCHED")
+
     return format_error_type_tags_csv(tags)
 
 
 # ---------------------------------------------------------------------------
-# Prefetch: when to fetch, which URLs, read from cache
+# FailureRow: normalised carrier for classification inputs
 # ---------------------------------------------------------------------------
 
 
-def should_prefetch_debug_files(status, stderr_url, log_url):
-    """Whether to prefetch stderr/log: failure-like status and at least one URL (snippet-only otherwise)."""
-    if not is_failure_like_status(status):
-        return False
-    return bool(normalize_fetch_url(stderr_url) or normalize_fetch_url(log_url))
+@dataclass
+class FailureRow:
+    """Inputs for failure classification: status, texts, and debug-file URLs."""
+
+    status: Any
+    status_description: Any
+    # Tags from the upstream row (TIMEOUT, XFAILED, …); VERIFY/SANITIZER are inferred from text.
+    source_error_type: Any
+    stderr_url: Any
+    log_url: Any
 
 
-def urls_for_debug_prefetch_if_needed(need_prefetch, stderr_url, log_url):
-    """Raw stderr and log URLs to download when prefetch is required for this row."""
-    if not need_prefetch:
+def failure_row_from_ydb(row: Dict[str, Any]) -> FailureRow:
+    return FailureRow(
+        status=row.get("status"),
+        status_description=row.get("status_description"),
+        source_error_type=row.get("error_type"),
+        stderr_url=row.get("stderr"),
+        log_url=row.get("log"),
+    )
+
+
+def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
+    """``status_str`` must be failure|error|mute tokens used by :func:`is_failure_like_status`."""
+    return FailureRow(
+        status=status_str,
+        status_description=getattr(test, "status_description", None),
+        source_error_type=getattr(test, "error_type", None),
+        stderr_url=getattr(test, "stderr_url", None),
+        log_url=getattr(test, "log_url", None),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Prefetch: batch HTTP download of stderr/log into a URL → text cache
+# ---------------------------------------------------------------------------
+
+
+def _urls_to_prefetch(fr: FailureRow) -> List[Any]:
+    """Return the list of URLs (0, 1, or 2) that should be fetched for this row."""
+    if not is_failure_like_status(fr.status):
         return []
-    out = []
-    if normalize_fetch_url(stderr_url):
-        out.append(stderr_url)
-    if normalize_fetch_url(log_url):
-        out.append(log_url)
-    return out
+    urls = []
+    if normalize_fetch_url(fr.stderr_url):
+        urls.append(fr.stderr_url)
+    if normalize_fetch_url(fr.log_url):
+        urls.append(fr.log_url)
+    return urls
 
 
-def debug_file_texts_from_cache(need_prefetch, stderr_url, log_url, fetch_cache):
-    """Stderr and log from ``fetch_cache``; ``None`` if missing/failed, ``""`` if empty body."""
-    if not need_prefetch:
+def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """Return ``(stderr_text, log_text)`` from ``fetch_cache`` for ``fr``.
+
+    Returns ``None`` for a source when its URL is empty or was not fetched
+    (non-failure status, or URL missing).  Returns ``""`` when the fetch
+    succeeded but the file was empty.
+    """
+    if not is_failure_like_status(fr.status):
         return None, None
-    se = normalize_fetch_url(stderr_url)
+    se = normalize_fetch_url(fr.stderr_url)
     stderr_text = fetch_cache.get(se) if se else None
-    lg = normalize_fetch_url(log_url)
+    lg = normalize_fetch_url(fr.log_url)
     log_text = fetch_cache.get(lg) if lg else None
     return stderr_text, log_text
-
-
-# ---------------------------------------------------------------------------
-# HTTP: download log bodies into a URL → text cache
-# ---------------------------------------------------------------------------
 
 
 def fetch_text_by_url(
@@ -237,7 +299,7 @@ def fetch_text_by_url(
     max_attempts=DEFAULT_FETCH_MAX_ATTEMPTS,
     retry_delay_sec=DEFAULT_FETCH_RETRY_DELAY_SEC,
 ):
-    """Return response text, empty string for empty body, or ``None`` if the URL is invalid or fetch failed."""
+    """Return response text, ``""`` for empty body, ``None`` on permanent failure."""
     url = normalize_fetch_url(url)
     if not url:
         return None
@@ -250,14 +312,14 @@ def fetch_text_by_url(
         except (urllib_error.URLError, TimeoutError, ValueError, OSError):
             if attempt < max_attempts - 1:
                 time.sleep(retry_delay_sec)
-            continue
 
     return None
 
 
 def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_PREFETCH_MAX_WORKERS):
+    """Download ``urls`` in parallel; returns updated ``cache`` dict."""
     cache = existing_cache if existing_cache is not None else {}
-    seen = set()
+    seen: set = set()
     unique_urls = []
     for raw in urls:
         url = normalize_fetch_url(raw)
@@ -293,64 +355,16 @@ def prefetch_texts_by_urls(urls, existing_cache=None, max_workers=DEFAULT_PREFET
     return cache
 
 
-# ---------------------------------------------------------------------------
-# FailureRow: normalized row + per-row classification
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class FailureRow:
-    """Normalized inputs for failure classification (YDB row or HTML summary test)."""
-
-    status: Any
-    status_description: Any
-    # error_type from test_results / report row (TIMEOUT, XFAILED, …); VERIFY is inferred from text only
-    source_error_type: Any
-    stderr_url: Any
-    log_url: Any
-
-
-def failure_row_from_ydb(row: Dict[str, Any]) -> FailureRow:
-    return FailureRow(
-        status=row.get("status"),
-        status_description=row.get("status_description"),
-        source_error_type=row.get("error_type"),
-        stderr_url=row.get("stderr"),
-        log_url=row.get("log"),
-    )
-
-
-def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
-    """``status_str`` must be failure|error|mute tokens used by :func:`is_failure_like_status`."""
-    return FailureRow(
-        status=status_str,
-        status_description=getattr(test, "status_description", None),
-        source_error_type=getattr(test, "error_type", None),
-        stderr_url=getattr(test, "stderr_url", None),
-        log_url=getattr(test, "log_url", None),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Batch prefetch for many FailureRow instances
-# ---------------------------------------------------------------------------
-
-
 def prefetch_text_cache_and_urls_for_failure_rows(
     failure_rows: Sequence[FailureRow],
     existing_cache: Optional[Dict[str, Any]] = None,
     max_workers: Optional[int] = None,
 ) -> Tuple[Dict[str, Any], List[Any]]:
-    """Prefetch merged URLs from ``failure_rows``; returns ``(cache, url_list)``. Optional ``max_workers``."""
-    urls = []
+    """Collect URLs from ``failure_rows``, prefetch them, return ``(cache, url_list)``."""
+    urls: List[Any] = []
     for fr in failure_rows:
-        urls.extend(
-            urls_for_debug_prefetch_if_needed(
-                should_prefetch_debug_files(fr.status, fr.stderr_url, fr.log_url),
-                fr.stderr_url,
-                fr.log_url,
-            )
-        )
+        urls.extend(_urls_to_prefetch(fr))
+
     fetch_kw: Dict[str, Any] = {"existing_cache": existing_cache}
     if max_workers is not None:
         fetch_kw["max_workers"] = max_workers

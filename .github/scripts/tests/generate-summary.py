@@ -12,15 +12,14 @@ from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
 from error_type_utils import (
-    debug_file_texts_from_cache,
     failure_row_from_test_result,
+    get_debug_texts_from_cache,
     is_not_launched_issue,
-    is_sanitizer_issue,
+    is_sanitizer_classification,
     is_timeout_issue,
     is_verify_classification,
     is_xfailed_issue,
     prefetch_text_cache_and_urls_for_failure_rows,
-    should_prefetch_debug_files,
 )
 
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
@@ -191,7 +190,8 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
+            # is_sanitizer_issue and is_verify_issue are set after stderr/log prefetch in gen_summary.
+            is_sanitizer_issue=False,
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
             is_verify_issue=False,
@@ -583,7 +583,7 @@ def iter_build_results_files(path):
 
 
 def _status_string_for_error_utils(st: TestStatus) -> str:
-    """Same status tokens as test_results / is_failure_like_status (failure|error|mute)."""
+    """Map TestStatus to the failure|error|mute tokens used by is_failure_like_status."""
     return {
         TestStatus.FAIL: "failure",
         TestStatus.ERROR: "error",
@@ -592,16 +592,14 @@ def _status_string_for_error_utils(st: TestStatus) -> str:
 
 
 def _failure_row_pairs_for_summary_tests(tests):
-    """``TestResult`` → ``FailureRow`` only for failing statuses we classify; clears VERIFY badge on others."""
+    """Return ``[(TestResult, FailureRow)]`` for tests with failure-like statuses."""
     pairs = []
     for test in tests:
         st = getattr(test, "status", None)
         if st is None or not getattr(st, "is_error", False):
-            test.is_verify_issue = False
             continue
         status_str = _status_string_for_error_utils(st)
         if not status_str:
-            test.is_verify_issue = False
             continue
         pairs.append((test, failure_row_from_test_result(test, status_str)))
     return pairs
@@ -623,18 +621,15 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             [fr for _, fr in pairs],
             existing_cache=stderr_fetch_cache,
         )
+        # Set text-derived badge flags after prefetch.
+        # Each badge uses is_*_classification(snippet, stderr_text, log_text).
+        # To add a new badge: add is_<name>_issue field to TestResult (default False),
+        # then add one line here: test.is_<name>_issue = is_<name>_classification(...).
         for test, fr in pairs:
-            # Independent badge predicates (not one “primary” tag); same texts as build_error_type_csv_for_storage.
-            need = should_prefetch_debug_files(fr.status, fr.stderr_url, fr.log_url)
-            stderr_text, log_text = debug_file_texts_from_cache(
-                need, fr.stderr_url, fr.log_url, stderr_fetch_cache
+            stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
+            test.is_sanitizer_issue = is_sanitizer_classification(
+                test.status_description, stderr_text, log_text
             )
-            sanitizer_texts = [test.status_description or ""]
-            if stderr_text is not None:
-                sanitizer_texts.append(stderr_text)
-            if log_text is not None:
-                sanitizer_texts.append(log_text)
-            test.is_sanitizer_issue = any(is_sanitizer_issue(t) for t in sanitizer_texts)
             test.is_verify_issue = is_verify_classification(
                 test.status_description, stderr_text, log_text
             )

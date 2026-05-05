@@ -4,8 +4,8 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/ddisk_state.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_mask.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -22,7 +22,6 @@ struct TReadRangeHint
 {
     TReadRangeHint(
         THostMask hostMask,
-        bool fromDDisk,
         ui64 lsn,
         TBlockRange64 requestRelativeRange,
         TBlockRange64 vchunkRange,
@@ -32,7 +31,9 @@ struct TReadRangeHint
     TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
 
     THostMask HostMask;
-    bool FromDDisk = false;
+    // 0 -> read from DDisk (HostMask is the DDisk hosts to choose from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (HostMask is the PBuffer hosts that confirmed the write).
     ui64 Lsn = 0;
 
     // Range relative to the request.

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "host/host_mask.h"
+#include "model/host_mask.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 

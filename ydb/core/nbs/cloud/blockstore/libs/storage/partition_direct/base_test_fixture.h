@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_mask.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
@@ -57,8 +57,10 @@ struct IReadyQueue
 struct TReadSource
 {
     THostMask Mask;
-    // true -> mask is DDisk hosts; false -> mask is PB hosts
-    bool FromDDisk = false;
+    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
+    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // (Mask is the set of PBuffer hosts that confirmed the write).
+    ui64 Lsn = 0;
 };
 
 class TInflightInfo: public TDisableCopy

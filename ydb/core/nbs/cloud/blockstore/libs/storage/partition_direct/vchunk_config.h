@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
 
 #include <util/system/types.h>
 

@@ -15,13 +15,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
-    bool fromDDisk,
     ui64 lsn,
     TBlockRange64 requestRelativeRange,
     TBlockRange64 vchunkRange,
     TRangeLock&& lock)
     : HostMask(hostMask)
-    , FromDDisk(fromDDisk)
     , Lsn(lsn)
     , RequestRelativeRange(requestRelativeRange)
     , VChunkRange(vchunkRange)
@@ -206,46 +204,34 @@ TReadHint TBlocksDirtyMap::MakeReadHint(
 {
     TReadHint result;
 
-    auto makeDefaultHint = [this, ddiskReadable, &ddiskStates](
-                               TBlockRange64 subRange,
-                               ui64 offsetBlocks)
+    auto makeDefaultHint = [&](TBlockRange64 subRange, ui64 offsetBlocks)
     {
         auto hostMask = ddiskStates.FilterReadable(ddiskReadable, subRange);
         Y_ABORT_UNLESS(!hostMask.Empty());
 
         return TReadRangeHint(
             hostMask,
-            /*fromDDisk=*/true,
-            0,
+            /*Lsn=*/0,
             TBlockRange64::WithLength(offsetBlocks, subRange.Size()),
             subRange,
             TRangeLock(this, subRange, hostMask));
     };
 
-    auto makeHint = [this, ddiskReadable, pbufferReadable](
+    auto makeHint = [&](
                         TReadSource src,
-                        ui64 lsn,
                         TBlockRange64 subRange,
                         ui64 offsetBlocks)
     {
-        auto hostMask = src.Mask;
-        Y_ABORT_UNLESS(!hostMask.Empty());
-
-        if (src.FromDDisk) {
-            hostMask = hostMask.LogicalAnd(ddiskReadable);
-        } else {
-            hostMask = hostMask.LogicalAnd(pbufferReadable);
-        }
+        Y_ABORT_UNLESS(src.Lsn != 0);
+        auto hostMask = src.Mask.LogicalAnd(pbufferReadable);
         Y_ABORT_UNLESS(!hostMask.Empty());
 
         return TReadRangeHint(
             hostMask,
-            src.FromDDisk,
-            lsn,
+            src.Lsn,
             TBlockRange64::WithLength(offsetBlocks, subRange.Size()),
             subRange,
-            src.FromDDisk ? TRangeLock(this, subRange, hostMask)
-                          : TRangeLock(this, lsn));
+            TRangeLock(this, src.Lsn));
     };
 
     if (!Inflight.HasOverlaps(range)) {
@@ -267,7 +253,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(
                 return TInflightMap::EEnumerateContinuation::Stop;
             }
 
-            if (readMask.FromDDisk) {
+            if (readMask.Lsn == 0) {
                 return TInflightMap::EEnumerateContinuation::Continue;
             }
             if (readMask.Mask.LogicalAnd(pbufferReadable).Empty()) {
@@ -300,7 +286,6 @@ TReadHint TBlocksDirtyMap::MakeReadHint(
 
             result.RangeHints.push_back(makeHint(
                 readMask,
-                lsn,
                 nonOverlappingRange.Range,
                 offsetBlocks));
         }

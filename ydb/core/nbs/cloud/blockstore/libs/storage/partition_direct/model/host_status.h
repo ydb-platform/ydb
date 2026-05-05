@@ -2,7 +2,7 @@
 
 #include "host_mask.h"
 
-#include <util/generic/vector.h>
+#include <array>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -37,7 +37,8 @@ public:
     bool operator==(const THostStatusList& other) const = default;
 
 private:
-    TVector<EHostStatus> Statuses;
+    std::array<EHostStatus, MaxHostCount> Statuses{};
+    size_t Count = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

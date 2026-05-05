@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
-    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
 
     library/cpp/threading/future
 )

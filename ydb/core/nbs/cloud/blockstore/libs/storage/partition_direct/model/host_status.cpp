@@ -7,9 +7,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 THostStatusList::THostStatusList(size_t hostCount)
-    : Statuses(hostCount, EHostStatus::Disabled)
+    : Count(hostCount)
 {
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
+    Statuses.fill(EHostStatus::Disabled);
 }
 
 // static
@@ -21,8 +22,10 @@ THostStatusList THostStatusList::MakeRotating(
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
     Y_ABORT_UNLESS(primaryCount <= hostCount);
 
-    THostStatusList result;
-    result.Statuses.assign(hostCount, EHostStatus::HandOff);
+    THostStatusList result(hostCount);
+    for (size_t i = 0; i < hostCount; ++i) {
+        result.Statuses[i] = EHostStatus::HandOff;
+    }
     for (size_t i = 0; i < primaryCount; ++i) {
         const size_t idx = (i + vChunkIndex) % hostCount;
         result.Statuses[idx] = EHostStatus::Primary;
@@ -32,25 +35,25 @@ THostStatusList THostStatusList::MakeRotating(
 
 size_t THostStatusList::HostCount() const
 {
-    return Statuses.size();
+    return Count;
 }
 
 EHostStatus THostStatusList::Get(THostIndex host) const
 {
-    Y_ABORT_UNLESS(host < Statuses.size());
+    Y_ABORT_UNLESS(host < Count);
     return Statuses[host];
 }
 
 void THostStatusList::Set(THostIndex host, EHostStatus status)
 {
-    Y_ABORT_UNLESS(host < Statuses.size());
+    Y_ABORT_UNLESS(host < Count);
     Statuses[host] = status;
 }
 
 THostMask THostStatusList::GetPrimary() const
 {
     THostMask result;
-    for (size_t i = 0; i < Statuses.size(); ++i) {
+    for (size_t i = 0; i < Count; ++i) {
         if (Statuses[i] == EHostStatus::Primary) {
             result.Set(static_cast<THostIndex>(i));
         }
@@ -61,7 +64,7 @@ THostMask THostStatusList::GetPrimary() const
 THostMask THostStatusList::GetHandOff() const
 {
     THostMask result;
-    for (size_t i = 0; i < Statuses.size(); ++i) {
+    for (size_t i = 0; i < Count; ++i) {
         if (Statuses[i] == EHostStatus::HandOff) {
             result.Set(static_cast<THostIndex>(i));
         }

@@ -107,21 +107,21 @@ TReadSource TInflightInfo::ReadMask(THostMask allDDisks) const
     switch (State) {
         case EState::PBufferIncompleteWrite:
             // Reading will be possible only after receiving a quorum.
-            return {THostMask::MakeEmpty(), /*FromDDisk=*/false};
+            return {THostMask::MakeEmpty(), /*Lsn=*/0};
 
         case EState::PBufferWritten:
         case EState::PBufferFlushing:
             // The data is written to PBuffer, but not transferred to DDisk.
-            // Will read from confirmed PBuffer.
-            return {WriteConfirmed, /*FromDDisk=*/false};
+            // Will read from confirmed PBuffer at this inflight's Lsn.
+            return {WriteConfirmed, Lsn};
 
         case EState::PBufferFlushed:
         case EState::PBufferErasing:
         case EState::PBufferErased:
             // The data has already been transferred to DDisk.
-            // Will read from DDisks.
+            // Will read from DDisks. Lsn=0 marks a DDisk read.
             // Filter out non-desired or fresh later.
-            return {allDDisks, /*FromDDisk=*/true};
+            return {allDDisks, /*Lsn=*/0};
     }
 }
 

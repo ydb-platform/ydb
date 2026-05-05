@@ -1,11 +1,15 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ddisk_state.h)
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host_state.h)
 
 SRCS(
+    ddisk_state.cpp
+    host_mask.cpp
     host_stat.cpp
     host_state.cpp
+    host_status.cpp
     oracle.cpp
 )
 

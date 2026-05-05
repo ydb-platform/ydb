@@ -81,7 +81,7 @@ void TReadSingleLocationRequestExecutor::Run()
         return;
     }
 
-    const bool fromDDisk = hint.FromDDisk;
+    const bool fromDDisk = hint.Lsn == 0;
 
     LOG_DEBUG(
         *ActorSystem,

@@ -1,4 +1,4 @@
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/host/ddisk_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_state.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1262,7 +1262,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         );
     }
 
-    preparedSettings.InputColumns.reserve(settings.GetInputColumns().size());
+    preparedSettings.InputColumns.reserve(std::max(settings.GetInputColumns().size(), settings.GetLookupKeyColumns().size()));
     for (const auto& inputColumn : settings.GetInputColumns()) {
         NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(inputColumn.GetTypeId(), inputColumn.GetTypeInfo());
         auto itKey = preparedSettings.KeyColumns.find(inputColumn.GetName());
@@ -1276,6 +1276,17 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
         AFL_ENSURE(preparedSettings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP
             || preparedSettings.KeyColumns.contains(inputColumn.GetName()));
+    }
+
+    if (settings.GetInputColumns().empty()) {
+        // For compatibility with old versions
+        AFL_ENSURE(preparedSettings.InputColumns.empty());
+        for (const auto& lookupKey : settings.GetLookupKeyColumns()) {
+            auto columnIt = preparedSettings.KeyColumns.find(lookupKey);
+            AFL_ENSURE(columnIt != preparedSettings.KeyColumns.end());
+            preparedSettings.InputColumns.push_back(columnIt->second);
+            AFL_ENSURE(columnIt->second.KeyOrder >= 0);
+        }
     }
 
     preparedSettings.Columns.reserve(settings.GetColumns().size());

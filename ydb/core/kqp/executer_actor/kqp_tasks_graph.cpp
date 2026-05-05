@@ -800,6 +800,13 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         ParseColumnToProto(keyColumn, columnIt, keyColumnProto);
     }
 
+    for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
+        auto columnIt = tableInfo->Columns.find(keyColumn);
+        YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << keyColumn);
+        // For compatibility with old versions
+        settings->AddLookupKeyColumns(keyColumn);
+    }
+
     for (const auto& inputColumn : streamLookup.GetInputColumns()) {
         auto columnIt = tableInfo->Columns.find(inputColumn);
         YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << inputColumn);

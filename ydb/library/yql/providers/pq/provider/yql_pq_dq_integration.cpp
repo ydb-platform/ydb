@@ -81,12 +81,12 @@ public:
              const size_t tasks = predicatePartitions.size();
              partitions.reserve(tasks);
              for (auto partition : predicatePartitions) {
-                 NPq::NProto::TDqReadTaskParams params;
-                 auto* partitioningParams = params.MutablePartitioningParams();
-                 partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
-                 partitioningParams->SetEachTopicPartitionGroupId(partition);
-                 partitioningParams->SetDqPartitionsCount(topicPartitionsCount);    // todo 
-                 YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+                NPq::NProto::TDqReadTaskParams params;
+                auto* partitioningParams = params.MutablePartitioningParams();
+                partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                partitioningParams->SetEachTopicPartitionGroupId(partition);
+                partitioningParams->SetDqPartitionsCount(topicPartitionsCount);
+                YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
 
                 TString serializedParams;
                 YQL_ENSURE(params.SerializeToString(&serializedParams));
@@ -98,11 +98,9 @@ public:
 
     bool GetPartition(const TExprNode& node, std::set<ui64>& partitions) {
         partitions.clear();
-
         if (!node.IsCallable("AsList")) {
             return false;
         }
-
         for (ui32 j = 0; j < node.ChildrenSize(); ++j) {
             if (!node.Child(j)->IsCallable("Uint64")) {
                 return false;
@@ -133,10 +131,9 @@ public:
                 }
                 std::set<ui64> predicatePartitions;
                 bool success = GetPartition(*topicSource.Partitions().Ptr(), predicatePartitions);
-                if (success) {
-                    YQL_CLOG(DEBUG, ProviderPq) << "partitions999  " << JoinSeq(" ", predicatePartitions);
+                if (!success) {
+                    YQL_CLOG(WARN, ProviderPq) << "Failed to get predicate partitions";
                 }
-
                 return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead, predicatePartitions);
             }
         }
@@ -198,7 +195,6 @@ public:
             TExprNode::TPtr emptyList = ctx.NewCallable(pqReadTopic.Pos(), "List", {
                 ExpandType(pqReadTopic.Pos(), *listType, ctx)
             });
-            TExprNode::TPtr emptyList2; 
 
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
@@ -433,10 +429,10 @@ public:
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
 
-                NYql::NConnector::NApi::TPredicate filterPredicateProto;
-                auto filterSerializedProto = topicSource.FilterPredicate().Ref().Content();
-                YQL_ENSURE(filterPredicateProto.ParseFromString(filterSerializedProto));
-                TString filterPredicateSql = NYql::FormatPredicate(filterPredicateProto);
+                NYql::NConnector::NApi::TPredicate predicateProto;
+                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+                TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
 
                 NPq::NProto::TOffsetPredicate offsetPredicates;
                 auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();

@@ -13,7 +13,6 @@ namespace {
 
 struct TContext {
     TStringBuilder& Err;
-    TExprContext& Ctx;
 };
 
 bool ConvertPredicate(
@@ -35,14 +34,13 @@ std::optional<ui64> TryConvertExpressionToInt(
         ui64 valueAbs;
         ExtractIntegralValue(atom.Ref(), false, hasSign, isSigned, valueAbs);
         if (hasSign) {
-            return 0;   // TODO
+            return 0;
         }
         return valueAbs;
     }
     if (auto atom = expression.Maybe<TCoTimestamp>()) {   
         return FromString<ui64>(atom.Cast().Literal().Value());
     }
-
     ctx.Err << "Unsupported expression: " << expression.Raw()->Content();
     return std::nullopt;
 }
@@ -119,7 +117,7 @@ bool ConvertComparePredicate(
     tree.Clear();
 
     if (compare.Maybe<TCoCmpEqual>()) {
-        tree.Insert(value);
+        InsertInterval(tree, value, value + 1);
         return true;
     } else if (compare.Maybe<TCoCmpNotEqual>()) {
         InsertInterval(tree, std::numeric_limits<ui64>::min(), value);
@@ -239,7 +237,6 @@ bool ConvertInPredicate(
     return true;
 }
 
-
 bool ConvertPredicate(
     const TExprBase& predicate,
     TDisjointIntervalTree<ui64>& tree,
@@ -263,12 +260,11 @@ bool ConvertPredicate(
 }
 
 bool ConvertPredicateToIntervals(
-    TExprContext& ctx,
     const TExprBase& predicateBody,
     TDisjointIntervalTree<ui64>& tree,
     TStringBuilder& err
 ) {
-    TContext context = {.Err = err, .Ctx = ctx};
+    TContext context = {.Err = err};
     return ConvertPredicate(predicateBody, tree, context);
 }
 

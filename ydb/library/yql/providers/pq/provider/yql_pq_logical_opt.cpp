@@ -331,42 +331,34 @@ public:
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
         const auto& topic = dqPqTopicSource.Topic();
 
-        size_t topicPartitionsCount = 0;
-        for (auto kv : topic.Props()) {
-            auto key = kv.Name().Value();
-            if (key == PartitionsCountProp) {
-                topicPartitionsCount = FromString(kv.Value().Ref().Content());
-            }
-        }
         const auto* topicMeta = State_->FindTopicMeta(topic);
+        if (!topicMeta || !topicMeta->FederatedTopic) {
+            return node;
+        }
+        const auto& federatedTopics = *(topicMeta->FederatedTopic);
+        
+        size_t topicPartitionsCount = 0;
         TInstant minWriteTime = TInstant::Max();
-        if (topicMeta) {
-            if (topicMeta->FederatedTopic) {
-                const auto& federatedTopics = *(topicMeta->FederatedTopic);
-              
-                for (auto [p, time] : federatedTopics[0].MaxWriteTime) {
-                    minWriteTime = std::min(minWriteTime, time);
-                }
+        if (federatedTopics.size() == 1) {
+            topicPartitionsCount = federatedTopics[0].PartitionsCount;
+            for (auto [p, time] : federatedTopics[0].MaxWriteTime) {
+                minWriteTime = std::min(minWriteTime, time);
             }
+        } else {
+            // TODO
+            // for (const auto& topic: federatedTopics) {
+            
+            // }
         }
 
-        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()
+            || !dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()
+            || !dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
             return node;
         }
 
         if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
-
-        if (!dqPqTopicSource.WriteTimePredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
-            return node;
-        }
-
-        if (!dqPqTopicSource.OffsetPredicate().Ref().Content().empty()) {
-            YQL_CLOG(TRACE, ProviderPq) << "OffsetPredicate is already not empty";
             return node;
         }
 
@@ -430,10 +422,7 @@ public:
         TString sharedReadingPridicateSerializedProto;
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
             // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
-            auto settings = TPushdownSettings();
-
-            
-            NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), settings);
+            NPushdown::TPredicateNode sharedReadingPredicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
             if (!sharedReadingPredicate.IsEmpty()) {
                 TStringBuilder err;
                 NYql::NConnector::NApi::TPredicate predicateProto;
@@ -668,7 +657,7 @@ private:
         }
         TStringBuilder err;
         TDisjointIntervalTree<ui64> tree;
-        if (!NYql::NPushdown::ConvertPredicateToIntervals(ctx, predicate.ExprNode.Cast(), tree, err)) {
+        if (!NYql::NPushdown::ConvertPredicateToIntervals(predicate.ExprNode.Cast(), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
             return {};
         }

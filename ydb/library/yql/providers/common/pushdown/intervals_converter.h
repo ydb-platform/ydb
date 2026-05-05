@@ -8,7 +8,6 @@
 namespace NYql::NPushdown {
 
 bool ConvertPredicateToIntervals(
-    TExprContext& ctx,
     const NNodes::TExprBase& predicateBody,
     TDisjointIntervalTree<ui64>& tree,
     TStringBuilder& err);

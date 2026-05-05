@@ -1411,5 +1411,4 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 }
 
-
 } // namespace NKikimr::NKqp

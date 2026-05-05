@@ -1188,5 +1188,4 @@ namespace NYql {
         TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err, .Ctx = ctx};
         return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
     }
-
 } // namespace NYql

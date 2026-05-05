@@ -11,7 +11,7 @@ using namespace NNodes;
 
 namespace {
 
-TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {
+TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {   
     if (predicateTree.CanBePushed) {
         return predicateTree;
     }
@@ -42,7 +42,7 @@ TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicat
 NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings) {
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
-    YQL_LOG(INFO) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
+    YQL_LOG(TRACE) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
 
     auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
     if (!maybeOptionalIf.IsValid()) { // Nothing to push
@@ -53,6 +53,7 @@ NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExp
     NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
     NPushdown::CollectPredicates(ctx, optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), settings);
     YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
+
     return SplitForPartialPushdown(predicateTree, ctx, pos, settings);
 }
 

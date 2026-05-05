@@ -100,8 +100,8 @@ def _normalize_table_cell(value, max_len: int = 120) -> str:
     return text
 
 
-def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[str, Dict]:
-    """Return ``full_name -> latest failing/muted CI run row`` from ``test_history_fast``.
+def _load_latest_failures(ydb_wrapper, branch, full_names) -> Dict[str, Dict[str, Dict]]:
+    """Return ``full_name -> build_type -> latest failing/muted CI run row``.
 
     Returns ``{}`` (and logs a warning) when YDB is unavailable; callers still
     render the table with history links for every test.
@@ -125,22 +125,29 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
         return {}
 
     branch_esc = str(branch).replace("'", "''")
-    bt_esc = str(build_type).replace("'", "''")
     jobs_in = ', '.join(f"'{j}'" for j in _JOB_NAMES)
     pair_pred = ' OR '.join(
         f"(suite_folder = '{s}' AND test_name = '{t}')" for s, t in pairs
     )
     query = f"""
-    SELECT suite_folder, test_name, job_id, status, error_type, status_description, run_timestamp,
+    SELECT suite_folder, test_name, build_type, job_id, status, error_type, status_description, run_timestamp,
            stderr, stdout, log, logsdir
-    FROM `{table_path}`
-    WHERE branch = '{branch_esc}'
-        AND build_type = '{bt_esc}'
-        AND job_name IN ({jobs_in})
-        AND (pull IS NULL OR NOT String::Contains(pull, 'manual'))
-        AND ({pair_pred})
-        AND status IN ('failure', 'error', 'mute')
-        AND run_timestamp >= CurrentUtcTimestamp() - {FAILURE_LOOKBACK_DAYS} * Interval("P1D")
+    FROM (
+        SELECT suite_folder, test_name, build_type, job_id, status, error_type, status_description, run_timestamp,
+               stderr, stdout, log, logsdir,
+               ROW_NUMBER() OVER (
+                   PARTITION BY suite_folder, test_name, build_type
+                   ORDER BY run_timestamp DESC
+               ) AS rn
+        FROM `{table_path}`
+        WHERE branch = '{branch_esc}'
+            AND job_name IN ({jobs_in})
+            AND (pull IS NULL OR NOT String::Contains(pull, 'manual'))
+            AND ({pair_pred})
+            AND status IN ('failure', 'error', 'mute')
+            AND run_timestamp >= CurrentUtcTimestamp() - {FAILURE_LOOKBACK_DAYS} * Interval("P1D")
+    )
+    WHERE rn = 1
     ORDER BY run_timestamp DESC
     """
     try:
@@ -149,53 +156,64 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
         logging.warning('Failed to load debug links from test_history_fast: %s', exc)
         return {}
 
-    latest: Dict[str, Dict] = {}
+    latest: Dict[str, Dict[str, Dict]] = {}
     for row in rows:
         suite = row.get('suite_folder')
         test = row.get('test_name')
         if not suite or not test:
             continue
-        full_name = f"{suite}/{test}"
-        if full_name not in target or full_name in latest:
+        row_build_type = str(row.get('build_type') or '')
+        if not row_build_type:
             continue
-        latest[full_name] = row
+        full_name = f"{suite}/{test}"
+        if full_name not in target:
+            continue
+        per_build_rows = latest.setdefault(full_name, {})
+        if row_build_type in per_build_rows:
+            continue
+        per_build_rows[row_build_type] = row
     return latest
 
 
-def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
+def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict[str, Dict]],
                    branch: str, build_type: str) -> str:
     lines = [
         '### Links to recent failed test runs',
         _LLM_HINT,
         _COMMENT_MARKER,
         '',
-        '| test | status | type | last_run | history | run | stderr | stdout | log | logsdir |',
-        '|---|---|---|---|---|---|---|---|---|---|',
+        '| test | build_type | status | type | last_run | history | run | stderr | stdout | log | logsdir |',
+        '|---|---|---|---|---|---|---|---|---|---|---|',
     ]
     for full_name in sorted(set(full_names)):
-        row = rows.get(full_name)
-        history = _history_link(full_name, branch, build_type)
         short = full_name.rsplit('/', 1)[-1]
-        if not row:
+        build_rows = rows.get(full_name, {})
+        if not build_rows:
+            history = _history_link(full_name, branch, build_type)
             lines.append(
-                f"| `{short}` | n/a | n/a | n/a | {_link(history)} | n/a | n/a | n/a | n/a | n/a |"
+                f"| `{short}` | `{_normalize_table_cell(build_type or 'n/a', max_len=32)}` "
+                f"| n/a | n/a | n/a | {_link(history)} | n/a | n/a | n/a | n/a | n/a |"
             )
             continue
-        job_id = row.get('job_id')
-        run_url = f"https://github.com/ydb-platform/ydb/actions/runs/{job_id}" if job_id else ''
-        type_text = _normalize_table_cell(row.get('error_type') or 'n/a', max_len=48).upper()
-        lines.append(
-            f"| `{short}` "
-            f"| `{_normalize_table_cell(row.get('status') or 'unknown', max_len=32)}` "
-            f"| `{type_text}` "
-            f"| {_format_ts_for_table(row.get('run_timestamp'))} "
-            f"| {_link(history)} "
-            f"| {_link(run_url)} "
-            f"| {_link(row.get('stderr'))} "
-            f"| {_link(row.get('stdout'))} "
-            f"| {_link(row.get('log'))} "
-            f"| {_link(row.get('logsdir'))} |"
-        )
+        for row_build_type in sorted(build_rows):
+            row = build_rows[row_build_type]
+            history = _history_link(full_name, branch, row_build_type)
+            job_id = row.get('job_id')
+            run_url = f"https://github.com/ydb-platform/ydb/actions/runs/{job_id}" if job_id else ''
+            type_text = _normalize_table_cell(row.get('error_type') or 'n/a', max_len=48).upper()
+            lines.append(
+                f"| `{short}` "
+                f"| `{_normalize_table_cell(row_build_type, max_len=32)}` "
+                f"| `{_normalize_table_cell(row.get('status') or 'unknown', max_len=32)}` "
+                f"| `{type_text}` "
+                f"| {_format_ts_for_table(row.get('run_timestamp'))} "
+                f"| {_link(history)} "
+                f"| {_link(run_url)} "
+                f"| {_link(row.get('stderr'))} "
+                f"| {_link(row.get('stdout'))} "
+                f"| {_link(row.get('log'))} "
+                f"| {_link(row.get('logsdir'))} |"
+            )
 
     body = '\n'.join(lines)
     if len(body) <= MAX_COMMENT_LENGTH:
@@ -226,7 +244,7 @@ def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
     if not issue_id or not full_names:
         return
     try:
-        rows = _load_latest_failures(ydb_wrapper, branch, build_type, full_names)
+        rows = _load_latest_failures(ydb_wrapper, branch, full_names)
         if _already_posted(issue_id):
             logging.info('LLM debug comment already exists for %s, skipping duplicate post', issue_url)
         else:

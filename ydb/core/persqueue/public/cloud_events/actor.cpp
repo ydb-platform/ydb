@@ -253,7 +253,11 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
 template<typename TEvent>
 TString SerializeEventToProtobuf(const TEvent& ev) {
     TString data;
-    Y_ABORT_UNLESS(ev.SerializeToString(&data), "SerializeToString failed");
+    if (!ev.SerializeToString(&data)) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "SerializeToString failed");
+        return TString();
+    }
     return data;
 }
 
@@ -263,7 +267,11 @@ TString SerializeEventToJson(const TEvent& ev) {
     google::protobuf::util::JsonPrintOptions opts;
     opts.preserve_proto_field_names = true;
     opts.always_print_primitive_fields = true;
-    Y_ABORT_UNLESS(google::protobuf::util::MessageToJsonString(ev, &data, opts).ok(), "MessageToJsonString failed");
+    if (!google::protobuf::util::MessageToJsonString(ev, &data, opts).ok()) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "MessageToJsonString failed");
+        return TString();
+    }
     return data;
 }
 
@@ -341,6 +349,12 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
 
     try {
         TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
+        if (data.empty()) {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+                "Failed to build cloud event");
+            PassAway();
+            return;
+        }
         EventsWriter->Write(data);
     } catch (const std::exception& e) {
         LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,

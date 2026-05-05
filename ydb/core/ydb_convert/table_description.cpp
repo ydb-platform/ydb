@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
@@ -294,73 +293,6 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     tableIndex->CopyFrom(req->add_indexes(0));
 
     return true;
-}
-
-// For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
-// ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
-bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme,
-    Ydb::StatusIds::StatusCode& code, TString& error)
-{
-    std::pair<TString, TString> pathPair;
-    try {
-        pathPair = SplitPathIntoWorkingDirAndName(path);
-    } catch (const std::exception&) {
-        code = Ydb::StatusIds::BAD_REQUEST;
-        error = "Invalid table path";
-        return false;
-    }
-
-    modifyScheme->SetWorkingDir(pathPair.first);
-    modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
-
-    auto* tableDesc = modifyScheme->MutableAlterTable();
-    tableDesc->SetName(pathPair.second);
-
-    // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
-    // Last specified FPP wins for each prefix length; 0 means "not set, use default".
-    TMap<ui32, double> bloomPrefixes;
-    for (const auto& index : req->add_indexes()) {
-        if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
-            continue;
-        }
-        if (index.index_columns().empty()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = "Bloom filter index must specify at least one column";
-            return false;
-        }
-
-        const ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
-        const auto& bloomSettings = index.local_bloom_filter_index();
-        if (bloomSettings.has_false_positive_probability()) {
-            const double fpp = bloomSettings.false_positive_probability();
-            if (fpp <= 0.0 || fpp >= 1.0) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = "false_positive_probability must be in range (0, 1)";
-                return false;
-            }
-            bloomPrefixes[prefixLen] = fpp;
-        } else {
-            bloomPrefixes.emplace(prefixLen, 0.0);
-        }
-    }
-
-    for (auto&& [prefixLen, fpp] : bloomPrefixes) {
-        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
-        entry->SetPrefixLength(prefixLen);
-        if (fpp > 0.0) {
-            entry->SetFalsePositiveProbability(fpp);
-        }
-    }
-
-    return true;
-}
-
-bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme,
-    Ydb::StatusIds::StatusCode& code, TString& error)
-{
-    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
@@ -1649,35 +1581,6 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
             }
             index->set_size_bytes(tableIndex.GetDataSize());
-        }
-    }
-
-    // Synthesize LocalBloomFilter index entries for DataShard tables.
-    // ByKeyFilterPrefixes stores prefix lengths (not index names), so names are generated
-    // as "idx_bloom_<prefixLen>".
-    if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
-        const auto& pkCols = in.GetKeyColumnNames();
-        for (auto&& filterPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
-            const ui32 prefixLen = filterPrefix.GetPrefixLength();
-            if (prefixLen == 0 || static_cast<int>(prefixLen) > pkCols.size()) {
-                continue;
-            }
-
-            auto index = out.add_indexes();
-            index->set_name(TStringBuilder() << "idx_bloom_" << prefixLen);
-            for (ui32 i = 0; i < prefixLen; ++i) {
-                index->add_index_columns(pkCols[i]);
-            }
-
-            auto* bloom = index->mutable_local_bloom_filter_index();
-            if (filterPrefix.HasFalsePositiveProbability() &&
-                filterPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
-                bloom->set_false_positive_probability(filterPrefix.GetFalsePositiveProbability());
-            }
-
-            if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
-                index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
-            }
         }
     }
 }

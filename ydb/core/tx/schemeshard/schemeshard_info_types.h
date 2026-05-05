@@ -3069,8 +3069,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexAlteringConfig& config, TString& errMsg) {
-        if (!config.KeyColumnNamesSize() && !config.HasType()) {
-            errMsg += TStringBuilder() << "TIndexAlteringConfig requires Type and KeyColumnNames for local indexes";
+        if (!config.HasType() || !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "TIndexAlteringConfig requires a valid local index type to be set";
             return nullptr;
         }
 

@@ -591,18 +591,11 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
             }
 
             case NKikimrSchemeOp::TAuth::kIam: {
-                if (authDescription.GetIam().GetServiceAccountId().empty()) {
-                    SetError(externalDataSourceMetadata, "IAM auth requires non-empty SERVICE_ACCOUNT_ID");
-                    return;
-                }
-                if (authDescription.GetIam().GetResourceId().empty()) {
-                    SetError(externalDataSourceMetadata, "IAM auth requires non-empty RESOURCE_ID");
-                    return;
-                }
-                if (objectDescription.SecretValues.size() != 0) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "IAM auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
-                    return;
-                }
+                // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
+                // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
+                // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
+                // SecretValues. Emptiness of these fields/secret list is therefore an
+                // internal-contract violation and not an actionable BAD_REQUEST.
                 return;
             }
 

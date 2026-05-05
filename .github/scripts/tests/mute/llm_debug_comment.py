@@ -148,7 +148,6 @@ def _load_latest_failures(ydb_wrapper, branch, full_names) -> Dict[str, Dict[str
             AND run_timestamp >= CurrentUtcTimestamp() - {FAILURE_LOOKBACK_DAYS} * Interval("P1D")
     )
     WHERE rn = 1
-    ORDER BY run_timestamp DESC
     """
     try:
         rows = ydb_wrapper.execute_scan_query(query, query_name='mute_issue_llm_debug_links')

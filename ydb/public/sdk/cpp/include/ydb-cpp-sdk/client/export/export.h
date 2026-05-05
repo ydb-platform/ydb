@@ -147,6 +147,7 @@ struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSetting
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {

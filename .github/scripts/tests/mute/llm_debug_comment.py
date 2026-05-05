@@ -156,7 +156,7 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
 def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
                    branch: str, build_type: str) -> str:
     lines = [
-        '### Debug links (latest failed run)',
+        '### Failed test run details',
         _LLM_HINT,
         '',
         '| test | status | type | last_run | history | run | stderr | stdout | log | logsdir |',

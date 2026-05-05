@@ -352,13 +352,8 @@ TRuntimeNode BuildParseCall(
             ctx.ProgramBuilder.NewStructType({}),
             userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
-<<<<<<< HEAD
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format + settingsAsJson), {input}));
-=======
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input}), {}):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, formatForCh + settingsAsJson), {input}), {});
->>>>>>> f36168c2b7d (read csv support (#37284))
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, formatForCh + settingsAsJson), {input}));
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,

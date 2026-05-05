@@ -659,54 +659,6 @@ def add_issue_comment(issue_id, comment):
     else:
         print(f"Error: Failed to add comment to issue {issue_id}")
 
-def add_issue_label(issue_id, label_name):
-    """Attach a repository label to an issue by label name (idempotent on the GitHub side).
-
-    No-op (with a warning) when the label is missing in ``ORG_NAME/REPO_NAME``.
-    """
-    if not label_name:
-        return False
-
-    query_label = """
-    query ($org: String!, $repo: String!, $label: String!) {
-      organization(login: $org) {
-        repository(name: $repo) {
-          label(name: $label) {
-            id
-          }
-        }
-      }
-    }
-    """
-    label_result = run_query(
-        query_label,
-        {"org": ORG_NAME, "repo": REPO_NAME, "label": label_name},
-    )
-    label_id = (
-        ((label_result.get('data') or {}).get('organization') or {})
-        .get('repository', {})
-        .get('label', {})
-        .get('id')
-    )
-    if not label_id:
-        print(f"Warning: label {label_name!r} not found in {ORG_NAME}/{REPO_NAME}, skipping")
-        return False
-
-    mutation = """
-    mutation ($issueId: ID!, $labelId: ID!) {
-      addLabelsToLabelable(input: {labelableId: $issueId, labelIds: [$labelId]}) {
-        labelable { __typename }
-      }
-    }
-    """
-    result = run_query(mutation, {"issueId": issue_id, "labelId": label_id})
-    if result.get('errors'):
-        print(f"Error: failed to add label {label_name!r} to issue {issue_id}")
-        return False
-    print(f"Added label {label_name!r} to issue {issue_id}")
-    return True
-
-
 def update_issue_status(issue_id, status_field_id, status_option_id, issue_url):
     """Updates the status of an issue in the project.
     

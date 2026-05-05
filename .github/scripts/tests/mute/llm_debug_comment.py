@@ -21,8 +21,8 @@ from urllib.parse import quote_plus
 from mute.update_mute_issues import (
     CURRENT_TEST_HISTORY_DASHBOARD,
     add_issue_comment,
-    add_issue_label,
 )
+from mute.fast_unmute_github import add_label_to_issue
 
 
 AI_REVIEW_LABEL = 'needs-ai-review'
@@ -74,7 +74,13 @@ def _link(url) -> str:
 
 
 def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[str, Dict]:
-    """Return ``full_name -> latest failing/muted CI run row`` from ``test_results``."""
+    """Return ``full_name -> latest failing/muted CI run row`` from ``test_results``.
+
+    Returns ``{}`` (and logs a warning) when YDB is unavailable; callers still
+    render the table with history links for every test.
+    """
+    if ydb_wrapper is None:
+        return {}
     pairs = []
     target = set(full_names)
     for name in target:
@@ -87,7 +93,7 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
 
     try:
         table_path = ydb_wrapper.get_table_path('test_results')
-    except KeyError:
+    except (KeyError, AttributeError):
         logging.warning('test_results not registered in ydb_qa_config — debug links disabled')
         return {}
 
@@ -165,8 +171,13 @@ def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
     body = '\n'.join(lines)
     if len(body) <= MAX_COMMENT_LENGTH:
         return body
+    # Truncate on a line boundary so we never split a markdown table row.
     suffix = '\n\n_… truncated to fit GitHub comment size limit._'
-    return body[: MAX_COMMENT_LENGTH - len(suffix)] + suffix
+    budget = MAX_COMMENT_LENGTH - len(suffix)
+    cutoff = body.rfind('\n', 0, budget)
+    if cutoff <= 0:
+        cutoff = budget
+    return body[:cutoff] + suffix
 
 
 def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
@@ -181,7 +192,5 @@ def post_llm_debug_comment(ydb_wrapper, issue_id: str, issue_url: str,
     except Exception as exc:
         logging.warning('Failed to post LLM debug comment to %s: %s', issue_url, exc)
         return
-    try:
-        add_issue_label(issue_id, AI_REVIEW_LABEL)
-    except Exception as exc:
-        logging.warning('Failed to add label %r to %s: %s', AI_REVIEW_LABEL, issue_url, exc)
+    # add_label_to_issue caches the label id and silently no-ops on failures.
+    add_label_to_issue(issue_id, AI_REVIEW_LABEL)

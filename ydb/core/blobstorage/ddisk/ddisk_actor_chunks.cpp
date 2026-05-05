@@ -29,8 +29,8 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(ReserveInFlight);
         ReserveInFlight = false;
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReserveResult)")) {
+            return;
         }
 
         for (TChunkIdx chunkIdx : msg.ChunkIds) {

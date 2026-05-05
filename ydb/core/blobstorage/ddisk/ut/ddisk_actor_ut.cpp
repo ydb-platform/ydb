@@ -1288,6 +1288,51 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             }
         }
     }
+
+    void TestPDiskErrorStopsDDisk(NKikimrProto::EReplyStatus errorStatus) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(20, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 100, 1);
+
+        const TString payload = MakeData('X', BlockSize);
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(0, 0, BlockSize), NDDisk::TWriteInstruction(0));
+        write->AddPayload(MakeAlignedRope(payload));
+        SendToDDisk(ctx, disk.ServiceId, write.release());
+
+        // A first-time write triggers three PDisk requests:
+        //   TEvLog (chunk map increment), TEvLog (chunk map snapshot), TEvChunkReserve (refill).
+        // Drain all of them so the PDisk edge is clean before the sentinel check.
+        auto logIncrement = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto logSnapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto reserve = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+        Y_UNUSED(logSnapshot);
+        Y_UNUSED(reserve);
+
+        auto logReply = std::make_unique<NPDisk::TEvLogResult>(errorStatus, 0, "test injected error", 0);
+        logReply->Results.emplace_back(logIncrement->Get()->Lsn, logIncrement->Get()->Cookie);
+        ctx.SendPDiskResponse(disk, *logIncrement, logReply.release());
+
+        // DDisk should be in StateFuncTerminate now (not crashed).
+        // Verify it silently drops client requests.
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvConnect(creds));
+
+        TActorId sentinelEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.Send(new IEventHandle(sentinelEdge, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
+
+        auto ev = ctx.Runtime.WaitForEdgeActorEvent({ctx.Edge, sentinelEdge});
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Recipient, sentinelEdge,
+            "DDisk should not respond to client requests after PDisk "
+            << NKikimrProto::EReplyStatus_Name(errorStatus));
+    }
+
+    Y_UNIT_TEST(PDiskCorruptedStopsDDisk) {
+        TestPDiskErrorStopsDDisk(NKikimrProto::CORRUPTED);
+    }
+
+    Y_UNIT_TEST(PDiskOutOfSpaceStopsDDisk) {
+        TestPDiskErrorStopsDDisk(NKikimrProto::OUT_OF_SPACE);
+    }
 }
 
 } // NKikimr

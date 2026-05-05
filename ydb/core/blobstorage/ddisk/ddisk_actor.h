@@ -331,7 +331,16 @@ namespace NKikimr::NDDisk {
         void Bootstrap();
         STFUNC(StateFuncDDisk);
         STFUNC(StateFuncPersistentBuffer);
+        STFUNC(StateFuncTerminate);
         void PassAway() override;
+
+        // Mirrors TVDiskContext::CheckPDiskResponse: returns true on OK, returns false and
+        // switches to StateFuncTerminate on session-loss statuses (ERROR / INVALID_OWNER /
+        // INVALID_ROUND) and device-error statuses (CORRUPTED / OUT_OF_SPACE), Y_ABORTs on
+        // anything else. Caller must `return` immediately on false because the actor's
+        // state has changed.
+        bool CheckPDiskReply(NKikimrProto::EReplyStatus status,
+            const TString& errorReason, TStringBuf source);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Boot sequence and PDisk management

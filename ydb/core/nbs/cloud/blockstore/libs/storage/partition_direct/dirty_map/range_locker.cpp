@@ -13,7 +13,7 @@ TRangeLock::TRangeLock(TRangeLock&& other) noexcept
     , Armed(other.Armed)
 {
     other.Armed = false;
-    other.LockRange = {};
+    other.LockableRanges = nullptr;
 }
 
 TRangeLock::~TRangeLock()
@@ -21,6 +21,8 @@ TRangeLock::~TRangeLock()
     if (!Armed) {
         return;
     }
+
+    Y_ABORT_UNLESS(LockableRanges);
 
     if (Lsn) {
         LockableRanges->UnlockPBuffer(Lsn);
@@ -39,7 +41,7 @@ TRangeLock& TRangeLock::operator=(TRangeLock&& other) noexcept
     Armed = other.Armed;
 
     other.Armed = false;
-    other.LockRange = {};
+    other.LockableRanges = nullptr;
     return *this;
 }
 

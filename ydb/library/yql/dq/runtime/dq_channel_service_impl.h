@@ -522,8 +522,9 @@ struct TEvPrivate {
     };
 
     struct TEvFreeNodeSession : public NActors::TEventLocal<TEvFreeNodeSession, EvFreeNodeSession> {
-        TEvFreeNodeSession(ui32 nodeId) : NodeId(nodeId) {}
+        TEvFreeNodeSession(ui32 nodeId, bool force) : NodeId(nodeId), Force(force) {}
         const ui32 NodeId;
+        const bool Force;
     };
 
     struct TEvCleanup : public NActors::TEventLocal<TEvCleanup, EvCleanup> {
@@ -710,7 +711,7 @@ public:
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
-    void FreeNodeSession(ui32 nodeId);
+    void FreeNodeSession(ui32 nodeId, bool force);
 
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
@@ -1047,7 +1048,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvFreeNodeSession::TPtr& ev) {
-        ChannelService->FreeNodeSession(ev->Get()->NodeId);
+        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Get()->Force);
     }
 
     void HandleWakeup() {

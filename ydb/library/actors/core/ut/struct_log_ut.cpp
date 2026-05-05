@@ -47,6 +47,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TestType<TString>({"", "a", "ab", "abc"});
 
         TestType<float>({1, 1.2, 1.23, 1.234, 1.2345});
+        TestType<NActors::TActorId>({NActors::TActorId(), NActors::TActorId(1,2), NActors::TActorId(3,4)});
     }
 
     Y_UNIT_TEST(TestKeyName) {
@@ -104,6 +105,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TestCreateMessageTypedValueRead<std::int64_t>({0, 1, 2, 3, 4, 5});
         TestCreateMessageTypedValueRead<bool>({true, false});
         TestCreateMessageTypedValueRead<TString>({"", "a", "ab", "abc"});
+        TestCreateMessageTypedValueRead<NActors::TActorId>({NActors::TActorId(), NActors::TActorId(1,2), NActors::TActorId(3,4)});
     }
 
     Y_UNIT_TEST(SortValues) {
@@ -177,7 +179,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
             {"string", static_cast<TString>("abc")},
             {"float", static_cast<float>(1.123)},
             {"double", static_cast<double>(1.123)},
-            {"long double", static_cast<long double>(1.123)}
+            {"long double", static_cast<long double>(1.123)},
+            {"actor id", NActors::TActorId(1, 2)},
         );
 
         message.ForEach(
@@ -194,7 +197,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 [](const std::vector<TKeyName>& name, const TString& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc"); },
                 [](const std::vector<TKeyName>& name, const float& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "float" && std::abs(value - 1.123) < 0.001); },
                 [](const std::vector<TKeyName>& name, const double& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "double" && std::abs(value - 1.123) < 0.001); },
-                [](const std::vector<TKeyName>& name, const long double& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString()=="long double" && std::abs(value - 1.123) < 0.001); }
+                [](const std::vector<TKeyName>& name, const long double& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString()=="long double" && std::abs(value - 1.123) < 0.001); },
+                [](const std::vector<TKeyName>& name, const NActors::TActorId& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString()=="actor id" && value == NActors::TActorId(1, 2)); }
             ));
     }
 
@@ -234,7 +238,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 [&](const std::vector<TKeyName>& name, const TString& value) { append(name, "string", value); },
                 [&](const std::vector<TKeyName>& name, const float& value) { append(name, "float", value); },
                 [&](const std::vector<TKeyName>& name, const double& value) { append(name, "double", value); },
-                [&](const std::vector<TKeyName>& name, const long double& value) { append(name, "long double", value); }
+                [&](const std::vector<TKeyName>& name, const long double& value) { append(name, "long double", value); },
+                [&](const std::vector<TKeyName>& name, const NActors::TActorId& value) { append(name, "actor id", value); }
             )
         );
         return result;
@@ -273,6 +278,11 @@ Y_UNIT_TEST_SUITE(StructLog) {
         // optional values
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{}}), "");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui8>{1}}), "value:uint8=1");
+
+        // Actor id
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{}}), "value:actor id=[0:0:0]");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{1,2}}), "value:actor id=[0:1:2]");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{1, 2, 3, 4}}), "value:actor id=[1:3:4]");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {
@@ -399,6 +409,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":1.123})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":1.123})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId(1, 2)}), R"({"value":"[0:1:2]"})");
 
         // reuse message and sub message
         auto subMessage = YDBLOG_CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});

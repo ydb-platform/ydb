@@ -22,11 +22,6 @@ on:
             required: false
             type: string
             default: ''
-        add_debug_info:
-            description: 'Post LLM-targeted debug-links comment and attach AI review label to created issues'
-            required: false
-            type: boolean
-            default: true
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -118,18 +113,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Default to posting the LLM debug-links comment unless the dispatcher disables it.
-          ADD_DEBUG_FLAG="--add_debug_info"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.add_debug_info }}" = "false" ]; then
-            ADD_DEBUG_FLAG="--no-add_debug_info"
-          fi
-          .github/scripts/tests/mute/create_new_muted_ya.py create_issues \
-            --file_path="${{ env.MUTED_YA_FILE_PATH }}" \
-            --branch=${{ env.BASE_BRANCH }} \
-            --build-type=${{ matrix.build_type }} \
-            "$ADD_DEBUG_FLAG"
+        run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR
         continue-on-error: true

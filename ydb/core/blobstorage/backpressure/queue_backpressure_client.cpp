@@ -566,6 +566,10 @@ private:
         } else {
             RequestReadiness(nullptr, ctx);
         }
+
+        PostponePump = false;
+        PostponePumpDelay = TDuration::Zero();
+        PostponePumpLastInstant = TInstant();
     }
 
     void Drain(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason) {

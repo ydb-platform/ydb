@@ -17,13 +17,13 @@ Allows you to set a default value for a column. If no value is specified for thi
 
 ### NOT NULL
 
-Disallows `NULL` values in this column.
-
 {% note warning %}
 
-Currently only `DROP NOT NULL` is supported for this option — it removes the constraint and allows `NULL` values in the column again. `SET NOT NULL` is under development.
+Currently only `DROP NOT NULL` is supported. `SET NOT NULL` is under development.
 
 {% endnote %}
+
+Removes the `NOT NULL` constraint from the column, allowing `NULL` values again.
 
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
 

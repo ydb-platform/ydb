@@ -46,7 +46,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternat
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
 ### Request parameters
@@ -65,7 +65,7 @@ Set a column option.
 
 #### DROP
 
-Remove a column option. Currently only `DEFAULT` can be removed.
+Remove a column option.
 
 {% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 

@@ -15,6 +15,16 @@ The `DEFAULT` option is supported:
 
 Allows you to set a default value for a column. If no value is specified for this column when inserting a row, the specified default value will be used. The default value must match the column's data type.
 
+### NOT NULL
+
+Disallows `NULL` values in this column.
+
+{% note warning %}
+
+Currently only `DROP NOT NULL` is supported for this option — it removes the constraint and allows `NULL` values in the column again. `SET NOT NULL` is under development.
+
+{% endnote %}
+
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
 
 {% if oss == true and backend_name == "YDB" %}

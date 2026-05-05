@@ -46,7 +46,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 Изменяет свойства существующей колонки в указанной таблице. Изменение свойства происходит без пересоздания колонки. Некоторые свойства применяются только к свежим записанным данным или в процессе компакшена (детали можно найти в описании конкретного свойства)
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ### Параметры запроса
@@ -61,11 +61,11 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 #### SET
 
-Установить параметр колонки
+Установить свойство для указанной колонки.
 
 #### DROP
 
-Удалить параметр колонки. На текущий момент поддерживается только удаление `DEFAULT`.
+Удалить свойство для указанной колонки.
 
 {% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 

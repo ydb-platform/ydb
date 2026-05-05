@@ -493,6 +493,7 @@ TString ResolveFullTextQueryToken(
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
         return fullToken;
     }
 
@@ -518,11 +519,13 @@ TString ResolveFullTextQueryToken(
     }
 
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", type is not data");
         return fullToken;
     }
 
     auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
     if (!dataSlot) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", data slot is not found");
         return fullToken;
     }
 
@@ -594,6 +597,7 @@ TString ResolveFullTextQueryToken(
             break;
         }
         default:
+            LOG_W("Failed to get parameter value for token: " << token.GetParamName() << ", data slot is not supported");
             break;
     }
 

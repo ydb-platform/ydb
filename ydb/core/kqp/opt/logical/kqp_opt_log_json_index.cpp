@@ -64,7 +64,9 @@ bool IsJsonValueReturningNonIndexable(std::optional<EDataSlot> slot) {
 
 TExprBase UnwrapPredicate(TExprBase node) {
     while (true) {
-        if (const auto coalesce = node.Maybe<TCoCoalesce>()) {
+        if (const auto just = node.Maybe<TCoJust>()) {
+            node = just.Cast().Input();
+        } else if (const auto coalesce = node.Maybe<TCoCoalesce>()) {
             node = coalesce.Cast().Predicate();
         } else if (const auto optionalIf = node.Maybe<TCoOptionalIf>()) {
             node = optionalIf.Cast().Predicate();

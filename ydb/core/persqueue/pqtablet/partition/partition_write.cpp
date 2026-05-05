@@ -1633,7 +1633,7 @@ bool TPartition::RequestBlobQuota()
     size_t messagesQuotaSize = 0;
     for (auto& r : PendingRequests) {
         quotaSize += r.GetWriteSize();
-        if (r.IsWrite()) {
+        if (r.IsWrite() && r.GetWrite().Msg.PartNo == 0) {
             ++messagesQuotaSize;
         }
     }

@@ -83,7 +83,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         } else {
             for (auto&& [_, i] : indexes.GetIndexes()) {
                 auto proto = i.GetIndexMeta().SerializeToProto();
-                if (proto.HasMaxIndex() && proto.GetMaxIndex().GetColumnId() == column->GetId()) {
+                if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
                     correct = true;
                     break;
                 }

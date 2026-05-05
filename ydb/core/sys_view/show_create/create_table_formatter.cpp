@@ -1799,25 +1799,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
             break;
-        }
-        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
-            const auto& maxIndex = indexDesc.GetMaxIndex();
-            Stream << ", TYPE=MAX, ";
-            Stream << "FEATURES=";
-            NJson::TJsonValue json;
-
-            if (maxIndex.HasColumnId()) {
-                const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json[NIndexParameters::ColumnName] = columnName;
-            } else {
-                ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
-                    TStringBuilder() << "ColumnId have to be in MAX index description");
-            }
-
-            EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
-            break;
-        }
-        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
+        }        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
             const auto& countMinSketch = indexDesc.GetCountMinSketch();
             Stream << ", TYPE=COUNT_MIN_SKETCH, ";
             Stream << "FEATURES=";

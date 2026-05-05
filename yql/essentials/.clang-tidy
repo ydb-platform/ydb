@@ -413,7 +413,8 @@ Checks: >
   -readability-uniqueptr-delete-release,
   -readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls
+  readability-avoid-const-params-in-decls,
+  -sdc-no-lowercase-l-suffix
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

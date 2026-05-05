@@ -9735,6 +9735,9 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
             SendKillLocal(runtime, i);
         }
 
+        ui32 nodesConnected = 0;
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([&] (auto&&) { ++nodesConnected; });
+
         // Connect hive node
         CreateLocalForTenant(runtime, 0, "/dc-1/tenant1");
         MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
@@ -9747,16 +9750,11 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         MakeSureTabletIsUp(runtime, tabletId, 0); // dummy from sub hive also good
 
         // Connect all other nodes
-        TBlockEvents<TEvLocal::TEvStatus> block(runtime);
         for (size_t i = 1; i < initialNodeCount; ++i) {
             CreateLocalForTenant(runtime, i, "/dc-1/tenant1");
         }
-        runtime.WaitFor("nodes are connected to root hive", [&]{ return block.size() >= initialNodeCount - 1; });
-        block.Unblock();
 
-        runtime.WaitFor("nodes are connected to sub hive", [&]{ return block.size() >= initialNodeCount - 1; });
-        block.Unblock();
-        block.Stop();
+        runtime.WaitFor("nodes are connected to hives", [&] { return nodesConnected >= 2 * initialNodeCount; }); // each node connects to 2 hives
 
         return {subHiveTablet, subdomainKey};
     }

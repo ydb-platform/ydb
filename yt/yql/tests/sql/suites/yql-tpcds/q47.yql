@@ -1,35 +1,34 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: No such column: avg_monthly_sales */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 $v1 = (
     SELECT
-        i_category,
-        i_brand,
-        s_store_name,
-        s_company_name,
-        d_year,
-        d_moy,
+        item.i_category AS i_category,
+        item.i_brand AS i_brand,
+        store.s_store_name AS s_store_name,
+        store.s_company_name AS s_company_name,
+        date_dim.d_year AS d_year,
+        date_dim.d_moy AS d_moy,
         Sum(ss_sales_price) AS sum_sales,
         Avg(Sum(ss_sales_price)) OVER (
             PARTITION BY
-                i_category,
-                i_brand,
-                s_store_name,
-                s_company_name,
-                d_year
+                item.i_category,
+                item.i_brand,
+                store.s_store_name,
+                store.s_company_name,
+                date_dim.d_year
         ) AS avg_monthly_sales,
         Rank() OVER (
             PARTITION BY
-                i_category,
-                i_brand,
-                s_store_name,
-                s_company_name
+                item.i_category,
+                item.i_brand,
+                store.s_store_name,
+                store.s_company_name
             ORDER BY
-                d_year,
-                d_moy
+                date_dim.d_year,
+                date_dim.d_moy
         ) AS rn
     FROM
         plato.item
@@ -49,22 +48,22 @@ $v1 = (
             OR (d_year == 2000 + 1 AND d_moy == 1)
         )
     GROUP BY
-        i_category,
-        i_brand,
-        s_store_name,
-        s_company_name,
-        d_year,
-        d_moy
+        item.i_category,
+        item.i_brand,
+        store.s_store_name,
+        store.s_company_name,
+        date_dim.d_year,
+        date_dim.d_moy
 );
 
 $v2 = (
     SELECT
-        v1.i_category,
-        v1.i_brand,
-        v1.d_year,
-        v1.d_moy,
-        v1.avg_monthly_sales,
-        v1.sum_sales,
+        v1.i_category AS i_category,
+        v1.i_brand AS i_brand,
+        v1.d_year AS d_year,
+        v1.d_moy AS d_moy,
+        v1.avg_monthly_sales AS avg_monthly_sales,
+        v1.sum_sales AS sum_sales,
         v1_lag.sum_sales AS psum,
         v1_lead.sum_sales AS nsum
     FROM

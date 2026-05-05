@@ -649,24 +649,25 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultVChunkSize / DefaultBlockSize);
         TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
+        // Lock range on DDisk (for reading).
+        auto lockHandle =
+            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
+
+        // User write to overlapped with locked range.
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
             TLocationMask::MakePrimaryPBuffers(),
             TLocationMask::MakePrimaryPBuffers());
 
-        // Lock range on DDisk
-        auto lockHandle =
-            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
-
         // Flush hints should not be generated when DDisk is locked.
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(true, flushHint.Empty());
 
-        // Lock pbuffer
+        // Unlock DDisk
         dirtyMap.UnLockDDiskRange(lockHandle);
 
-        // FLush hints should be generated when DDisk is unlocked.
+        // FLush hints should be generated after DDisk is unlocked.
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
     }

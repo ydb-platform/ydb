@@ -154,6 +154,7 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
+        , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
@@ -684,7 +685,7 @@ protected:
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
-                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                             execStats.AddTxPlansWithStats(planWithStats);
                         }
                         this->Send(Target, progress.Release());
@@ -794,7 +795,7 @@ protected:
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
-                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                 TPlanVisualizer viz;
 
                 NJson::TJsonReaderConfig jsonConfig;
@@ -1562,7 +1563,7 @@ protected:
                     response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
                     for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                         const auto& tx = Request.Transactions[txId].Body;
-                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats(), NewRboEnabled);
                         jsonSize += planWithStats.size();
                         response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                     }
@@ -1813,6 +1814,8 @@ protected:
 
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
+
+    bool NewRboEnabled = false;
 
 protected:
     TKqpTasksGraph TasksGraph;

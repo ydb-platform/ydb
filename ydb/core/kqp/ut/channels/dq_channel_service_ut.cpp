@@ -963,8 +963,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
                 channels[i]->Bind(sender, receiver);
                 return true;
             });
-            senderBuffers.push_back(service->GetLocalBuffer(info, false, nullptr));
-            receiverBuffers.push_back(service->GetLocalBuffer(info, true, nullptr));
+            senderBuffers.push_back(service->GetLocalBuffer(info, nullptr, false, nullptr));
+            receiverBuffers.push_back(service->GetLocalBuffer(info, nullptr, true, nullptr));
         }
 
         // Both channels empty after Bind() → consumer is NoLimit.

@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
-        ), NYdb::Dev::EStatus::PRECONDITION_FAILED, "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
+        ), NYdb::Dev::EStatus::GENERIC_ERROR, "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {

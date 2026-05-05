@@ -9,11 +9,7 @@ public:
     struct TTransferConfig : public TConfigBase {
         using TPtr = std::shared_ptr<TTransferConfig>;
 
-<<<<<<< HEAD
-        TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath);
-=======
         TTransferConfig(const TString& srcPath, const TString& dstPath, const NKikimrReplication::TReplicationConfig& cfg);
->>>>>>> 4e763f3dc40 (Use parametrs from the config directly (#35690))
         
         const TString& GetTransformLambda() const;
         const TString& GetRunAsUser() const;

@@ -16,21 +16,7 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
     Config = std::make_shared<TTargetTransfer::TTransferConfig>(
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
-<<<<<<< HEAD
-        t.GetTransformLambda(),
-        cfg.GetTransferSpecific().GetRunAsUser(),
-        t.GetDirectoryPath());
-=======
         cfg);
-
-    Y_ABORT_UNLESS(MetricsConfig);
-    if (cfg.HasMetricsConfig()) {
-        MetricsConfig->CopyFrom(cfg.GetMetricsConfig());
-    } else {
-        MetricsConfig->SetLevel(TMetricsConfig::LEVEL_DEFAULT);
-    }
-    Location->CopyFrom(cfg.GetLocation());
->>>>>>> 4e763f3dc40 (Use parametrs from the config directly (#35690))
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {

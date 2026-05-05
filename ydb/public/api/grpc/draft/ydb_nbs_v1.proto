@@ -16,6 +16,9 @@ service NbsService {
     // Delete NBS partition
     rpc DeletePartition(Ydb.Nbs.DeletePartitionRequest) returns (Ydb.Nbs.DeletePartitionResponse);
 
+    // Get load actor adapter actor id for partition
+    rpc GetLoadActorAdapterActorId(Ydb.Nbs.GetLoadActorAdapterActorIdRequest) returns (Ydb.Nbs.GetLoadActorAdapterActorIdResponse);
+
     // List NBS partitions
     rpc ListPartitions(Ydb.Nbs.ListPartitionsRequest) returns (Ydb.Nbs.ListPartitionsResponse);
 

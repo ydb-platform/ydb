@@ -63,6 +63,11 @@ static constexpr const char *kSystemFilesystemState = "system.filesystem.state";
 static constexpr const char *kSystemFilesystemType = "system.filesystem.type";
 
 /**
+  The Linux Slab memory state
+ */
+static constexpr const char *kSystemMemoryLinuxSlabState = "system.memory.linux.slab.state";
+
+/**
   The memory state
  */
 static constexpr const char *kSystemMemoryState = "system.memory.state";
@@ -167,6 +172,15 @@ static constexpr const char *kExt4 = "ext4";
 
 }  // namespace SystemFilesystemTypeValues
 
+namespace SystemMemoryLinuxSlabStateValues
+{
+
+static constexpr const char *kReclaimable = "reclaimable";
+
+static constexpr const char *kUnreclaimable = "unreclaimable";
+
+}  // namespace SystemMemoryLinuxSlabStateValues
+
 namespace SystemMemoryStateValues
 {
 /**
@@ -178,8 +192,8 @@ static constexpr const char *kFree = "free";
 
 /**
   @deprecated
-  {"note": "Removed, report shared memory usage with @code metric.system.memory.shared @endcode
-  metric", "reason": "uncategorized"}
+  {"note": "Removed, report shared memory usage with @code metric.system.memory.linux.shared
+  @endcode metric", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kShared = "shared";
 

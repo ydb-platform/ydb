@@ -22,7 +22,11 @@ TParsedColumnGroupSpec GetColumnGroupsFromSpec(const TString& serializedColumnGr
 
 TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& ysonInputs, const TParsedColumnGroupSpec& columnGroupsSpec);
 
+TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, const TParsedColumnGroupSpec& columnGroupsSpec);
+
 TString GetYsonUnion(const std::vector<TString>& ysonRows, const std::vector<TString>& neededColumns);
+
+TString GetYsonUnionRaw(const std::vector<TString>& ysonInputs, const std::vector<TString>& neededColumns);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -52,7 +56,7 @@ public:
 
 private:
     std::vector<NYT::NYson::IYsonConsumer*> ColumnGroupConsumers_;
-    const THashMap<TString, ui64> ColumnGroups_;
+    const THashMap<TString, ui64>& ColumnGroups_;
     ui64 MapDepth_ = 0;
     ui64 ConsumerIndex_ = 0;
     const ui64 GroupsNum_;

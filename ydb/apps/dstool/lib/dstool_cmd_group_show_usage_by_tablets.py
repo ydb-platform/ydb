@@ -15,7 +15,7 @@ def create_table_output():
                'Count', 'TabletMaxCount']
 
     def human_readable_fn(d):
-        return d.update((key, '%s GiB' % common.gib_string(d[key])) for key in ['Size', 'TabletMaxSize'] if key in d)
+        return d.update((key, common.gb_string(d[key])) for key in ['Size', 'TabletMaxSize'] if key in d)
 
     def aggr_size(d, rg):
         for x in rg:

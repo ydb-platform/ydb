@@ -840,12 +840,17 @@ message AlterStreamingConsumerType {
 message SharedConsumerType {
     // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
     // For streaming consumers, the order of messages is always preserved.
-    optional bool keep_messages_order = 10;
+    bool keep_messages_order = 10;
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
-    optional google.protobuf.Duration default_processing_timeout = 11;
-    // The dedad letter policy for this consumer.
-    optional DeadLetterPolicy dead_letter_policy = 12;
+    google.protobuf.Duration default_processing_timeout = 11;
+    // The dead letter policy for this consumer.
+    DeadLetterPolicy dead_letter_policy = 12;
+    // Time to wait for message if queue empty and if this parameter is not set in receive request
+    google.protobuf.Duration receive_message_wait_time = 13;
+    // Default delay before messages become visible to ReceiveMessage after write (Amazon SQS DelaySeconds).
+    // Only used for shared (SQS-compatible) consumers. If unset or zero, there is no delivery delay.
+    google.protobuf.Duration receive_message_delay = 14;
 }
 
 message AlterSharedConsumerType {
@@ -855,6 +860,13 @@ message AlterSharedConsumerType {
 
     // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+    // Time to wait for message if queue empty and if this parameter is not set in receive request
+    google.protobuf.Duration set_receive_message_wait_time = 12;
+
+    // Default delay before messages become visible after write (Amazon SQS DelaySeconds). Shared consumer only.
+    // While this duration has not elapsed since write, ReceiveMessage must not return the message.
+    // Optional: if unset in AlterConsumer.alter_shared_consumer_type, the previous value is unchanged.
+    google.protobuf.Duration set_receive_message_delay = 13;
 }
 
 // Consumer description.
@@ -1084,6 +1096,9 @@ message CreateTopicRequest {
 
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
+
+    // Enable content-based deduplication for the topic.
+    bool content_based_deduplication = 14;
 }
 
 // Create topic response sent from server to client.
@@ -1220,6 +1235,9 @@ message DescribeTopicResult {
 
     // Metrics level.
     optional uint32 metrics_level = 16;
+
+    // Is content-based deduplication enabled for the topic.
+    bool content_based_deduplication = 17;
 }
 
 // Describe partition request sent from client to server.
@@ -1397,6 +1415,9 @@ message AlterTopicRequest {
         uint32 set_metrics_level = 15;
         google.protobuf.Empty reset_metrics_level = 16;
     }
+
+    // Enable content-based deduplication for the topic.
+    optional bool set_content_based_deduplication = 17;
 }
 
 // Update topic response sent from server to client.

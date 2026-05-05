@@ -334,12 +334,9 @@ err:
 	return (void *)(intptr_t)ret;
 }
 
-static int __do_send_bundle(struct recv_data *rd, struct io_uring *ring, int sockfd)
+static void submit_bundle(struct io_uring *ring, int sockfd)
 {
-	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
-	int bytes_needed = MSG_SIZE * nr_msgs;
-	int i, ret;
 
 	sqe = io_uring_get_sqe(ring);
 	io_uring_prep_send_bundle(sqe, sockfd, 0, 0);
@@ -347,9 +344,16 @@ static int __do_send_bundle(struct recv_data *rd, struct io_uring *ring, int soc
 	sqe->buf_group = SEND_BGID;
 	sqe->user_data = 1;
 
-	ret = io_uring_submit(ring);
-	if (ret != 1)
-		return 1;
+	io_uring_submit(ring);
+}
+
+static int __do_send_bundle(struct recv_data *rd, struct io_uring *ring, int sockfd)
+{
+	struct io_uring_cqe *cqe;
+	int bytes_needed = MSG_SIZE * nr_msgs;
+	int i, ret;
+
+	submit_bundle(ring, sockfd);
 
 	pthread_barrier_wait(&rd->barrier);
 
@@ -373,10 +377,9 @@ static int __do_send_bundle(struct recv_data *rd, struct io_uring *ring, int soc
 			io_uring_cqe_seen(ring, cqe);
 			break;
 		}
-		if (!(cqe->flags & IORING_CQE_F_MORE)) {
-			fprintf(stderr, "expected more, but MORE not set\n");
-			return 1;
-		}
+		/* bundle finished, resubmit as more is pending */
+		if (!(cqe->flags & IORING_CQE_F_MORE))
+			submit_bundle(ring, sockfd);
 		io_uring_cqe_seen(ring, cqe);
 	}
 

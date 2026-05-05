@@ -14,7 +14,7 @@ TNodePtr TListBuiltin::GetIdentityLambda() {
 }
 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
-    if (Args_.size() < 1 || Args_.size() > 2) {
+    if (Args_.empty() || Args_.size() > 2) {
         ctx.Error(Pos_) << OpName_ << " requires one or two parameters.";
         return false;
     }
@@ -145,8 +145,8 @@ bool TMutDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    for (ui32 i = 0; i < Args_.size(); ++i) {
-        if (!Args_[i]->Init(ctx, src)) {
+    for (auto& arg : Args_) {
+        if (!arg->Init(ctx, src)) {
             return false;
         }
     }
@@ -169,8 +169,8 @@ bool TToMutDictBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    for (ui32 i = 0; i < Args_.size(); ++i) {
-        if (!Args_[i]->Init(ctx, src)) {
+    for (auto& arg : Args_) {
+        if (!arg->Init(ctx, src)) {
             return false;
         }
     }

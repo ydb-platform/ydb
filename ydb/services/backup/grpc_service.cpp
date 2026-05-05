@@ -18,7 +18,7 @@ void TGRpcBackupService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_BACKUP_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, backup, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, backup, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
     SETUP_BACKUP_METHOD(FetchBackupCollections, DoFetchBackupCollectionsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_BACKUP_METHOD(ListBackupCollections, DoListBackupCollectionsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());

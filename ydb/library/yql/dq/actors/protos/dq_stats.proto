@@ -309,6 +309,7 @@ message TDqComputeActorStats {
     uint64 DurationUs = 2; // task.FinishTimeMs - task.StartTimeMs
     repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used
     uint64 MaxMemoryUsage = 4;
+    uint64 MemoryUsage = 5;
 
     // profile stats
     uint64 MkqlMaxMemoryUsage = 102;       // MKQL allocations stats
@@ -471,8 +472,47 @@ message TDqStageStats {
     map<string, TDqStatsAggr> Mkql = 53;
 
     TDqStatsAggr MaxMemoryUsage = 24;
+    TDqStatsAggr MemoryUsageMB = 54;
 
     google.protobuf.Any Extra = 100;
+}
+
+message TDqMemoryHistoryItem {
+    uint64 TimeMs = 1;
+    uint64 MemPhysicalUsage = 2;
+    uint64 MemSysAllocated  = 3;
+    uint64 MemSysFragmented = 4;
+    uint64 MemArrowDefault  = 5;
+    uint64 MemMkqlAllocated = 6;
+    uint64 MemMkqlFreeList  = 7;
+    uint64 InputInflightBytes  = 8;
+    uint64 OutputInflightBytes = 9;
+    uint64 LocalInflightBytes  = 10;
+}
+
+message TDqNodeStats {
+    uint32 NodeId = 1;
+    uint32 TotalTasksCount = 2;
+    uint32 FinishedTasksCount = 3;
+    uint64 BaseTimeMs = 15;
+
+    TDqStatsAggr CpuTimeUs = 4;
+    TDqStatsAggr MaxMemoryUsage = 5;
+    TDqStatsAggr MemoryUsageMB = 16;
+
+    TDqStatsAggr InputBytes = 6;
+    TDqStatsAggr OutputBytes = 7;
+    TDqStatsAggr ResultBytes = 8;
+
+    TDqStatsAggr IngressBytes = 9;
+    TDqStatsAggr EgressBytes = 10;
+
+    TDqStatsAggr SpillingComputeBytes = 11;
+    TDqStatsAggr SpillingChannelBytes = 12;
+    TDqStatsAggr SpillingComputeTimeUs = 13;
+    TDqStatsAggr SpillingChannelTimeUs = 14;
+
+    repeated TDqMemoryHistoryItem GlobalMemoryUsageMB = 17;
 }
 
 // graph execution stats
@@ -494,6 +534,7 @@ message TDqExecutionStats {
     uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds
 
     repeated TDqStageStats Stages = 14;
+    repeated TDqNodeStats Nodes = 18;
     repeated string TxPlansWithStats = 15;
 
     uint64 StatFinishBytes = 16;

@@ -3,21 +3,27 @@
 
 #include <util/generic/yexception.h>
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
 
 struct TFmrTableKeysBoundary;
 int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs);
 
+struct TSortingColumns {
+    std::vector<TString> Columns;
+    std::vector<ESortOrder> SortOrders;
+    bool operator==(const TSortingColumns&) const = default;
+};
+
 struct TFmrTableKeysBoundary {
     TString Row;
     TRowIndexMarkup Markup;
-    TVector<ESortOrder> SortOrders;
+    std::vector<ESortOrder> SortOrders;
 
     TFmrTableKeysBoundary() = default;
 
-    TFmrTableKeysBoundary(TStringBuf row, const TVector<TString>& keyColumns, TVector<ESortOrder> sortOrders)
+    TFmrTableKeysBoundary(TStringBuf row, const std::vector<TString>& keyColumns, std::vector<ESortOrder> sortOrders)
         : Row(row)
         , SortOrders(std::move(sortOrders))
     {
@@ -138,7 +144,7 @@ class TBinaryYsonComparator {
 public:
     TBinaryYsonComparator(
         TStringBuf blobData,
-        TVector<ESortOrder> sortOrders
+        std::vector<ESortOrder> sortOrders
     )
         : BlobData_(blobData)
         , SortOrders_(std::move(sortOrders))
@@ -156,7 +162,9 @@ public:
 
 private:
     TStringBuf BlobData_;
-    TVector<ESortOrder> SortOrders_;
+    std::vector<ESortOrder> SortOrders_;
 };
+
+TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns);
 
 } // namespace NYql::NFmr

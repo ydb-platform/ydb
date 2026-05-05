@@ -6,12 +6,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandConfig : public TClientCommandTree {
-public:
-    TCommandConfig();
-    virtual void Config(TConfig& config) override;
-};
-
 class TCommandConnectionInfo : public TClientCommand {
 public:
     TCommandConnectionInfo();

@@ -3,6 +3,7 @@
 #include "raw_requests.h"
 #include "rpc_parameters_serialization.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
@@ -13,16 +14,69 @@
 
 #include <yt/cpp/mapreduce/interface/fluent.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
+
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
+#include <yt/yt/core/http/client.h>
+#include <yt/yt/core/http/config.h>
+#include <yt/yt/core/http/http.h>
+#include <yt/yt/core/https/client.h>
+#include <yt/yt/core/https/config.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+void CheckError(const TString& requestId, NHttp::IResponsePtr response)
+{
+    if (const auto* ytError = response->GetHeaders()->Find("X-YT-Error")) {
+        TYtError error;
+        error.ParseFrom(*ytError);
+
+        TErrorResponse errorResponse(std::move(error), requestId);
+        if (errorResponse.IsOk()) {
+            return;
+        }
+
+        if (TExpectedErrorGuard::IsErrorExpected(errorResponse)) {
+            YT_LOG_INFO("Received expected error, RSP %v - HTTP %v - %v",
+                requestId,
+                response->GetStatusCode(),
+                errorResponse.AsStrBuf());
+        } else {
+            YT_LOG_ERROR("RSP %v - HTTP %v - %v",
+                requestId,
+                response->GetStatusCode(),
+                errorResponse.AsStrBuf());
+        }
+
+        ythrow errorResponse;
+    }
+}
+
+void SetMutationId(TNode& params, TMutationId& mutationId)
+{
+    if (mutationId.IsEmpty()) {
+        params["retry"] = false;
+        mutationId = GenerateMutationId();
+    } else {
+        params["retry"] = true;
+    }
+    params["mutation_id"] = GetGuidAsString(mutationId);
+}
+
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -265,24 +319,20 @@ TTransactionId THttpRawClient::StartTransaction(
 
 void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
 {
-    TMutationId mutationId;
-    THttpHeader header("POST", "ping_tx");
-    header.MergeParameters(NRawClient::SerializeParamsForPingTx(transactionId));
-    TRequestConfig requestConfig;
-    requestConfig.HttpConfig = NHttpClient::THttpConfig{
-        .SocketTimeout = Context_.Config->PingTimeout
-    };
-    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+    TNode node;
+    node["transaction_id"] = GetGuidAsString(transactionId);
+    auto strParams = NodeToYsonString(node);
+
+    PostAsync("ping_tx", node);
 }
 
 void THttpRawClient::AbortTransaction(
     TMutationId& mutationId,
     const TTransactionId& transactionId)
 {
-    THttpHeader header("POST", "abort_tx");
-    header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForAbortTransaction(transactionId));
-    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+    TNode params = NRawClient::SerializeParamsForAbortTransaction(transactionId);
+    SetMutationId(params, mutationId);
+    PostAsync("abort_tx", params);
 }
 
 void THttpRawClient::CommitTransaction(
@@ -555,7 +605,7 @@ IFileReaderPtr THttpRawClient::GetJobTrace(
     return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFileReaderOptions& options)
@@ -750,7 +800,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
     return NRawClient::WriteTable(Context_, transactionId, path, format, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFormat& format,
@@ -777,7 +827,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
     return NRawClient::WriteFile(Context_, transactionId, path, options);
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
     const TFormat& format,
     const TTablePartitionReaderOptions& options)
@@ -795,7 +845,7 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-std::unique_ptr<IInputStream> THttpRawClient::ReadBlobTable(
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TKey& key,
@@ -1168,6 +1218,76 @@ IRawClientPtr THttpRawClient::Clone()
 IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
 {
     return ::MakeIntrusive<THttpRawClient>(context);
+}
+
+void THttpRawClient::InitAsyncClient() {
+    auto httpPoller = NConcurrency::CreateThreadPoolPoller(
+        Context_.Config->AsyncHttpClientThreads,
+        "tx_http_client_poller");
+
+    if (Context_.UseTLS) {
+        auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
+        httpsClientConfig->MaxIdleConnections = 16;
+        AsyncHttpClient_ = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
+    } else {
+        auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
+        httpClientConfig->MaxIdleConnections = 16;
+        AsyncHttpClient_ = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
+    }
+}
+
+void THttpRawClient::PostAsync(const TString& command, TNode params)
+{
+    auto traceContext = Context_.Config->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent("ping_tx")
+        : nullptr;
+    NTracing::TCurrentTraceContextGuard traceContextGuard(traceContext);
+
+    std::call_once(AsyncHttpClientInitOnceFlag_, [this] () {
+        InitAsyncClient();
+    });
+
+    auto url = TString::Join(Context_.UseTLS ? "https://" : "http://", Context_.ServerName, "/api/", Context_.Config->ApiVersion, "/", command);
+    auto headers = New<NHttp::THeaders>();
+    auto requestId = CreateGuidAsString();
+
+    headers->Add("Host", url);
+    headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
+
+    if (const auto& serviceTicketAuth = Context_.ServiceTicketAuth) {
+        const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
+        headers->Add("X-Ya-Service-Ticket", serviceTicket);
+    } else if (const auto& token = Context_.Token; !token.empty()) {
+        headers->Add("Authorization", "OAuth " + token);
+    }
+
+    headers->Add("Transfer-Encoding", "chunked");
+    headers->Add("X-YT-Correlation-Id", requestId);
+    headers->Add("X-YT-Header-Format", "<format=text>yson");
+    headers->Add("Content-Encoding", "identity");
+    headers->Add("Accept-Encoding", "identity");
+
+    if (traceContext) {
+        auto traceparent = FormatTraceParentHeader(traceContext->GetTraceId(), traceContext->GetSpanId());
+        headers->Add("traceparent", traceparent);
+    }
+
+    auto strParams = NodeToYsonString(params);
+
+    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
+        requestId,
+        Context_.ServerName,
+        url,
+        strParams);
+
+    auto response = NConcurrency::WaitFor(AsyncHttpClient_->Post(url, TSharedRef::FromString(strParams), headers))
+        .ValueOrThrow();
+    CheckError(requestId, response);
+
+    YT_LOG_DEBUG("RSP %v - received response %v bytes. (%v)",
+        requestId,
+        response->ReadAll().size(),
+        strParams);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

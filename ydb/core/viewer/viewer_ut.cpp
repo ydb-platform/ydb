@@ -15,7 +15,6 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
-#include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -486,15 +485,25 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
     }
 
-    void GrantConnect(TClient& client) {
+    void CreateUser(TClient& client) {
         client.CreateUser("/Root", "username", "password");
-        client.GrantConnect("username");
-
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    void GrantConnect(TClient& client) {
+        client.GrantConnect("username");
+        const auto grantStatus = client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(grantStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    void GrantRead(TClient& client) {
+        CreateUser(client);
+        GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
     }
 
    TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
@@ -535,7 +544,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TKeepAliveHttpClient httpClient("localhost", monPort);
@@ -751,15 +760,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        httpReq.CgiParameters.emplace("enums", "true");
-        httpReq.CgiParameters.emplace("sort", "");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&tablets=true&enums=true&sort=&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -786,15 +788,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -824,12 +824,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&fields_required=SystemState HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -851,21 +847,48 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     ChangeResponseHiveNodeStatsServerless(x, sharedDynNodeId, exclusiveDynNodeId);
                     break;
                 }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
+                    for (auto& nodeInfo : *nodes) {
+                        NActorsInterconnect::TNodeLocation location;
+                        location.SetBridgePileName("pile0");
+                        location.SetDataCenter("az-2");
+                        location.SetRack("eu-north1-c-13ct2");
+                        location.SetUnit("1");
+                        nodeInfo.Location = TNodeLocation(location);
+                    }
+                    auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                        new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+                    );
+                    x->Swap(newEv);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    for (auto& systemStateInfo : *(*x)->Get()->Record.MutableSystemStateInfo()) {
+                        systemStateInfo.MutableLocation()->ClearBridgePileName();
+                        systemStateInfo.MutableLocation()->ClearDataCenter();
+                        systemStateInfo.MutableLocation()->ClearRack();
+                        systemStateInfo.MutableLocation()->ClearUnit();
+                        systemStateInfo.ClearDataCenter();
+                        systemStateInfo.ClearRack();
+                    }
+                    break;
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -875,6 +898,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
         auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
         UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), exclusiveDynNodeId);
+        UNIT_ASSERT(node.contains("SystemState"));
+        const auto& systemState = node.at("SystemState").GetMap();
+        UNIT_ASSERT(systemState.contains("Location"));
+        const auto& location = systemState.at("Location").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(location.at("BridgePileName").GetStringSafe(), "pile0");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("DataCenter").GetStringSafe(), "az-2");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("Rack").GetStringSafe(), "eu-north1-c-13ct2");
+        UNIT_ASSERT_VALUES_EQUAL(location.at("Unit").GetStringSafe(), "1");
     }
 
     Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)
@@ -898,12 +929,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/shared");
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/shared&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -931,15 +958,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -972,14 +997,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("database", "/Root/serverless");
-        httpReq.CgiParameters.emplace("path", "/Root/serverless/users");
-        httpReq.CgiParameters.emplace("direct", "1");
-        httpReq.CgiParameters.emplace("tablets", "true");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest("GET /viewer/json/nodes?database=/Root/serverless&direct=1&path=/Root/serverless/users&tablets=true HTTP/1.1\r\n\r\n", endpoint, {});
 
         //size_t staticNodeId = runtime.GetNodeId(0);
         size_t sharedDynNodeId = runtime.GetNodeId(1);
@@ -1008,15 +1027,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
 
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
+        Ctest << "result: " << result->Response->Body << Endl;
         NJson::TJsonValue json;
         try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
         }
         catch (yexception ex) {
             Ctest << ex.what() << Endl;
@@ -1095,256 +1112,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
     {
         FuzzySearcherTest(DifferentWordsDictionary, "/ord", 10, { "/orders", "/OrdinaryScheduleTables", "/peoples"});
         FuzzySearcherTest(DifferentWordsDictionary, "Tables", 10, { "/OrdinaryScheduleTables", "/orders", "/peoples"});
-    }
-
-    void JsonAutocompleteTest(HTTP_METHOD method, NJson::TJsonValue& value, TString prefix = "", TString database = "", TVector<TString> tables = {}, ui32 limit = 10, bool lowerCaseContentType = false) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-        ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port);
-        settings.InitKikimrRunConfig()
-                .SetNodeCount(1)
-                .SetUseRealThreads(false)
-                .SetDomainName("Root")
-                .SetUseSectorMap(true);
-        TServer server(settings);
-        server.EnableGRpc(grpcPort);
-        TClient client(settings);
-        TTestActorRuntime& runtime = *server.GetRuntime();
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        THttpRequest httpReq(method);
-        if (method == HTTP_METHOD_GET) {
-            if (database) {
-                httpReq.CgiParameters.emplace("database", database);
-            }
-            if (tables.size() > 0) {
-                httpReq.CgiParameters.emplace("table", JoinSeq(",", tables));
-            }
-            if (prefix) {
-                httpReq.CgiParameters.emplace("prefix", prefix);
-            }
-            httpReq.CgiParameters.emplace("limit", ToString(limit));
-        } else if (method == HTTP_METHOD_POST) {
-            NJson::TJsonArray tableArray;
-            for (const TString& table : tables) {
-                tableArray.AppendValue(table);
-            }
-
-            NJson::TJsonValue root = NJson::TJsonMap{
-                {"database", database},
-                {"table", tableArray},
-                {"prefix", prefix},
-                {"limit", limit}
-            };
-            httpReq.PostContent = NJson::WriteJson(root);
-            auto contentType = lowerCaseContentType ? "content-type" : "Content-Type";
-            httpReq.HttpHeaders.AddHeader(contentType, "application/json");
-        }
-        httpReq.CgiParameters.emplace("direct", "1");
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/autocomplete", nullptr);
-        THolder<NMon::TEvHttpInfo> request = MakeHolder<NMon::TEvHttpInfo>(monReq);
-
-        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
-            Y_UNUSED(ev);
-            switch (ev->GetTypeRewrite()) {
-                case NConsole::TEvConsole::EvListTenantsResponse: {
-                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
-                    Ydb::Cms::ListDatabasesResult listTenantsResult;
-                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-                    listTenantsResult.Addpaths("/Root/slice");
-                    listTenantsResult.Addpaths("/Root/qwerty");
-                    listTenantsResult.Addpaths("/Root/MyDatabase");
-                    listTenantsResult.Addpaths("/Root/TestDatabase");
-                    listTenantsResult.Addpaths("/Root/test");
-                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
-                    break;
-                }
-                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
-                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
-                    (*x)->Get()->Request->ErrorCount = 0;
-                    for (auto& entry: (*x)->Get()->Request->ResultSet) {
-                        if (entry.Path.size() <= 2) {
-                            const TPathId pathId(1, 1);
-                            auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
-                            listNodeEntry->Children.reserve(3);
-                            listNodeEntry->Children.emplace_back("orders", pathId, TNavigate::KindTable);
-                            listNodeEntry->Children.emplace_back("clients", pathId, TNavigate::KindTable);
-                            listNodeEntry->Children.emplace_back("products", pathId, TNavigate::KindTable);
-                            entry.ListNodeEntry = listNodeEntry;
-                            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
-                        } else {
-                            entry.Columns[1].Name = "id";
-                            entry.Columns[2].Name = "name";
-                            entry.Columns[3].Name = "description";
-                            entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
-                        }
-                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
-                    }
-                    break;
-                }
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(observerFunc);
-
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
-        try {
-            NJson::ReadJsonTree(jsonResult, &value, true);
-        }
-        catch (yexception ex) {
-            Ctest << ex.what() << Endl;
-        }
-    }
-
-    void VerifyJsonAutocompleteSuccess(NJson::TJsonValue& value, TVector<TString> names) {
-        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Success").GetBoolean(), true);
-        UNIT_ASSERT_VALUES_EQUAL(value.GetMap().at("Result").GetMap().at("Total").GetInteger(), names.size());
-        auto& entities = value.GetMap().at("Result").GetMap().at("Entities").GetArray();
-        for (ui32 k = 0; k < names.size(); k++) {
-            UNIT_ASSERT_VALUES_EQUAL(entities[k].GetMap().at("Name").GetString(), names[k]);
-        }
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEmpty) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty",
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteStartOfDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty",
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEndOfDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase",
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseName) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase",
-            "/Root/test",
-            "/Root/slice",
-            "/Root/qwerty"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameWithLimit) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "/Root/Database", "", {}, 2);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNamePOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSimilarDatabaseNameLowerCase) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "/Root/Database", "", {}, 2, true);
-        VerifyJsonAutocompleteSuccess(value, {
-            "/Root/MyDatabase",
-            "/Root/TestDatabase"
-        });
-
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteScheme) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "clien", "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "clients",
-            "orders",
-            "products"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteSchemePOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "clien", "/Root/Database");
-        VerifyJsonAutocompleteSuccess(value, {
-            "clients",
-            "orders",
-            "products"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteEmptyColumns) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "", "/Root/Database", {"orders"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "id",
-            "name",
-            "description"
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteColumns) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_GET, value, "nam", "/Root/Database", {"orders", "products"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "name",
-            "name",
-            "id",
-            "id",
-            "description",
-            "description",
-        });
-    }
-
-    Y_UNIT_TEST(JsonAutocompleteColumnsPOST) {
-        NJson::TJsonValue value;
-        JsonAutocompleteTest(HTTP_METHOD_POST, value, "nam", "/Root/Database", {"orders", "products"});
-        VerifyJsonAutocompleteSuccess(value, {
-            "name",
-            "name",
-            "id",
-            "id",
-            "description",
-            "description",
-        });
     }
 
     void ChangeBSGroupStateResponse(TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
@@ -1556,7 +1323,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TTestActorRuntime& runtime = *server.GetRuntime();
@@ -1592,7 +1359,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
-        GrantConnect(client);
+        GrantRead(client);
 
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
@@ -1636,7 +1403,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
@@ -1700,7 +1467,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        GrantConnect(client);
+        GrantRead(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1849,7 +1616,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
 
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
@@ -1962,22 +1729,29 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetMonitoringPortOffset(monPort, true);
         settings.CreateTicketParser = CreateFakeTicketParser;
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+        securityConfig.AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        securityConfig.AddViewerAllowedSIDs("username");
+
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
         auto pqClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        pqClient->SetSecurityToken(ROOT_TOKEN);
         pqClient->InitRoot();
         pqClient->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
-                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+            .SetDatabase("/Root")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 
         TString consumerName = "consumer1";
+
+        driverCfg.SetAuthToken(ROOT_TOKEN);
         NYdb::TDriver ydbDriver{driverCfg};
 
-        driverCfg.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
-        driverCfg.SetAuthToken("root@builtin");
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
@@ -2004,34 +1778,38 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
-        // checking that user with correct token but no rights cannot commit to the topic
-        auto postReturnCode1 = PostOffsetCommit(httpClient, "root@builtin");
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
-
         TClient client(settings);
-        client.InitRootScheme();
+        client.SetSecurityToken(ROOT_TOKEN);
+        CreateUser(client);
+
+        // checking that user with correct token but no connect right cannot commit to the topic
+        auto postReturnCode1 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+
         GrantConnect(client);
+        Sleep(TDuration::MilliSeconds(200));
 
         // client without required AccessRights can't commit offsets
         auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
-        Cerr << postReturnCode2 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_FORBIDDEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode2, HTTP_FORBIDDEN);
 
 
         client.Grant("/", "Root", "username", NACLib::EAccessRights::SelectRow);
+        Sleep(TDuration::MilliSeconds(200));
+
         // checking that user with rights and correct token can commit successfully
         auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN);
-        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode3, HTTP_OK);
 
 
         // checking that user with invalid token cannot commit
         TString invalid_token = "abracadabra";
         auto postReturnCode4 = PostOffsetCommit(httpClient, invalid_token);
-        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_FORBIDDEN);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode4, HTTP_FORBIDDEN);
 
         // checking that commiting with consumer without read rule is forbidden
         auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
-        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode5, HTTP_BAD_REQUEST);
 
         auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult.IsSuccess());
@@ -2046,10 +1824,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         // now messages are deleted because of retention
         // check that if we commit offset less than start offset in strict mode, start offset is committed
         auto postReturnCode6 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
-        UNIT_ASSERT_EQUAL(postReturnCode6, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode6, HTTP_OK);
         // check that offset commit works correctly if start offset is non-zero and offset is greater that start offset
         auto postReturnCode7 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 15000);
-        UNIT_ASSERT_EQUAL(postReturnCode7, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(postReturnCode7, HTTP_OK);
 
     }
 
@@ -2213,6 +1991,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         TClient client1(settings);
         client1.InitRootScheme();
+        CreateUser(client1);
         GrantConnect(client1);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
@@ -2297,6 +2076,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         TClient client1(settings);
         client1.InitRootScheme();
+        CreateUser(client1);
         GrantConnect(client1);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";

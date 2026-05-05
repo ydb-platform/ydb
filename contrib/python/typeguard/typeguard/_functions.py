@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 import warnings
 from collections.abc import Sequence
-from typing import Any, Callable, NoReturn, TypeVar, Union, overload
+from inspect import Parameter, signature
+from typing import Any, Callable, NoReturn, TypeVar, Union, get_type_hints, overload
 
 from . import _suppression
 from ._checkers import BINARY_MAGIC_METHODS, check_type_internal
@@ -14,7 +15,7 @@ from ._config import (
 )
 from ._exceptions import TypeCheckError, TypeCheckWarning
 from ._memo import TypeCheckMemo
-from ._utils import get_stacklevel, qualified_name
+from ._utils import find_function, get_stacklevel, qualified_name
 
 if sys.version_info >= (3, 11):
     from typing import Literal, Never, TypeAlias
@@ -115,7 +116,49 @@ def check_type(
     return value
 
 
-def check_argument_types(
+def check_argument_types() -> Literal[True]:
+    """
+    Check that the argument values match the annotated types.
+
+    Unless both ``args`` and ``kwargs`` are provided, the information will be retrieved from
+    the previous stack frame (ie. from the function that called this).
+
+    :return: ``True``
+    :raises TypeCheckError: if there is an argument type mismatch
+
+    .. version-changed:: 4.5.0
+       This function was restored since its removal in v3.0.0.
+
+    """
+    # faster than inspect.currentframe(), but not officially
+    # supported in all python implementations
+    frame = sys._getframe(1)
+    func = find_function(frame)
+    f_locals = frame.f_locals
+    memo = TypeCheckMemo(frame.f_globals, frame.f_locals)
+    if sys.version_info >= (3, 10):
+        sig = signature(func, globals=frame.f_globals, locals=frame.f_locals)
+    else:
+        sig = signature(func)
+
+    arguments = {}
+    for param in sig.parameters.values():
+        if param.annotation is Parameter.empty or param.annotation is Any:
+            continue
+
+        if param.kind is Parameter.VAR_POSITIONAL:
+            annotation: Any = tuple[param.annotation, ...]  # type: ignore[name-defined]
+        elif param.kind is Parameter.VAR_KEYWORD:
+            annotation = dict[str, param.annotation]  # type: ignore[name-defined]
+        else:
+            annotation = param.annotation
+
+        arguments[param.name] = (f_locals[param.name], annotation)
+
+    return check_argument_types_internal(func.__name__, arguments, memo)
+
+
+def check_argument_types_internal(
     func_name: str,
     arguments: dict[str, tuple[Any, Any]],
     memo: TypeCheckMemo,
@@ -146,7 +189,28 @@ def check_argument_types(
     return True
 
 
-def check_return_type(
+def check_return_type(retval: T) -> T:
+    """
+    Check that the return value is compatible with the return value annotation in the function.
+
+    :param retval: the value about to be returned from the call
+    :return: ``retval`` unchanged
+    :raises TypeCheckError: if there is a type mismatch
+
+    .. version-changed:: 4.5.0
+       This function was restored since its removal in v3.0.0.
+
+    """
+    # faster than inspect.currentframe(), but not officially
+    # supported in all python implementations
+    frame = sys._getframe(1)
+    func = find_function(frame)
+    memo = TypeCheckMemo(frame.f_globals, frame.f_locals)
+    type_hints = get_type_hints(func, frame.f_globals, frame.f_locals)
+    return check_return_type_internal(func.__name__, retval, type_hints["return"], memo)
+
+
+def check_return_type_internal(
     func_name: str,
     retval: T,
     annotation: Any,
@@ -243,42 +307,39 @@ def check_yield_type(
 
 
 def check_variable_assignment(
-    value: Any, targets: Sequence[list[tuple[str, Any]]], memo: TypeCheckMemo
+    value: Any,
+    groups: Sequence[list[tuple[str, Any]] | tuple[str, Any]],
+    memo: TypeCheckMemo,
 ) -> Any:
     if _suppression.type_checks_suppressed:
         return value
 
     value_to_return = value
-    for target in targets:
-        star_variable_index = next(
-            (i for i, (varname, _) in enumerate(target) if varname.startswith("*")),
-            None,
-        )
-        if star_variable_index is not None:
-            value_to_return = list(value)
-            remaining_vars = len(target) - 1 - star_variable_index
-            end_index = len(value_to_return) - remaining_vars
-            values_to_check = (
-                value_to_return[:star_variable_index]
-                + [value_to_return[star_variable_index:end_index]]
-                + value_to_return[end_index:]
-            )
-        elif len(target) > 1:
-            values_to_check = value_to_return = []
-            iterator = iter(value)
-            for _ in target:
-                try:
-                    values_to_check.append(next(iterator))
-                except StopIteration:
-                    raise ValueError(
-                        f"not enough values to unpack (expected {len(target)}, got "
-                        f"{len(values_to_check)})"
-                    ) from None
+    for targets in groups:
+        values_to_check: list[tuple[Any, str, Any]]
+        if isinstance(targets, list):
+            values_to_check = []
 
-        else:
-            values_to_check = [value]
+            # Get all the available values from a generator or arbitrary iterator
+            if not isinstance(value_to_return, list):
+                value_to_return = list(value)
 
-        for val, (varname, annotation) in zip(values_to_check, target):
+            iterator = iter(value_to_return)
+            for index, (name, annotation) in enumerate(targets):
+                if name.startswith("*"):
+                    remaining_values = list(iterator)
+                    num_remaining_targets = len(targets) - 1 - index
+                    cutoff_offset = len(remaining_values) - num_remaining_targets
+                    star_values = remaining_values[:cutoff_offset]
+                    iterator = iter(remaining_values[cutoff_offset:])
+                    values_to_check.append((star_values, name[1:], annotation))
+                else:
+                    next_value = next(iterator)
+                    values_to_check.append((next_value, name, annotation))
+        else:  # single target, no unpacking
+            values_to_check = [(value,) + targets]
+
+        for val, varname, annotation in values_to_check:
             try:
                 check_type_internal(val, annotation, memo)
             except TypeCheckError as exc:

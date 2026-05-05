@@ -446,7 +446,6 @@ const std::vector<TCreatePathOp> CreatePathOperations({
         //TODO: proper check
         .CreateRequest = nullptr,
         // .SetupFlags = [](TTestEnvOptions& options) {
-        //     options.EnableTopicTransfer(true);
         // },
         // .CreateRequest = [](const TString& workingDir, const TString& path) {
         //     const TString modifyScheme = Sprintf(

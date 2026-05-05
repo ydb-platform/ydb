@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_NVIEW_ITERATOR_SEP_24_2009_0329PM)
+#ifndef BOOST_FUSION_NVIEW_ITERATOR_SEP_24_2009_0329PM
 #define BOOST_FUSION_NVIEW_ITERATOR_SEP_24_2009_0329PM
 
 #include <boost/fusion/support/config.hpp>

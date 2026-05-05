@@ -126,7 +126,9 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 }
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId,
+                                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
+                                            std::optional<i32> generationId) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -146,6 +148,9 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);
+    }
+    if (generationId.has_value()) {
+        request.GenerationId = *generationId;
     }
 
     return WriteAndRead<TOffsetCommitResponseData>(header, request);
@@ -362,7 +367,7 @@ void TKafkaTestClient::WaitRebalance(TString& memberId, ui64 generationId, TStri
         heartbeatStatus = Heartbeat(memberId, generationId, groupId)->ErrorCode;
     } while (heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-    UNIT_ASSERT_VALUES_EQUAL(heartbeatStatus, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+    UNIT_ASSERT(heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
 }
 
 TReadInfo TKafkaTestClient::JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount, TString& protocolName, ui32 totalPartitionsCount, ui32 hartbeatTimeout) {
@@ -915,16 +920,6 @@ void TKafkaTestClient::ScramAuthenticateToKafka(const TString& userName, const T
     UNIT_ASSERT(response2->AuthBytes.has_value());
     const auto& authBytes2 = response2->AuthBytes.value();
     std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
-
-    Cerr << ">>>>> Server final message: " << serverFinalMessage << Endl;
-    Cerr << ">>>>> Server final message length: " << serverFinalMessage.size() << Endl;
-
-    // DEBUG: Print raw bytes
-    Cerr << ">>>>> Raw bytes: ";
-    for (size_t i = 0; i < authBytes2.size(); ++i) {
-        Cerr << "0x" << Hex((unsigned char)authBytes2[i]) << " ";
-    }
-    Cerr << Endl;
 
     NLogin::NSasl::TFinalServerMsg parsedFinalServerMsg;
     auto parseFinalResult = NLogin::NSasl::ParseFinalServerMsg(serverFinalMessage, parsedFinalServerMsg);

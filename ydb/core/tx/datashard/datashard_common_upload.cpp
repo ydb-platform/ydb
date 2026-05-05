@@ -2,6 +2,8 @@
 #include "datashard_common_upload.h"
 #include "datashard_user_db.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>
@@ -121,7 +123,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             valueCells.GetCells().size() != valueCols.size())
         {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
+                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size()
                     << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
         }
@@ -209,30 +211,35 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             // note, that for upsertIfExists mode we must break locks, because otherwise we can
             // produce inconsistency.
             if (BreakLocks) {
+                TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
                 if (breakWriteConflicts) {
-                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, uniqueKey, volatileDependencies)) {
                         pageFault = true;
                     }
                 }
 
                 if (!pageFault) {
-                    self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+                    self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
                 }
             }
 
             if (ChangeCollector) {
                 Y_ENSURE(CollectChanges);
 
+                auto userCtx = NACLib::TUserContextBuilder()
+                    .DeserializeFromEventHandle(*Ev.Get())
+                    .Build();
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {
                         throw TNeedGlobalTxId();
                     }
 
-                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId)) {
+                    if (!ChangeCollector->OnUpdateTx(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId, userCtx)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion)) {
+                    if (!ChangeCollector->OnUpdate(fullTableId, writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion, userCtx)) {
                         pageFault = true;
                     }
                 }

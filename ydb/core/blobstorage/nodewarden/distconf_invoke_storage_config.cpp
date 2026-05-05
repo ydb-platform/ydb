@@ -198,7 +198,18 @@ namespace NKikimr::NStorage {
                         dom->ClearExplicitAllocators();
                         dom->ClearExplicitMediators();
                     }
-                    enrich(domains, replace("domains_config"));
+                    auto replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes = [](auto rootNode, auto protoNode, auto& doc) {
+                        auto m = rootNode.Map().at("config").Map();
+                        // remove top-level storage_pool_types (they are now inside domains_config.domain[0])
+                        if (auto ref = m.pair_at_opt("storage_pool_types")) {
+                            m.Remove(ref);
+                        }
+                        if (auto ref = m.pair_at_opt("domains_config")) {
+                            m.Remove(ref);
+                        }
+                        m.Append(doc.CreateScalar("domains_config"), protoNode);
+                    };
+                    enrich(domains, replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes);
                 } else {
                     throw TExError() << "State storage, state storage board and scheme board configs are not equal";
                 }
@@ -278,6 +289,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
+
+        IsDryRun = request.GetDryRun();
 
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
@@ -463,6 +476,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
+
+        if (IsDryRun) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         for (const auto& actorId : Self->DetachedQueries) {
             Send(actorId, new TEvNodeWardenStorageConfig(std::make_shared<const NKikimrBlobStorage::TStorageConfig>(
                 ProposedStorageConfig), false, nullptr, nullptr), 0, 1);
@@ -481,7 +499,7 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, IsDryRun); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
                 throw TExError() << "Unexpected config proposition";
@@ -563,6 +581,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::DISABLE_DISTCONF:
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
+                record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
                     record.SetExpectedStorageConfigVersion(ProposedStorageConfig.GetExpectedStorageYamlVersion());
                     record.SetPeerName(replaceStorageConfig.GetPeerName());

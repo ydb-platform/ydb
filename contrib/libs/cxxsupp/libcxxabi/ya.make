@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.8)
+VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-20.1.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 PEERDIR(
     contrib/libs/libunwind
@@ -49,7 +49,6 @@ SRCS(
     src/cxa_vector.cpp
     src/cxa_virtual.cpp
     src/fallback_malloc.cpp
-    src/private_typeinfo.cpp
     src/stdlib_exception.cpp
     src/stdlib_new_delete.cpp
     src/stdlib_stdexcept.cpp
@@ -64,6 +63,14 @@ ELSE()
     SRCS(
         src/cxa_exception.cpp
         src/cxa_personality.cpp
+    )
+ENDIF()
+
+IF (NO_CXX_RTTI)
+    BUILD_ONLY_IF(NO_CXX_EXCEPTIONS)
+ELSE()
+    SRCS(
+        src/private_typeinfo.cpp
     )
 ENDIF()
 

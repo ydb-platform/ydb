@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -80,10 +81,12 @@ public:
     struct TPhysicalTxData : private TMoveOnly {
         TKqpPhyTxHolder::TConstPtr Body;
         NKikimr::NKqp::TQueryData::TPtr Params;
+        ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params)
+        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params, ui64 querySpanId = 0)
             : Body(body)
-            , Params(params) {}
+            , Params(params)
+            , QuerySpanId(querySpanId) {}
     };
 
     struct TKqpSnapshot {
@@ -118,6 +121,7 @@ public:
 
     struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult {
         TKqpSnapshot Snapshot;
+        NKqp::TSnapshotHandle Handle;
         NActors::TActorId ManagingActor;
         NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN;
     };
@@ -133,14 +137,11 @@ public:
             : TxAlloc(txAlloc)
         {}
 
-        static void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGateway::TExecPhysicalRequest& from);
-
         bool AllowTrailingResults = false;
         NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
-        TMap<ui64, TVector<NKikimrDataEvents::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;
@@ -166,6 +167,7 @@ public:
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
         TString UserTraceId;
+        ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 
         NTopic::TTopicOperations TopicOperations;
 

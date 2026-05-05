@@ -2,8 +2,7 @@
 
 #include <util/generic/scope.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -203,5 +202,4 @@ NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad)
     return NUdf::TUnboxedValuePod(NUdf::TStringValue(fullSize), size);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

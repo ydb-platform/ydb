@@ -12,17 +12,12 @@ using namespace NSQLv1Generated;
 
 class TSqlExpression: public TSqlTranslation {
 public:
-    enum class ESmartParenthesis {
-        Default,
-        GroupBy,
-        InStatement,
-        SqlLambdaParams,
-    };
-
-    TSqlExpression(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlTranslation(ctx, mode)
+    explicit TSqlExpression(const TSqlTranslation& that)
+        : TSqlTranslation(that)
     {
     }
+
+    TSqlExpression(const TSqlExpression&) = default;
 
     TNodeResult BuildSourceOrNode(const TRule_expr& node);
     TNodeResult Build(const TRule_tuple_or_expr& node);
@@ -85,7 +80,7 @@ private:
     bool SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq);
 
     TNodePtr KeyExpr(const TRule_key_expr& node) {
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         return Unwrap(expr.Build(node.GetRule_expr2()));
     }
 
@@ -122,7 +117,7 @@ private:
 
     TNodePtr BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const;
 
-    TNodePtr RowPatternVarAccess(TString var, const TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block);
+    TNodePtr RowPatternVarAccess(TString var, TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2 block);
 
     struct TCaseBranch {
         TNodePtr Pred;
@@ -152,11 +147,10 @@ private:
 
     TNodePtr GetNamedNode(const TString& name);
 
-    ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
-    bool IsSourceAllowed_ = true;
+    ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
 
-    THashMap<TString, TNodePtr> ExprShortcuts_;
+    bool IsSourceAllowed_ = true;
 };
 
 bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter);

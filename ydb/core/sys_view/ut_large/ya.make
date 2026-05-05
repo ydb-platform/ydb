@@ -3,8 +3,7 @@ UNITTEST_FOR(ydb/core/sys_view)
 FORK_SUBTESTS()
 
 SIZE(LARGE)
-TAG(ya:fat)
-
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base

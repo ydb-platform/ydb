@@ -2,8 +2,7 @@
 #include <util/system/types.h>
 #include <yql/essentials/public/udf/arrow/bit_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 inline ui64 SaturationSub(ui64 x, ui64 y) {
     // simple code produces cmov (same result as commented one)
@@ -43,7 +42,10 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
     // MASKED VALUES:    --10--1-
     // RESULT:           00000101
     // TODO: should be replaced by PEXT instruction from BMI2 instruction set
-    ui8 mk, mp, mv, t;
+    ui8 mk;
+    ui8 mp;
+    ui8 mv;
+    ui8 t;
     x = x & m;    // Clear irrelevant bits.
     mk = ~m << 1; // We will count 0's to right.
     for (ui8 i = 0; i < 3; i++) {
@@ -60,7 +62,8 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
 }
 
 inline ui8 PopCountByte(ui8 value) {
-    static constexpr uint8_t BytePopCounts[] = {
+    // clang-format off
+    static constexpr auto BytePopCounts = std::to_array<uint8_t>({
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3,
         4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4,
         4, 5, 4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
@@ -69,7 +72,8 @@ inline ui8 PopCountByte(ui8 value) {
         3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5,
         5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4,
         5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6,
-        4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
+        4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8});
+    // clang-format on
     return BytePopCounts[value];
 }
 
@@ -158,5 +162,4 @@ using NYql::NUdf::CompressArray;
 using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::DecompressToSparseBitmap;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

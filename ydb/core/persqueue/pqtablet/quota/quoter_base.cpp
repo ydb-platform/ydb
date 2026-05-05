@@ -134,7 +134,7 @@ bool TPartitionQuoterBase::CanExaust(TInstant now) {
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
     if (!PartitionTotalQuotaTracker)
         return;
-    while (!WaitingTotalPartitionQuotaRequests.empty() && CanExaust(ActorContext().Now())) {
+    while (CanExaust(ActorContext().Now()) && !WaitingTotalPartitionQuotaRequests.empty()) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
         ApproveQuota(request);
         WaitingTotalPartitionQuotaRequests.pop_front();

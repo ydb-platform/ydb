@@ -232,6 +232,9 @@ void TMkqlIOSpecs::LoadSpecInfo(bool inputSpec, const NYT::TNode& attrs, NCommon
     if (attrs.HasKey(YqlDynamicAttribute)) {
         info.Dynamic = attrs[YqlDynamicAttribute].AsBool();
     }
+    if (attrs.HasKey(YqlRLSAttribute)) {
+        info.RLS = attrs[YqlRLSAttribute].AsBool();
+    }
     if (attrs.HasKey(YqlSysColumnPrefix)) {
         for (auto& n: attrs[YqlSysColumnPrefix].AsList()) {
             const TString sys = n.AsString();
@@ -273,6 +276,7 @@ void TMkqlIOSpecs::InitDecoder(NCommon::TCodecContext& codecCtx,
     decoder.StructSize = structColumns.size();
     decoder.NativeYtTypeFlags = specInfo.NativeYtTypeFlags;
     decoder.Dynamic = specInfo.Dynamic;
+    decoder.RLS = specInfo.RLS;
     THashSet<ui32> virtualColumns;
 
     if (specInfo.SysColumns.contains("path")) {

@@ -71,7 +71,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
         ```
 
     1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
-  
+
         ```json
         - labels:
             container: ydb-dynamic
@@ -96,7 +96,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
           - "localhost:8765"
         ```
 
-    1. If necessary, in the `tls_config` section of [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml), specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
+    1. If necessary, in the `tls_config` section of [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml), specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment/deployment-preparation.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
 
        ```json
        scheme: https

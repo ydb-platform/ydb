@@ -1,0 +1,19 @@
+--- contrib/libs/curl/lib/vtls/openssl.c	(index)
++++ contrib/libs/curl/lib/vtls/openssl.c	(working tree)
+@@ -4327,11 +4327,11 @@ CURLcode Curl_ossl_ctx_init(struct ossl_ctx *octx,
+   }
+ #endif /* HAVE_OPENSSL_SRP && USE_TLS_SRP */
+ 
+-  /* OpenSSL always tries to verify the peer. By setting the failure mode
+-   * to NONE, we allow the connect to complete, regardless of the outcome.
+-   * We then explicitly check the result and may try alternatives like
+-   * Apple's SecTrust for verification. */
+-  SSL_CTX_set_verify(octx->ssl_ctx, SSL_VERIFY_NONE, NULL);
++  /* OpenSSL always tries to verify the peer, this only says whether it should
++  * fail to connect if the verification fails, or if it should continue
++  * anyway. In the latter case the result of the verification is checked with
++  * SSL_get_verify_result() below. */
++  SSL_CTX_set_verify(octx->ssl_ctx, conn_config->verifypeer ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, NULL);
+ 
+   /* Enable logging of secrets to the file specified in env SSLKEYLOGFILE. */
+ #ifdef HAVE_KEYLOG_CALLBACK

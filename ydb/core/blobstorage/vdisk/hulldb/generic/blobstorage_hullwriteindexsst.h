@@ -96,6 +96,26 @@ public:
         , Recs(TMemoryConsumer(VCtx->SstIndex))
     {}
 
+    bool PushRecord(const TKey& key, const TMemRec& memRec) {
+        TRec rec(key, memRec);
+
+        if (!Writer) {
+            PostponedRecs.push_back(rec);
+            return false;
+        }
+
+        if (sizeof(TRec) + sizeof(TIdxDiskPlaceHolder) <= Writer->GetFreeSpace()) {
+            Recs.push_back(rec);
+            Writer->Push(&rec, sizeof(TRec));
+            ++Items;
+            return true;
+        }
+
+        PostponedRecs.push_back(rec);
+        FinishChunk();
+        return false;
+    }
+
     bool Push(const TRec::TVec& records) {
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS20, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexSstWriter: Push"),

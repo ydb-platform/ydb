@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
@@ -17,7 +17,7 @@ bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOConte
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules)
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
     : IRBOStage(std::move(stageName))
     , Rules(std::move(rules)) {
     for (const auto& r : Rules) {
@@ -26,9 +26,11 @@ TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IR
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
-    if (props & ERuleProperties::RequireParents) {
-        root.ComputeParents();
-    }
+    // FIXME: Parents are currently always required, because we need to update them when a rule fires
+    root.ComputeParents();
+    //if (props & ERuleProperties::RequireParents) {
+    //    root.ComputeParents();
+    //}
     if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
             Y_ENSURE(false, "RBO type annotation failed");
@@ -53,7 +55,7 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
  *
  * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
  */
-void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
+void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     bool fired = true;
     ui32 numMatches = 0;
     const ui32 maxNumOfMatches = 1000;
@@ -71,11 +73,18 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
-                    if (iter.Parent) {
-                        iter.Parent->Children[iter.ChildIndex] = op;
-                    } else if (!iter.SubplanIU) {
+                    // If the original operator had parents, update all parents
+                    if (iter.Current->Parents.size()) {
+                        for (auto & [parent, parentIdx] : iter.Current->Parents) {
+                            parent->Children[parentIdx] = op;
+                        }
+                    } 
+                    // Otherwise, if its not a subplan, it was root, so update root
+                    else if (!iter.SubplanIU) {
                         root.SetInput(op);
-                    } else {
+                    }
+                    // Finally, it's a subplan, so update the subplan 
+                    else {
                         root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
@@ -98,25 +107,21 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, TExprContext &ctx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
-    Y_ENSURE(opRoot);
-    auto& root = *opRoot;
+    auto& ctx = rboCtx.ExprCtx;
 
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
-    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, std::move(RBOTypeAnnTransformer), std::move(PeepholeTypeAnnTransformer), FuncRegistry);
-
-    for (size_t idx = 0; idx < Stages.size(); idx++) {
-        auto stage = Stages[idx];
+    for (const auto& stage : Stages) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
-        ComputeRequiredProps(root, stage->Props, context);
+        ComputeRequiredProps(root, stage->Props, rboCtx);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
-        stage->RunStage(root, context);
+        stage->RunStage(root, rboCtx);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
@@ -125,12 +130,16 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, T
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
-    ComputeRequiredProps(root, convertProps, context);
+    ComputeRequiredProps(root, convertProps, rboCtx);
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
 
-    return ConvertToPhysical(root, context);
+    ui64 counter = 0;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter);
+    rboCtx.ExplainJson = root.GetExplainJson(counter);
+
+    return ConvertToPhysical(root, rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

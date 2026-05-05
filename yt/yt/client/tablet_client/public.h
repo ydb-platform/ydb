@@ -98,6 +98,11 @@ YT_DEFINE_ERROR_ENUM(
     ((TabletIsInIntermediateState)            (1744))
     ((HunkTabletStoreToggleConflict)          (1745))
     ((HunkStoreAllocationFailed)              (1746))
+    ((TabletResharded)                        (1747))
+
+    // Test error codes.
+    ((TestingFailureBeforeWrite)              (1798))
+    ((TestingFailureAfterWrite)               (1799))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -267,6 +272,7 @@ DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)
 DECLARE_REFCOUNTED_STRUCT(TTableReplicaInfo)
 DECLARE_REFCOUNTED_STRUCT(ITableMountCache)
+DECLARE_REFCOUNTED_STRUCT(TReshardRedirectionHint)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -15,7 +15,6 @@ public:
 
 public:
     TConstrainedTableSchema() = default;
-    explicit TConstrainedTableSchema(const TTableSchema& schema);
     TConstrainedTableSchema(TTableSchema schema, TColumnNameToConstraintMap columnNameToConstraint);
     TConstrainedTableSchema(TTableSchema schema, TColumnStableNameToConstraintMap columnStableNameToConstraint, int columnToConstraintLogLimit);
 };

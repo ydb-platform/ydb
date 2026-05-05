@@ -42,8 +42,8 @@ private:
     bool ScanErrors(const TExprNode& node, TExprContext& ctx);
 
 private:
-    TProcessedNodesSet SimpleProcessedNodes_[TCoCallableRules::SIMPLE_STEPS];
-    TProcessedNodesSet FlowProcessedNodes_[TCoCallableRules::FLOW_STEPS];
+    std::array<TProcessedNodesSet, TCoCallableRules::SIMPLE_STEPS> SimpleProcessedNodes_;
+    std::array<TProcessedNodesSet, TCoCallableRules::FLOW_STEPS> FlowProcessedNodes_;
     TProcessedNodesSet FinalProcessedNodes_;
     TProcessedNodesSet ErrorProcessedNodes_;
     THashSet<TIssue> AddedErrors_;

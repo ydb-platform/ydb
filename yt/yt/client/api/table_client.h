@@ -320,13 +320,17 @@ struct TPartitionTablesOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NChunkClient::TChunkSliceFetcherConfigPtr ChunkSliceFetcherConfig;
     NTableClient::ETablePartitionMode PartitionMode = NTableClient::ETablePartitionMode::Unordered;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+    //! Whether to include node descriptors in the cookie (effective only when EnableCookies is true).
+    //! Increases cookie size but likely reduces read latency with ReadTablePartition.
+    bool FetchCookieNodeDescriptors = false;
 
     bool OmitInaccessibleRows = false;
 };

@@ -66,11 +66,10 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
     // Note: we no longer store small readsets in InReadSets
     // This test now only checks unnecessary InReadSets are removed on restart
-    Y_UNIT_TEST_TWIN(TestCleanupInRS, UseSink) {
+    Y_UNIT_TEST(TestCleanupInRS) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             // Volatile transactions avoid storing readsets in InReadSets table

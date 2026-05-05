@@ -7,7 +7,9 @@
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <yt/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
+#include <yt/yql/providers/yt/lib/access_provider/full/yt_access_provider.h>
 #include <yt/yql/providers/yt/lib/secret_masker/dummy/dummy_secret_masker.h>
+#include <yt/yql/providers/yt/lib/tvm_client/full/tvm_client.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
@@ -125,6 +127,12 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-pool-name", "Fmr pool name")
             .Optional()
             .StoreResult(&FmrPoolName_);
+        opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
+        });
+        opts.AddLongOption("yt-access-provider-cfg", "YT access provider configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &AccessProviderConfig_);
+        });
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -188,6 +196,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
+    services.TvmClient = CreateTvmClient(TvmConfig_);
+    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, AccessProviderConfig_);
     auto ytGateway = CreateYtNativeGateway(services);
     if (!GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
         return ytGateway;
@@ -231,6 +241,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
     fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
+    fmrServices.TvmSettings = fmrInitializationOpts.FmrTvmSettings;
 
     if (!DisableLocalFmrWorker_) {
         auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), TableDataServiceDiscoveryFilePath_);
@@ -240,6 +251,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
         fmrServices.JobPreparer = jobPreparer;
     }
+    fmrServices.CheckSpecDoesntUseNativeYtTypes = false;
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
     FmrWorker_ = std::move(worker);

@@ -132,8 +132,6 @@ public:
 
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -147,10 +145,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TExtendWideFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TExtendWideFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -195,27 +190,21 @@ public:
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
-            const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
-            const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
-            CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+            EmitFunctionCall<&TState::SelectCurrentFlow>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             BranchInst::Create(done, block);
         }
 
         block = next;
 
-        const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
-        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
+        const auto nextContinue = EmitFunctionCall<&TState::NextFlow>(Type::getInt1Ty(context), {stateArg}, ctx, block);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
         BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
-        const auto overFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlowOver>());
-        const auto overPtr = CastInst::Create(Instruction::IntToPtr, overFunc, PointerType::getUnqual(funcType), "over_ptr", block);
-        CallInst::Create(funcType, overPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::FlowOver>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(loop, block);
 
@@ -292,8 +281,6 @@ public:
 
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -308,10 +295,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TExtendFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TExtendFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -348,18 +332,14 @@ public:
 
         block = next;
 
-        const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
-        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
+        const auto nextContinue = EmitFunctionCall<&TState::NextFlow>(Type::getInt1Ty(context), {stateArg}, ctx, block);
         result->addIncoming(GetYield(context), block);
 
         BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
-        const auto overFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlowOver>());
-        const auto overPtr = CastInst::Create(Instruction::IntToPtr, overFunc, PointerType::getUnqual(funcType), "over_ptr", block);
-        CallInst::Create(funcType, overPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::FlowOver>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(loop, block);
 
@@ -367,9 +347,7 @@ public:
 
         result->addIncoming(selectFlow, block);
 
-        const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
-        const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
-        CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::SelectCurrentFlow>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         BranchInst::Create(done, block);
 
@@ -622,12 +600,7 @@ public:
         }
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), IsStream ? GetMethodPtr<&THolderFactory::ExtendStream>() : GetMethodPtr<&THolderFactory::ExtendList<false>>());
-
-        const auto funType = FunctionType::get(valueType, {factory->getType(), array->getType(), size->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto res = CallInst::Create(funType, funcPtr, {factory, array, size}, "res", block);
-        return res;
+        return EmitFunctionCall < IsStream ? &THolderFactory::ExtendStream : &THolderFactory::ExtendList < false >> (valueType, {factory, array, size}, ctx, block);
     }
 #endif
 private:

@@ -61,6 +61,13 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-consumer", "Max memory usage per consumer in bytes. Should be more than '1MiB'.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("partition-max-inflight-bytes", "Max inflight bytes per partition.")
+        .DefaultValue(0)
+        .Hidden()
+        .StoreResult(&Scenario.PartitionMaxInflightBytes);
+    config.Opts->AddLongOption("direct-read", "Direct read mode.")
+        .Hidden()
+        .StoreTrue(&Scenario.DirectRead);
     config.IsNetworkIntensive = true;
 }
 

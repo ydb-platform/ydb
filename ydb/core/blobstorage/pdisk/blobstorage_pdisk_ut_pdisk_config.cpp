@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 4ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(true);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 1000ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(0, 0, TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
 
-        alignas(16) NPDisk::TDiskFormat format;
+        alignas(16) NPDisk::TDiskFormat format = {};
         format.DiskSize = 100ull << 30;
 
         NPDisk::TKeeperParams params;

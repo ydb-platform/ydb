@@ -12,6 +12,8 @@
 #include <util/system/env.h>
 #include <util/generic/queue.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -43,7 +45,7 @@ public:
         TOperationProgressWriter writer,
         bool withFinalize)
         : Types_(types)
-        , Writer_(writer)
+        , Writer_(std::move(writer))
         , WithFinalize_(withFinalize)
         , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     {
@@ -837,8 +839,8 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
     TExprNode::TListType childrenToCheck;
     dataProvider->GetRequiredChildren(*node, childrenToCheck);
     IGraphTransformer::TStatus combinedStatus = IGraphTransformer::TStatus::Ok;
-    for (ui32 i = 0; i < childrenToCheck.size(); ++i) {
-        combinedStatus = combinedStatus.Combine(ValidateExecution(childrenToCheck[i], ctx, types, visited));
+    for (const auto& child : childrenToCheck) {
+        combinedStatus = combinedStatus.Combine(ValidateExecution(child, ctx, types, visited));
     }
 
     return combinedStatus;
@@ -1018,31 +1020,31 @@ IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index) {
 }
 
 template<>
-void Out<NYql::TOperationProgress::EState>(class IOutputStream &o, NYql::TOperationProgress::EState x) {
+void Out<NYql::TOperationProgress::EState>(class IOutputStream &out, NYql::TOperationProgress::EState value) {
 #define YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TOperationProgress::EState::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_OPERATION_PROGRESS_STATE_MAP(YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }
 
 template<>
-void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &o, NYql::TOperationProgress::EOpBlockStatus x) {
+void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &out, NYql::TOperationProgress::EOpBlockStatus value) {
 #define YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TOperationProgress::EOpBlockStatus::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_OPERATION_BLOCK_STATUS_MAP(YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }

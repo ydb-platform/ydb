@@ -11,7 +11,7 @@
 
 3. **Оптимизировать запросы**
    * Запрашивать только необходимые колонки
-   * Использовать подходящие [индексы](../concepts/secondary_indexes.md)
+   * Использовать подходящие [индексы](../concepts/query_execution/secondary_indexes.md)
    * Правильно формулировать условия фильтрации
 
 {% include [olap-links](_includes/olap-links.md) %}

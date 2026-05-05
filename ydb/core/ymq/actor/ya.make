@@ -9,7 +9,10 @@ SRCS(
     count_queues.cpp
     cleanup_queue_data.cpp
     create_queue.cpp
+    create_topic_tx.cpp
     create_user.cpp
+    deduplicator.cpp
+    deferred_create_topic.cpp
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
@@ -17,6 +20,7 @@ SRCS(
     executor.cpp
     fifo_cleanup.cpp
     garbage_collector.cpp
+    get_message_groups.cpp
     get_queue_attributes.cpp
     get_queue_url.cpp
     index_events_processor.cpp

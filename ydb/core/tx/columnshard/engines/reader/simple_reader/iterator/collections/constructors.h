@@ -22,6 +22,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
+
     virtual ui64 DoGetDeprecatedPortionId() const override {
         return Portion->GetPortionId();
     }
@@ -30,6 +31,7 @@ public:
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }
+
     bool GetIsStartedByCursor() const {
         return IsStartedByCursorFlag;
     }
@@ -45,7 +47,8 @@ public:
     {
     }
 
-    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
+    std::shared_ptr<TPortionDataSource> Construct(
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
 
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
@@ -65,15 +68,17 @@ private:
         ui64 compactedPortionsBytes = 0;
         ui64 insertedPortionsBytes = 0;
         ui64 committedPortionsBytes = 0;
-        for (auto&& i : TBase::GetConstructors()) {
-            if (i.GetPortion()->GetPortionType() == EPortionType::Compacted) {
-                compactedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
-            } else if (i.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
-                insertedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+
+        TBase::ForEachConstructor([&](const TSourceConstructor& constructor) {
+            if (constructor.GetPortion()->GetPortionType() == EPortionType::Compacted) {
+                compactedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
+            } else if (constructor.GetPortion()->GetProduced() == NPortion::EProduced::INSERTED) {
+                insertedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
             } else {
-                committedPortionsBytes += i.GetPortion()->GetTotalBlobBytes();
+                committedPortionsBytes += constructor.GetPortion()->GetTotalBlobBytes();
             }
-        }
+        });
+
         stats.IndexPortions = TBase::GetConstructorsCount();
         stats.InsertedPortionsBytes = insertedPortionsBytes;
         stats.CompactedPortionsBytes = compactedPortionsBytes;
@@ -91,7 +96,8 @@ private:
 
 public:
     TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
-        : TBase(sorting) {
+        : TBase(sorting)
+    {
         InitializeConstructors(std::move(sources));
     }
 

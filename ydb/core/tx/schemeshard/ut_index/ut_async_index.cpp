@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitMainWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMainWithReboots, 2, 1, false) {
         SplitWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitIndexWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitIndexWithReboots, 2, 1, false) {
         SplitWithReboots(t, SPLIT_OP_INDEX, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitBothWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitBothWithReboots, 2, 1, false) {
         SplitWithReboots(t, SPLIT_OP_BOTH, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CdcAndSplitWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CdcAndSplitWithReboots, 2, 1, false) {
         SplitWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeMainWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMainWithReboots, 2, 1, false) {
         MergeWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeIndexWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeIndexWithReboots, 2, 1, false) {
         MergeWithReboots(t, SPLIT_OP_INDEX, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeBothWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeBothWithReboots, 2, 1, false) {
         MergeWithReboots(t, SPLIT_OP_BOTH, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CdcAndMergeWithReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CdcAndMergeWithReboots, 2, 1, false) {
         MergeWithReboots(t, SPLIT_OP_MAIN, [&](TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropTableWithInflightChanges) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropTableWithInflightChanges, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 return TTestActorRuntime::DefaultObserverFunc(ev);

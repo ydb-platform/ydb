@@ -15,6 +15,7 @@
 #include <yt/yql/providers/yt/fmr/job_preparer/impl/yql_yt_job_preparer_impl.h>
 #include <yt/yql/providers/yt/fmr/gc_service/impl/yql_yt_gc_service_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
@@ -35,6 +36,7 @@ struct TFmrInitializationOptions {
     NFmr::IFileMetadataService::TPtr FmrFileMetadataService;
     NFmr::IFileUploadService::TPtr FmrFileUploadService;
     TFmrDistributedCacheSettings FmrDistributedCacheSettings = TFmrDistributedCacheSettings(); // return fmr cache settings explicitly for jobPrerarer initialization.
+    TMaybe<TFmrTvmGatewaySettings> FmrTvmSettings;
 };
 
 TFmrInitializationOptions GetFmrInitializationInfoFromConfig(

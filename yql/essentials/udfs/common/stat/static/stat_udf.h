@@ -11,8 +11,8 @@ using namespace NUdf;
 namespace {
 extern const char DigestResourceName[] = "Stat.TDigestResource";
 
-typedef TBoxedResource<TDigest, DigestResourceName> TDigestResource;
-typedef TRefCountedPtr<TDigestResource> TDigestResourcePtr;
+using TDigestResource = TBoxedResource<TDigest, DigestResourceName>;
+using TDigestResourcePtr = TRefCountedPtr<TDigestResource>;
 
 SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), 2) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);

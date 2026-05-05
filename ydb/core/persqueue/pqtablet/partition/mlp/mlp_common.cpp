@@ -65,7 +65,12 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
         0, // partitionSessionId
         consumer.GetGeneration(),
         0, // step
-        TActorId{} // pipeClient
+        TActorId{}, // pipeClient
+        TEvPQ::TEvSetClientInfo::ESetClientInfoType::ESCI_OFFSET,
+        0, // readRuleGeneration
+        false, // strict
+        std::nullopt, // committedMetadata
+        true // mlpRequest
     );
 }
 
@@ -101,4 +106,9 @@ ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetCookie();
 }
 
+}
+
+template<>
+void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
+    o << "(" << p.Offset << ", " << p.SeqNo << ")";
 }

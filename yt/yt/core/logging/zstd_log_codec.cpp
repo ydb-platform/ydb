@@ -71,13 +71,13 @@ public:
 
         TBuffer buffer;
 
-        auto outputPosition = 0;
+        i64 outputPosition = 0;
         while (bufSize >= ZstdSyncTagSize) {
             buffer.Resize(0);
             buffer.Reserve(bufSize);
 
-            size_t sz = file->Pread(buffer.Data(), bufSize, pos);
-            buffer.Resize(sz);
+            size_t readSize = file->Pread(buffer.Data(), bufSize, pos);
+            buffer.Resize(readSize);
 
             if (auto offset = FindLastZstdSyncTagOffset(TRef(buffer.Data(), buffer.Size()), pos)) {
                 outputPosition = *offset + ZstdSyncTagSize;

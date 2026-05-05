@@ -669,7 +669,7 @@ private:
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
-                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
                     if (State_->Types->OrderedColumns) {
                         YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                         nextRowSpec->SetColumnOrder(contentColumnOrder);
@@ -1629,7 +1629,8 @@ private:
             return TStatus::Repeat;
         }
 
-        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn() &&
+            input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
             output = ctx.ChangeChild(*input, TYtWriteTable::idx_Content,
                 Build<TCoList>(ctx, input->Pos())
                    .ListType<TCoListType>()
@@ -1902,7 +1903,7 @@ private:
                 next.RowType = rowType;
                 next.IsReplaced = true;
 
-                const TYtOutTableInfo outTable(rowType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, columnOrder);
+                const TYtOutTableInfo outTable(rowType, GetNativeYtTypeCompatibility(create.DataSink().Cluster().StringValue(), *State_->Configuration), columnOrder);
 
                 const auto orderBySize = create.OrderBy().Size();
                 outTable.RowSpec->SortedBy.reserve(orderBySize);
@@ -2326,8 +2327,13 @@ private:
                 }
 
                 if (auto& lambda = input->ChildRef(i + 7U); lambda->IsLambda()) {
-                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx))
+                    if (auto status = ConvertToLambda(lambda, ctx, 1); status != IGraphTransformer::TStatus::Ok) {
+                        return status;
+                    }
+
+                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx)) {
                         return TStatus::Error;
+                    }
 
                     if (!lambda->GetTypeAnn()) {
                         return TStatus::Repeat;

@@ -70,7 +70,7 @@ public:
     }
 };
 
-typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
+using TVerifyLineFunc = std::function<void (const TString& word, const TString& line)>;
 
 TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {
     const auto programm = GetPrettyPrint(res);

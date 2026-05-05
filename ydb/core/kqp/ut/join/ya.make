@@ -3,9 +3,10 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(200)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -20,10 +21,6 @@ ENDIF()
 
 SRCS(
     kqp_block_hash_join_ut.cpp
-    kqp_complex_join_query_ut.cpp
-    kqp_flip_join_ut.cpp
-    kqp_index_lookup_join_ut.cpp
-    kqp_join_ut.cpp
     kqp_join_order_ut.cpp
     kqp_join_topology_generator.cpp
     kqp_join_topology_ut.cpp
@@ -37,7 +34,6 @@ PEERDIR(
     yql/essentials/udfs/common/digest
 )
 
-
 DATA (
     arcadia/ydb/core/kqp/ut/join
     arcadia/ydb/library/benchmarks/queries
@@ -47,3 +43,7 @@ DATA (
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    index_lookup
+)

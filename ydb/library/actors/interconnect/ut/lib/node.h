@@ -14,6 +14,8 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
+#include <library/cpp/logger/backend.h>
+
 #include "tls/tls.h"
 
 using namespace NActors;
@@ -21,8 +23,11 @@ using namespace NActors;
 class TNode {
     THolder<TActorSystem> ActorSystem;
     TString CaPath;
+    TInterconnectProxyCommon::TPtr Common;
 
 public:
+    using TLogBackendFactory = std::function<TAutoPtr<TLogBackend>()>;
+
     static constexpr ui32 DefaultInflight() { return 512 * 1024; }
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
@@ -31,7 +36,10 @@ public:
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
           bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
-          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT) {
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
+          bool withRdma = true,
+          std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
+          TLogBackendFactory logBackendFactory = {}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -41,7 +49,8 @@ public:
         setup.Scheduler.Reset(new TBasicSchedulerThread());
         const ui32 interconnectPoolId = 0;
 
-        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        Common = MakeIntrusive<TInterconnectProxyCommon>();
+        auto& common = Common;
         common->NameserviceId = GetNameserviceActorId();
         common->MonCounters = counters->GetSubgroup("nodeId", ToString(nodeId));
         common->ChannelsConfig = channelsSettings;
@@ -56,9 +65,17 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+        if (settingsCustomizer) {
+            settingsCustomizer(nodeId, common->Settings);
+        }
+        setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
         #if !defined(_msan_enabled_)
-        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        if (withRdma) {
+            common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        }
+        #else
+            Y_UNUSED(withRdma);
         #endif
 
         if (withTls) {
@@ -137,8 +154,9 @@ public:
             interconnectPoolId));
 
         // register logger
+        TAutoPtr<TLogBackend> logBackend = logBackendFactory ? logBackendFactory() : CreateStderrBackend();
         setup.LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(loggerSettings,
-            CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
+            logBackend, counters->GetSubgroup("subsystem", "logger")),
             TMailboxType::ReadAsFilled, 1));
 
         if (common->OutgoingHandshakeInflightLimit) {
@@ -154,8 +172,15 @@ public:
     }
 
     ~TNode() {
-        ActorSystem->Stop();
+        Stop();
         unlink(CaPath.c_str());
+    }
+
+    void Stop() {
+        if (ActorSystem) {
+            ActorSystem->Stop();
+            ActorSystem.Reset();
+        }
     }
 
     bool Send(const TActorId& recipient, IEventBase* ev) {
@@ -177,5 +202,9 @@ public:
 
     TActorSystem *GetActorSystem() const {
         return ActorSystem.Get();
+    }
+
+    TInterconnectSettings& MutableInterconnectSettings() {
+        return Common->Settings;
     }
 };

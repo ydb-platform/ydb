@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 
 namespace NKafka {

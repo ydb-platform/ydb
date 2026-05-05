@@ -1,5 +1,6 @@
 """Core tests for wcwidth module."""
 # std imports
+import sys
 import importlib.metadata
 
 # 3rd party
@@ -7,6 +8,9 @@ import pytest
 
 # local
 import wcwidth
+
+_wcwidth_module = sys.modules['wcwidth.wcwidth']
+_WIDTH_FAST_PATH_MIN_LEN = _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN
 
 
 def test_package_version():
@@ -202,7 +206,7 @@ def test_balinese_script():
               "\u1B2E"    # Category 'Lo', EAW 'N' -- BALINESE LETTER LA
               "\u1B44")   # Category 'Mc', EAW 'N' -- BALINESE ADEG ADEG
     expect_length_each = (1, 1, 1, 0)
-    expect_length_phrase = 3
+    expect_length_phrase = 4
 
     # exercise,
     length_each = tuple(map(wcwidth.wcwidth, phrase))
@@ -211,6 +215,13 @@ def test_balinese_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+
+    # verify width() parse mode also handles Mc correctly
+    assert wcwidth.width(phrase) == expect_length_phrase
+
+    # standalone Mc has zero width
+    assert wcwidth.wcswidth("\u1B44") == 0
+    assert wcwidth.width("\u1B44") == 0
 
 
 def test_kr_jamo():
@@ -302,7 +313,7 @@ def test_devanagari_script():
               "\u093F")   # MatraL, Category 'Mc', East Asian Width property 'N' -- DEVANAGARI VOWEL SIGN I
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (2, 0, 0, 1)
     expect_length_each = (1, 0, 1, 0)
-    # I believe the final width *should* be 3.
+    # virama conjunct collapses KA+virama+SSA into one cell, Mc adds +1
     expect_length_phrase = 2
 
     # exercise,
@@ -312,6 +323,7 @@ def test_devanagari_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_tamil_script():
@@ -323,7 +335,7 @@ def test_tamil_script():
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (3, 0, 0, 4)
     expect_length_each = (1, 0, 1, 0)
 
-    # I believe the final width should be about 5 or 6.
+    # virama conjunct collapses KA+virama+SSA into one cell, Mc adds +1
     expect_length_phrase = 2
 
     # exercise,
@@ -333,6 +345,7 @@ def test_tamil_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_kannada_script():
@@ -345,7 +358,7 @@ def test_kannada_script():
               "\u0cc8")   # MatraUR, Category 'Mc', East Asian Width property 'N' -- KANNADA VOWEL SIGN AI
     # 23107-terminal-suppt.pdf suggests should be (2, 0, 3, 1)
     expect_length_each = (1, 0, 1, 0)
-    # I believe the correct final width *should* be 3 or 4.
+    # virama conjunct collapses RA+virama+JHA into one cell, Mc adds +1
     expect_length_phrase = 2
 
     # exercise,
@@ -355,6 +368,7 @@ def test_kannada_script():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
 def test_kannada_script_2():
@@ -367,7 +381,7 @@ def test_kannada_script_2():
               "\u0c9a")   # Subjoin, Category 'Mc', East Asian Width property 'N' -- KANNADA LETTER CA
     # 23107-terminal-suppt.pdf suggests wcwidth.wcwidth should return (2, 0, 0, 1)
     expect_length_each = (1, 0, 0, 1)
-    # I believe the final width is correct, but maybe for the wrong reasons!
+    # virama conjunct collapses RA(+Nukta)+virama+CA into one cell
     expect_length_phrase = 2
 
     # exercise,
@@ -377,20 +391,77 @@ def test_kannada_script_2():
     # verify.
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
+    assert wcwidth.width(phrase) == expect_length_phrase
 
 
-def test_zero_wide_conflict():
-    # Test characters considered both "wide" and "zero" width
-    # -  (0x03000, 0x0303e,),  # Ideographic Space       ..Ideographic Variation In
-    # +  (0x03000, 0x03029,),  # Ideographic Space       ..Hangzhou Numeral Nine
-    assert wcwidth.wcwidth(chr(0x03029), unicode_version='4.1.0') == 2
-    assert wcwidth.wcwidth(chr(0x0302a), unicode_version='4.1.0') == 0
+def test_bengali_nukta_mc():
+    # Mc following Mn (Nukta) is still counted as spacing mark.
+    #
+    # Discovered via UDHR Bengali text where wrap() produced lines exceeding the requested width.
+    # The root cause was that width() only recognized a Spacing Combining Mark (Mc) when it was
+    # *immediately* adjacent to the base character (index == last_base + 1).
+    #
+    # In Bengali, a Nukta (U+09BC, category Mn) commonly sits between the consonant and the vowel
+    # sign, so the Mc vowel sign was skipped and measured as zero instead of one.
+    #
+    # The nukta between consonant and vowel sign does not break the combining sequence, so the Mc
+    # must still be counted.
+    phrase = "\u09AF\u09BC\u09C7"
+    assert wcwidth.wcwidth("\u09C7") == 0
+    assert wcwidth.wcswidth(phrase) == 2
+    assert wcwidth.width(phrase) == 2
 
-    # - (0x03099, 0x030ff,),  # Combining Katakana-hirag..Katakana Digraph Koto
-    # + (0x0309b, 0x030ff,),  # Katakana-hiragana Voiced..Katakana Digraph Koto
-    assert wcwidth.wcwidth(chr(0x03099), unicode_version='4.1.0') == 0
-    assert wcwidth.wcwidth(chr(0x0309a), unicode_version='4.1.0') == 0
-    assert wcwidth.wcwidth(chr(0x0309b), unicode_version='4.1.0') == 2
+
+@pytest.mark.parametrize("repeat", [1, _WIDTH_FAST_PATH_MIN_LEN])
+def test_mc_width_consistency(repeat):
+    # width(), wcswidth(), and per-grapheme width sums must all agree.
+    #
+    # The repeat parameter ensures both the short (parse) and long (fast) code
+    # paths of width() are exercised.  At repeat=1 the phrases are short enough
+    # to go through character-by-character parse mode.  At repeat=_WIDTH_FAST_PATH_MIN_LEN
+    # every phrase exceeds the threshold and takes the fast path that delegates
+    # to wcswidth().
+    phrases = [
+        "\u0915\u094D\u0937\u093F",
+        "\u0b95\u0bcd\u0bb7\u0bcc",
+        "\u0cb0\u0ccd\u0c9d\u0cc8",
+        "\u0cb0\u0cbc\u0ccd\u0c9a",
+        "\u09AF\u09BC\u09C7",
+        "\u09B9\u09AF\u09BC\u09C7\u099B\u09C7",
+        "\u0915\u09BE\u0999\u09CD\u0996\u09BE",
+    ]
+    # Virama conjunct collapsing is context-sensitive across grapheme
+    # boundaries (virama ends one grapheme, consonant starts the next),
+    # so per-grapheme width sums may exceed wcswidth/width totals for
+    # phrases containing conjuncts.
+    no_conjunct_phrases = [
+        "\u09AF\u09BC\u09C7",
+    ]
+    for phrase in phrases:
+        text = phrase * repeat
+        assert wcwidth.width(text) == wcwidth.wcswidth(text)
+    for phrase in no_conjunct_phrases:
+        text = phrase * repeat
+        grapheme_sum = sum(wcwidth.width(g) for g in wcwidth.iter_graphemes(text))
+        assert wcwidth.width(text) == grapheme_sum
+
+
+@pytest.mark.parametrize("phrase,expected", [
+    ("\u0999\u09CD\u0997\u09C7", 2),
+    ("\u0915\u094D\u0924\u093F", 2),
+    ("\u0915\u094D\u0930\u093F", 2),
+    ("\u0A95\u0ACD\u0A95\u0ACB", 2),
+    ("\u0938\u094D\u0924\u094D\u0930", 2),
+    ("\u0938\u094D\u0924", 2),
+    ("\u0915\u094D\u0020", 2),
+    ("\u09A4\u09CD\u200D\u09AA", 2),
+    ("\u0915\u094D\u200D\u0924", 2),
+    ("\u0D15\u0D4D\u0D15\u0D41\u0D02", 2),
+    ("\u0915\u094D\u0924\u0941\u0902", 2),
+])
+def test_virama_conjunct(phrase, expected):
+    assert wcwidth.wcswidth(phrase) == expected
+    assert wcwidth.width(phrase) == expected
 
 
 def test_soft_hyphen():

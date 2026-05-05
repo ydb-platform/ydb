@@ -1,10 +1,18 @@
-PROTO_LIBRARY()
-
-INCLUDE_TAGS(GO_PROTO)
-EXCLUDE_TAGS(JAVA_PROTO)
+LIBRARY()
 
 SRCS(
-    storage.proto
+    config.cpp
+)
+
+PEERDIR(
+    ydb/core/nbs/cloud/blockstore/config/protos
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
+
+RECURSE(
+)

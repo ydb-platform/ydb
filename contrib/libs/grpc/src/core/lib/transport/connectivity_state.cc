@@ -20,9 +20,6 @@
 
 #include "src/core/lib/transport/connectivity_state.h"
 
-#include <util/generic/string.h>
-#include <util/string/cast.h>
-
 #include <grpc/support/log.h>
 
 #include "src/core/lib/gprpp/debug_location.h"

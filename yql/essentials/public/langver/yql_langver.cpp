@@ -9,17 +9,13 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 4);
-
-const std::pair<ui32, ui32> Versions[] = {
-#include "yql_langver_list.inc"
-};
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 5);
 
 } // namespace
 
 bool IsValidLangVersion(TLangVersion ver) {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        if (ver == MakeLangVersion(Versions[i].first, Versions[i].second)) {
+    for (const auto& version : Versions) {
+        if (ver == MakeLangVersion(version.first, version.second)) {
             return true;
         }
     }
@@ -33,7 +29,8 @@ bool ParseLangVersion(TStringBuf str, TLangVersion& result) {
         return false;
     }
 
-    ui32 year, minor;
+    ui32 year;
+    ui32 minor;
     if (!TryFromString(str.SubString(0, 4), year)) {
         return false;
     }
@@ -83,16 +80,6 @@ TLangVersion GetMaxReleasedLangVersion() {
     return MaxReleasedLangVersion;
 }
 
-TLangVersion GetMaxLangVersion() {
-    TLangVersion max = 0;
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        auto v = MakeLangVersion(Versions[i].first, Versions[i].second);
-        max = Max(max, v);
-    }
-
-    return max;
-}
-
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
                                           EBackportCompatibleFeaturesMode mode) {
     switch (mode) {
@@ -106,8 +93,8 @@ bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion 
 }
 
 void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback) {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
-        callback(MakeLangVersion(Versions[i].first, Versions[i].second));
+    for (const auto& version : Versions) {
+        callback(MakeLangVersion(version.first, version.second));
     }
 }
 

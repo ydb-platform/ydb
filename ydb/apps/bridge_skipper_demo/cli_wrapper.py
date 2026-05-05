@@ -18,7 +18,7 @@ def execute_cli_command(
         print_info: bool = False,
 ) -> Optional[subprocess.CompletedProcess]:
 
-    if ydb_auth_opts and "--ca-file" in ydb_auth_opts:
+    if ydb_auth_opts and ("--ca-file" in ydb_auth_opts or "--client-cert-file" in ydb_auth_opts):
         grpc_scheme = "grpcs"
     else:
         grpc_scheme = "grpc"
@@ -38,7 +38,14 @@ def execute_cli_command(
             result = subprocess.run(full_cmd, capture_output=True)
             if result.returncode == 0:
                 return result
-            logger.debug(f"{full_cmd} failed for {endpoint} with code {result.returncode}, stdout: {result.stdout}")
+            logger.debug(
+                "%s failed for %s with code %s, stdout: %s, stderr: %s",
+                full_cmd,
+                endpoint,
+                result.returncode,
+                result.stdout,
+                result.stderr,
+            )
         except Exception as e:
             logger.debug(f"CLI command failed for endpoint {endpoint}: {e}")
             continue

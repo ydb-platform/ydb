@@ -2,8 +2,19 @@
 
 #include "abstract.h"
 
-#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
+
+namespace NKikimrSchemeOp {
+    class TFSSettings;
+} // namespace NKikimrSchemeOp
+
+namespace Ydb::Export {
+    class ExportToFsSettings;
+} // namespace Ydb::Export
+
+namespace Ydb::Import {
+    class ImportFromFsSettings;
+} // namespace Ydb::Import
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -17,6 +28,8 @@ protected:
 
 public:
     TFsExternalStorageConfig(const NKikimrSchemeOp::TFSSettings& settings);
+    TFsExternalStorageConfig(const Ydb::Export::ExportToFsSettings& settings);
+    TFsExternalStorageConfig(const Ydb::Import::ImportFromFsSettings& settings);
 };
 
 } // NKikimr::NWrappers::NExternalStorage

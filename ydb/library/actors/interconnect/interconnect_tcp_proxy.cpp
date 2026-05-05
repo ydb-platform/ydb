@@ -114,7 +114,8 @@ namespace NActors {
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
+            const TString peerLabel = Common->Settings.MergePerHostCounters ? info.Host : name;
+            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId(), peerLabel);
             PeerBridgePileName = info.Location.GetBridgePileName();
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
@@ -332,13 +333,17 @@ namespace NActors {
 
         bool runDelayedRdmaHandshakeTimer = false;
 
+        const auto handshakeSuccessLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
+            ? NLog::PRI_NOTICE
+            : NLog::PRI_INFO;
+
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
-            LOG_INFO_IC("ICP19", "incoming handshake succeeded");
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP19", handshakeSuccessLogPriority, "incoming handshake succeeded");
             DropIncomingHandshake(false);
             DropOutgoingHandshake();
         } else if (ev->Sender == OutgoingHandshakeActor) {
-            LOG_INFO_IC("ICP20", "outgoing handshake succeeded");
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP20", handshakeSuccessLogPriority, "outgoing handshake succeeded");
             if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
                 runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
             }
@@ -411,12 +416,18 @@ namespace NActors {
             (IncomingHandshakeActor && OutgoingHandshakeActor);
         LogHandshakeFail(ev, inconclusive);
 
+        const auto handshakeFailLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
+            ? NLog::PRI_DEBUG
+            : NLog::PRI_NOTICE;
+
         if (ev->Sender == IncomingHandshakeActor) {
-            LOG_NOTICE_IC("ICP24", "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP24", handshakeFailLogPriority,
+                          "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
                           ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), OutgoingHandshakeActor.ToString().data());
             DropIncomingHandshake(false);
         } else if (ev->Sender == OutgoingHandshakeActor) {
-            LOG_NOTICE_IC("ICP25", "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
+            LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP25", handshakeFailLogPriority,
+                          "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
                           ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), IncomingHandshakeActor.ToString().data(),
                           HeldHandshakeReply ? "yes" : "no");
             DropOutgoingHandshake(false);
@@ -437,6 +448,11 @@ namespace NActors {
 
         if (Metrics) {
             Metrics->IncHandshakeFails();
+        }
+        if (Common->Settings.MergePerHostCounters) {
+            LOG_NOTICE_IC("ICP36", "peer-level handshake fail PeerNodeId# %" PRIu32 " Peer# %s Host# %s Temporary# %u"
+                " Explanation# %s", PeerNodeId, Metrics ? Metrics->GetHumanFriendlyPeerHostName().data() : "",
+                TechnicalPeerHostName.data(), ui32(ev->Get()->Temporary), ev->Get()->Explanation.data());
         }
 
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
@@ -532,6 +548,16 @@ namespace NActors {
                 TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                 break;
 
+            case TEvForwardSubscribeSession::EventType: {
+                auto msg = ev->Release<TEvForwardSubscribeSession>();
+                if (msg->Event) {
+                    Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                    TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                        TEvents::TEvUndelivered::Disconnected));
+                }
+                break;
+            }
+
             case TEvInterconnect::TEvConnectNode::EventType:
             case TEvents::TEvSubscribe::EventType:
                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
@@ -579,7 +605,7 @@ namespace NActors {
     void TInterconnectProxyTCP::EnqueueSessionEvent(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
-        if (ev->Flags & IEventHandle::FlagFailFastWhenDisconnected) {
+        if (InErrorState) {
             return DropSessionEvent(ev);
         }
 

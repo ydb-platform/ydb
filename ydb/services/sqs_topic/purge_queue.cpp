@@ -81,12 +81,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 return Nothing();
             }
 
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NKikimr::NPQ::NMLP::TPurgerSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = this->QueueUrl_->Consumer,
-                .UserToken = std::move(userToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
         }

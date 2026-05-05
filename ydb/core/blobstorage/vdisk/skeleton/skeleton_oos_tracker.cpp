@@ -115,7 +115,7 @@ namespace NKikimr {
                 ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;
                 if (VCtx->CostTracker) {
-                    VCtx->CostTracker->SetTimeAvailable(timeAvailable);
+                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumSlots, msg->ExpectedSlotCount);
                 }
             }
 

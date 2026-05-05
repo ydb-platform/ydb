@@ -1,12 +1,16 @@
 #include "yql_yt_file_download.h"
-#include <library/cpp/streams/brotli/brotli.h>
-#include <library/cpp/yson/node/node_io.h>
+
 #include <yql/essentials/utils/log/context.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
-#include <yql/essentials/utils/log/log.h>
-#include <util/stream/fwd.h>
 #include <yt/cpp/mapreduce/interface/client.h>
+
+#include <library/cpp/streams/brotli/brotli.h>
+#include <library/cpp/yson/node/node_io.h>
+
+#include <util/stream/fwd.h>
 
 namespace NYql {
 
@@ -27,6 +31,7 @@ ITableDownloaderFunc MakeYtNativeFileDownloader(
         downloadTableOptions.PublicId(options.PublicId);
         downloadTableOptions.StructColumns(options.StructColumns);
         downloadTableOptions.TmpFiles(tmpFiles);
+        downloadTableOptions.DeliveryMode(options.DeliveryMode);
 
         TMaybe<IYtGateway::TDownloadTableOptions::TSamplingConfig> samplingConfig = Nothing();
         if (options.SamplingConfig) {

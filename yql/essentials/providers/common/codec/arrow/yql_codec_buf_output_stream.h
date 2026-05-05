@@ -5,8 +5,7 @@
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TOutputBufArrowOutputStream: public arrow::io::OutputStream {
 public:
@@ -36,5 +35,4 @@ private:
     int64_t BytesWritten_ = 0;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

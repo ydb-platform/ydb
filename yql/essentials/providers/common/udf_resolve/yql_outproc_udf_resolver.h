@@ -8,8 +8,7 @@
 #include <util/generic/map.h>
 #include <util/generic/string.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 void LoadSystemModulePaths(
     const TString& resolverPath,
@@ -26,5 +25,4 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     const TString& udfDependencyStubPath,
     const TMap<TString, TString>& path2md5 = {});
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

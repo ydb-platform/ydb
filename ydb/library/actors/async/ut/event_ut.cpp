@@ -21,7 +21,9 @@ namespace NAsyncTest {
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "started");
+
             UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
 
             actor.RunAsync([&]() -> async<void> {
                 sequence.push_back("second started");
@@ -32,6 +34,7 @@ namespace NAsyncTest {
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "second started");
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 2u);
 
             actor.RunSync([&]{
                 sequence.push_back("calling NotifyOne");
@@ -44,9 +47,13 @@ namespace NAsyncTest {
                 "after NotifyOne",
                 "resumed",
                 "finished");
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
 
             actor.Poison();
             ASYNC_ASSERT_SEQUENCE(sequence, "second finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(NotifyAll) {
@@ -64,7 +71,9 @@ namespace NAsyncTest {
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "started");
+
             UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
 
             actor.RunAsync([&]() -> async<void> {
                 sequence.push_back("second started");
@@ -75,6 +84,7 @@ namespace NAsyncTest {
             });
 
             ASYNC_ASSERT_SEQUENCE(sequence, "second started");
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 2u);
 
             actor.RunSync([&]{
                 sequence.push_back("calling NotifyAll");
@@ -90,6 +100,9 @@ namespace NAsyncTest {
                 "finished",
                 "second resumed",
                 "second finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(AlreadyCancelled) {
@@ -125,6 +138,9 @@ namespace NAsyncTest {
                 "was cancelled",
                 "returning",
                 "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(Cancel) {
@@ -156,6 +172,9 @@ namespace NAsyncTest {
                 "started",
                 "calling Wait");
 
+            UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
+
             actor.RunSync([&]{
                 UNIT_ASSERT(event.HasAwaiters());
                 sequence.push_back("calling Cancel");
@@ -171,6 +190,9 @@ namespace NAsyncTest {
                 "was cancelled",
                 "returning",
                 "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(CancelAfterNotify) {
@@ -202,6 +224,9 @@ namespace NAsyncTest {
                 "started",
                 "calling Wait");
 
+            UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
+
             actor.RunSync([&]{
                 UNIT_ASSERT(event.HasAwaiters());
                 sequence.push_back("calling NotifyOne");
@@ -220,15 +245,18 @@ namespace NAsyncTest {
                 "scope.Wrap finished",
                 "returning",
                 "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(Detach) {
             TVector<TString> sequence;
-            std::optional<TAsyncEvent> event;
+            std::unique_ptr<TAsyncEvent> event;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
-            event.emplace();
+            event = std::make_unique<TAsyncEvent>();
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 sequence.push_back("started");
@@ -243,6 +271,9 @@ namespace NAsyncTest {
                 "started",
                 "calling Wait");
 
+            UNIT_ASSERT(event->HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event->AwaitersCount(), 1u);
+
             actor.RunSync([&]{
                 sequence.push_back("calling reset");
                 event.reset();
@@ -254,6 +285,83 @@ namespace NAsyncTest {
                 "after reset",
                 "detached",
                 "finished");
+        }
+
+        Y_UNIT_TEST(CancelAfterDetach) {
+            TVector<TString> sequence;
+            std::unique_ptr<TAsyncEvent> event;
+            TAsyncCancellationScope scope;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            event = std::make_unique<TAsyncEvent>();
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                bool success = co_await scope.Wrap([&]() -> async<void> {
+                    Y_DEFER { sequence.push_back("scope.Wrap finished"); };
+                    sequence.push_back("calling Wait");
+                    bool resumed = co_await event->Wait();
+                    sequence.push_back(resumed ? "resumed" : "detached");
+                });
+
+                if (!success) {
+                    sequence.push_back("was cancelled");
+                }
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started",
+                "calling Wait");
+
+            UNIT_ASSERT(event->HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event->AwaitersCount(), 1u);
+
+            actor.RunSync([&]{
+                sequence.push_back("calling reset");
+                event.reset();
+                scope.Cancel();
+                sequence.push_back("after reset");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "calling reset",
+                "after reset",
+                "detached",
+                "scope.Wrap finished",
+                "returning",
+                "finished");
+        }
+
+        Y_UNIT_TEST(RemoveOnShutdown) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                bool resumed = co_await event.Wait();
+                sequence.push_back(resumed ? "resumed" : "detached");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
+
+            UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
+
+            runtime.CleanupNode();
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
         Y_UNIT_TEST(NoResumeOnShutdown) {
@@ -309,6 +417,63 @@ namespace NAsyncTest {
             runtime.CleanupNode();
             ASYNC_ASSERT_SEQUENCE(sequence,
                 "finished", "second finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
+        }
+
+        Y_UNIT_TEST(CallbackOnSuspend) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                bool resumed = co_await event.Wait([&]{
+                    sequence.push_back("suspended");
+                });
+                sequence.push_back(resumed ? "resumed" : "detached");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started",
+                "suspended");
+
+            UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
+        }
+
+        Y_UNIT_TEST(ExceptionOnSuspend) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto callback = [&]{
+                    sequence.push_back(TStringBuilder() << "have " << event.AwaitersCount() << " awaiters");
+                    throw TTestException();
+                };
+
+                UNIT_ASSERT_EXCEPTION(co_await event.Wait(callback), TTestException);
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started",
+                "have 1 awaiters",
+                "returning",
+                "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
     } // Y_UNIT_TEST_SUITE(Event)

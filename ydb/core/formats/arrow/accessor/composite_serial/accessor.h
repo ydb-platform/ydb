@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 
@@ -14,7 +15,7 @@ private:
     const TStringBuf DataBuffer;
     const bool ForLazyInitialization;
     mutable TAtomicCounter Counter = 0;
-    TString InternalPathId;
+    std::shared_ptr<IAdditionalAccessorData> AdditionalAccessorData;
 
 protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -34,7 +35,8 @@ protected:
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
-    virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
+    virtual TLocalDataAddress DoGetLocalData(
+        const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
         AFL_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
     }
@@ -46,9 +48,8 @@ protected:
     virtual std::optional<ui64> DoGetRawSize() const override {
         return {};
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        AFL_VERIFY(false);
-        return nullptr;
+    virtual TMinMax DoGetMinMaxScalars() const override {
+        Y_ABORT("Not implemented");
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {
@@ -61,21 +62,13 @@ protected:
 
 public:
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
-        const bool forLazyInitialization = false)
-        : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
-        , Loader(loader)
-        , Data(data)
-        , ForLazyInitialization(forLazyInitialization) {
-        AFL_VERIFY(Loader);
-    }
-
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
-        const TString& internalPathId, const bool forLazyInitialization = false)
+        const bool forLazyInitialization = false,
+        std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Data(data)
         , ForLazyInitialization(forLazyInitialization)
-        , InternalPathId(internalPathId)
+        , AdditionalAccessorData(std::move(additionalAccessorData))
     {
         AFL_VERIFY(Loader);
     }
@@ -85,7 +78,8 @@ public:
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , DataBuffer(data)
-        , ForLazyInitialization(forLazyInitialization) {
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 
@@ -94,7 +88,8 @@ public:
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , PredefinedArray(data)
-        , ForLazyInitialization(forLazyInitialization) {
+        , ForLazyInitialization(forLazyInitialization)
+    {
         AFL_VERIFY(Loader);
     }
 };

@@ -13,6 +13,8 @@
 #include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
+#include <util/system/file.h>
+#include <util/system/fhandle.h>
 
 
 namespace NKikimr {
@@ -22,6 +24,10 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 
 struct TPDiskMon;
 namespace NPDisk {
+
+struct TDiskFormat;
+
+using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
 
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
@@ -140,6 +146,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
+    bool GetDiskFd = false; // if true, response will contain a duplicated file descriptor for direct disk access
 
     TEvYardInit(
             TOwnerRound ownerRound,
@@ -148,7 +155,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
             const TActorId &cutLogID = TActorId(),
             const TActorId& whiteboardProxyId = {},
             ui32 slotId = Max<ui32>(),
-            ui32 groupSizeInUnits = 0
+            ui32 groupSizeInUnits = 0,
+            bool getDiskFd = false
         )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
@@ -157,6 +165,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
         , GroupSizeInUnits(groupSizeInUnits)
+        , GetDiskFd(getDiskFd)
     {}
 
     TString ToString() const {
@@ -172,6 +181,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
         str << " SlotId# " << record.SlotId;
         str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
+        str << " GetDiskFd# " << record.GetDiskFd;
         str << "}";
         return str.Str();
     }
@@ -184,6 +194,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
+    TFileHandle DiskFd; // A duplicated fd for direct disk access
+    TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
@@ -249,6 +261,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
             str << record.OwnedChunks[i];
         }
         str << "}";
+        str << " DiskFd# " << static_cast<FHANDLE>(record.DiskFd);
+        str << " DiskFormat# " << (record.DiskFormat ? "set" : "null");
         str << "}";
         return str.Str();
     }
@@ -959,6 +973,7 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     void *Cookie;
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1075,6 +1090,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     ui8 PriorityClass;
     bool DoFlush;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     mutable NLWTrace::TOrbit Orbit;
 
@@ -1518,6 +1534,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
     double VDiskRawUsage = 0;  // 100.0 * Owner.Used / Owner.HardLimit
     double PDiskUsage = 0;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    ui32 ExpectedSlotCount = 0; // maximum number of VDisks over PDisk
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
 
@@ -1529,6 +1546,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 usedChunks,
             ui32 numSlots,
             ui32 numActiveSlots,
+            ui32 expectedSlotCount,
             TString errorReason,
             TStatusFlags logStatusFlags = {})
         : Status(status)
@@ -1538,6 +1556,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , NumActiveSlots(numActiveSlots)
+        , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
         , LogStatusFlags(logStatusFlags)
     {}
@@ -1551,6 +1570,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " NumActiveSlots# " << NumActiveSlots;
+        str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";

@@ -1,9 +1,11 @@
 #include "vector_data_generator.h"
 
+#include <ydb/library/workload/benchmark_base/state.h>
 #include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/workload/abstract/colors.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
@@ -252,17 +254,19 @@ public:
 
 class TRandomDataGenerator final: public IBulkDataGenerator {
 private:
-    static constexpr size_t PORTION_SIZE = 8192;
-
     const TVectorWorkloadParams& Params;
     const NVector::TVectorOpts& VectorOpts;
     const size_t RowCount;
+    const size_t PrefixCount;
+    TGeneratorStateProcessor* const StateProcessor;
+    const TString StateSource;
 
     std::mt19937 RandomGenerator;
     std::uniform_real_distribution<float> Distribution;
     TAdaptiveLock Lock;
 
     size_t DoneRows = 0;
+    bool SeekDone = false;
 
 private:
     template<typename T>
@@ -288,11 +292,14 @@ private:
     }
 
 public:
-    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const uint32_t randomSeed)
+    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const size_t prefixCount, const uint32_t randomSeed, TGeneratorStateProcessor* stateProcessor)
         : IBulkDataGenerator(params.TableOpts.Name, rowCount)
         , Params(params)
         , VectorOpts(vectorOpts)
         , RowCount(rowCount)
+        , PrefixCount(prefixCount)
+        , StateProcessor(stateProcessor)
+        , StateSource(params.TableOpts.Name)
         , RandomGenerator(randomSeed)
         , Distribution(0.0f, 1.0f)
     { }
@@ -300,10 +307,33 @@ public:
     virtual TDataPortions GenerateDataPortion() override {
         // Sequential generation is required to ensure reproducibility for fixed seed value.
         with_lock(Lock) {
+            if (!SeekDone) {
+                SeekDone = true;
+                if (StateProcessor) {
+                    const auto& state = StateProcessor->GetState();
+                    const auto it = state.find(StateSource);
+                    if (it != state.end()) {
+                        const size_t toSkip = Min<size_t>(it->second.Position, RowCount);
+                        DoneRows = toSkip;
+                        if (toSkip > 0) {
+                            Cout << "Resuming generator from row " << toSkip << " / " << RowCount << Endl;
+                            // Advance PRNG to match the state after generating toSkip rows,
+                            // preserving reproducibility for a fixed seed value.
+                            RandomGenerator.discard(toSkip * VectorOpts.VectorDimension);
+                        }
+                    }
+                }
+            }
+
+            if (DoneRows >= RowCount) {
+                return {};
+            }
+
             std::vector<std::shared_ptr<arrow::Array>> resultColumns;
 
             arrow::UInt64Builder idsBuilder;
             arrow::StringBuilder embeddingsBuilder;
+            arrow::UInt64Builder prefixesBuilder;
 
             std::function<TStringBuilder()> generateEmbedding;
             if (VectorOpts.VectorType == "float") {
@@ -318,8 +348,10 @@ public:
                 ythrow yexception() << "Unknown vector type: " << VectorOpts.VectorType;
             }
 
+            const bool prefixed = Params.KmeansTreePrefixed;
+            const size_t portionStart = DoneRows;
             size_t currentBatchSize;
-            for (currentBatchSize = 0; currentBatchSize < PORTION_SIZE && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
+            for (currentBatchSize = 0; currentBatchSize < Params.BulkSize && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
                 if (const auto status = idsBuilder.Append(static_cast<uint64_t>(DoneRows)); !status.ok()) {
                     ythrow yexception() << status.ToString();
                 }
@@ -327,6 +359,13 @@ public:
                 TStringBuilder buffer = generateEmbedding();
                 if (const auto status = embeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
                     ythrow yexception() << status.ToString();
+                }
+
+                if (prefixed) {
+                    const uint64_t prefix = PrefixCount > 0 ? (DoneRows % PrefixCount) : 0;
+                    if (const auto status = prefixesBuilder.Append(prefix); !status.ok()) {
+                        ythrow yexception() << status.ToString();
+                    }
                 }
             }
             if (currentBatchSize == 0) {
@@ -345,10 +384,21 @@ public:
             }
             resultColumns.push_back(std::move(newEmbeddingColumn));
 
-            const auto schema = arrow::schema({
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
                 arrow::field("id", arrow::uint64()),
                 arrow::field("embedding", arrow::binary()),
-            });
+            };
+
+            if (prefixed) {
+                std::shared_ptr<arrow::UInt64Array> newPrefixColumn;
+                if (const auto status = prefixesBuilder.Finish(&newPrefixColumn); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
+                resultColumns.push_back(std::move(newPrefixColumn));
+                fields.push_back(arrow::field("prefix", arrow::uint64()));
+            }
+
+            const auto schema = arrow::schema(fields);
             const auto recordBatch = arrow::RecordBatch::Make(
                 schema,
                 currentBatchSize,
@@ -360,19 +410,68 @@ public:
                 arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
             );
 
-            return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableOpts.Name.c_str()), std::move(arrowData), currentBatchSize)};
+            const TString tablePath = Params.GetFullTableName(Params.TableOpts.Name.c_str());
+            return {MakeIntrusive<TDataPortionWithState>(
+                StateProcessor,
+                tablePath,
+                StateSource,
+                std::move(arrowData),
+                portionStart,
+                currentBatchSize
+            )};
         }
     }
 };
 
 }
 
+TWorkloadVectorDataInitializerBase::TWorkloadVectorDataInitializerBase(const TString& name, const TString& description, const TVectorWorkloadParams& params)
+    : TWorkloadDataInitializerBase(name, description, params)
+    , VectorParams(params)
+{ }
+
+int TWorkloadVectorDataInitializerBase::PostImport() {
+    if (VectorParams.IndexType == "None") {
+        return EXIT_SUCCESS;
+    }
+
+    TStringBuilder ddlQuery;
+    ddlQuery << "ALTER TABLE `" << VectorParams.GetFullTableName(VectorParams.TableOpts.Name.c_str()) << "`\n";
+    ddlQuery << "ADD INDEX `" << VectorParams.IndexName << "`\n";
+    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    if (VectorParams.KmeansTreePrefixed) {
+        ddlQuery << "ON (prefix, embedding)\n";
+    } else {
+        ddlQuery << "ON (embedding)\n";
+    }
+    if (VectorParams.KmeansTreeCovering) {
+        ddlQuery << "COVER (id)\n";
+    }
+    ddlQuery << "WITH (\n";
+    ddlQuery << "    " << VectorParams.GetDistanceDDL() << ",\n";
+    ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
+    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
+    ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";
+    ddlQuery << "    clusters=" << VectorParams.KmeansTreeClusters << "\n";
+    ddlQuery << ");";
+
+    Cout << "Building vector index ..." << Endl;
+    auto result = VectorParams.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {
+        return session.ExecuteQuery(ddlQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    });
+    NYdb::NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    Cout << "Building vector index ...Ok" << Endl;
+
+    return EXIT_SUCCESS;
+}
+
 TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("files", "Import vectors from files", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("files", "Import vectors from files and build a vector index", params)
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
+    TWorkloadDataInitializerBase::ConfigureOpts(opts);
+
     NColorizer::TColors colors = GetColors(Cout);
 
     TStringBuilder inputDescription;
@@ -393,20 +492,75 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
         .Required()
         .StoreResult(&DataFiles);
 
+    opts.AddLongOption("format", "Source files format. One of 'csv', 'tsv', 'parquet'. "
+            "Both unpacked and packed .gz files are supported. "
+            "When set, only files matching the specified format are imported from a directory. "
+            "When not set, format is auto-detected from file extensions.")
+        .RequiredArgument("FORMAT")
+        .Optional()
+        .Handler1T<TString>([this](const TString& value) {
+            const TString lower = to_lower(value);
+            Y_ENSURE(lower == "csv" || lower == "tsv" || lower == "parquet",
+                "Invalid format '" << value << "'. Supported formats: csv, tsv, parquet");
+            Format = lower;
+        });
+
     opts.AddLongOption("embedding-column-name", "Alternative source column name for the embedding field in input files.")
         .RequiredArgument("NAME")
         .DefaultValue(EmbeddingColumnName)
         .StoreResult(&EmbeddingColumnName);
 }
 
+static bool MatchesFormat(const TString& filename, const TString& format) {
+    const TString lower = to_lower(filename);
+    if (format == "csv") {
+        return lower.EndsWith(".csv") || lower.EndsWith(".csv.gz");
+    } else if (format == "tsv") {
+        return lower.EndsWith(".tsv") || lower.EndsWith(".tsv.gz");
+    } else if (format == "parquet") {
+        return lower.EndsWith(".parquet");
+    }
+    return false;
+}
+
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
+    const TFsPath inputPath(DataFiles);
+
+    if (!Format.empty() && inputPath.IsDirectory()) {
+        // Filter directory contents by format
+        TVector<TFsPath> children;
+        inputPath.List(children);
+
+        TBulkDataGeneratorList result;
+        for (const auto& child : children) {
+            if (MatchesFormat(child.GetName(), Format)) {
+                const auto basicDataGenerator = std::make_shared<TDataGenerator>(
+                    *this,
+                    VectorParams.TableOpts.Name,
+                    0,
+                    VectorParams.TableOpts.Name,
+                    child,
+                    VectorParams.GetColumns(),
+                    TDataGenerator::EPortionSizeUnit::Line
+                );
+                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName));
+            }
+        }
+        return result;
+    }
+
+    if (!Format.empty() && !inputPath.IsDirectory()) {
+        Y_ENSURE(MatchesFormat(inputPath.GetName(), Format),
+            "File '" << DataFiles << "' does not match the specified format '" << Format << "'");
+    }
+
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         0,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         DataFiles,
-        Params.GetColumns(),
+        VectorParams.GetColumns(),
         TDataGenerator::EPortionSizeUnit::Line
     );
 
@@ -416,15 +570,20 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
 }
 
 TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("generator", "Generate random vectors", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("generator", "Generate random vectors and build a vector index", params)
+    , VectorOpts(params.VectorOpts)
 { }
 
 void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption( "rows", "Number of rows to generate")
+    TWorkloadDataInitializerBase::ConfigureOpts(opts);
+    opts.AddLongOption("rows", "Number of rows to generate")
         .RequiredArgument("NUMBER")
-        .Required().StoreResult(&RowCount);
+        .DefaultValue(RowCount)
+        .StoreResult(&RowCount);
+    opts.AddLongOption("prefix-count", "Number of prefixes for prefix index")
+        .RequiredArgument("NUMBER")
+        .DefaultValue(PrefixCount)
+        .StoreResult(&PrefixCount);
     opts.AddLongOption("seed", "Seed for random number generator")
         .RequiredArgument("NUMBER")
         .DefaultValue(RandomSeed)
@@ -433,7 +592,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(Params, VectorOpts, RowCount, RandomSeed)};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed, StateProcessor.Get())};
 }
 
 } // namespace NYdbWorkload

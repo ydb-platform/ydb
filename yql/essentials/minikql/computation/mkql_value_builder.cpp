@@ -14,8 +14,7 @@
 
 #include <util/system/env.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultValueBuilder
@@ -141,25 +140,25 @@ bool TDefaultValueBuilder::SplitDatetime(ui32 value, ui32& year, ui32& month, ui
 }
 
 bool TDefaultValueBuilder::FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
-                                         ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const {
+                                         ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId) const {
     ui32 unusedWeekOfYearIso8601 = 0;
-    return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, tzId);
+    return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, timezoneId);
 }
 
 bool TDefaultValueBuilder::FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
-                                          ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const {
-    return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+                                          ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId) const {
+    return ::NKikimr::NMiniKQL::SplitTzDate(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId);
 }
 
 bool TDefaultValueBuilder::FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-                                             ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 tzId) const {
+                                             ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId) const {
     ui32 unusedWeekOfYearIso8601 = 0;
-    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, tzId);
+    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, unusedWeekOfYearIso8601, dayOfWeek, timezoneId);
 }
 
 bool TDefaultValueBuilder::FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-                                              ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId) const {
-    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, tzId);
+                                              ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId) const {
+    return ::NKikimr::NMiniKQL::SplitTzDatetime(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId);
 }
 
 bool TDefaultValueBuilder::EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const {
@@ -336,5 +335,4 @@ NUdf::IListValueBuilder::TPtr TDefaultValueBuilder::NewListBuilder() const {
     return HolderFactory_.NewList();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

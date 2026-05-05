@@ -29,7 +29,7 @@ void BenchmarkComplete(benchmark::State& state) {
     auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
 
     for (const auto _ : state) {
-        auto completion = engine->Complete({"SELECT "});
+        auto completion = engine->Complete({.Text = "SELECT "});
         benchmark::DoNotOptimize(completion);
     }
 }

@@ -27,7 +27,7 @@ class FixedSizeExemplarReservoir : public ExemplarReservoir
 
 public:
   FixedSizeExemplarReservoir(size_t size,
-                             std::shared_ptr<ReservoirCellSelector> reservoir_cell_selector,
+                             const std::shared_ptr<ReservoirCellSelector> &reservoir_cell_selector,
                              MapAndResetCellType map_and_reset_cell)
       : storage_(size),
         reservoir_cell_selector_(reservoir_cell_selector),

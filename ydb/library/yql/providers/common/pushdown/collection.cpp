@@ -382,6 +382,7 @@ public:
                 && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
                 && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
+
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {
             return IsSupportedFlatMap(flatMap.Cast());
         }
@@ -396,6 +397,23 @@ public:
         }
         if (auto maybeMax = node.Maybe<TCoMax>()) {
             return MaxCanBePushed(maybeMax.Cast());
+        }
+        if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
+            if (auto apply = node.Maybe<TCoApply>()) {
+                return ApplyCanBePushed(apply.Cast());
+            }
+            if (auto maybeCompare = node.Maybe<TCoCompare>()) {
+                return CompareCanBePushed(maybeCompare.Cast());
+            }
+            if (auto maybeIn = node.Maybe<TCoSqlIn>()) {
+                return SqlInCanBePushed(maybeIn.Cast());
+            }
+            if (auto exists = node.Maybe<TCoExists>()) {
+                return ExistsCanBePushed(exists.Cast());
+            }
+            if (node.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"})) {
+                return IsDistinctCanBePushed(node);
+            }
         }
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());
@@ -535,7 +553,7 @@ private:
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }

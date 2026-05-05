@@ -28,11 +28,58 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
+- JavaScript
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
+
 {% endlist %}
 
 ## Initializing a connection {#init}
 
 {% list tabs group=lang %}
+
+- Go
+
+  Use a {{ ydb-short-name }} driver instance created with `ydb.Open`. The topic client is available via `db.Topic()`.
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    // db.Topic() — client for topics
+    writer, err := db.Topic().StartWriter("topic-path")
+    if err != nil {
+      panic(err)
+    }
+
+    reader, err := db.Topic().StartReader("consumer-name",
+      topicoptions.ReadTopic("topic-path"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    _ = writer
+    _ = reader
+  }
+  ```
 
 - C++
 
@@ -135,6 +182,66 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   }.Build();
   ```
 
+- Python
+
+  To work with topics, create a {{ ydb-short-name }} driver instance. The topic client is available via the `topic_client` attribute and is used for management operations on topics and for creating writers and readers.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    driver = ydb.Driver(driver_config)
+    driver.wait(timeout=5)
+    # driver.topic_client — client for working with topics
+    writer = driver.topic_client.writer(topic_path)
+    reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    async with ydb.aio.Driver(driver_config) as driver:
+        await driver.wait(timeout=5)
+        # driver.topic_client — client for working with topics
+        writer = driver.topic_client.writer(topic_path)
+        reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  {% endlist %}
+
+  For more on [connecting to the database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
+
+- JavaScript
+
+  ```javascript
+  const t = topic(driver);
+
+  await using reader = t.createReader({
+    topic: "/Root/demo-topic",
+    consumer: "demo-consumer",
+  });
+
+  await using writer = t.createWriter({
+    topic: "/Root/demo-topic",
+    producer: "demo-producer",
+  });
+  ```
+  
 {% endlist %}
 
 ## Managing topics {#manage}
@@ -181,12 +288,27 @@ The topic path is mandatory. Other parameters are optional.
 
    Example of creating a topic with a list of supported codecs and a minimum number of partitions:
 
-   ```python
-   driver.topic_client.create_topic(topic_path,
-       supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
-       min_active_partitions=3,                                    # optional
-   )
-   ```
+   {% list tabs %}
+
+   - Native SDK
+
+     ```python
+     driver.topic_client.create_topic(topic_path,
+         supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+         min_active_partitions=3,                                    # optional
+     )
+     ```
+
+   - Native SDK (Asyncio)
+
+     ```python
+     await driver.topic_client.create_topic(topic_path,
+         supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
+         min_active_partitions=3,                                     # optional
+     )
+     ```
+
+   {% endlist %}
 
 - Java
 
@@ -223,6 +345,22 @@ The topic path is mandatory. Other parameters are optional.
   });
   ```
 
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.createTopic(
+    create(CreateTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      partitioningSettings: {
+        minActivePartitions: 1n,
+        maxActivePartitions: 100n,
+      },
+      consumers: [{ name: "my-consumer" }],
+    }),
+  );
+  ```
+
 {% endlist %}
 
 ### Updating a topic {#alter-topic}
@@ -235,7 +373,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
   For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
-  Example of adding an [important consumer](../../concepts/topic#important-consumer) and setting two days [retention time](../../concepts/topic#retention-time) for the topic:
+  Example of adding an [important consumer](../../concepts/datamodel/topic.md#important-consumer) and setting two days [retention time](../../concepts/datamodel/topic.md#retention-time) for the topic:
 
   ```cpp
   auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
@@ -268,12 +406,27 @@ When you update a topic, you must specify the topic path and the parameters to b
 
   Example of updating a topic's list of supported codecs and minimum number of partitions:
 
-  ```python
-  driver.topic_client.create_topic(topic_path,
-      set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
-      set_min_active_partitions=3,                                    # optional
-  )
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.alter_topic(topic_path,
+        set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+        set_min_active_partitions=3,                                    # optional
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.alter_topic(topic_path,
+        set_supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP],  # optional
+        set_min_active_partitions=3,                                     # optional
+    )
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -289,6 +442,18 @@ When you update a topic, you must specify the topic path and the parameters to b
                                   .build())
                           .build())
                   .build());
+  ```
+
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.alterTopic(
+    create(AlterTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      addConsumers: [{ name: "my-consumer-2" }],
+    }),
+  );
   ```
 
 {% endlist %}
@@ -328,10 +493,23 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 - Python
 
-   ```python
-   info = driver.topic_client.describe_topic(topic_path)
-   print(info)
-   ```
+   {% list tabs %}
+
+   - Native SDK
+
+     ```python
+     info = driver.topic_client.describe_topic(topic_path)
+     print(info)
+     ```
+
+   - Native SDK (Asyncio)
+
+     ```python
+     info = await driver.topic_client.describe_topic(topic_path)
+     print(info)
+     ```
+
+   {% endlist %}
 
 - Java
 
@@ -343,6 +521,17 @@ When you update a topic, you must specify the topic path and the parameters to b
   Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
           .join();
   TopicDescription description = topicDescriptionResult.getValue();
+  ```
+
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.describeTopic(
+    create(DescribeTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
   ```
 
 {% endlist %}
@@ -367,20 +556,43 @@ To delete a topic, just specify the path to it.
 
 - Python
 
-   ```python
-   driver.topic_client.drop_topic(topic_path)
-   ```
+   {% list tabs %}
+
+   - Native SDK
+
+     ```python
+     driver.topic_client.drop_topic(topic_path)
+     ```
+
+   - Native SDK (Asyncio)
+
+     ```python
+     await driver.topic_client.drop_topic(topic_path)
+     ```
+
+   {% endlist %}
 
 - Java
 
-  ```java
-  topicClient.dropTopic(topicPath);
-  ```
+   ```java
+   topicClient.dropTopic(topicPath);
+   ```
 
 - C#
 
   ```c#
   await topicClient.DropTopic(topicName);
+  ```
+
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.dropTopic(
+    create(DropTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
   ```
 
 {% endlist %}
@@ -425,9 +637,21 @@ Only connections with matching [producer and message group](../../concepts/topic
 
 - Python
 
-   ```python
-   writer = driver.topic_client.writer(topic_path)
-   ```
+   {% list tabs %}
+
+   - Native SDK
+
+     ```python
+     writer = driver.topic_client.writer(topic_path)
+     ```
+
+   - Native SDK (Asyncio)
+
+     ```python
+     writer = driver.topic_client.writer(topic_path)
+     ```
+
+   {% endlist %}
 
 - Java (sync)
 
@@ -505,6 +729,15 @@ Only connections with matching [producer and message group](../../concepts/topic
   }.Build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+  });
+  ```
+
 {% endlist %}
 
 ### Writing messages {#writing-messages}
@@ -569,32 +802,47 @@ Only connections with matching [producer and message group](../../concepts/topic
 
    To deliver messages, you can either simply transmit message content (bytes, str) or set certain properties manually. You can send objects one-by-one or as a list. The `write` method is asynchronous. The method returns immediately once messages are put to the client's internal buffer; this is usually a fast process. If the internal buffer is filled up, you might need to wait until part of the data is sent to the server.
 
-   ```python
-   # Simple delivery of messages, without explicit metadata.
-   # Easy to get started, easy to use if everything you need is the message content.
-   writer = driver.topic_client.writer(topic_path)
-   writer.write("mess")  # Rows will be transmitted in UTF-8; this is the easiest way to send
-                         # text messages.
-   writer.write(bytes([1, 2, 3]))  # These bytes will be transmitted as they are, this is the easiest way to send
-                                   # binary data.
-   writer.write(["mess-1", "mess-2"])  # This line multiple messages per call
-                                       # to decrease overheads on internal SDK processes.
-                                       # This makes sense when the message stream is high.
+   {% list tabs %}
 
-   # This is the full form; it is used when except the message content you need to manually specify its properties.
-   writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
+   - Native SDK
 
-   writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
-   writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
+     ```python
+     # Simple delivery of messages, without explicit metadata.
+     # Easy to get started, easy to use if everything you need is the message content.
+     writer = driver.topic_client.writer(topic_path)
+     writer.write("mess")  # Rows will be transmitted in UTF-8; this is the easiest way to send
+                           # text messages.
+     writer.write(bytes([1, 2, 3]))  # These bytes will be transmitted as they are, this is the easiest way to send
+                                       # binary data.
+     writer.write(["mess-1", "mess-2"])  # This line sends multiple messages per call
+                                         # to decrease overheads on internal SDK processes.
+                                         # This makes sense when the message stream is high.
 
-   # In the full form, you can also send multiple messages per function call.
-   # This approach is useful when the message stream is high, and you want to
-   # reduce overheads on SDK internal calls.
-   writer.write([
-     ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
-     ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
-     ])
-   ```
+     # This is the full form; it is used when except the message content you need to manually specify its properties.
+     writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
+
+     writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
+     writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
+
+     # In the full form, you can also send multiple messages per function call.
+     # This approach is useful when the message stream is high, and you want to
+     # reduce overheads on SDK internal calls.
+     writer.write([
+       ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
+       ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
+       ])
+     ```
+
+   - Native SDK (Asyncio)
+
+     ```python
+     writer = driver.topic_client.writer(topic_path)
+     await writer.write("mess")
+     await writer.write(bytes([1, 2, 3]))
+     await writer.write(["mess-1", "mess-2"])
+     ```
+
+   {% endlist %}
 
 - Java (sync)
 
@@ -649,6 +897,19 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   ```c#
   var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
+  ```
+
+- JavaScript
+
+  ```javascript
+  // Write a message to the internal buffer.
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // To send immediately, call flush.
+  await writer.flush();
+
+  // Or close the writer.
+  await writer.close();
   ```
 
 {% endlist %}
@@ -713,7 +974,8 @@ Only connections with matching [producer and message group](../../concepts/topic
 
   There are two ways to get a message write acknowledgement from the server:
 
-  * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+  - `flush()` - waits until all the messages previously written to the internal buffer are acknowledged.
+  - `write_with_ack(...)` - sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
   ```python
   # Put multiple messages to the internal buffer and then wait
@@ -792,6 +1054,28 @@ Only connections with matching [producer and message group](../../concepts/topic
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
+- JavaScript
+
+  All messages are written to an internal buffer. There are three mechanisms they reach the server: two automatic and one manual. The manual path is calling `writer.flush`, which returns the last seqNo persisted on the server. Automatic flushes happen when:
+  - The internal buffer exceeds `maxBufferBytes` (default 256 MiB).
+  - The periodic flush interval `flushIntervalMs` ticks (default 10 ms).
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+    // Callback that is called when writer receives an acknowledgment for a message.
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
+    },
+  })
+
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Get the latest seqNo confirmed by the server.
+  await writer.flush();
+  ```
+
 {% endlist %}
 
 ### Selecting a codec for message compression {#codec}
@@ -855,9 +1139,29 @@ For more details on using data compression for topics, see [here](../../concepts
           .build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using writer = t.createWriter({
+    codec: Codec.RAW,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.GZIP,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.LZOP,
+  });
+
+  await using writer = t.createWriter({
+    codec: 10000, // CUSTOM (allowed range: 10000–19999)
+  });
+  ```
+
 {% endlist %}
 
-### Writing messages in no-deduplication mode
+### Writing messages in no-deduplication mode {#nodedup}
 
 {% list tabs group=lang %}
 
@@ -873,6 +1177,10 @@ auto session = topicClient.CreateWriteSession(settings);
 ```
 
 If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
+
+- Go
+
+  In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
 
 {% endlist %}
 
@@ -966,6 +1274,42 @@ All the metadata provided when writing a message is sent to a consumer with the 
       new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
   );
+  ```
+
+- Go
+
+  Set metadata in the `Metadata` field of `topicwriter.Message`:
+
+  ```go
+  err := writer.Write(ctx, topicwriter.Message{
+    Data: strings.NewReader("message-data"),
+    Metadata: map[string][]byte{
+      "meta-key":    []byte("meta-value"),
+      "another-key": []byte("value"),
+    },
+  })
+  ```
+
+  When reading, metadata is available on the message:
+
+  ```go
+  msg, err := reader.ReadMessage(ctx)
+  if err != nil {
+    return err
+  }
+  for k, v := range msg.Metadata {
+    fmt.Printf("%s: %s\n", k, string(v))
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  writer.write(Buffer.from("Hello, world!", "utf-8"), {
+    metadataItems: {
+      "meta-key": new TextEncoder().encode("meta-value"),
+    },
+  });
   ```
 
 {% endlist %}
@@ -1187,6 +1531,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 ## Reading messages {#reading}
@@ -1346,6 +1694,15 @@ Topic can have several Consumers and for each of them server stores its own read
   }.Build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+  });
+  ```
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -1419,6 +1776,53 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
   }.Build();
   ```
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      partitionIds: [1n, 2n, 3n],
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      maxLag: "1s", // number, import('ms').StringValue, protobuf Duration
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      readFrom: new Date(), // number, Date, protobuf Timestamp
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: [
+      {
+        path: topicPath,
+        partitionIds: [1n, 2n, 3n],
+      },
+      {
+        path: topicPath2,
+        maxLag: "1s",
+      },
+      {
+        path: topicPath3,
+        readFrom: new Date(),
+      },
+      // ...
+    ],
+    consumer: consumerName,
+  });
+  ```
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1457,6 +1861,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 
@@ -1486,11 +1894,25 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -1521,6 +1943,15 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   }
   catch (OperationCanceledException)
   {
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for await (let msg of batch) {
+    }
   }
   ```
 
@@ -1566,11 +1997,32 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+  }
+  ```
 
 - Java (sync)
 
@@ -1648,14 +2100,29 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-       message = reader.receive_message()
-       process(message)
-       reader.commit(message)
-   ```
-
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -1703,6 +2170,16 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   ```
 
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for (let msg of batch) {
+      await reader.commit(msg);
+    }
+  }
+  ```
+
 {% endlist %}
 
 #### Reading message batches with commits
@@ -1747,12 +2224,27 @@ If a commit fails with an error, the application should log it and continue; it 
 
 - Python
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
    The `commit` call is fast, saving data into an internal buffer and returning control back to the caller. The real message to the server is sent in the background. To prevent losing the last commits, you should call the `Reader.Close()` method before exiting the program.
 
@@ -1809,6 +2301,14 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   catch (OperationCanceledException)
   {
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    await reader.commit(batch);
   }
   ```
 
@@ -1905,6 +2405,21 @@ Instead of committing messages, the client application may track reading progres
 
   The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
 
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+    onPartitionSessionStart: (evt) => {
+      return {
+        readOffset: 0n,
+        commitOffset: 0n,
+      };
+    },
+  });
+  ```
+
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
@@ -1912,6 +2427,24 @@ Instead of committing messages, the client application may track reading progres
 Reading progress is usually saved on a server for each Consumer. However, such progress can't be saved if a reader is created without a specified `Consumer`.
 
 {% list tabs group=lang %}
+
+- Go
+
+  Pass an empty string as the consumer name and use the `topicoptions.WithReaderWithoutConsumer(false)` option (this mode is **experimental**; see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and partition list. Message commits are not available in this mode (`CommitModeNone`); on reconnects you must restore progress on the client side—see [client-side offset storage](#client-commit).
+
+  ```go
+  reader, err := db.Topic().StartReader(
+    "",
+    topicoptions.ReadSelectors{{
+      Path:       "topic-path",
+      Partitions: []int64{0, 1, 2},
+    }},
+    topicoptions.WithReaderWithoutConsumer(false),
+  )
+  if err != nil {
+    return err
+  }
+  ```
 
 - Java
 
@@ -1941,9 +2474,9 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Python
 
   To read without a `Consumer`, create a reader using the `reader` method with specifying these arguments:
-  * `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
-  * `consumer` - should be `None`;
-  * `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
+  - `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
+  - `consumer` - should be `None`;
+  - `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
 
   Example:
 
@@ -1963,6 +2496,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
       event_handler=CustomEventHandler(),
   )
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2058,37 +2595,41 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  {% list tabs %}
 
-  ```python
-  with driver.topic_client.reader(topic, consumer) as reader:
-      with ydb.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+  - Native SDK
 
-              def callee(tx: ydb.QueryTxContext):
-                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-              session_pool.retry_tx_sync(callee)
-  ```
+    ```python
+    with driver.topic_client.reader(topic, consumer) as reader:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-- Python (asyncio)
+                def callee(tx: ydb.QueryTxContext):
+                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-  To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
+                session_pool.retry_tx_sync(callee)
+    ```
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+  - Native SDK (Asyncio)
 
-  ```python
-  async with driver.topic_client.reader(topic, consumer) as reader:
-      async with ydb.aio.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
-              async def callee(tx: ydb.aio.QueryTxContext):
-                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    ```python
+    async with driver.topic_client.reader(topic, consumer) as reader:
+        async with ydb.aio.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              await session_pool.retry_tx_async(callee)
-  ```
+                async def callee(tx: ydb.aio.QueryTxContext):
+                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+                await session_pool.retry_tx_async(callee)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2153,6 +2694,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 
@@ -2204,12 +2749,27 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    No special processing is required.
 
-   ```python
-   while True:
-     batch = reader.receive_batch()
-     process(batch)
-     reader.commit(batch)
-   ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2233,6 +2793,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
       event.confirm();
   }
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2280,18 +2844,39 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    In this example, processing of messages within the batch will stop if the partition is reassigned during operation. This kind of optimization requires that you run extra code on the client side. In simple cases when processing of reassigned partitions is not a problem, you may skip this optimization.
 
-   ```python
-   def process_batch(batch):
-       for message in batch.messages:
-           if not batch.alive:
-               return False
-           process(message)
-       return True
+  {% list tabs %}
 
-   batch = reader.receive_batch()
-   if process_batch(batch):
-       reader.commit(batch)
-   ```
+  - Native SDK
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = await reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2305,6 +2890,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
   }
   ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -2413,33 +3002,56 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   Autoscaling of a topic can be enabled during its creation using the `auto_partitioning_settings` argument of `create_topic`:
 
-  ```python
-      driver.topic_client.create_topic(
-          topic,
-          consumers=[consumer],
-          min_active_partitions=10,
-          max_active_partitions=100,
-          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              up_utilization_percent=80,
-              down_utilization_percent=20,
-              stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  {% endlist %}
 
   Changes to an existing topic can be made using the `alter_auto_partitioning_settings` argument of `alter_topic`:
 
   ```python
-      driver.topic_client.alter_topic(
-          topic_path,
-          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
-              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              set_up_utilization_percent=80,
-              set_down_utilization_percent=20,
-              set_stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
+  driver.topic_client.alter_topic(
+      topic_path,
+      alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
+          set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+          set_up_utilization_percent=80,
+          set_down_utilization_percent=20,
+          set_stabilization_window=datetime.timedelta(seconds=300),
+      ),
+  )
   ```
 
   The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode can be set in the `auto_partitioning_support` argument when creating the reader. Full support mode is used by default.
@@ -2462,6 +3074,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}
 
 ### Commit outside the reader {#commit-outside-the-reader}
@@ -2470,17 +3086,96 @@ Most often, committing is conveniently done within the reader that has read the 
 
 {% list tabs group=lang %}
 
+- Go
+
+  Committing outside the reader is done with `db.Topic().CommitOffset`:
+
+  ```go
+  // Basic usage — commit an offset without an active read session
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+  )
+  ```
+
+  If a read session is active when you commit (via `StartReader` or `StartListener`), pass its ID with `WithCommitOffsetReadSessionID` so the server does not interrupt the current read session:
+
+  ```go
+  import (
+    // ...
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  // Read session ID
+  sessionID := reader.ReadSessionID()
+  // or: sessionID := listener.ReadSessionID()
+
+  err = db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+    topicoptions.WithCommitOffsetReadSessionID(sessionID),
+  )
+  ```
+
 - Python
 
-  Commit outside the reader is done using the `topic_client.commit_offset` method:
+  Committing outside the reader is done with the `topic_client.commit_offset` method:
 
-  ```python
-  driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
-  )
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # optional: avoids interrupting the active read session
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # optional: avoids interrupting the active read session
+    )
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // For AsyncReader, the session ID can be obtained when handling SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
   ```
 
 {% endlist %}

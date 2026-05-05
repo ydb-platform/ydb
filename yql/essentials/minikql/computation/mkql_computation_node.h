@@ -10,7 +10,7 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
-
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_validate.h>
@@ -21,11 +21,12 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <map>
+#include <set>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf::TUnboxedValuePod& value) {
     return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed()));
@@ -46,21 +47,19 @@ struct TComputationOpts {
 };
 
 struct TComputationOptsFull: public TComputationOpts {
-    TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
-                         ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider,
-                         NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver)
-        : TComputationOpts(stats)
-        , AllocState(allocState)
-        , TypeEnv(typeEnv)
-        , RandomProvider(randomProvider)
-        , TimeProvider(timeProvider)
-        , ValidatePolicy(validatePolicy)
-        , SecureParamsProvider(secureParamsProvider)
-        , CountersProvider(countersProvider)
-        , LogProvider(logProvider)
-        , LangVer(langver)
-    {
-    }
+    TComputationOptsFull(IStatsRegistry* stats,
+                         TAllocState& allocState,
+                         const TTypeEnvironment& typeEnv,
+                         IRandomProvider& randomProvider,
+                         ITimeProvider& timeProvider,
+                         NUdf::EValidatePolicy validatePolicy,
+                         const NUdf::ISecureParamsProvider* secureParamsProvider,
+                         NUdf::ICountersProvider* countersProvider,
+                         const NUdf::ILogProvider* logProvider,
+                         NYql::TLangVersion langver,
+                         const NYql::TRuntimeSettings& runtimeSettings);
+
+    ~TComputationOptsFull();
 
     TAllocState& AllocState;
     const TTypeEnvironment& TypeEnv;
@@ -71,6 +70,7 @@ struct TComputationOptsFull: public TComputationOpts {
     NUdf::ICountersProvider* const CountersProvider;
     const NUdf::ILogProvider* const LogProvider;
     const NYql::TLangVersion LangVer;
+    const NYql::TRuntimeSettings& RuntimeSettings;
 };
 
 struct TWideFieldsInitInfo {
@@ -106,7 +106,7 @@ class THolderFactory;
 struct TComputationContextLLVM {
     const THolderFactory& HolderFactory;
     IStatsRegistry* const Stats;
-    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues;
+    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; // NOLINT(modernize-avoid-c-arrays)
     const NUdf::IValueBuilder* const Builder;
     float UsageAdjustor = 1.f;
     ui32 RssCounter = 0U;
@@ -128,13 +128,15 @@ struct TComputationContext: public TComputationContextLLVM {
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
     TMaybe<NUdf::TSourcePosition>& NotConsumedLinear;
+    const NYql::TRuntimeSettings& RuntimeSettings;
 
     TComputationContext(const THolderFactory& holderFactory,
                         const NUdf::IValueBuilder* builder,
                         const TComputationOptsFull& opts,
                         const TComputationMutables& mutables,
                         arrow::MemoryPool& arrowMemoryPool,
-                        TMaybe<NUdf::TSourcePosition>& notConsumedLinear);
+                        TMaybe<NUdf::TSourcePosition>& notConsumedLinear,
+                        const NYql::TRuntimeSettings& RuntimeSettings);
 
     ~TComputationContext();
 
@@ -161,12 +163,13 @@ private:
 
 class IArrowKernelComputationNode;
 class IComputationExternalNode;
+class TComputationExternalNodeInvalidator;
 using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
 public:
-    typedef TIntrusivePtr<IComputationNode> TPtr;
-    typedef std::map<ui32, EValueRepresentation> TIndexesMap;
+    using TPtr = TIntrusivePtr<IComputationNode>;
+    using TIndexesMap = std::map<ui32, EValueRepresentation>;
 
     virtual ~IComputationNode() {
     }
@@ -201,11 +204,6 @@ public:
     virtual TComputationExternalNodePtrSet GetUpvalues() const = 0;
     virtual ui32 GetDependentWeight() const = 0;
     virtual ui32 GetDependentsCount() const = 0;
-    // FIXME: Remove this method, when all the clients will be
-    // migrated to the renamed analogue GetDependentsCount.
-    ui32 GetDependencesCount() const {
-        return GetDependentsCount();
-    }
 
     virtual bool IsTemporaryValue() const = 0;
 
@@ -232,6 +230,10 @@ public:
     using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>;
     virtual void SetGetter(TGetter&& getter) = 0;
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
+
+private:
+    friend class TComputationExternalNodeInvalidator;
+    virtual void CollectInvalidationIndexes(std::set<ui32>& out) const = 0;
 };
 
 enum class EFetchResult: i32 {
@@ -339,8 +341,8 @@ public:
 };
 
 class TNodeFactory;
-typedef std::function<IComputationNode*(TNode* node, bool pop)> TNodeLocator;
-typedef std::function<void(IComputationNode*)> TNodePushBack;
+using TNodeLocator = std::function<IComputationNode*(TNode* node, bool pop)>;
+using TNodePushBack = std::function<void(IComputationNode*)>;
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
@@ -362,7 +364,7 @@ struct TComputationNodeFactoryContext {
     const TNodePushBack NodePushBack;
 
     TComputationNodeFactoryContext(
-        const TNodeLocator& nodeLocator,
+        TNodeLocator nodeLocator,
         const IFunctionRegistry& functionRegistry,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
@@ -378,26 +380,9 @@ struct TComputationNodeFactoryContext {
         EGraphPerProcess graphPerProcess,
         TComputationMutables& mutables,
         TComputationNodeOnNodeMap& elementsCache,
-        TNodePushBack&& nodePushBack)
-        : NodeLocator(nodeLocator)
-        , FunctionRegistry(functionRegistry)
-        , Env(env)
-        , TypeInfoHelper(typeInfoHelper)
-        , CountersProvider(countersProvider)
-        , SecureParamsProvider(secureParamsProvider)
-        , LogProvider(logProvider)
-        , LangVer(langver)
-        , NodeFactory(nodeFactory)
-        , HolderFactory(holderFactory)
-        , Builder(builder)
-        , ValidateMode(validateMode)
-        , ValidatePolicy(validatePolicy)
-        , GraphPerProcess(graphPerProcess)
-        , Mutables(mutables)
-        , ElementsCache(elementsCache)
-        , NodePushBack(std::move(nodePushBack))
-    {
-    }
+        TNodePushBack&& nodePushBack);
+
+    ~TComputationNodeFactoryContext();
 };
 
 using TComputationNodeFactory = std::function<IComputationNode*(TCallable&, const TComputationNodeFactoryContext&)>;
@@ -406,11 +391,7 @@ using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
 struct TPatternCacheEntry;
 
 struct TComputationPatternOpts {
-    TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env)
-        : AllocState(allocState)
-        , Env(env)
-    {
-    }
+    TComputationPatternOpts(TAllocState& allocState, const TTypeEnvironment& env);
 
     TComputationPatternOpts(
         TAllocState& allocState,
@@ -419,51 +400,27 @@ struct TComputationPatternOpts {
         const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode,
         NUdf::EValidatePolicy validatePolicy,
-        const TString& optLLVM,
+        TString optLLVM,
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr,
         const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
         const NUdf::ILogProvider* logProvider = nullptr,
-        NYql::TLangVersion langver = NYql::UnknownLangVersion)
-        : AllocState(allocState)
-        , Env(env)
-        , Factory(factory)
-        , FunctionRegistry(functionRegistry)
-        , ValidateMode(validateMode)
-        , ValidatePolicy(validatePolicy)
-        , OptLLVM(optLLVM)
-        , GraphPerProcess(graphPerProcess)
-        , Stats(stats)
-        , CountersProvider(countersProvider)
-        , SecureParamsProvider(secureParamsProvider)
-        , LogProvider(logProvider)
-        , LangVer(langver)
-    {
-    }
+        NYql::TLangVersion langver = NYql::UnknownLangVersion,
+        NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings());
+
+    ~TComputationPatternOpts();
 
     void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
                     NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
                     const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats = nullptr,
                     NUdf::ICountersProvider* counters = nullptr,
                     const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
-                    const NUdf::ILogProvider* logProvider = nullptr, NYql::TLangVersion langver = NYql::UnknownLangVersion) {
-        Factory = factory;
-        FunctionRegistry = functionRegistry;
-        ValidateMode = validateMode;
-        ValidatePolicy = validatePolicy;
-        OptLLVM = optLLVM;
-        GraphPerProcess = graphPerProcess;
-        Stats = stats;
-        CountersProvider = counters;
-        SecureParamsProvider = secureParamsProvider;
-        LogProvider = logProvider;
-        LangVer = langver;
-    }
+                    const NUdf::ILogProvider* logProvider = nullptr,
+                    NYql::TLangVersion langver = NYql::UnknownLangVersion,
+                    NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings());
 
-    void SetPatternEnv(std::shared_ptr<TPatternCacheEntry> cacheEnv) {
-        PatternEnv = std::move(cacheEnv);
-    }
+    void SetPatternEnv(std::shared_ptr<TPatternCacheEntry> cacheEnv);
 
     mutable std::shared_ptr<TPatternCacheEntry> PatternEnv;
     TAllocState& AllocState;
@@ -480,19 +437,15 @@ struct TComputationPatternOpts {
     const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
     const NUdf::ILogProvider* LogProvider = nullptr;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider,
-                                              TAllocState* allocStatePtr = nullptr) const {
-        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState,
-                                    Env, randomProvider, timeProvider,
-                                    ValidatePolicy, SecureParamsProvider,
-                                    CountersProvider, LogProvider, LangVer);
-    }
+                                              TAllocState* allocStatePtr = nullptr) const;
 };
 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
-    typedef TIntrusivePtr<IComputationPattern> TPtr;
+    using TPtr = TIntrusivePtr<IComputationPattern>;
 
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;
@@ -527,5 +480,4 @@ auto CallComputationBuilderWithArgs(F* f, TCallable& callable, const TComputatio
     return f(ctx, callable.GetInput(Is)...);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

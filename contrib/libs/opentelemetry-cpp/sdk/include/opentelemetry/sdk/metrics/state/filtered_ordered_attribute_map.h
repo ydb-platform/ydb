@@ -61,6 +61,8 @@ public:
   FilteredOrderedAttributeMap &operator=(const FilteredOrderedAttributeMap &other) = default;
   FilteredOrderedAttributeMap &operator=(FilteredOrderedAttributeMap &&other)      = default;
 
+  ~FilteredOrderedAttributeMap() = default;
+
   //
   // equality operator
   //

@@ -877,7 +877,7 @@ def from_regex(
     regex: str | Pattern[str],
     *,
     fullmatch: bool = False,
-    alphabet: str | SearchStrategy[str] = characters(codec="utf-8"),
+    alphabet: str | SearchStrategy[str] | None = characters(codec="utf-8"),
 ) -> SearchStrategy[str]:  # pragma: no cover
     ...
 
@@ -1518,7 +1518,7 @@ def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
 
     # If there's no explicitly registered strategy, maybe a subtype of thing
     # is registered - if so, we can resolve it to the subclass strategy.
-    # We'll start by checking if thing is from from the typing module,
+    # We'll start by checking if thing is from the typing module,
     # because there are several special cases that don't play well with
     # subclass and instance checks.
     if (

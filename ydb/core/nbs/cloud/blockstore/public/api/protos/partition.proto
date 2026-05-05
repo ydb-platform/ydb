@@ -1,0 +1,25 @@
+
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/public/api/protos";
+
+
+////////////////////////////////////////////////////////////////////////////////
+// GetLoadActorAdapterActorId request/response.
+
+message TGetLoadActorAdapterActorIdRequest
+{
+}
+
+message TGetLoadActorAdapterActorIdResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Load actor adapter id
+    string ActorId = 2;
+}

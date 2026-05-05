@@ -228,6 +228,7 @@ Convert a Python dictionary back into XML.
 - `input_dict`: Dictionary to convert to XML.
 - `output=None`: File-like object to write XML to; returns string if None.
 - `encoding='utf-8'`: Encoding of the output XML.
+- `bytes_errors='replace'`: Error handler used when decoding byte values during unparse (for example `'replace'`, `'strict'`, `'ignore'`).
 - `full_document=True`: Include XML declaration if True.
 - `short_empty_elements=False`: Use short tags for empty elements (`<tag/>`).
 - `attr_prefix='@'`: Prefix for dictionary keys representing attributes.
@@ -311,15 +312,15 @@ $ conda install -c conda-forge xmltodict
 
 ### RPM-based distro (Fedora, RHEL, …)
 
-There is an [official Fedora package for xmltodict](https://apps.fedoraproject.org/packages/python-xmltodict).
+There is an [official Fedora package for xmltodict](https://packages.fedoraproject.org/pkgs/python-xmltodict/).
 
 ```sh
-$ sudo yum install python-xmltodict
+$ sudo yum install python3-xmltodict
 ```
 
 ### Arch Linux
 
-There is an [official Arch Linux package for xmltodict](https://www.archlinux.org/packages/community/any/python-xmltodict/).
+There is an [official Arch Linux package for xmltodict](https://archlinux.org/packages/extra/any/python-xmltodict/).
 
 ```sh
 $ sudo pacman -S python-xmltodict

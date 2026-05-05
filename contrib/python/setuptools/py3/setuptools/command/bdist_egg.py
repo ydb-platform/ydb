@@ -159,7 +159,6 @@ class bdist_egg(Command):
         for dirname in INSTALL_DIRECTORY_ATTRS:
             kw.setdefault(dirname, self.bdist_dir)
         kw.setdefault('skip_build', self.skip_build)
-        kw.setdefault('dry_run', self.dry_run)
         cmd = self.reinitialize_command(cmdname, **kw)
         self.run_command(cmdname)
         return cmd
@@ -186,8 +185,7 @@ class bdist_egg(Command):
             pyfile = os.path.join(self.bdist_dir, strip_module(filename) + '.py')
             self.stubs.append(pyfile)
             log.info("creating stub loader for %s", ext_name)
-            if not self.dry_run:
-                write_stub(os.path.basename(ext_name), pyfile)
+            write_stub(os.path.basename(ext_name), pyfile)
             to_compile.append(pyfile)
             ext_outputs[p] = ext_name.replace(os.sep, '/')
 
@@ -209,15 +207,13 @@ class bdist_egg(Command):
         native_libs = os.path.join(egg_info, "native_libs.txt")
         if all_outputs:
             log.info("writing %s", native_libs)
-            if not self.dry_run:
-                ensure_directory(native_libs)
-                with open(native_libs, 'wt', encoding="utf-8") as libs_file:
-                    libs_file.write('\n'.join(all_outputs))
-                    libs_file.write('\n')
+            ensure_directory(native_libs)
+            with open(native_libs, 'wt', encoding="utf-8") as libs_file:
+                libs_file.write('\n'.join(all_outputs))
+                libs_file.write('\n')
         elif os.path.isfile(native_libs):
             log.info("removing %s", native_libs)
-            if not self.dry_run:
-                os.unlink(native_libs)
+            os.unlink(native_libs)
 
         write_safety_flag(os.path.join(archive_root, 'EGG-INFO'), self.zip_safe())
 
@@ -235,11 +231,10 @@ class bdist_egg(Command):
             self.egg_output,
             archive_root,
             verbose=self.verbose,
-            dry_run=self.dry_run,  # type: ignore[arg-type] # Is an actual boolean in vendored _distutils
             mode=self.gen_header(),
         )
         if not self.keep_temp:
-            remove_tree(self.bdist_dir, dry_run=self.dry_run)
+            remove_tree(self.bdist_dir)
 
         # Add to 'Distribution.dist_files' so that the "upload" command works
         getattr(self.distribution, 'dist_files', []).append((
@@ -446,7 +441,6 @@ def make_zipfile(
     zip_filename: StrPathT,
     base_dir,
     verbose: bool = False,
-    dry_run: bool = False,
     compress=True,
     mode: _ZipFileMode = 'w',
 ) -> StrPathT:
@@ -458,7 +452,7 @@ def make_zipfile(
     """
     import zipfile
 
-    mkpath(os.path.dirname(zip_filename), dry_run=dry_run)  # type: ignore[arg-type] # python/mypy#18075
+    mkpath(os.path.dirname(zip_filename))  # type: ignore[arg-type] # python/mypy#18075
     log.info("creating '%s' and adding '%s' to it", zip_filename, base_dir)
 
     def visit(z, dirname, names):
@@ -466,17 +460,12 @@ def make_zipfile(
             path = os.path.normpath(os.path.join(dirname, name))
             if os.path.isfile(path):
                 p = path[len(base_dir) + 1 :]
-                if not dry_run:
-                    z.write(path, p)
+                z.write(path, p)
                 log.debug("adding '%s'", p)
 
     compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
-    if not dry_run:
-        z = zipfile.ZipFile(zip_filename, mode, compression=compression)
-        for dirname, dirs, files in sorted_walk(base_dir):
-            visit(z, dirname, files)
-        z.close()
-    else:
-        for dirname, dirs, files in sorted_walk(base_dir):
-            visit(None, dirname, files)
+    z = zipfile.ZipFile(zip_filename, mode, compression=compression)
+    for dirname, dirs, files in sorted_walk(base_dir):
+        visit(z, dirname, files)
+    z.close()
     return zip_filename

@@ -1,0 +1,97 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: YqlSelect unsupported: JOIN with an asterisk projection */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    cd_gender,
+    cd_marital_status,
+    cd_education_status,
+    Count(*) AS cnt1,
+    cd_purchase_estimate,
+    Count(*) AS cnt2,
+    cd_credit_rating,
+    Count(*) AS cnt3,
+    cd_dep_count,
+    Count(*) AS cnt4,
+    cd_dep_employed_count,
+    Count(*) AS cnt5,
+    cd_dep_college_count,
+    Count(*) AS cnt6
+FROM
+    plato.customer AS c
+,
+    plato.customer_address AS ca
+,
+    plato.customer_demographics
+WHERE
+    c.c_current_addr_sk == ca.ca_address_sk
+    AND ca_county IN (
+        'Walker County',
+        'Richland County',
+        'Gaines County',
+        'Douglas County',
+        'Dona Ana County',
+    )
+    AND cd_demo_sk == c.c_current_cdemo_sk
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            plato.store_sales
+        ,
+            plato.date_dim
+        WHERE
+            c.c_customer_sk == ss_customer_sk
+            AND ss_sold_date_sk == d_date_sk
+            AND d_year == 2002
+            AND d_moy BETWEEN 4 AND 4 + 3
+    )
+    AND (
+        EXISTS (
+            SELECT
+                *
+            FROM
+                plato.web_sales
+            ,
+                plato.date_dim
+            WHERE
+                c.c_customer_sk == ws_bill_customer_sk
+                AND ws_sold_date_sk == d_date_sk
+                AND d_year == 2002
+                AND d_moy BETWEEN 4 AND 4 + 3
+        )
+        OR EXISTS (
+            SELECT
+                *
+            FROM
+                plato.catalog_sales
+            ,
+                plato.date_dim
+            WHERE
+                c.c_customer_sk == cs_ship_customer_sk
+                AND cs_sold_date_sk == d_date_sk
+                AND d_year == 2002
+                AND d_moy BETWEEN 4 AND 4 + 3
+        )
+    )
+GROUP BY
+    cd_gender,
+    cd_marital_status,
+    cd_education_status,
+    cd_purchase_estimate,
+    cd_credit_rating,
+    cd_dep_count,
+    cd_dep_employed_count,
+    cd_dep_college_count
+ORDER BY
+    cd_gender,
+    cd_marital_status,
+    cd_education_status,
+    cd_purchase_estimate,
+    cd_credit_rating,
+    cd_dep_count,
+    cd_dep_employed_count,
+    cd_dep_college_count
+LIMIT 100;

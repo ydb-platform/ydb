@@ -167,23 +167,24 @@ class TestKiKiMRDistConfSelfHealNodeDisconnected(KiKiMRDistConfNodeStatusTest):
 
 class TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration(KiKiMRDistConfNodeStatusTest):
     erasure = Erasure.MIRROR_3_DC
-    nodes_count = 12
+    nodes_count = 15
+    pileup_replicas = True
 
     def do_test(self, configName):
         rg = get_ring_group(self.do_request_config(), configName)
-        assert_eq(rg["NToSelect"], 9)
-        assert_eq(len(rg["Ring"]), 9)
+        self.validate_contains_nodes(rg, [2, 3, 12, 15])
         self.kill_nodes(lambda hosts, i: i == 1 or i == 2)
-        time.sleep(25)
+        time.sleep(30)
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
-        assert_eq(rg["NToSelect"], 9)
-        assert_eq(len(rg["Ring"]), 9)
-        assert_eq(rg["RingGroupActorIdOffset"], 1)
-        self.kill_nodes(lambda hosts, i: i == 6)
-        time.sleep(25)
+        self.validate_not_contains_nodes(rg, [2, 3])
+        self.validate_contains_nodes(rg, [6, 12, 15])
+        assert_eq(rg["RingGroupActorIdOffset"], 1)  # full reconfiguration applied
+        self.cluster.nodes[12].stop()
+        time.sleep(30)
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]
-        self.validate_not_contains_nodes(rg, [7])
-        assert_eq(rg["RingGroupActorIdOffset"], 1)  # reassign node api used
+        self.validate_not_contains_nodes(rg, [12])
+        self.validate_contains_nodes(rg, [6, 9, 15])  # 12 -> 9 reassigned
+        assert_eq(rg["RingGroupActorIdOffset"], 1)  # offset not changed -> reassign node api used
 
 
 class TestKiKiMRDistConfSelfHeal2NodesDisconnected(KiKiMRDistConfNodeStatusTest):

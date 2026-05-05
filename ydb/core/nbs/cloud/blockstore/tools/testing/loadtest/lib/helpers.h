@@ -42,9 +42,8 @@ T WaitForCompletion(
     if (HasError(response)) {
         const auto& error = response.GetError();
         if (Find(successOnError, error.GetCode()) == successOnError.end()) {
-            throw yexception()
-                << "Failed to execute " << request << " request: "
-                << FormatError(error);
+            throw yexception() << "Failed to execute " << request
+                               << " request: " << FormatError(error);
         }
     }
     return response;

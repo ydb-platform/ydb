@@ -626,3 +626,67 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }
+
+Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
+    Y_UNIT_TEST(RequireCountersAuthentication) {
+        { // Without security config
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement disabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement enabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            config.MutableMonitoringConfig()->SetRequireCountersAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+
+    Y_UNIT_TEST(RequireHealthcheckAuthentication) {
+        { // Without security config
+            NKikimrConfig::TAppConfig config;
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement disabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+        }
+        { // With EnforceUserTokenRequirement enabled
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            config.MutableMonitoringConfig()->SetRequireHealthcheckAuthentication(true);
+            std::vector<TString> msg;
+            auto res = ValidateMonitoringConfig(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+    }
+}

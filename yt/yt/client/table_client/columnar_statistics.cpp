@@ -72,10 +72,12 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
 void UpdateLargeColumnarStatistics(TLargeColumnarStatistics* statistics, TUnversionedValue value)
 {
     if (value.Type != EValueType::Null) {
-        auto valueNoFlags = value;
-        valueNoFlags.Flags = EValueFlags::None;
-        auto fingerprint = TBitwiseUnversionedValueHash()(valueNoFlags);
-        statistics->ColumnHyperLogLogDigests[value.Id].Add(fingerprint);
+        ui16 originalId = value.Id;
+        // The value for HLL shouldn't depend on the column ID, as the ID may vary between chunks.
+        value.Id = 0;
+        value.Flags = EValueFlags::None;
+        auto fingerprint = TBitwiseUnversionedValueHash()(value);
+        statistics->ColumnHyperLogLogDigests[originalId].Add(fingerprint);
     }
 }
 
@@ -88,7 +90,7 @@ void UpdateColumnarStatistics(
     bool needsValueStatistics,
     bool needsLargeStatistics)
 {
-    if (Y_UNLIKELY(static_cast<int>(value.Id) >= statistics->GetColumnCount())) {
+    if (static_cast<int>(value.Id) >= statistics->GetColumnCount()) [[unlikely]] {
         statistics->Resize(value.Id + 1);
 
         if (needsValueStatistics) {
@@ -107,7 +109,7 @@ void UpdateColumnarStatistics(
             minValue = MakeSentinelValue<TUnversionedValue>(EValueType::Min);
             maxValue = MakeSentinelValue<TUnversionedValue>(EValueType::Max);
         } else if (value.Type != EValueType::Null) {
-            if (Y_UNLIKELY(minValue.Type == EValueType::Null)) {
+            if (minValue.Type == EValueType::Null) [[unlikely]] {
                 // minValue has not been initialized yet, so this is the first value.
                 minValue = value;
                 maxValue = value;

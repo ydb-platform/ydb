@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
@@ -16,7 +17,6 @@ namespace {
 using namespace NActors;
 
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
-
 
 template <typename TDerived>
 class TPoolHandlerActorBase : public TActor<TDerived> {
@@ -106,15 +106,19 @@ protected:
             Canceling   // after TEvCancelRequest
         };
 
-        TRequest(const TActorId& workerActorId, const TString& sessionId)
+        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<IWmSessionUpdater> wmSessionUpdater = nullptr)
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
+            , RequestText(requestText)
+            , WmSessionUpdater(wmSessionUpdater)
         {}
 
         const TActorId WorkerActorId;
         const TString SessionId;
+        const TString RequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
+        std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 
         EState State = EState::Pending;
         bool Started = false;  // after TEvContinueRequest success
@@ -187,6 +191,8 @@ private:
     void Handle(TEvPrivate::TEvResolvePoolResponse::TPtr& ev) {
         auto event = std::move(ev->Get()->Event);
         const TString& sessionId = event->Get()->SessionId;
+        const TString& requestText = event->Get()->RequestText;
+        auto wmSessionUpdater = event->Get()->WmSessionUpdater;
         this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(DatabaseId, PoolId, sessionId));
 
         const TActorId& workerActorId = event->Sender;
@@ -200,13 +206,17 @@ private:
             return;
         }
 
-        LOG_D("Received new request, worker id: " << workerActorId << ", session id: " << sessionId);
+        LOG_D("Received new request, worker id: " << workerActorId << ", session id: " << sessionId << ", request text: " << requestText);
         if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
             this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
 
-        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId)}).first->second;
+        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText, wmSessionUpdater)}).first->second;
         Counters.LocalDelayedRequests->Inc();
+
+        if (wmSessionUpdater) {
+            wmSessionUpdater->SetPoolId(PoolId);
+        }
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
         UpdateSchemeboardSubscription(ev->Get()->PathId);
@@ -230,7 +240,6 @@ private:
         request->Duration = ev->Get()->Duration;
         request->CpuConsumed = ev->Get()->CpuConsumed;
 
-        LOG_D("Received cleanup request, worker id: " << workerActorId << ", session id: " << sessionId << ", duration: " << request->Duration << ", cpu consumed: " << request->CpuConsumed);
         OnCleanupRequest(request);
     }
 
@@ -302,6 +311,10 @@ public:
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
         this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
+        
+        if (request->WmSessionUpdater) {
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::EXITED, TActivationContext::Now());
+        }
 
         if (status == Ydb::StatusIds::SUCCESS) {
             LocalInFlight++;
@@ -310,17 +323,18 @@ public:
             Counters.LocalInFly->Inc();
             Counters.ContinueOk->Inc();
             Counters.DelayedTimeMs->Collect((TInstant::Now() - request->StartTime).MilliSeconds());
-            LOG_D("Reply continue success to " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
         } else {
             if (status == Ydb::StatusIds::OVERLOADED) {
                 Counters.ContinueOverloaded->Inc();
-                LOG_I("Reply overloaded to " << request->WorkerActorId << ", session id: " << request->SessionId << ", issues: " << issues.ToOneLineString());
             } else if (status == Ydb::StatusIds::CANCELLED) {
                 Counters.Cancelled->Inc();
-                LOG_I("Reply cancelled to " << request->WorkerActorId << ", session id: " << request->SessionId << ", issues: " << issues.ToOneLineString());
             } else {
                 Counters.ContinueError->Inc();
-                LOG_W("Reply continue error " << status << " to " << request->WorkerActorId << ", session id: " << request->SessionId << ", issues: " << issues.ToOneLineString());
+                LOG_W("Reply continue error " << status
+                    << " to " << request->WorkerActorId
+                    << ", session id: " << request->SessionId
+                    << ", request text: " << request->RequestText
+                    << ", issues: " << issues.ToOneLineString());
             }
             RemoveRequest(request);
         }
@@ -639,6 +653,15 @@ protected:
 
         PendingRequests.emplace_back(request->SessionId);
         FifoCounters.PendingRequestsCount->Inc();
+        LOG_D("Request placed into pending queue, session id: " << request->SessionId
+            << ", request text: " << request->RequestText
+            << ", queue size: " << PendingRequests.size()
+        );
+
+        // Notify proxy that request entered WM pending queue via shared interface
+        if (request->WmSessionUpdater) {
+            request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::PENDING, TActivationContext::Now());
+        }
 
         if (!PreparingFinished) {
             this->Send(MakeKqpWorkloadServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPrepareTablesRequest(DatabaseId, PoolId));
@@ -785,7 +808,17 @@ private:
 
         GlobalState.DelayedRequests++;
         FifoCounters.GlobalDelayedRequests->Inc();
-        LOG_D("successfully delayed request, session id: " << ev->Get()->SessionId);
+
+        const TString& sessionId = ev->Get()->SessionId;
+        TRequest* request = GetRequestSafe(sessionId);
+        if (request) {
+            // Notify proxy that request moved to Delayed state via shared interface
+            if (request->WmSessionUpdater) {
+                request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());
+            }
+        } else {
+            LOG_D("successfully delayed request, session id: " << sessionId);
+        }
 
         DoStartDelayedRequest(GetLoadCpuThreshold());
         RefreshState();
@@ -863,7 +896,7 @@ private:
                     FifoCounters.GlobalInFly->Inc();
                     ReplyContinue(request);
                 } else {
-                    // Request was dropped due to lease expiration 
+                    // Request was dropped due to lease expiration
                     PendingRequests.emplace_front(request->SessionId);
                     FifoCounters.PendingRequestsCount->Inc();
                 }

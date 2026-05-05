@@ -1,0 +1,106 @@
+{
+    "Detailed" : {
+        "Operations" : [
+            {
+                "Id" : 5,
+                "Name" : "DqStage",
+                "Streams" : {
+                    "Program" : [
+                        {
+                            "Name" : "DqSourceWideWrap"
+                        },
+                        {
+                            "Name" : "NarrowMap"
+                        }
+                    ]
+                }
+            },
+            {
+                "Id" : 3,
+                "Name" : "DqStage",
+                "Streams" : {
+                    "Program" : [
+                        {
+                            "Name" : "FromFlow"
+                        },
+                        {
+                            "Name" : "MultiHoppingCore"
+                        },
+                        {
+                            "Name" : "ExtractMembers"
+                        },
+                        {
+                            "Name" : "FlatMap"
+                        }
+                    ]
+                },
+                "DependsOn" : [
+                    5
+                ]
+            },
+            {
+                "Id" : 2,
+                "Name" : "DqQuery!",
+                "DependsOn" : [
+                    3
+                ]
+            },
+            {
+                "Id" : 1,
+                "Name" : "Commit!",
+                "DependsOn" : [
+                    2
+                ]
+            }
+        ],
+        "OperationRoot" : 1,
+        "Providers" : [ ],
+        "OperationStats" : {
+            "Commit!" : 1,
+            "DqQuery!" : 1,
+            "DqStage" : 2
+        }
+    },
+    "Basic" : {
+        "nodes" : [
+            {
+                "id" : 5,
+                "level" : 1,
+                "name" : "DqStage #5",
+                "type" : "op"
+            },
+            {
+                "id" : 3,
+                "level" : 2,
+                "name" : "DqStage #3",
+                "type" : "op"
+            },
+            {
+                "id" : 2,
+                "level" : 3,
+                "name" : "DqQuery!",
+                "type" : "op"
+            },
+            {
+                "id" : 1,
+                "level" : 4,
+                "name" : "Commit!",
+                "type" : "op"
+            }
+        ],
+        "links" : [
+            {
+                "source" : 5,
+                "target" : 3
+            },
+            {
+                "source" : 3,
+                "target" : 2
+            },
+            {
+                "source" : 2,
+                "target" : 1
+            }
+        ]
+    }
+}

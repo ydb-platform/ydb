@@ -2,6 +2,7 @@
 
 #include "admin_commands.h"
 #include "authentication_commands.h"
+#include "ban_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
@@ -427,6 +428,10 @@ public:
         REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
         REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
+        REGISTER    (TGetUserBannedCommand,                "get_user_banned",                 Null,       Structured, false, true,  ApiVersion4);
+        REGISTER    (TSetUserBannedCommand,                "set_user_banned",                 Null,       Null,       true,  true,  ApiVersion4);
+        REGISTER    (TListBannedUsersCommand,              "list_banned_users",               Null,       Structured, false, false, ApiVersion4);
+
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
             REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
@@ -438,6 +443,8 @@ public:
             REGISTER_ALL(TReferenceLeaseCommand,            "reference_lease",                        Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
             REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
+            REGISTER_ALL(TForsakeChaosShortcut,             "forsake_chaos_shortcut",                 Null,       Null,       true,  true );
+            REGISTER_ALL(TRemoveChaosCellMailbox,           "remove_chaos_cell_mailbox",              Null,       Null,       true,  true );
             REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
             REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }
@@ -728,7 +735,7 @@ private:
             Serialize(yson, consumer.get());
 
             consumer->Flush();
-            syncOutputStream->Flush();
+            syncOutputStream->Finish();
         }
 
         void Finish()

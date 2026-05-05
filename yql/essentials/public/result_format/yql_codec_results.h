@@ -4,8 +4,7 @@
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 // we should not write numbers as numbers ever
 // write numbers as strings except Yson value where we use restricted dialect
@@ -96,5 +95,4 @@ private:
 private:
     NYson::TYsonConsumerBase& Writer_;
 };
-} // namespace NResult
-} // namespace NYql
+} // namespace NYql::NResult

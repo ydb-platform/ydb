@@ -9,6 +9,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
@@ -21,12 +24,13 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    TActorId DuplicatesManager = TActorId();
+    mutable TSpinLock DuplicatesManagerLock;
+    NActors::TActorId DuplicatesManager = NActors::TActorId();
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion,
-        const bool needFilterDuplicates, const bool isFinalSyncPoint) const;
+        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion, const bool needFilterDuplicates,
+        const bool isFinalSyncPoint) const;
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 
@@ -75,19 +79,23 @@ public:
     void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    const TActorId& GetDuplicatesManagerVerified() const {
+    NActors::TActorId GetDuplicatesManagerVerified() const {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
         AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-        : TBase(commonContext) {
+        : TBase(commonContext)
+    {
     }
 
     ~TSpecialReadContext() {
         if (NActors::TActorSystem::IsStopped()) {
             return;
         }
+
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
         AFL_VERIFY(!DuplicatesManager);
     }
 };

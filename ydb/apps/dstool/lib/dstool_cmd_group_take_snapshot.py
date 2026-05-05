@@ -37,7 +37,8 @@ def do(args):
             if group.base.GroupId in args.group_ids:
                 for index, vslot in enumerate(group.vslots_of_group):
                     id_ = vslot.base.VSlotId
-                    yield group.base.GroupId, index, vslot.pdisk.node.node_mon_endpoint, id_.PDiskId, id_.VSlotId
+                    if vslot.pdisk.node.node_mon_endpoint is not None:
+                        yield group.base.GroupId, index, vslot.pdisk.node.node_mon_endpoint, id_.PDiskId, id_.VSlotId
 
     global output_file
     output_file = args.output

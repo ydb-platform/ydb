@@ -164,6 +164,13 @@ private:
                 row.Counter = protoLock.GetCounter();
                 row.CreateTs = protoLock.GetCreateTs();
                 row.Flags = protoLock.GetFlags();
+                if (protoLock.HasVictimQuerySpanId()) {
+                    row.VictimQuerySpanId = protoLock.GetVictimQuerySpanId();
+                }
+                if (protoLock.HasBreakerQuerySpanId()) {
+                    row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
+                    row.BreakerNodeId = protoLock.GetBreakerNodeId();
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -630,6 +637,13 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         protoLockInfo->SetCounter(lockInfo.GetRawCounter());
         protoLockInfo->SetCreateTs(lockInfo.GetCreationTime().MicroSeconds());
         protoLockInfo->SetFlags((ui64)lockInfo.GetFlags());
+        if (ui64 victimId = lockInfo.GetVictimQuerySpanId(); victimId != 0) {
+            protoLockInfo->SetVictimQuerySpanId(victimId);
+        }
+        if (ui64 breakerSpanId = lockInfo.GetBreakerQuerySpanId(); breakerSpanId != 0) {
+            protoLockInfo->SetBreakerQuerySpanId(breakerSpanId);
+            protoLockInfo->SetBreakerNodeId(lockInfo.GetBreakerNodeId());
+        }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
         }

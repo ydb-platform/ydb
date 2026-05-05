@@ -230,6 +230,10 @@ private:
                 auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t rowNum: LevelClusters[cluster]) {
                     auto embedding = PendingRows[rowNum].GetElement(Settings.GetVectorColumnIndex());
+                    if (!embedding.IsString() && !embedding.IsEmbedded()) {
+                        // Skip invalid values, the only legitimate one here is NULL
+                        continue;
+                    }
                     clusters->FindClusters(embedding.AsStringRef(), TmpClusters, OverlapClusters, OverlapRatio);
                     for (auto& cluster: TmpClusters) {
                         NextClusters[rowNum].push_back(std::make_pair(clusterIds[cluster.first], cluster.second));
@@ -279,8 +283,11 @@ private:
     void ReadUsingActor(NTableIndex::NKMeans::TClusterId parent) {
         auto range = ParentRange(parent);
         auto arena = MakeIntrusive<NActors::TProtoArenaHolder>();
-        auto src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+        auto* src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
         src->SetDatabase(Settings.GetDatabase());
+        if (Settings.HasPoolId()) {
+            src->SetPoolId(Settings.GetPoolId());
+        }
         *src->MutableTable() = Settings.GetLevelTable();
         range.Serialize(*src->MutableFullRange());
         src->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
@@ -296,6 +303,9 @@ private:
         }
         if (Settings.HasLockNodeId()) {
             src->SetLockNodeId(Settings.GetLockNodeId());
+        }
+        if (Settings.HasQuerySpanId()) {
+            src->SetQuerySpanId(Settings.GetQuerySpanId());
         }
 
         // Level table key is parent+id

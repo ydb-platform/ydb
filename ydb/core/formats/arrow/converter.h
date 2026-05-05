@@ -58,6 +58,11 @@ private:
         return MakeCellFromView<arrow::Decimal128Array>(column, row);
     }
 
+    template <>
+    TCell MakeCell<arrow::FixedSizeBinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
+        return MakeCellFromView<arrow::FixedSizeBinaryArray>(column, row);
+    }
+
 public:
     static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
     

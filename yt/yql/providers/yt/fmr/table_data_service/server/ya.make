@@ -10,6 +10,7 @@ PEERDIR(
     yql/essentials/utils
     yt/yql/providers/yt/fmr/table_data_service/local/interface
     yt/yql/providers/yt/fmr/table_data_service/client/proto_helpers
+    yt/yql/providers/yt/fmr/tvm/interface
     yt/yql/providers/yt/fmr/utils
 )
 

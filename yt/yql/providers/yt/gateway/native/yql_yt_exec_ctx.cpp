@@ -51,11 +51,13 @@ TExecContextBase::TExecContextBase(
     , DisableAnonymousClusterAccess_(services->DisableAnonymousClusterAccess)
     , Hidden(session->SessionId_.EndsWith("_hidden"))
     , Metrics(std::move(metrics))
+    , YtAccessProvider(services->YtAccessProvider)
 {
 }
 
 void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-    const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash) {
+    const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash,
+    const TMaybe<TString>& outputHash) {
     const bool testRun = Config_->GetLocalChainTest();
     if (!testRun && !Hidden) {
         NYT::TNode mergeSpec = Session_->CreateSpecWithDesc();
@@ -66,7 +68,7 @@ void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVe
         auto chunkLimit = settings->QueryCacheChunkLimit.Get(Cluster_).GetOrElse(0);
 
         QueryCacheItem.Reset(new TYtQueryCacheItem(settings->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable),
-            entry, opHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
+            entry, opHash, outputHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
             settings->QueryCacheUseExpirationTimeout.Get().GetOrElse(false),
             settings->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS), LogCtx_));
     }

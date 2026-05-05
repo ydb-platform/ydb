@@ -17,6 +17,12 @@ using namespace NYdb::NTopic::NTests;
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NPQ::NTest;
 
+using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
+using TStartPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent;
+using TStopPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent;
+using TCommitOffsetAcknowledgementEvent = NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent;
+using TMessage = TDataEvent::TMessage;
+
 #define UNIT_ASSERT_TIME_EQUAL(A, B, D)                                                               \
   do {                                                                                                \
     if (!(((A - B) >= TDuration::Zero()) && ((A - B) <= D))                                           \
@@ -319,11 +325,6 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         settings.PartitionMaxInFlightBytes(10000);
         auto session = client.CreateReadSession(settings);
 
-        using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
-        using TStartPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent;
-        using TStopPartitionEvent = NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent;
-        using TMessage = TDataEvent::TMessage;
-
         TVector<TMessage> first10;
         first10.reserve(10);
 
@@ -388,6 +389,144 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         UNIT_ASSERT_VALUES_EQUAL(10, first10.size());
         UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_ManyPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3, 3);
+
+        TTopicClient client(setup.MakeDriver());
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT(describeResult.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(3, describeResult.GetTopicDescription().GetPartitions().size());
+
+        const auto& partitions = describeResult.GetTopicDescription().GetPartitions();
+
+        TWriteSessionSettings writeSettings1;
+        writeSettings1.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW)
+            .PartitionId(partitions[0].GetPartitionId())
+            .DirectWriteToPartition(true);
+
+        TWriteSessionSettings writeSettings2 = writeSettings1;
+        writeSettings1.ProducerId("producer-2");
+        writeSettings1.MessageGroupId("producer-2");
+        writeSettings2.PartitionId(partitions[1].GetPartitionId());
+
+        TWriteSessionSettings writeSettings3 = writeSettings1;
+        writeSettings3.ProducerId("producer-3");
+        writeSettings3.MessageGroupId("producer-3");
+        writeSettings3.PartitionId(partitions[2].GetPartitionId());
+
+        std::unordered_map<ui32, std::shared_ptr<ISimpleBlockingWriteSession>> writeSessions;
+        writeSessions[partitions[0].GetPartitionId()] = client.CreateSimpleBlockingWriteSession(writeSettings1);
+        writeSessions[partitions[1].GetPartitionId()] = client.CreateSimpleBlockingWriteSession(writeSettings2);
+        writeSessions[partitions[2].GetPartitionId()] = client.CreateSimpleBlockingWriteSession(writeSettings3);
+
+        std::vector<TMessage> receivedMessages;
+        std::vector<ui64> committedOffsets;
+
+        auto writeMessages = [&](size_t count, ui32 partitionId) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSessions[partitionId]->Write(TString(1000, 'a'));
+            }
+        };
+
+        auto handleEvents = [&](std::shared_ptr<IReadSession> session) {
+            while (true) {
+                auto eventOpt = session->GetEvent(false);
+                if (!eventOpt) {
+                    break;
+                }
+                auto& event = *eventOpt;
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (auto* data = std::get_if<TDataEvent>(&event)) {
+                    for (auto& msg : data->GetMessages()) {
+                        receivedMessages.push_back(msg);
+                    }
+                    continue;
+                }
+                if (auto* commit = std::get_if<TCommitOffsetAcknowledgementEvent>(&event)) {
+                    committedOffsets.push_back(commit->GetCommittedOffset());
+                    continue;
+                }
+                if (std::get_if<TSessionClosedEvent>(&event)) {
+                    return;
+                }
+            }
+        };
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(
+            TTopicReadSettings()
+            .Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(1)
+            .AppendPartitionIds(2));
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.PartitionMaxInFlightBytes(2000);
+        auto session = client.CreateReadSession(settings);
+
+        auto readMessages = [&](size_t count, TDuration timeout) {
+            auto deadline = TInstant::Now() + timeout;
+            while (receivedMessages.size() < count && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received in 30 seconds");
+                handleEvents(session);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(count, receivedMessages.size());
+        };
+
+        auto waitCommitMessages = [&](size_t count, TDuration timeout) {
+            auto deadline = TInstant::Now() + timeout;
+            while (committedOffsets.size() < count && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received in 30 seconds");
+                Sleep(TDuration::Seconds(1));
+                handleEvents(session);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(count, committedOffsets.size());
+        };
+
+        writeMessages(2, partitions[0].GetPartitionId());
+        Sleep(TDuration::Seconds(5));
+        readMessages(2, TDuration::Seconds(30));
+
+        writeMessages(1, partitions[0].GetPartitionId());
+        writeMessages(2, partitions[1].GetPartitionId());
+        writeMessages(2, partitions[2].GetPartitionId());
+        Sleep(TDuration::Seconds(10));
+        readMessages(6, TDuration::Seconds(30));
+
+        std::unordered_set<ui64> expectedPartitions = { partitions[1].GetPartitionId(), partitions[2].GetPartitionId() };
+        for (size_t i = 0; i < receivedMessages.size(); ++i) {
+            if (i >= 2) {
+                UNIT_ASSERT(expectedPartitions.contains(receivedMessages[i].GetPartitionSession()->GetPartitionId()));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(partitions[0].GetPartitionId(), receivedMessages[i].GetPartitionSession()->GetPartitionId());
+            }
+
+            receivedMessages[i].Commit();
+        }
+
+        receivedMessages.clear();
+        waitCommitMessages(6, TDuration::Seconds(30));
+        readMessages(1, TDuration::Seconds(30));
+        receivedMessages[0].Commit();
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+        for (const auto& [_, writeSession] : writeSessions) {
+            UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
+        }
     }
 }
 } // namespace NKikimr

@@ -115,10 +115,14 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
 
     if (DumpTx) {
         YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(DumpTx->GetId())  << " on " << clusterName;
-        if (commitDumpTx) {
-            DumpTx->Commit();
-        } else {
-            DumpTx->Abort();
+        try {
+            if (commitDumpTx) {
+                DumpTx->Commit();
+            } else {
+                DumpTx->Abort();
+            }
+        } catch (...) {
+            YQL_CLOG(WARN, ProviderYt) << CurrentExceptionMessage();
         }
     }
 }
@@ -464,7 +468,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
-        const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        const TString tmpFolder = GetUserTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
             bool existsGlobally = createdEntry->Client->Exists(fullTmpFolder);

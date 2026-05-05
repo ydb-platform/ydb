@@ -6,9 +6,7 @@
 
 #include <arrow/c/abi.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMiniKQLTypeBuilderTest: public TTestBase {
 public:
@@ -452,5 +450,4 @@ Y_UNIT_TEST(DisabledByComponentLevel) {
 }
 } // Y_UNIT_TEST_SUITE(TLogProviderTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

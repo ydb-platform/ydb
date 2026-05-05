@@ -48,6 +48,13 @@ namespace NActors {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
         }
 
+        // Retry connect from this sender actor so TEvNodeConnected is delivered back here;
+        // if another actor issues TEvConnectNode, this sender may never start sending traffic.
+        virtual void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+            ctx.Send(ctx.ActorSystem()->InterconnectProxy(RecipientActorId.NodeId()),
+                new TEvInterconnect::TEvConnectNode);
+        }
+
         virtual void Handle(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext& ctx) {
             Die(ctx);
         }
@@ -55,6 +62,7 @@ namespace NActors {
         virtual STRICT_STFUNC(StateFunc,
             HFunc(TEvTestResponse, Handle)
             HFunc(TEvents::TEvUndelivered, Handle)
+            HFunc(TEvents::TEvWakeup, Handle)
             HFunc(TEvents::TEvPoisonPill, Handle)
             HFunc(TEvInterconnect::TEvNodeConnected, Handle)
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)

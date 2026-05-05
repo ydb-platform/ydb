@@ -93,7 +93,7 @@ TPropagatingStorage::TPropagatingStorage(const TPropagatingStorage& other) = def
 TPropagatingStorage::TPropagatingStorage(TPropagatingStorage&& other) noexcept = default;
 
 TPropagatingStorage& TPropagatingStorage::operator=(const TPropagatingStorage& other) = default;
-TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) = default;
+TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) noexcept = default;
 
 bool TPropagatingStorage::IsNull() const
 {
@@ -237,7 +237,7 @@ public:
 private:
     DECLARE_LEAKY_SINGLETON_FRIEND()
 
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
 
     static constexpr int MaxSwitchHandlerCount = 16;
     std::array<TPropagatingStorageGlobalSwitchHandler, MaxSwitchHandlerCount> SwitchHandlers_;

@@ -104,6 +104,7 @@ TNode SerializeParamsForCreate(
     result["recursive"] = options.Recursive_;
     result["type"] = ToString(type);
     result["ignore_existing"] = options.IgnoreExisting_;
+    result["ignore_type_mismatch"] = options.IgnoreTypeMismatch_;
     result["force"] = options.Force_;
     if (options.Attributes_) {
         result["attributes"] = *options.Attributes_;
@@ -924,6 +925,7 @@ TNode SerializeParamsForGetTablePartitions(
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
     result["enable_cookies"] = options.EnableCookies_;
+    result["fetch_cookie_node_descriptors"] = options.FetchCookieNodeDescriptors_;
     return result;
 }
 

@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 #include <vector>
 
 namespace NYT::NProfiling {
@@ -33,7 +35,9 @@ constexpr ui8 NoTagSentinel = 0xff;
 constexpr int NoParent = 0;
 
 struct TDynamicTag final
-{ };
+{
+    NThreading::TAtomicObject<std::pair<std::string, std::string>> Tag;
+};
 
 using TDynamicTagPtr = TIntrusivePtr<TDynamicTag>;
 
@@ -86,6 +90,7 @@ public:
     void Append(const TTagSet& other);
 
     TDynamicTagPtr AddDynamicTag(int index);
+    void ApplyDynamicTag(TDynamicTagPtr dynamicTag);
 
     const TTagList& Tags() const;
 

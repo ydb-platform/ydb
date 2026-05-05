@@ -982,6 +982,17 @@ FromDynamicLinear(DynamicLinear<T>)->Linear<T>
 This function is available since version [2025.04](../changelog/2025.04.md).
 The `FromDynamicLinear` function converts a value from a dynamic [linear](../types/linear.md) type to a static type.
 
+## LinearDestroy
+
+#### Signature
+
+```yql
+LinearDestroy(T, [Linear<U1>...])->T
+```
+
+This function is available since version [2025.05](../changelog/2025.05.md).
+The function returns its first argument, consuming zero or more values ​​of the [linear](../types/linear.md) types listed after the first argument.
+
 ## Block
 
 #### Signature

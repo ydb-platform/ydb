@@ -257,6 +257,12 @@ public:
             }
         }
 
+        if (createSecretProto.HasValueParamName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Secret value must be set via Value, however ValueParamName was passed");
+            return result;
+        }
+
         NKikimrSchemeOp::TSecretDescription secretDescription;
         secretDescription.SetName(createSecretProto.GetName());
         secretDescription.SetValue(createSecretProto.GetValue());

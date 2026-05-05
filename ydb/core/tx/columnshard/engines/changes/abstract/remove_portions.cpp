@@ -16,6 +16,15 @@ std::shared_ptr<NDataLocks::ILock> TRemovePortionsChange::DoBuildDataLock(
 
 void TRemovePortionsChange::DoApplyOnExecute(
     NColumnShard::TColumnShard* /* self */, TWriteIndexContext& context, const TDataAccessorsResult& fetchedDataAccessors) {
+    if (fetchedDataAccessors.HasErrors()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + fetchedDataAccessors.GetErrorMessage());
+    }
+
+    if (fetchedDataAccessors.HasRemovedData()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+            "error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
+    }
+
     THashSet<ui64> usedPortionIds;
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto&& [_, i] : Portions) {
@@ -24,9 +33,8 @@ void TRemovePortionsChange::DoApplyOnExecute(
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
-        context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred,
-                schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+        context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(context.DBWrapper,
+            fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 

@@ -25,13 +25,12 @@ namespace metrics
 class SyncMultiMetricStorage : public SyncWritableMetricStorage
 {
 public:
-  void AddStorage(std::shared_ptr<SyncWritableMetricStorage> storage)
+  void AddStorage(const std::shared_ptr<SyncWritableMetricStorage> &storage)
   {
     storages_.push_back(storage);
   }
 
-  virtual void RecordLong(int64_t value,
-                          const opentelemetry::context::Context &context) noexcept override
+  void RecordLong(int64_t value, const opentelemetry::context::Context &context) noexcept override
   {
     for (auto &s : storages_)
     {
@@ -39,9 +38,9 @@ public:
     }
   }
 
-  virtual void RecordLong(int64_t value,
-                          const opentelemetry::common::KeyValueIterable &attributes,
-                          const opentelemetry::context::Context &context) noexcept override
+  void RecordLong(int64_t value,
+                  const opentelemetry::common::KeyValueIterable &attributes,
+                  const opentelemetry::context::Context &context) noexcept override
   {
     for (auto &s : storages_)
     {
@@ -49,8 +48,7 @@ public:
     }
   }
 
-  virtual void RecordDouble(double value,
-                            const opentelemetry::context::Context &context) noexcept override
+  void RecordDouble(double value, const opentelemetry::context::Context &context) noexcept override
   {
     for (auto &s : storages_)
     {
@@ -58,9 +56,9 @@ public:
     }
   }
 
-  virtual void RecordDouble(double value,
-                            const opentelemetry::common::KeyValueIterable &attributes,
-                            const opentelemetry::context::Context &context) noexcept override
+  void RecordDouble(double value,
+                    const opentelemetry::common::KeyValueIterable &attributes,
+                    const opentelemetry::context::Context &context) noexcept override
   {
     for (auto &s : storages_)
     {
@@ -75,7 +73,7 @@ private:
 class AsyncMultiMetricStorage : public AsyncWritableMetricStorage
 {
 public:
-  void AddStorage(std::shared_ptr<AsyncWritableMetricStorage> storage)
+  void AddStorage(const std::shared_ptr<AsyncWritableMetricStorage> &storage)
   {
     storages_.push_back(storage);
   }

@@ -52,6 +52,11 @@ public:
                   TracerConfig::Default())
                   .Build())) noexcept;
 
+  TracerContext(const TracerContext &)            = delete;
+  TracerContext(TracerContext &&)                 = delete;
+  TracerContext &operator=(const TracerContext &) = delete;
+  TracerContext &operator=(TracerContext &&)      = delete;
+
   virtual ~TracerContext() = default;
 
   /**

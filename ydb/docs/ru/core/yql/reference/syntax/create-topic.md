@@ -28,7 +28,7 @@ CREATE TOPIC topic_path (
 
 {% endif %}
 
-Параметры топика: {#topic-parameters}
+## Параметры топика {#topic-parameters}
 
 * `metering_mode` — способ метеринга ресурсов (`RESERVED_CAPACITY` - по выделенным ресурсам или `REQUEST_UNITS` - по фактическому использованию). Актуально для топиков в serverless базах данных. Тип значения - `String`.
 * `min_active_partitions` — минимальное количество активных партиций топика. [Автопартиционирование](../../../../concepts/datamodel/topic#autopartitioning) не будет уменьшать количество активных партиций ниже этого количества. Тип значения — `integer`, значение по умолчанию — `1`.
@@ -50,7 +50,7 @@ CREATE TOPIC topic_path (
 
 {% note info %}
 
-При выборе имени для топика учитывайте общие [правила именования схемных объектов](../../../concepts/datamodel/cluster-namespace.md##object-naming-rules).
+При выборе имени для топика учитывайте общие [правила именования схемных объектов](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
 

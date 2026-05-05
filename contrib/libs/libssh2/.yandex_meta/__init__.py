@@ -1,6 +1,5 @@
 from devtools.yamaker.project import GNUMakeNixProject
 
-
 libssh2 = GNUMakeNixProject(
     owners=["g:cpp-contrib"],
     arcdir="contrib/libs/libssh2",

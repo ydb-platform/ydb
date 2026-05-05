@@ -4,6 +4,7 @@ SRCS(
     environment.cpp
     input.cpp
     name.cpp
+    position.cpp
     statement.cpp
 )
 

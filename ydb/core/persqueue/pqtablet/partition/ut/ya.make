@@ -8,6 +8,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/persqueue/pqtablet/partition
+    ydb/core/persqueue/common
+    ydb/core/protos
 )
 
 END()

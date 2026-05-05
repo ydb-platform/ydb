@@ -18,18 +18,20 @@ message THeartbeatResponse {
 }
 
 message TPrepareOperationRequest {
-    TOperationParams OperationParams = 1;
-    map<string, TClusterConnection> ClusterConnections = 2;
-    optional string FmrOperationSpec = 3;
+    EOperationType OperationType = 1;
+    TOperationParams OperationParams = 2;
+    map<string, TClusterConnection> ClusterConnections = 3;
+    optional string FmrOperationSpec = 4;
 }
 
 message TPrepareOperationResponse {
     string PartitionId = 1;
     uint64 TasksNum = 2;
+    repeated TFmrError ErrorMessages = 3;
 }
 
 message TStartOperationRequest {
-    ETaskType TaskType = 1;
+    EOperationType OperationType = 1;
     TOperationParams OperationParams = 2;
     string SessionId = 3;
     optional string IdempotencyKey = 4;
@@ -44,6 +46,7 @@ message TStartOperationRequest {
 message TStartOperationResponse {
     EOperationStatus Status = 1;
     string OperationId = 2;
+    repeated TFmrError ErrorMessages = 3;
 }
 
 message TGetOperationResponse {
@@ -103,8 +106,4 @@ message TListSessionsRequest {
 
 message TListSessionsResponse {
     repeated string SessionIds = 1;
-}
-
-message TErrorResponse {
-    string ErrorMessage = 1;
 }

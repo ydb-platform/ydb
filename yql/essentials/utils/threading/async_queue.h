@@ -7,34 +7,30 @@
 #include <util/generic/ptr.h>
 #include <util/generic/function.h>
 #include <util/system/guard.h>
-#include <util/system/rwlock.h>
+#include <util/generic/yexception.h>
 
 #include <exception>
+#include <memory>
 
 namespace NYql {
 
-class TAsyncQueue: public TThrRefBase {
+class TAsyncQueue: public std::enable_shared_from_this<TAsyncQueue> {
 public:
-    using TPtr = TIntrusivePtr<TAsyncQueue>;
+    using TWeakPtr = std::weak_ptr<TAsyncQueue>;
+    using TPtr = std::shared_ptr<TAsyncQueue>;
 
     static TPtr Make(size_t numThreads, const TString& poolName);
 
-    void Stop() {
-        auto guard = TWriteGuard(Lock_);
-        if (MtpQueue_) {
-            MtpQueue_->Stop();
-            MtpQueue_.Destroy();
-        }
+    virtual ~TAsyncQueue() {
+        MtpQueue_->Stop();
+        MtpQueue_.Destroy();
     }
 
     template <typename TCallable>
     [[nodiscard]]
-    ::NThreading::TFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>> Async(TCallable&& func) {
-        {
-            auto guard = TReadGuard(Lock_);
-            if (MtpQueue_) {
-                return ::NThreading::Async(std::forward<TCallable>(func), *MtpQueue_);
-            }
+    static ::NThreading::TFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>> Async(const TWeakPtr& pool, TCallable&& func) {
+        if (auto queue = pool.lock()) {
+            return ::NThreading::Async(std::forward<TCallable>(func), *queue->MtpQueue_);
         }
 
         return ::NThreading::MakeErrorFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>>(std::make_exception_ptr(yexception() << "Thread pool is already stopped"));
@@ -43,8 +39,6 @@ public:
 private:
     TAsyncQueue(size_t numThreads, const TString& poolName);
 
-private:
-    TRWMutex Lock_;
     THolder<IThreadPool> MtpQueue_;
 };
 

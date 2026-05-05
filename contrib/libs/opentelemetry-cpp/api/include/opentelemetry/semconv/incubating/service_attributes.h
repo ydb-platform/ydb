@@ -20,6 +20,15 @@ namespace service
 {
 
 /**
+  The operational criticality of the service.
+  <p>
+  Application developers are encouraged to set @code service.criticality @endcode to express the
+  operational importance of their services. Telemetry consumers MAY use this attribute to optimize
+  telemetry collection or improve user experience.
+ */
+static constexpr const char *kServiceCriticality = "service.criticality";
+
+/**
   The string ID of the service instance.
   <p>
   MUST be unique for each instance of the same @code service.namespace,service.name @endcode pair
@@ -74,10 +83,48 @@ static constexpr const char *kServiceName = "service.name";
 static constexpr const char *kServiceNamespace = "service.namespace";
 
 /**
-  The version string of the service API or implementation. The format is not defined by these
-  conventions.
+  Logical name of the service on the other side of the connection. SHOULD be equal to the actual <a
+  href="/docs/resource/README.md#service">@code service.name @endcode</a> resource attribute of the
+  remote service if any.
+ */
+static constexpr const char *kServicePeerName = "service.peer.name";
+
+/**
+  Logical namespace of the service on the other side of the connection. SHOULD be equal to the
+  actual <a href="/docs/resource/README.md#service">@code service.namespace @endcode</a> resource
+  attribute of the remote service if any.
+ */
+static constexpr const char *kServicePeerNamespace = "service.peer.namespace";
+
+/**
+  The version string of the service component. The format is not defined by these conventions.
  */
 static constexpr const char *kServiceVersion = "service.version";
+
+namespace ServiceCriticalityValues
+{
+/**
+  Service is business-critical; downtime directly impacts revenue, user experience, or core
+  functionality.
+ */
+static constexpr const char *kCritical = "critical";
+
+/**
+  Service is important but has degradation tolerance or fallback mechanisms.
+ */
+static constexpr const char *kHigh = "high";
+
+/**
+  Service provides supplementary functionality; degradation has limited user impact.
+ */
+static constexpr const char *kMedium = "medium";
+
+/**
+  Service is non-essential to core operations; used for background tasks or internal tools.
+ */
+static constexpr const char *kLow = "low";
+
+}  // namespace ServiceCriticalityValues
 
 }  // namespace service
 }  // namespace semconv

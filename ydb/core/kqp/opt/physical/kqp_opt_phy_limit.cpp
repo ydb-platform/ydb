@@ -50,6 +50,38 @@ TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const 
         .Done();
 }
 
+namespace {
+bool IsSuitableToDisableOlapBlocks(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+    if (columnsLimit == 0 || !node.Maybe<TCoTake>() || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
+        return false;
+    }
+
+    return !!FindNode(node.Ptr(), [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadOlapTableRanges>(node); });
+}
+} // namespace
+
+TExprBase KqpDisableOlapBlocksOnLimit(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+    if (!IsSuitableToDisableOlapBlocks(node, typesCtx, columnsLimit)) {
+        return node;
+    }
+
+    const auto takeType = node.Ref().GetTypeAnn();
+    if (!takeType || takeType->GetKind() != ETypeAnnotationKind::List) {
+        return node;
+    }
+
+    const auto maybeStructType = takeType->Cast<TListExprType>()->GetItemType();
+    if (!maybeStructType || maybeStructType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+
+    if (maybeStructType->Cast<TStructExprType>()->GetItems().size() >= static_cast<size_t>(columnsLimit)) {
+        typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+    }
+
+    return node;
+}
+
 TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTake>()) {
         return node;

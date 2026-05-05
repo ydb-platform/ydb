@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -272,11 +273,16 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
     UNIT_TEST(CombinationsRootDomain);
     UNIT_TEST(MigratedPathRecreation);
     UNIT_TEST(CombinationsMigratedPath);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId1);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId2);
     UNIT_TEST_SUITE_END();
 
     void CombinationsRootDomain();
     void MigratedPathRecreation();
     void CombinationsMigratedPath();
+    void PathIdLessThanImpl(ui64 badRootSchemeshardId);
+    void PathIdLessThanBadRootSchemeshardId1();
+    void PathIdLessThanBadRootSchemeshardId2();
 }; // TSubscriberCombinationsTest
 
 UNIT_TEST_SUITE_REGISTRATION(TSubscriberCombinationsTest);
@@ -923,6 +929,68 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         // No additional sync responses.
         UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
     }
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanImpl(ui64 badRootSchemeshardId) {
+    // Verify PathIdLessThan(DomainId, other.DomainId) branch in subscriber.cpp:
+    // on a misconfigured cluster the bad root schemeshard owner-id is numerically higher than
+    // the tenant schemeshard owner-id, so without the fix the TSS update would be dropped.
+
+    constexpr ui64 tenantSchemeshardId = 100ULL;
+    constexpr auto path = "/Root/Tenant/table";
+
+    // Subdomain roots have local-path-id 1; inner paths have local-path-id > 1.
+    const TPathId gssSubdomainId{badRootSchemeshardId, 2};
+    const TPathId gssPathId{badRootSchemeshardId, 5};
+    const TPathId tssSubdomainId{tenantSchemeshardId, 1};
+    const TPathId tssPathId{tenantSchemeshardId, 5};
+
+    auto context = CreateContext();
+    TVector<TActorId> replicas = ResolveReplicas(*context);
+    Y_ASSERT(replicas.size() >= 2);
+
+    // GSS populator on replica[0]
+    const TActorId gssPopulator = context->AllocateEdgeActor();
+    context->HandshakeReplica(replicas[0], gssPopulator, badRootSchemeshardId, 1);
+    context->CommitReplica(replicas[0], gssPopulator, badRootSchemeshardId, 1);
+
+    // TSS populator on replica[1]
+    const TActorId tssPopulator = context->AllocateEdgeActor();
+    context->HandshakeReplica(replicas[1], tssPopulator, tenantSchemeshardId, 1);
+    context->CommitReplica(replicas[1], tssPopulator, tenantSchemeshardId, 1);
+
+    const TActorId edge = context->AllocateEdgeActor();
+    context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
+
+    // GSS update: inner path with bad subdomain ID.
+    context->Send(replicas[0], gssPopulator,
+        GenerateUpdate(GenerateDescribe(path, gssPathId, 1, gssSubdomainId), badRootSchemeshardId, 1));
+    {
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
+        UNIT_ASSERT(ev->Get());
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(gssPathId, ev->Get()->PathId);
+    }
+
+    // TSS update: inner path with tenant subdomain ID.
+    // PathIdLessThan(gssSubdomainId, tssSubdomainId) returns true (bad ID treated as lower)
+    // -> subscriber picks TSS update.
+    context->Send(replicas[1], tssPopulator,
+        GenerateUpdate(GenerateDescribe(path, tssPathId, 1, tssSubdomainId), tenantSchemeshardId, 1));
+    {
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
+        UNIT_ASSERT(ev->Get());
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(tssPathId, ev->Get()->PathId);
+    }
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanBadRootSchemeshardId1() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_1);
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanBadRootSchemeshardId2() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_2);
 }
 
 } // NSchemeBoard

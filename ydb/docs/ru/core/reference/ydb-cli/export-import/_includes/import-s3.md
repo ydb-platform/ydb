@@ -8,7 +8,7 @@
 
 {% note info %}
 
-Импорт таблиц из S3-совместимого хранилища данных в других форматах возможен с использованием [внешних таблиц](../../../../concepts/federated_query/s3/external_table.md), подробнее см. в статье [{#T}](../../../../concepts/federated_query/import_and_export.md#import).
+Импорт таблиц из S3-совместимого хранилища данных в других форматах возможен с использованием [внешних таблиц](../../../../concepts/query_execution/federated_query/s3/external_table.md), подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
 
 {% endnote %}
 
@@ -159,7 +159,7 @@
   --include dir1 --include dir2
 ```
 
-### Перечисление объектов в существующей загифрованной выгрузке {#example-list}
+### Перечисление объектов в существующей зашифрованной выгрузке {#example-list}
 
 Перечисление путей всех объектов в существующей зашифрованной выгрузке, которая находится в директории `export1` в бакете `mybucket`, с использованием секретного ключа из файла `~/my_secret_key`.
 

@@ -83,6 +83,22 @@ public:
             typename TActualMap::iterator it = Map.find(key);
             return it == Map.end() ? nullptr : &it->second;
         }
+
+        template <typename Predicate>
+        void RetainUnsafe(Predicate predicate) {
+            typename TActualMap::iterator it = Map.begin();
+            while (it != Map.end()) {
+                if (predicate(*it)) {
+                    it++;
+                } else {
+                    Map.erase(it++);
+                }
+            }
+        }
+
+        size_t SizeUnsafe() const {
+            return Map.size();
+        }
     };
 
     std::array<TBucket, BucketCount> Buckets;
@@ -181,5 +197,22 @@ public:
         const TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         return bucket.HasUnsafe(key);
+    }
+
+    template <typename Predicate>
+    void Retain(Predicate predicate) {
+        for (auto& bucket: Buckets) {
+            TBucketGuard guard(bucket.Mutex);
+            bucket.RetainUnsafe(predicate);
+        }
+    }
+
+    size_t ApproximateSize() const {
+        size_t total = 0;
+        for (const auto& bucket: Buckets) {
+            TBucketGuard guard(bucket.Mutex);
+            total += bucket.SizeUnsafe();
+        }
+        return total;
     }
 };

@@ -30,6 +30,10 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kExceptionEscaped = "excep
 
 /**
   The exception message.
+  <blockquote>
+  [!WARNING]
+  <p>
+  This attribute may contain sensitive information.</blockquote>
  */
 static constexpr const char *kExceptionMessage = "exception.message";
 

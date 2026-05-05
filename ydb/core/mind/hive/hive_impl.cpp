@@ -28,27 +28,6 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
 namespace NKikimr {
 namespace NHive {
 
-// For balancing, only nodes in the same "segment" are compared
-// This function defines which parameters are used to define segments
-auto GetNodeSegment(const TNodeInfo* node) {
-    return std::forward_as_tuple(node->GetServicedDomain(), node->BridgePileId);
-}
-
-struct TEqualNodeSegment {
-    bool operator()(const TNodeInfo* lhs, const TNodeInfo* rhs) const {
-        bool result = GetNodeSegment(lhs) == GetNodeSegment(rhs);
-        return result;
-    }
-};
-
-struct THashNodeSegment {
-    size_t operator()(const TNodeInfo* node) const {
-        return std::hash<decltype(GetNodeSegment(node))>{}(GetNodeSegment(node));
-    }
-};
-
-using TNodeSegments = std::unordered_multiset<const TNodeInfo*, THashNodeSegment, TEqualNodeSegment>;
-
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
     if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
@@ -86,6 +65,14 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         RestartRootHivePipe();
         return;
     }
+    if (msg->Status != NKikimrProto::OK) {
+        for (auto& [_, domain] : Domains) {
+            if (domain.HivePipeClient == msg->ClientId) {
+                domain.ClosePipeToHive(SelfId());
+                return;
+            }
+        }
+    }
     if (!PipeClientCache->OnConnect(ev)) {
         BLOG_ERROR("Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
         RestartPipeTx(ev->Get()->TabletId);
@@ -103,6 +90,12 @@ void THive::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     if (msg->ClientId == RootHivePipeClient) {
         RestartRootHivePipe();
         return;
+    }
+    for (auto& [_, domain] : Domains) {
+        if (domain.HivePipeClient == msg->ClientId) {
+            domain.ClosePipeToHive(SelfId());
+            return;
+        }
     }
     BLOG_D("Client pipe to tablet " << ev->Get()->TabletId << " from " << TabletID() << " is reset");
     PipeClientCache->OnDisconnect(ev);
@@ -1520,6 +1513,7 @@ TNodeInfo& THive::GetNode(TNodeId nodeId) {
     if (it == Nodes.end()) {
         it = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first;
         TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Add(1);
+        UpdateNodeSegments(&it->second);
     }
     return it->second;
 }
@@ -1655,6 +1649,7 @@ void THive::DeleteTablet(TTabletId tabletId) {
 
 void THive::DeleteNode(TNodeId nodeId) {
     TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
+    RemoveNodeFromSegments(nodeId);
     Nodes.erase(nodeId);
 }
 
@@ -2374,7 +2369,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     THiveStats stats = {};
     stats.Values.reserve(std::distance(begin, end));
     for (auto it = begin; it != end; ++it) {
-        const auto* node = *it;
+        const auto* node = &*it;
         if (node->IsAlive() && !node->Down) {
             auto nodeValues = NormalizeRawValues(node->ResourceValues, node->GetResourceMaximumValues());
             stats.Values.emplace_back(node->Id, node->GetNodeUsage(nodeValues), nodeValues);
@@ -2415,7 +2410,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
 }
 
 THive::THiveStats THive::GetStats() const {
-    auto getNode = [](const decltype(Nodes)::value_type& p) { return &p.second; };
+    auto getNode = [](const decltype(Nodes)::value_type& p) -> const TNodeInfo& { return p.second; };
     auto nodesRange = Nodes | std::views::transform(getNode);
     return GetStats(nodesRange.begin(), nodesRange.end());
 }
@@ -2428,6 +2423,29 @@ double THive::GetScatter() const {
 double THive::GetUsage() const {
     THiveStats stats = GetStats();
     return stats.MaxUsage;
+}
+
+void THive::RemoveNodeFromSegments(TNodeInfo* node) {
+    auto it = NodeSegments.find(node->GetSegment());
+    if (it == NodeSegments.end()) {
+        return;
+    }
+
+    it->second.Remove(node);
+    if (it->second.Empty()) {
+        NodeSegments.erase(it);
+    }
+}
+ 
+void THive::RemoveNodeFromSegments(TNodeId nodeId) {
+    if (auto* node = FindNode(nodeId)) {
+        RemoveNodeFromSegments(node);
+    }
+}
+
+void THive::UpdateNodeSegments(TNodeInfo* node) {
+    RemoveNodeFromSegments(node);
+    NodeSegments[node->GetSegment()].PushBack(node);
 }
 
 std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedValues& scatterByResource) const {
@@ -2471,11 +2489,6 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         return;
     }
 
-    TNodeSegments nodeSegments;
-    for (const auto& [_, node] : Nodes) {
-        nodeSegments.insert(&node);
-    }
-
     std::optional<TBalancerSettings> settings;
     std::bitset<EBalancerTypeSize> balancersStarted;
     const auto maybeStartBalancer = [&settings, &balancersStarted, this]() -> bool {
@@ -2511,13 +2524,13 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         });
     }
 
-    auto it = nodeSegments.begin();
-    while (it != nodeSegments.end()) {
-        auto [segmentBegin, segmentEnd] = nodeSegments.equal_range(*it);
-        Y_ENSURE(segmentBegin != nodeSegments.end());
-        it = segmentEnd;
-        THiveStats stats = GetStats(segmentBegin, segmentEnd);
-        BLOG_D("ProcessTabletBalancer [" << GetNodeSegment(*segmentBegin) << "] "
+    for (const auto& [segmentId, nodes] : NodeSegments) {
+        if (nodes.Empty()) {
+            continue;
+        }
+
+        THiveStats stats = GetStats(nodes.begin(), nodes.end());
+        BLOG_D("ProcessTabletBalancer [" << segmentId << "] "
                << " MaxUsage=" << Sprintf("%.9f", stats.MaxUsage) << " on #" << stats.MaxUsageNodeId
                << " MinUsage=" << Sprintf("%.9f", stats.MinUsage) << " on #" << stats.MinUsageNodeId
                << " Scatter=" << Sprintf("%.9f", stats.Scatter));
@@ -2572,7 +2585,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             }
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
-            std::transform(segmentBegin, segmentEnd, std::back_inserter(nodeIds), [](const TNodeInfo* node) { return node->Id; });
+            std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
             BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
                        << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
             settings.emplace(TBalancerSettings{
@@ -3060,15 +3073,19 @@ void THive::UpdatePiles() {
     Execute(CreateUpdatePiles());
 }
 
+std::optional<TActorId> THive::GetPipeToTenantHive(TDomainInfo* domainInfo) {
+    if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
+        return std::nullopt;
+    }
+    return domainInfo->GetPipeToHive(this);
+}
+
 std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
     if (!nodeInfo || nodeInfo->ServicedDomains.size() != 1) {
         return std::nullopt;
     }
     TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
-    if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
-        return std::nullopt;
-    }
-    return domainInfo->GetPipeToHive(this);
+    return GetPipeToTenantHive(domainInfo);
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
@@ -3274,6 +3291,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
+        hFunc(TEvHive::TEvShrinkStoragePool, Handle);
+        hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
     }
 }
 
@@ -3389,6 +3408,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvShrinkStoragePool::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvShrinkStoragePoolReply::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3770,6 +3791,31 @@ void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
     Execute(CreateProcessTabletMetrics());
+}
+
+void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
+    BLOG_D("Handle TEvShrinkStoragePool");
+    const auto& record = ev->Get()->Record;
+    auto& pool = GetStoragePool(record.GetStoragePool());
+    if (pool.ConsoleVersion < record.GetVersion()) {
+        pool.ConsoleVersion = record.GetVersion();
+    } else {
+        BLOG_W("Got outdated TEvShrinkStoragePool request");
+        return;
+    }
+    if (AreWeRootHive()) {
+        ShrinkPoolInitiator = ev->Sender;
+        auto* domain = FindDomain(TSubDomainKey(record.GetSubDomain()));
+        if (auto tenantHive = GetPipeToTenantHive(domain)) {
+            return NTabletPipe::SendData(SelfId(), *tenantHive, ev->Release().Release());
+        }
+    }
+
+    Execute(CreateShrinkPool(ev));
+}
+
+void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {
+    Execute(CreateShrinkPoolReply(std::move(ev)));
 }
 
 void THive::MakeScaleRecommendation() {

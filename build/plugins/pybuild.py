@@ -14,7 +14,6 @@ from _common import (
     resolve_common_const,
 )
 
-
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
@@ -170,6 +169,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "taxi/uservices/",
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
+            "market/robotics/contrib/",  # Robotics contrib
             "market/sre",  # YMAKE-626 -> MARKET-???
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib

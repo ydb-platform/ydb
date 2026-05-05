@@ -70,4 +70,5 @@ RECURSE(
     events
     simple
     result_set_format
+    ut
 )

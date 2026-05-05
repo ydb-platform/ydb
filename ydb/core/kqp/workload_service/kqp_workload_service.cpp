@@ -88,6 +88,13 @@ public:
     void HandlePoison() {
         LOG_W("Got poison, stop workload service");
 
+        // Unsubscribe from all scheme cache watches
+        for (const auto& [_, databaseState] : DatabaseToState) {
+            if (databaseState.WatchKey) {
+                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(databaseState.WatchKey));
+            }
+        }
+
         for (const auto& [_, poolState] : PoolIdToState) {
             Send(poolState.PoolHandler, new TEvents::TEvPoison());
             if (poolState.NewPoolHandler) {
@@ -239,16 +246,98 @@ public:
         hFunc(TEvPrivate::TEvCpuLoadResponse, Handle);
         hFunc(TEvPrivate::TEvResignPoolHandler, Handle);
         hFunc(TEvPrivate::TEvStopPoolHandlerResponse, Handle);
+        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
+        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated);
     )
 
 private:
+    ///
+    /// Fetches database metadata and subscribes to Scheme Cache Watch via db's PathId.
+    ///
     void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
+        const TString& databaseId = ev->Get()->DatabaseId;
+
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully fetched database info, DatabaseId: " << ev->Get()->DatabaseId << ", Serverless: " << ev->Get()->Serverless);
+            LOG_D("Successfully fetched database info, DatabaseId: " << databaseId
+                << ", Serverless: " << ev->Get()->Serverless
+                << ", PathId: " << ev->Get()->PathId
+            );
+
+            // Subscribe to scheme cache watch for this PathId
+            auto databaseState = GetOrCreateDatabaseState(databaseId);
+
+            if (!databaseState->WatchKey) {
+                databaseState->WatchKey = ++FreeWatchKey;
+                auto subscribeEvent = new TEvTxProxySchemeCache::TEvWatchPathId(
+                    ev->Get()->PathId, databaseState->WatchKey);
+
+                Send(MakeSchemeCacheID(), subscribeEvent);
+
+                LOG_D("Subscribed to scheme cache watch for database: " << databaseId
+                    << ", PathId: " << ev->Get()->PathId
+                    << ", WatchKey: " << databaseState->WatchKey
+                );
+            }
         } else {
-            LOG_D("Failed to fetch database info, DatabaseId: " << ev->Get()->DatabaseId << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_D("Failed to fetch database info, DatabaseId: " << databaseId
+                << ", Status: " << ev->Get()->Status
+                << ", Issues: " << ev->Get()->Issues.ToOneLineString());
         }
-        GetOrCreateDatabaseState(ev->Get()->DatabaseId)->UpdateDatabaseInfo(ev);
+
+        GetOrCreateDatabaseState(databaseId)->UpdateDatabaseInfo(ev);
+    }
+
+    ///
+    /// Handles database deletion to prevent stale PathId mismatch on recreation.
+    ///
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
+        const TString& databasePath = ev->Get()->Path;
+        LOG_W("Database deleted: " << databasePath << ". Cleaning all related states.");
+
+        // Find all database states for this path
+        std::vector<TString> databaseIdsToRemove;
+        for (const auto& [databaseId, databaseState] : DatabaseToState) {
+            if (DatabaseIdToDatabase(databaseId) == databasePath) {
+                databaseIdsToRemove.push_back(databaseId);
+            }
+        }
+
+        // Cleaning all pools and database state for each matching database ID
+        for (const TString& databaseId : databaseIdsToRemove) {
+            LOG_I("Removing database state for: " << databaseId);
+            CleanupDatabasePools(databaseId);
+            DatabaseToState.erase(databaseId);
+        }
+    }
+
+    ///
+    /// Stops all active pool handlers and clears database state.
+    ///
+    void CleanupDatabasePools(const TString& databaseId) {
+        std::vector<TString> poolsToRemove;
+        const TString prefix = CanonizePath(databaseId) + "/";
+
+        for (const auto& [poolKey, poolState] : PoolIdToState) {
+            if (poolKey.StartsWith(prefix)) {
+                LOG_I("Cleaning pool handler for: " << poolKey);
+                Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
+
+                if (poolState.NewPoolHandler) {
+                    Send(*poolState.NewPoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
+                }
+
+                for (const auto& previousHandler : poolState.PreviousPoolHandlers) {
+                    Send(previousHandler, new TEvPrivate::TEvStopPoolHandler(true));
+                }
+
+                poolsToRemove.push_back(poolKey);
+            }
+        }
+
+        for (const auto& poolKey : poolsToRemove) {
+            Counters.ActivePools->Dec();
+            PoolIdToState.erase(poolKey);
+        }
     }
 
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
@@ -257,10 +346,10 @@ private:
 
         TActorId poolHandler;
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully fetched pool " << poolId << ", DatabaseId: " << databaseId);
+            LOG_D("Successfully fetched pool: " << poolId << ", DatabaseId: " << databaseId);
             poolHandler = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig)->PoolHandler;
         } else {
-            LOG_W("Failed to fetch pool " << poolId << ", DatabaseId: " << databaseId << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_W("Failed to fetch pool: " << poolId << ", DatabaseId: " << databaseId << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
@@ -562,9 +651,11 @@ private:
 
     TDatabaseState* GetOrCreateDatabaseState(TString databaseId) {
         auto databaseIt = DatabaseToState.find(databaseId);
+
         if (databaseIt != DatabaseToState.end()) {
             return &databaseIt->second;
         }
+
         LOG_I("Creating new database state for id " << databaseId);
         return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
     }
@@ -617,6 +708,7 @@ private:
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     ETablesCreationStatus TablesCreationStatus = ETablesCreationStatus::Cleanup;
     std::unordered_set<TString> PendingHandlers;  // DatabaseID/PoolID
+    ui32 FreeWatchKey = 0;
 
     std::unordered_map<TString, TDatabaseState> DatabaseToState;  // DatabaseID to state
     std::unordered_map<TString, TPoolState> PoolIdToState;  // DatabaseID/PoolID to state

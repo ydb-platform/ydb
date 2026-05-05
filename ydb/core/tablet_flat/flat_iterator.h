@@ -350,6 +350,7 @@ public:
 
     bool IsUncommitted() const;
     ui64 GetUncommittedTxId() const;
+    ui64 GetDeltaTxId() const;
     EReady SkipUncommitted();
     std::tuple<ELockMode, ui64> GetLockInfo() const;
     TRowVersion GetRowVersion() const;
@@ -723,6 +724,23 @@ inline ui64 TTableIterBase<TIteratorOps>::GetUncommittedTxId() const
 
     // Must only be called for uncommitted positions
     Y_DEBUG_ABORT_UNLESS(Delta && Uncommitted);
+
+    return DeltaTxId;
+}
+
+template<class TIteratorOps>
+inline ui64 TTableIterBase<TIteratorOps>::GetDeltaTxId() const
+{
+    // Must only be called after a fully successful Apply()
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
+
+    // There must be at least one active iterator
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
+
+    // Must only be called for committed deltas
+    if (!Delta || Uncommitted) {
+        return 0;
+    }
 
     return DeltaTxId;
 }

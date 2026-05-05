@@ -130,7 +130,7 @@ class TS3Writer
         CB_LOG_D("Handshake"
             << ": worker# " << Worker);
 
-        S3Client = RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        S3Client = RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         WriteIdentity();
     }

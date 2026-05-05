@@ -124,6 +124,14 @@ void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActor
         SendCollectGarbage(ctx);
 }
 
+void TExecutorGCLogic::OnConfirmSnapshot(ui32 step, const TActorContext &ctx) {
+    ConfirmedOnSendStep = Max(ConfirmedOnSendStep, step);
+
+    if (step >= SnapshotStep) {
+        SendCollectGarbage(ctx);
+    }
+}
+
 TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
     TChannelInfo& channel = ChannelInfo[ev->Channel];

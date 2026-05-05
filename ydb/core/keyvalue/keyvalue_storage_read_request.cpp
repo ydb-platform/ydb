@@ -255,8 +255,8 @@ public:
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
             // kill the key value tablet due to it's obsolete generation
+            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
             Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
-            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_ERROR);
             return;
         }
 
@@ -412,8 +412,12 @@ public:
         response->Record.set_requested_size(interRead.RequestedSize);
 
         TRope value = interRead.BuildRope();
-        const TContiguousSpan span = value.GetContiguousSpan();
-        response->Record.set_value(span.data(), span.size());
+        if (IntermediateResult->UsePayloadInResponse) {
+            response->SetBuffer(std::move(value));
+        } else {
+            const TContiguousSpan span = value.GetContiguousSpan();
+            response->Record.set_value(span.data(), span.size());
+        }
 
         if (IntermediateResult->RespondTo.NodeId() != SelfId().NodeId()) {
             response->Record.set_node_id(SelfId().NodeId());
@@ -427,6 +431,8 @@ public:
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+        } else if (status == NKikimrProto::BLOCKED) {
+            return NKikimrKeyValue::Statuses::RSTATUS_BLOCKED;
         } else {
             return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
         }
@@ -451,13 +457,18 @@ public:
         std::unique_ptr<TEvKeyValue::TEvReadRangeResponse> response = CreateReadRangeResponse(status, msgBuilder);
         NKikimrKeyValue::ReadRangeResult &readRangeResult = response->Record;
 
-        for (auto &interRead : interRange.Reads) {
+        for (ui32 idx = 0; idx < interRange.Reads.size(); ++idx) {
+            auto &interRead = interRange.Reads[idx];
             auto *kvp = readRangeResult.add_pair();
             kvp->set_key(interRead.Key);
 
             TRope value = interRead.BuildRope();
-            const TContiguousSpan span = value.GetContiguousSpan();
-            kvp->set_value(span.data(), span.size());
+            if (IntermediateResult->UsePayloadInResponse) {
+                response->SetBuffer(std::move(value), idx);
+            } else {
+                const TContiguousSpan span = value.GetContiguousSpan();
+                kvp->set_value(span.data(), span.size());
+            }
 
             kvp->set_value_size(interRead.ValueSize);
             kvp->set_creation_unix_time(interRead.CreationUnixTime);

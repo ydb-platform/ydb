@@ -22,6 +22,8 @@ TCustomer ParseCustomerFromResult(TResultSetParser& parser) {
     TCustomer customer;
     if (parser.ColumnIndex("C_ID") != -1) {
         customer.c_id = parser.ColumnParser("C_ID").GetInt32();
+    } else {
+        customer.c_id = C_INVALID_CUSTOMER_ID;
     }
     customer.c_first = *parser.ColumnParser("C_FIRST").GetOptionalUtf8();
     customer.c_middle = *parser.ColumnParser("C_MIDDLE").GetOptionalUtf8();

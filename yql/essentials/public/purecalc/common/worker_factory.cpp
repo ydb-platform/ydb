@@ -3,6 +3,7 @@
 #include "type_from_schema.h"
 #include "worker.h"
 #include "compile_mkql.h"
+#include "default_runtime_settings.h"
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -43,6 +44,28 @@
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
+namespace {
+
+NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
+    NSQLTranslation::TSqlFlags flags = {
+        "AnsiOrderByLimitInUnionAll",
+        "AnsiRankForNullableKeys",
+        "DisableAnsiOptionalAs",
+        "DisableCoalesceJoinKeysOnQualifiedAll",
+        "DisableUnorderedSubqueries",
+        "FlexibleTypes"};
+    if (blockEngineMode != EBlockEngineMode::Disable) {
+        flags.insert("EmitAggApply");
+    }
+    return flags;
+}
+
+NYql::TRuntimeSettings::TConstPtr GetRuntimeSettings() {
+    return NYql::NPureCalc::NPrivate::GetDefaultRuntimeSettings();
+}
+
+} // namespace
+
 template <typename TBase>
 TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorMode processorMode)
     : Factory_(std::move(options.Factory))
@@ -57,6 +80,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , RuntimeSettings_(::GetRuntimeSettings())
     , IssueReportTarget_(options.IssueReportTarget)
 {
     HandleInternalSettings(options.InternalSettings);
@@ -173,6 +197,14 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
+    typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
+    typeContext->RuntimeSettings = RuntimeSettings_;
+
+    if (BlockEngineMode_ != EBlockEngineMode::Disable) {
+        typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
+    }
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
@@ -218,7 +250,6 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.EmitReadsForExists = true;
         settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
@@ -226,16 +257,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
-        settings.Flags = {
-            "AnsiOrderByLimitInUnionAll",
-            "AnsiRankForNullableKeys",
-            "DisableAnsiOptionalAs",
-            "DisableCoalesceJoinKeysOnQualifiedAll",
-            "DisableUnorderedSubqueries",
-            "FlexibleTypes"};
-        if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-            settings.Flags.insert("EmitAggApply");
-        }
+        settings.Flags = GetSqlFlags(BlockEngineMode_);
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
@@ -318,7 +340,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
             LangVer_,
-            true);
+            true,
+            RuntimeSettings_);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
@@ -567,19 +590,18 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             CountersProvider_,                                                      \
             NativeYtTypeFlags_,                                                     \
             DeterministicTimeProviderSeed_,                                         \
-            LangVer_));                                                             \
+            LangVer_,                                                               \
+            RuntimeSettings_));                                                     \
     }
 
 DEFINE_WORKER_MAKER(PullStream)
 DEFINE_WORKER_MAKER(PullList)
 DEFINE_WORKER_MAKER(PushStream)
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 template class TWorkerFactory<IPullStreamWorkerFactory>;
 
 template class TWorkerFactory<IPullListWorkerFactory>;
 
 template class TWorkerFactory<IPushStreamWorkerFactory>;
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

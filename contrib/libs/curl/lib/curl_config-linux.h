@@ -156,6 +156,9 @@
 /* Definition to make a library symbol externally visible. */
 #define CURL_EXTERN_SYMBOL __attribute__((__visibility__("default")))
 
+/* MIT Kerberos version */
+/* #undef CURL_KRB5_VERSION */
+
 /* cpu-machine-OS */
 #define CURL_OS "x86_64-pc-linux-gnu"
 
@@ -210,6 +213,9 @@
 
 /* Define to 1 if you have the fseeko declaration */
 #define HAVE_DECL_FSEEKO 1
+
+/* if you have the function DES_ecb_encrypt */
+#define HAVE_DES_ECB_ENCRYPT 1
 
 /* if you have <dirent.h> */
 #define HAVE_DIRENT_H 1
@@ -310,6 +316,9 @@
 /* if you have the function gnutls_srp_verifier */
 /* #undef HAVE_GNUTLS_SRP */
 
+/* Define to 1 if you have the <gsasl.h> header file. */
+/* #undef HAVE_GSASL_H */
+
 /* if you have GSS-API libraries */
 /* #undef HAVE_GSSAPI */
 
@@ -407,9 +416,6 @@
 /* Define to 1 if you have the `ssl' library (-lssl). */
 #define HAVE_LIBSSL 1
 
-/* Define to 1 if you have the `wolfssh' library (-lwolfssh). */
-/* #undef HAVE_LIBWOLFSSH */
-
 /* if zlib is available */
 #define HAVE_LIBZ 1
 
@@ -427,6 +433,9 @@
 
 /* Define to 1 if you have the `mach_absolute_time' function. */
 /* #undef HAVE_MACH_ABSOLUTE_TIME */
+
+/* Define to 1 if you have the `mbedtls_des_crypt_ecb' function. */
+/* #undef HAVE_MBEDTLS_DES_CRYPT_ECB */
 
 /* Define to 1 if you have the memrchr function or macro. */
 #define HAVE_MEMRCHR 1
@@ -463,10 +472,6 @@
 
 /* Define to 1 if you have the <ngtcp2/ngtcp2.h> header file. */
 #define HAVE_NGTCP2_NGTCP2_H 1
-
-/* if you have an old MIT Kerberos version, lacking GSS_C_NT_HOSTBASED_SERVICE
-   */
-/* #undef HAVE_OLD_GSSMIT */
 
 /* if you have opendir */
 #define HAVE_OPENDIR 1
@@ -707,9 +712,6 @@
 /* Define to 1 if you have the <uv.h> header file. */
 /* #undef HAVE_UV_H */
 
-/* Define to 1 if you have the <wolfssh/ssh.h> header file. */
-/* #undef HAVE_WOLFSSH_SSH_H */
-
 /* Define to 1 if you have the `wolfSSL_BIO_new' function. */
 /* #undef HAVE_WOLFSSL_BIO_NEW */
 
@@ -819,6 +821,9 @@
 /* if AppleIDN */
 /* #undef USE_APPLE_IDN */
 
+/* enable Apple OS certificate validation */
+/* #undef USE_APPLE_SECTRUST */
+
 /* Define to enable c-ares support */
 #define USE_ARES 1
 
@@ -916,9 +921,6 @@
 
 /* to enable SSPI support */
 /* #undef USE_WINDOWS_SSPI */
-
-/* if wolfSSH is in use */
-/* #undef USE_WOLFSSH */
 
 /* if wolfSSL is enabled */
 /* #undef USE_WOLFSSL */

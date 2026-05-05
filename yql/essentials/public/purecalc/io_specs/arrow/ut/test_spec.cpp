@@ -8,6 +8,8 @@
 #include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 #include <arrow/array/builder_primitive.h>
 
+#include <utility>
+
 namespace {
 
 #define Y_UNIT_TEST_ADD_BLOCK_TEST(N, MODE)             \
@@ -64,9 +66,9 @@ struct TVectorConsumer: public NYql::NPureCalc::IConsumer<T*> {
     size_t Index = 0;
 
 public:
-    TVectorConsumer(TVector<U>& items, const TConverter& converter)
+    TVectorConsumer(TVector<U>& items, TConverter converter)
         : Data(items)
-        , Converter(converter)
+        , Converter(std::move(converter))
     {
     }
 

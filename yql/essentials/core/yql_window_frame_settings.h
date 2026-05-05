@@ -1,10 +1,14 @@
 #pragma once
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_node_transform.h>
+#include <yql/essentials/core/yql_window_frame_setting_bound.h>
 #include <yql/essentials/core/sql_types/window_frames_collector_params.h>
 #include <yql/essentials/core/sql_types/window_number_and_direction.h>
 #include <yql/essentials/core/sql_types/sort_order.h>
-#include <yql/essentials/core/yql_expr_node_core_win_frame_collector_bounds.h>
+#include <yql/essentials/core/yql_range_frame_collector_bounds.h>
+
+#include <utility>
 
 namespace NYql {
 
@@ -37,21 +41,22 @@ public:
     class TRangeFrame {
     public:
         using ESortOrder = NYql::ESortOrder;
-        using TBoundType = NYql::NWindow::TNumberAndDirection<TExprNode::TPtr>;
 
-        TRangeFrame(std::pair<TBoundType, TBoundType> frame, bool isNumeric, ESortOrder sortOrder, bool isRightCurrentRow)
-            : Frame_(frame)
+        using TFrameBoundType = NYql::NWindow::TNumberAndDirection<TExprNode::TPtr>;
+
+        TRangeFrame(std::pair<TWindowFrameSettingBound, TWindowFrameSettingBound> frame, bool isNumeric, ESortOrder sortOrder, bool isRightCurrentRow)
+            : Frame_(std::move(frame))
             , IsNumeric_(isNumeric)
             , SortOrder_(sortOrder)
             , IsRightCurrentRow_(isRightCurrentRow)
         {
         }
 
-        const TBoundType& GetFirst() const {
+        const TWindowFrameSettingBound& GetFirst() const {
             return Frame_.first;
         }
 
-        const TBoundType& GetLast() const {
+        const TWindowFrameSettingBound& GetLast() const {
             return Frame_.second;
         }
 
@@ -68,7 +73,7 @@ public:
         }
 
     private:
-        std::pair<TBoundType, TBoundType> Frame_;
+        std::pair<TWindowFrameSettingBound, TWindowFrameSettingBound> Frame_;
         bool IsNumeric_;
         ESortOrder SortOrder_;
         bool IsRightCurrentRow_;
@@ -78,7 +83,7 @@ public:
 
     using TFrame = std::variant<TRowFrame, TRangeFrame, TGroupsFrame>;
 
-    TWindowFrameSettings(const TFrame& frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty);
+    TWindowFrameSettings(TFrame frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty);
 
     static TWindowFrameSettings Parse(const TExprNode& node, TExprContext& ctx);
     static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
@@ -129,11 +134,9 @@ private:
     bool IsAlwaysEmpty_ = false;
 };
 
-using TExprNodeNumberAndDirection = TWindowFrameSettings::TRangeFrame::TBoundType;
-using TExprNodeCoreWinFrameCollectorBounds = NWindow::TExprNodeCoreWinFrameCollectorBounds;
-using TExprNodeCoreWinFrameCollectorParams = NWindow::TCoreWinFramesCollectorParams<TWindowFrameSettings::TRangeFrame::TBoundType::TNumberType>;
-
-inline constexpr TStringBuf SortedColumnMemberName = "_yql_sorted_column";
+using TExprNodeNumberAndDirection = TWindowFrameSettings::TRangeFrame::TFrameBoundType;
+using TRangeFrameCollectorBounds = NWindow::TRangeFrameCollectorBounds;
+using TExprNodeCoreWinFrameCollectorParams = NWindow::TCoreWinFramesCollectorParams<TWindowFrameSettingWithOffset, /*WithSortedColumnNames=*/true>;
 
 bool CheckRowFrameIsAlwaysEmpty(const TWindowFrameSettings::TRowFrame& frame);
 

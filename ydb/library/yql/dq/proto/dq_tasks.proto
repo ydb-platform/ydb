@@ -239,3 +239,12 @@ message TDqTask {
     string RateLimiterDatabase = 25;
     uint32 DqChannelVersion = 26;
 }
+
+message TDqControlPlaneActorSettings {
+    string Type = 1;
+}
+
+message TDqIntegrationCommonSettings {
+    google.protobuf.Any Settings = 1;
+    map<string, TDqControlPlaneActorSettings> StageControlPlaneActors = 2;
+}

@@ -52,6 +52,9 @@ void TServerConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_keep_alive", &TThis::EnableKeepAlive)
         .Default(true);
 
+    registrar.Parameter("max_connection_age", &TThis::MaxConnectionAge)
+        .Default();
+
     registrar.Parameter("cancel_fiber_on_connection_close", &TThis::CancelFiberOnConnectionClose)
         .Default();
 

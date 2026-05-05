@@ -22,7 +22,9 @@
 #include <boost/thread/detail/move.hpp>
 #include <boost/thread/detail/invoke.hpp>
 
+#if !defined(BOOST_THREAD_PROVIDES_INVOKE) && !defined(BOOST_THREAD_PROVIDES_INVOKE_RET)
 #include <boost/bind/bind.hpp>
+#endif
 
 #include <boost/config/abi_prefix.hpp>
 
@@ -152,7 +154,7 @@ namespace boost
             {
                 name_once_mutex(mutex_name,flag_address);
             }
-            
+
             return ::boost::detail::win32::create_event(
                 mutex_name, 
                 ::boost::detail::win32::manual_reset_event,

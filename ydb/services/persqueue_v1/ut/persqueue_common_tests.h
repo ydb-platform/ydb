@@ -37,8 +37,9 @@ using namespace NThreading;
 using namespace NNetClassifier;
 
 
-#define MAKE_WRITE_STREAM(TOKEN)                                     \
+#define MAKE_WRITE_STREAM(DATABASE, TOKEN)                           \
     grpc::ClientContext context;                                     \
+    context.AddMetadata(NYdb::YDB_DATABASE_HEADER, DATABASE);        \
     context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, TOKEN);        \
     auto stream = server.ServiceStub->StreamingWrite(&context);      \
 
@@ -70,10 +71,12 @@ public:
         runtime->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
         runtime->GetAppData().EnforceUserTokenRequirement = true;
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
 
         for (const auto &invalidToken : invalidTokens) {
             Cerr << "Invalid token under test is '" << invalidToken << "'" << Endl;
-            MAKE_WRITE_STREAM(invalidToken);
+
+            MAKE_WRITE_STREAM(databaseName, invalidToken);
 
             // TODO: Message should be written to gRPC in order to get error. Fix gRPC data plane API code if our expectations are different.
             // Note that I check that initial metadata is sent during gRPC stream constructor.
@@ -101,7 +104,8 @@ public:
 
         server.ModifyTopicACL(server.GetFullTopicPath(), permissions);
 
-        MAKE_WRITE_STREAM(GenerateValidToken(0));
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
+        MAKE_WRITE_STREAM(databaseName, GenerateValidToken(0));
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
@@ -127,11 +131,12 @@ public:
         TPersQueueV1TestServer server = CreateServer();
 
         const auto token = GenerateValidToken();
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
 
         server.ModifyTopicACL(server.GetFullTopicPath(), {{token, {"ydb.generic.write"}}});
         Cerr << "===Make write stream\n";
 
-        MAKE_WRITE_STREAM(token);
+        MAKE_WRITE_STREAM(databaseName, token);
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
@@ -183,7 +188,9 @@ public:
 
 
         server.ModifyTopicACL(server.GetFullTopicPath(), permissions);
-        MAKE_WRITE_STREAM(GenerateValidToken(0));
+
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
+        MAKE_WRITE_STREAM(databaseName, GenerateValidToken(0));
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
@@ -224,10 +231,11 @@ public:
         // TODO: Why test fails with 'BUILTIN_ACL_DOMAIN' as domain in invalid token?
         TVector<TString> invalidTokens = {TString(), "test_user", "test_user@invalid_domain"};
         server.ModifyTopicACLAndWait(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
 
         for (const auto &invalidToken : invalidTokens) {
             Cerr << "Invalid token under test is '" << invalidToken << "'" << Endl;
-            MAKE_WRITE_STREAM(validToken);
+            MAKE_WRITE_STREAM(databaseName, validToken);
 
             StreamingWriteClientMessage clientMessage;
             StreamingWriteServerMessage serverMessage;
@@ -258,8 +266,9 @@ public:
                                      BUILTIN_ACL_DOMAIN;
 
         server.ModifyTopicACL(server.GetFullTopicPath(), {{validToken, {"ydb.generic.write"}}});
+        const TString databaseName = "/" + server.GetServerSettings().DomainName;
 
-        MAKE_WRITE_STREAM(validToken);
+        MAKE_WRITE_STREAM(databaseName, validToken);
 
         StreamingWriteClientMessage clientMessage;
         StreamingWriteServerMessage serverMessage;
@@ -293,13 +302,30 @@ public:
         };
         const TString data = TString("1234567890") * 120000; // 1200000 bytes
         for (const TString &topicPath : differentTopicPathsTypes) {
+            // Account quota is 10000000 bytes/sec.
+            // Partition write quota is 2 MB/sec and burst size is 2 MB.
+            // Message size for USER_PAYLOAD_SIZE is 1200004 bytes (data size + sourceId size).
+            // 1200004 bytes/msg * 7 msg = 8400028 bytes.
+            //
+            // iteration written AvailableSize wait time
+            // 0         0        2 MB
+            // 1         1,2 MB   0,8 MB       0
+            // 2         1,2 MB  -0,4 MB       0,2 sec
+            // 3         1,2 MB  -1,2 MB       0,6 sec
+            // 4         1,2 MB  -1,2 MB       0,6 sec
+            // 5         1,2 MB  -1,2 MB       0,6 sec
+            // 6         1,2 MB  -1,2 MB       0,6 sec
+            // 7         1,2 MB  -1,2 MB
+
+            // write 7 messages, wait time is 2,6 sec
+
             server.CreateTopicWithQuota(topicPath, true, 10000000);
             auto driver = server.Server->AnnoyingClient->GetDriver();
             auto start = TInstant::Now();
             const TString fullTopicPath = server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
 
             for (ui32 i = 0; i < 7; ++i) {
-                auto writer = CreateSimpleWriter(*driver, fullTopicPath, TStringBuilder() << "123" << i, {}, "raw");
+                auto writer = CreateSimpleWriter(*driver, fullTopicPath, TStringBuilder() << "SI-" << i, {}, "raw");
                 writer->Write(data);
                 bool res = writer->Close(TDuration::Seconds(10));
                 UNIT_ASSERT(res);
@@ -362,7 +388,8 @@ public:
     }
 
     void WriteWithUserPayloadRateLimit() {
-        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, TDuration::MilliSeconds(2500));
+        // UserPayloadSize is data size + sourceId size;
+        TestWriteWithRateLimiter(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, TDuration::MilliSeconds(2450));
     }
 
     void LimitsWithBlobsRateLimit() {

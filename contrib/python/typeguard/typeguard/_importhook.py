@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import sys
 import types
 from collections.abc import Callable, Iterable, Sequence
@@ -56,23 +57,30 @@ class TypeguardLoader(SourceFileLoader):
     def source_to_code(
         data: Buffer | str | ast.Module | ast.Expression | ast.Interactive,
         path: Buffer | str | PathLike[str] = "<string>",
+        *,
+        _optimize: int = -1,
     ) -> CodeType:
+        if isinstance(path, (str, PathLike)):
+            filename = path
+        else:
+            filename = os.fsdecode(bytes(path))
+
         if isinstance(data, (ast.Module, ast.Expression, ast.Interactive)):
-            tree = data
+            module = data
         else:
             if isinstance(data, str):
                 source = data
             else:
                 source = decode_source(data)
 
-            tree = _call_with_frames_removed(
+            module = _call_with_frames_removed(
                 ast.parse,
                 source,
-                path,
+                filename,
                 "exec",
             )
 
-        tree = TypeguardTransformer().visit(tree)
+        tree = TypeguardTransformer().visit(module)
         ast.fix_missing_locations(tree)
 
         if global_config.debug_instrumentation and sys.version_info >= (3, 9):
@@ -85,7 +93,7 @@ class TypeguardLoader(SourceFileLoader):
             print("----------------------------------------------", file=sys.stderr)
 
         return _call_with_frames_removed(
-            compile, tree, path, "exec", 0, dont_inherit=True
+            compile, tree, filename, "exec", 0, dont_inherit=True
         )
 
     def exec_module(self, module: ModuleType) -> None:

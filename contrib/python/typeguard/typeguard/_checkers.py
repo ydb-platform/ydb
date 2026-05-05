@@ -46,9 +46,15 @@ from ._exceptions import TypeCheckError, TypeHintWarning
 from ._memo import TypeCheckMemo
 from ._utils import evaluate_forwardref, get_stacklevel, get_type_name, qualified_name
 
+if sys.version_info >= (3, 15):
+    from typing import NoExtraItems
+else:
+    from typing_extensions import NoExtraItems
+
 if sys.version_info >= (3, 11):
     from typing import (
         NotRequired,
+        Required,
         TypeAlias,
         get_args,
         get_origin,
@@ -59,6 +65,7 @@ else:
     from typing_extensions import Any as SubclassableAny
     from typing_extensions import (
         NotRequired,
+        Required,
         TypeAlias,
         get_args,
         get_origin,
@@ -247,16 +254,24 @@ def check_typed_dict(
         raise TypeCheckError("is not a dict")
 
     declared_keys = frozenset(origin_type.__annotations__)
-    if hasattr(origin_type, "__required_keys__"):
-        required_keys = set(origin_type.__required_keys__)
-    else:  # py3.8 and lower
-        required_keys = set(declared_keys) if origin_type.__total__ else set()
-
+    required_keys = set(origin_type.__required_keys__)
     existing_keys = set(value)
-    extra_keys = existing_keys - declared_keys
-    if extra_keys:
-        keys_formatted = ", ".join(f'"{key}"' for key in sorted(extra_keys, key=repr))
-        raise TypeCheckError(f"has unexpected extra key(s): {keys_formatted}")
+    if extra_keys := existing_keys - declared_keys:
+        if (
+            argtype := getattr(origin_type, "__extra_items__", NoExtraItems)
+        ) is NoExtraItems:
+            keys_formatted = ", ".join(
+                f'"{key}"' for key in sorted(extra_keys, key=repr)
+            )
+            raise TypeCheckError(f"has unexpected extra key(s): {keys_formatted}")
+
+        for key in extra_keys:
+            argvalue = value[key]
+            try:
+                check_type_internal(argvalue, argtype, memo)
+            except TypeCheckError as exc:
+                exc.append_path_element(f"value of key {key!r}")
+                raise
 
     # Detect NotRequired fields which are hidden by get_type_hints()
     type_hints: dict[str, type] = {}
@@ -267,11 +282,13 @@ def check_typed_dict(
         if get_origin(annotation) is NotRequired:
             required_keys.discard(key)
             annotation = get_args(annotation)[0]
+        elif get_origin(annotation) is Required:
+            required_keys.add(key)
+            annotation = get_args(annotation)[0]
 
         type_hints[key] = annotation
 
-    missing_keys = required_keys - existing_keys
-    if missing_keys:
+    if missing_keys := required_keys - existing_keys:
         keys_formatted = ", ".join(f'"{key}"' for key in sorted(missing_keys, key=repr))
         raise TypeCheckError(f"is missing required key(s): {keys_formatted}")
 
@@ -471,6 +488,9 @@ def check_class(
     else:
         expected_class = args[0]
 
+    if type(expected_class) in type_alias_types:
+        expected_class = expected_class.__value__
+
     if expected_class is Any:
         return
     elif expected_class is typing_extensions.Self:
@@ -668,20 +688,26 @@ def check_signature_compatible(subject: type, protocol: type, attrname: str) -> 
     subject_type: typing.Literal["instance", "class", "static"] = "instance"
 
     # Check if the protocol-side method is a class method or static method
-    if attrname in protocol.__dict__:
-        descriptor = protocol.__dict__[attrname]
-        if isinstance(descriptor, staticmethod):
-            protocol_type = "static"
-        elif isinstance(descriptor, classmethod):
-            protocol_type = "class"
+    for klass in protocol.__mro__:
+        if attrname in klass.__dict__:
+            descriptor = klass.__dict__[attrname]
+            if isinstance(descriptor, staticmethod):
+                protocol_type = "static"
+            elif isinstance(descriptor, classmethod):
+                protocol_type = "class"
+
+            break
 
     # Check if the subject-side method is a class method or static method
-    if attrname in subject.__dict__:
-        descriptor = subject.__dict__[attrname]
-        if isinstance(descriptor, staticmethod):
-            subject_type = "static"
-        elif isinstance(descriptor, classmethod):
-            subject_type = "class"
+    for klass in subject.__mro__:
+        if attrname in klass.__dict__:
+            descriptor = klass.__dict__[attrname]
+            if isinstance(descriptor, staticmethod):
+                subject_type = "static"
+            elif isinstance(descriptor, classmethod):
+                subject_type = "class"
+
+            break
 
     if protocol_type == "instance" and subject_type != "instance":
         raise TypeCheckError(
@@ -927,6 +953,9 @@ def check_type_internal(
 
             return
 
+    if type(annotation) in type_alias_types:
+        annotation = annotation.__value__
+
     if annotation is Any or annotation is SubclassableAny or isinstance(value, Mock):
         return
 
@@ -973,7 +1002,9 @@ def check_type_internal(
 
 
 # Equality checks are applied to these
-origin_type_checkers = {
+origin_type_checkers: dict[
+    Any, Callable[[Any, Any, tuple[Any, ...], TypeCheckMemo], None]
+] = {
     bytes: check_byteslike,
     AbstractSet: check_set,
     BinaryIO: check_io,
@@ -1015,10 +1046,16 @@ origin_type_checkers = {
 if sys.version_info >= (3, 10):
     origin_type_checkers[types.UnionType] = check_uniontype
     origin_type_checkers[typing.TypeGuard] = check_typeguard
+
 if sys.version_info >= (3, 11):
     origin_type_checkers.update(
         {typing.LiteralString: check_literal_string, typing.Self: check_self}
     )
+
+if sys.version_info >= (3, 12):
+    type_alias_types = (typing_extensions.TypeAliasType, typing.TypeAliasType)
+else:
+    type_alias_types = (typing_extensions.TypeAliasType,)
 
 
 def builtin_checker_lookup(

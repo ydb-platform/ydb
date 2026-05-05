@@ -1,4 +1,6 @@
 #include "kqp_expression.h"
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 using namespace NYql::NNodes;
@@ -137,7 +139,7 @@ namespace NKikimr {
 namespace NKqp {
 
 TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
-    Y_ENSURE(ctx, "Creating an expression will null context");
+    Y_ENSURE(ctx, "Creating an expression with null context");
 
     if (node->IsLambda()) {
         Node = node;
@@ -180,7 +182,7 @@ bool TExpression::IsColumnAccess() const {
     return body->IsCallable("Member");
 }
 
- bool TExpression::IsSingleCallable(THashSet<TString> allowedCallables) const {
+ bool TExpression::IsSingleCallable(const THashSet<TString>& allowedCallables) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
      auto body = Node->ChildPtr(1);
     if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
@@ -196,7 +198,15 @@ bool TExpression::IsColumnAccess() const {
     return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
 
-bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
+bool TExpression::MaybeEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(false);
+}
+
+bool TExpression::MaybeExprEquiJoinCondition() const {
+    return MaybeEquiJoinConditionInternal(true);
+}
+
+bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const {
     auto body = Node->ChildPtr(1);
 
     if (body->IsCallable("FromPg")) {
@@ -303,7 +313,7 @@ TString TExpression::ToString() const {
     return PrintRBOExpression(Node, *Ctx);
 }
 
-TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
+TEquiJoinCondition::TEquiJoinCondition(const TExpression& expr) : Expr(expr)
 {
     auto body = Expr.Node->ChildPtr(1);
 
@@ -314,16 +324,12 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     TExprNode::TPtr leftArg;
     TExprNode::TPtr rightArg;
     if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
-        EquiJoin = true;
-
         TVector<TInfoUnit> bodyIUs;
         GetAllMembers(body, bodyIUs, *Expr.PlanProps, false, true);
 
         GetAllMembers(leftArg, LeftIUs, *Expr.PlanProps, false, true);
         GetAllMembers(rightArg, RightIUs, *Expr.PlanProps, false, true);
     } else {
-        EquiJoin = false;
-
         Y_ENSURE(body->ChildrenSize()==2, "Non-binary callable in join condition");
 
         GetAllMembers(body->ChildPtr(0), LeftIUs, *Expr.PlanProps, false, true);
@@ -335,19 +341,19 @@ TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
     }
 }
 
-TInfoUnit TJoinCondition::GetLeftIU() const {
+TInfoUnit TEquiJoinCondition::GetLeftIU() const {
     Y_ENSURE(LeftIUs.size()==1);
 
     return LeftIUs[0];
 }
 
-TInfoUnit TJoinCondition::GetRightIU() const {
+TInfoUnit TEquiJoinCondition::GetRightIU() const {
     Y_ENSURE(RightIUs.size()==1);
 
     return RightIUs[0];
 }
 
-bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
+bool TEquiJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
 
     if (!IncludesExpressions) {
@@ -400,7 +406,7 @@ bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
     return expressionExtracted;
 }
 
-TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
+TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
 
     // clang-format off
@@ -416,7 +422,7 @@ TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext
     return TExpression(lambda, ctx, props);
 }
 
-TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx) {
+TExpression MakeConstant(const TString& type, const TString& value, TPositionHandle pos, TExprContext* ctx) {
      auto constExpr = ctx->NewCallable(pos, type, {ctx->NewAtom(pos, value)});
      return TExpression(constExpr, ctx);
 }
@@ -431,10 +437,10 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
-    for (auto & expr : vec) {
+    for (auto& expr : vec) {
         if (expr.Ctx) {
             ctx = expr.Ctx;
         }
@@ -447,10 +453,11 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(props);
     auto pos = vec[0].Node->Pos();
 
-    if (vec.size()==1) {
+    if (vec.size() == 1) {
         return TExpression(vec[0].Node, ctx, props);
     }
 
+    // clang-format off
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
     TVector<TExprNode::TPtr> conjuncts;
 
@@ -471,14 +478,28 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
         .Args({lambda_arg})
         .Body(conjunction)
         .Done().Ptr();
+    // clang-format on
 
     return TExpression(lambda, ctx, props);
 }
 
-TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right) {
+TExpression MakeNegation(const TExpression& expr) {
+    Y_ENSURE(expr.Ctx);
+    Y_ENSURE(expr.PlanProps);
+
+    // clang-format off
+    auto negation = Build<TCoNot>(*expr.Ctx, expr.Node->Pos())
+        .Value(expr.GetExpressionBody())
+        .Done().Ptr();
+    // clang-format on
+
+    return TExpression(negation, expr.Ctx, expr.PlanProps);
+}
+
+TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {
     // Fetch context and plan properties from one of the arguments
-    TExprContext* ctx;
-    TPlanProps* props;
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
     if (left.Ctx) {
         ctx = left.Ctx;
@@ -501,7 +522,6 @@ TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const
     auto lambda = ctx->NewCallable(pos, callable, {left.GetExpressionBody(), right.GetExpressionBody()});
     return TExpression(lambda, ctx, props);
 }
-
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {

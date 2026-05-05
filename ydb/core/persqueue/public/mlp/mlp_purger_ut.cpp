@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
         });
 
         AssertPurgeError(runtime, Ydb::StatusIds::SCHEME_ERROR,
-            "You do not have access or the '/Root/topic_not_exists' does not exist");
+            "You do not have access permissions or the '/Root/topic_not_exists' does not exist");
     }
 
     Y_UNIT_TEST(TopicWithoutConsumer) {
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(0),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(0),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });

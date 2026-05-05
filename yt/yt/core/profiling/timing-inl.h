@@ -52,7 +52,7 @@ TTimerGuard<TTimer>& TTimerGuard<TTimer>::operator=(TTimerGuard&& other) noexcep
 {
     TryStopTimer();
 
-    Timer_ = std::exchange(other.Timer_);
+    Timer_ = std::exchange(other.Timer_, nullptr);
     return *this;
 }
 
@@ -68,6 +68,35 @@ void TTimerGuard<TTimer>::TryStopTimer() noexcept
     if (Timer_) {
         Timer_->Stop();
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TTimer>
+template <class... TArgs>
+TConcurrentTimer<TTimer>::TConcurrentTimer(TArgs&&... args)
+    : Timer_(std::forward<TArgs>(args)...)
+{ }
+
+template <class TTimer>
+bool TConcurrentTimer<TTimer>::Start()
+{
+    auto guard = Guard(Lock_);
+    return Timer_.Start();
+}
+
+template <class TTimer>
+bool TConcurrentTimer<TTimer>::Stop()
+{
+    auto guard = Guard(Lock_);
+    return Timer_.Stop();
+}
+
+template <class TTimer>
+TDuration TConcurrentTimer<TTimer>::GetElapsedTime() const
+{
+    auto guard = Guard(Lock_);
+    return Timer_.GetElapsedTime();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

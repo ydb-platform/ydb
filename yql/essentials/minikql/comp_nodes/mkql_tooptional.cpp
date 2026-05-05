@@ -74,7 +74,7 @@ public:
             const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto status = CallBoxedValueNext(iter, ctx, block, result);
             UnRefBoxed(iter, ctx, block);
 
             BranchInst::Create(good, none, status, block);
@@ -180,7 +180,7 @@ public:
             const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
-            const auto first = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto first = CallBoxedValueNext(iter, ctx, block, result);
             BranchInst::Create(loop, nope, first, block);
 
             block = nope;
@@ -190,7 +190,7 @@ public:
 
             block = loop;
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto status = CallBoxedValueNext(iter, ctx, block, result);
             BranchInst::Create(loop, good, status, block);
 
             block = good;

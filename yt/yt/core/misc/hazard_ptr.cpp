@@ -89,7 +89,8 @@ public:
 
 struct TRetiredPtr
 {
-    TPackedPtr PackedPtr;
+    void* ProtectedPtr;
+    void* ReclaimPtr;
     THazardPtrReclaimer Reclaimer;
 };
 
@@ -130,7 +131,10 @@ public:
 
     void InitThreadState();
 
-    void RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer);
+    void RetireHazardPointer(
+        void* protectedPtr,
+        void* reclaimPtr,
+        THazardPtrReclaimer reclaimer);
 
     void ReclaimHazardPointers(bool flush);
 
@@ -186,7 +190,7 @@ void THazardPointerManager::Shutdown()
 
     int count = 0;
     RetireQueue_.DequeueAll([&] (TRetiredPtr& item) {
-        item.Reclaimer(item.PackedPtr);
+        item.Reclaimer(item.ReclaimPtr);
         ++count;
     });
 
@@ -197,20 +201,23 @@ void THazardPointerManager::Shutdown()
     }
 }
 
-void THazardPointerManager::RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer)
+void THazardPointerManager::RetireHazardPointer(
+    void* protectedPtr,
+    void* reclaimPtr,
+    THazardPtrReclaimer reclaimer)
 {
     auto* threadState = HazardThreadState();
-    if (Y_UNLIKELY(!threadState)) {
+    if (!threadState) [[unlikely]] {
         if (HazardThreadStateDestroyed()) {
             // Looks like a global shutdown.
-            reclaimer(packedPtr);
+            reclaimer(reclaimPtr);
             return;
         }
         InitThreadState();
         threadState = HazardThreadState();
     }
 
-    threadState->RetireList.push({packedPtr, reclaimer});
+    threadState->RetireList.push({protectedPtr, reclaimPtr, reclaimer});
 
     if (threadState->Reclaiming) {
         return;
@@ -325,12 +332,11 @@ bool THazardPointerManager::DoReclaimHazardPointers(THazardThreadState* threadSt
         auto item = std::move(retireList.front());
         retireList.pop();
 
-        void* ptr = TTaggedPtr<void>::Unpack(item.PackedPtr).Ptr;
-        if (std::binary_search(protectedPointers.begin(), protectedPointers.end(), ptr)) {
+        if (std::binary_search(protectedPointers.begin(), protectedPointers.end(), item.ProtectedPtr)) {
             retireList.push(item);
             ++pushedCount;
         } else {
-            item.Reclaimer(item.PackedPtr);
+            item.Reclaimer(item.ReclaimPtr);
         }
     }
 
@@ -408,9 +414,15 @@ void InitHazardThreadState()
 
 } // namespace NDetail
 
-void RetireHazardPointer(TPackedPtr packedPtr, THazardPtrReclaimer reclaimer)
+void RetireHazardPointer(
+    void* protectedPtr,
+    void* reclaimPtr,
+    THazardPtrReclaimer reclaimer)
 {
-    NYT::NDetail::THazardPointerManager::Get()->RetireHazardPointer(packedPtr, reclaimer);
+    NYT::NDetail::THazardPointerManager::Get()->RetireHazardPointer(
+        protectedPtr,
+        reclaimPtr,
+        reclaimer);
 }
 
 void ReclaimHazardPointers(bool flush)

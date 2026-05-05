@@ -17,12 +17,14 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/persqueue/tests
     ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
     ydb/services/ydb
 )
 
 SRCS(
     ../sqs_topic_ut.cpp
+    ../sqs_topic_cdc_ut.cpp
     inside_ydb_ut.cpp
 )
 

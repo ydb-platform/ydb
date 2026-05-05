@@ -11,12 +11,12 @@ namespace logs
 
 OPENTELEMETRY_EXPORT bool LoggerConfig::operator==(const LoggerConfig &other) const noexcept
 {
-  return disabled_ == other.disabled_;
+  return enabled_ == other.enabled_;
 }
 
 OPENTELEMETRY_EXPORT bool LoggerConfig::IsEnabled() const noexcept
 {
-  return !disabled_;
+  return enabled_;
 }
 
 OPENTELEMETRY_EXPORT LoggerConfig LoggerConfig::Enabled()
@@ -26,7 +26,7 @@ OPENTELEMETRY_EXPORT LoggerConfig LoggerConfig::Enabled()
 
 OPENTELEMETRY_EXPORT LoggerConfig LoggerConfig::Disabled()
 {
-  static const auto kDisabledConfig = LoggerConfig(true);
+  static const auto kDisabledConfig = LoggerConfig(false);
   return kDisabledConfig;
 }
 

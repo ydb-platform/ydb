@@ -31,7 +31,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
@@ -43,11 +42,7 @@ public:
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", atTop);
 
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestBlockFlowWrapper::DoCalculateImpl>());
-        const auto doType = FunctionType::get(statusType, {self->getType(), ptrValueType, ctx.Ctx->getType(), ptrValueType, ptrValueType, ptrValueType}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doType), "function", atTop);
-
-        const auto result = CallInst::Create(doType, doFuncPtr, {self, statePtr, ctx.Ctx, values0Ptr, values1Ptr, values2Ptr}, "result", block);
+        const auto result = EmitFunctionCall<&TTestBlockFlowWrapper::DoCalculateImpl>(statusType, {self, statePtr, ctx.Ctx, values0Ptr, values1Ptr, values2Ptr}, ctx, block);
 
         ICodegeneratorInlineWideNode::TGettersList getters{
             [values0Ptr, valueType](const TCodegenContext&, BasicBlock*& block) { return new LoadInst(valueType, values0Ptr, "value", block); },

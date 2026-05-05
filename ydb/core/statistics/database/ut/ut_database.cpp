@@ -101,6 +101,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         auto test = [&] () {
             auto driverConfig = NYdb::TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user@builtin");
             auto driver = NYdb::TDriver(driverConfig);
             auto db = NYdb::NTable::TTableClient(driver);

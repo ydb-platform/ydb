@@ -580,7 +580,9 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
         _metakeys_hash = self._metakeys_hash
         _broadcast_change = self._broadcast_change
 
-        class Handler(FileSystemEventHandler):
+        class Handler(
+            FileSystemEventHandler
+        ):  # pragma: no cover # skipped in test_database.py for now
             def on_created(_self, event: FileCreatedEvent | DirCreatedEvent) -> None:
                 # we only registered for the file creation event
                 assert not isinstance(event, DirCreatedEvent)
@@ -1025,7 +1027,7 @@ class GitHubArtifactDatabase(ExampleDatabase):
             else:
                 warning_message = (
                     "Could not get the latest artifact from GitHub. "
-                    "This could be because because the repository "
+                    "This could be because the repository "
                     "or artifact does not exist. "
                 )
             # see https://github.com/python/cpython/issues/128734
@@ -1103,7 +1105,7 @@ class GitHubArtifactDatabase(ExampleDatabase):
         kp = self._key_path(key)
 
         with ZipFile(self._artifact) as zf:
-            # Get the all files in the the kp from the cache
+            # Get all the files in the kp from the cache
             filenames = self._access_cache.get(kp, ())
             for filename in filenames:
                 with zf.open(filename.as_posix()) as f:
@@ -1274,7 +1276,7 @@ def _choices_from_bytes(buffer: bytes, /) -> tuple[ChoiceT, ...]:
             parts.append(bool(size))
             continue
         if size == 0b11111:
-            (offset, size) = _unpack_uleb128(buffer[idx:])
+            offset, size = _unpack_uleb128(buffer[idx:])
             idx += offset
         chunk = buffer[idx : idx + size]
         idx += size

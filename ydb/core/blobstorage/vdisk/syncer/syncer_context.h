@@ -59,4 +59,6 @@ namespace NKikimr {
         }
     };
 
+    using TSyncerContextPtr = TIntrusivePtr<TSyncerContext>;
+
 } // NKikimr

@@ -29,7 +29,9 @@ try
 }
 #if __EXCEPTIONS
 catch (const std::bad_alloc &)
-{}
+{
+  return;
+}
 #endif
 }  // namespace detail
 }  // namespace plugin

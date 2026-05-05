@@ -13,7 +13,7 @@
 #include <util/system/compiler.h>
 
 #include <cmath>
-#include <ctype.h>
+#include <cctype>
 
 namespace NYql::NDom {
 
@@ -101,10 +101,10 @@ public:
     bool OnString(const TStringBuf& value) override {
         if constexpr (DecodeUtf8) {
             if (const auto from = AsciiSize(value); from < value.size()) {
-                return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder_));
+                return PushToCurrentCollection(SetUtf8Mark(MakeString(DecodeUtf(value, from), ValueBuilder_)));
             }
         }
-        return PushToCurrentCollection(MakeString(value, ValueBuilder_));
+        return PushToCurrentCollection(SetUtf8Mark(MakeString(value, ValueBuilder_)));
     }
 
     bool OnOpenMap() override {
@@ -247,7 +247,7 @@ bool IsEntity(const TUnboxedValuePod value) {
 }
 
 template <bool SkipMapEntity, bool EncodeUtf8>
-void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer);
+void WriteValue(TUnboxedValuePod value, TJsonWriter& writer);
 
 template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteArray(const TUnboxedValuePod value, TJsonWriter& writer) {
@@ -272,7 +272,8 @@ template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteMap(const TUnboxedValuePod value, TJsonWriter& writer) {
     writer.OpenMap();
     if (value.IsBoxed()) {
-        TUnboxedValue key, payload;
+        TUnboxedValue key;
+        TUnboxedValue payload;
         for (const auto it = value.GetDictIterator(); it.NextPair(key, payload);) {
             if constexpr (SkipMapEntity) {
                 if (IsEntity(payload)) {
@@ -299,7 +300,8 @@ template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
     switch (GetNodeType(value)) {
         case ENodeType::String: {
-            const TStringBuf str = value.AsStringRef();
+            const auto cleanValue = ClearUtf8Mark(value);
+            const TStringBuf str = cleanValue.AsStringRef();
             if constexpr (EncodeUtf8) {
                 if (const auto from = AsciiSize(str); from < str.size()) {
                     return writer.Write(EncodeUtf(str, from));
@@ -339,9 +341,9 @@ bool IsValidJson(const TStringBuf json) {
     return ReadJson(&input, &callbacks);
 }
 
-TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool dencodeUtf8) {
+TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool decodeUtf8) {
     TMemoryInput input(json.data(), json.size());
-    if (dencodeUtf8) {
+    if (decodeUtf8) {
         TDomCallbacks<true> callbacks(valueBuilder, /* throwException */ true);
         if (!ReadJson(&input, &callbacks)) {
             UdfTerminate("Internal error: parser error occurred but corresponding callback was not called");

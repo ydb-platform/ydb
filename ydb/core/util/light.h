@@ -1,8 +1,53 @@
+#pragma once
+
+#include <optional>
+
 #include <ydb/core/mon/mon.h>
 
 #include "hp_timer_helpers.h"
 
 namespace NKikimr {
+
+class TLightCounterConfig {
+public:
+    std::optional<TString> StateName;
+    std::optional<TString> CountName;
+    std::optional<TString> RedMsName;
+    std::optional<TString> GreenMsName;
+
+    static TLightCounterConfig Create() {
+        return {};
+    }
+
+    TLightCounterConfig& WithState(const TString& name) {
+        StateName = name;
+        return *this;
+    }
+
+    TLightCounterConfig& WithCount(const TString& name) {
+        CountName = name;
+        return *this;
+    }
+
+    TLightCounterConfig& WithRedMs(const TString& name) {
+        RedMsName = name;
+        return *this;
+    }
+
+    TLightCounterConfig& WithGreenMs(const TString& name) {
+        GreenMsName = name;
+        return *this;
+    }
+
+    static TLightCounterConfig WithDefaultLightSet(const TString& baseName) {
+        TLightCounterConfig config;
+        config.StateName = baseName + "_state";
+        config.CountName = baseName + "_count";
+        config.RedMsName = baseName + "_redMs";
+        config.GreenMsName = baseName + "_greenMs";
+        return config;
+    }
+};
 
 class TLightBase {
 protected:
@@ -18,21 +63,19 @@ private:
     NHPTimer::STime LastNow = 0;
     ui64 UpdateThreshold = 0;
 public:
-    void Initialize(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name) {
-        Name = name;
-        State = counters->GetCounter(name + "_state");
-        Count = counters->GetCounter(name + "_count", true);
-        RedMs = counters->GetCounter(name + "_redMs", true);
-        GreenMs = counters->GetCounter(name + "_greenMs", true);
-        UpdateThreshold = HPCyclesMs(100);
-        AdvancedTill = Now();
-    }
-
-    void Initialize(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& countName,
-            const TString& redMsName,const TString& greenMsName) {
-        Count = counters->GetCounter(countName, true);
-        RedMs = counters->GetCounter(redMsName, true);
-        GreenMs = counters->GetCounter(greenMsName, true);
+    void Initialize(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TLightCounterConfig& config) {
+        if (config.StateName) {
+            State = counters->GetCounter(*config.StateName);
+        }
+        if (config.CountName) {
+            Count = counters->GetCounter(*config.CountName, true);
+        }
+        if (config.RedMsName) {
+            RedMs = counters->GetCounter(*config.RedMsName, true);
+        }
+        if (config.GreenMsName) {
+            GreenMs = counters->GetCounter(*config.GreenMsName, true);
+        }
         UpdateThreshold = HPCyclesMs(100);
         AdvancedTill = Now();
     }
@@ -54,7 +97,9 @@ protected:
             if (State) {
                 *State = true;
             }
-            (*Count)++;
+            if (Count) {
+                (*Count)++;
+            }
             return;
         }
         if (!state && prevState) { // Switched to OFF state
@@ -70,10 +115,10 @@ protected:
             return;
         }
         Elapsed(state, now - AdvancedTill);
-        if (RedCycles > UpdateThreshold) {
+        if (RedMs && RedCycles > UpdateThreshold) {
             *RedMs += CutMs(RedCycles);
         }
-        if (GreenCycles > UpdateThreshold) {
+        if (GreenMs && GreenCycles > UpdateThreshold) {
             *GreenMs += CutMs(GreenCycles);
         }
         AdvancedTill = now;

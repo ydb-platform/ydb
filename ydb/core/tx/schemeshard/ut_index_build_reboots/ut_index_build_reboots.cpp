@@ -200,8 +200,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseUniq, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseAsync, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
     void DoBaseCaseWithDataColumns(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
@@ -289,6 +293,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumnsUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumnsAsync, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 
     void DoDropIndex(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
@@ -408,7 +416,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropIndexWithDataColumns) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexWithDataColumns, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoDropIndexWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
@@ -615,7 +623,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DoIndexPartitioning(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IndexPartitioningUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IndexPartitioningUniq, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoIndexPartitioning(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
@@ -762,7 +770,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DoUniqueIndexValidationFails(t, false);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(UniqueIndexValidationFailsBetweenShards) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(UniqueIndexValidationFailsBetweenShards, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoUniqueIndexValidationFails(t, true);
     }
 }

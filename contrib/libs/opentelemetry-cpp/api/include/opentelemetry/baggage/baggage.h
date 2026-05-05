@@ -121,7 +121,7 @@ public:
     }
 
     nostd::shared_ptr<Baggage> baggage(new Baggage(cnt));
-    bool kv_valid;
+    bool kv_valid{false};
     nostd::string_view key, value;
 
     while (kv_str_tokenizer.next(kv_valid, key, value) && baggage->kv_properties_->Size() < cnt)
@@ -274,8 +274,13 @@ private:
       {
         ret.push_back(' ');
       }
-      else if (std::isalnum(str[i]) || str[i] == '-' || str[i] == '_' || str[i] == '.' ||
-               str[i] == '~')
+      // See https://www.w3.org/TR/baggage/#definition
+      else if ((str[i] >= '!')      /* 21 */
+               && (str[i] <= '~')   /* 7E */
+               && (str[i] != '"')   /* 22 */
+               && (str[i] != ',')   /* 2C */
+               && (str[i] != ';')   /* 3B */
+               && (str[i] != '\\')) /* 5C */
       {
         ret.push_back(str[i]);
       }

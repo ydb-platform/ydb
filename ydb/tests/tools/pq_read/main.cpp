@@ -5,6 +5,7 @@
 
 #include <util/stream/output.h>
 #include <util/system/env.h>
+#include <util/system/mutex.h>
 
 #include <atomic>
 #include <thread>
@@ -63,25 +64,31 @@ int main(int argc, const char* argv[]) {
         .ConsumerName(opts.ConsumerName)
         .AppendTopics(std::string{opts.TopicPath});
 
-    std::shared_ptr<NYdb::NPersQueue::IReadSession> readSession;
-    size_t messagesReceived = 0;
-    THashMap<ui64, ui64> maxReceivedOffsets; // partition id -> max received offset
-    THashMap<ui64, ui64> committedOffsets; // partition id -> confirmed offset
-    std::atomic<bool> closing = false;
-    std::atomic<TInstant::TValue> lastDataReceiveTime = TInstant::Now().GetValue();
+    struct TState {
+        TMutex Lock;
+        std::shared_ptr<NYdb::NPersQueue::IReadSession> ReadSession;
+        size_t MessagesReceived = 0;
+        THashMap<ui64, ui64> MaxReceivedOffsets; // partition id -> max received offset
+        THashMap<ui64, ui64> CommittedOffsets; // partition id -> confirmed offset
+        std::atomic<bool> Closing = false;
+        std::atomic<TInstant::TValue> LastDataReceiveTime;
+    };
+    auto state = std::make_shared<TState>();
+    state->LastDataReceiveTime = TInstant::Now().GetValue();
 
     settings
         .EventHandlers_.SimpleDataHandlers(
-            [&messagesReceived, &maxReceivedOffsets, &closing, &lastDataReceiveTime](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable
+            [state](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable
             {
-                if (closing) {
+                if (state->Closing) {
                     return;
                 }
 
-                lastDataReceiveTime = TInstant::Now().GetValue();
-                ui64& maxReceivedOffset = maxReceivedOffsets[event.GetPartitionStream()->GetPartitionId()];
+                state->LastDataReceiveTime = TInstant::Now().GetValue();
+                TGuard lock(state->Lock); // required for map access and Cout serializing
+                ui64& maxReceivedOffset = state->MaxReceivedOffsets[event.GetPartitionStream()->GetPartitionId()];
                 for (const auto& msg : event.GetMessages()) {
-                    ++messagesReceived;
+                    ++state->MessagesReceived;
                     maxReceivedOffset = Max(maxReceivedOffset, msg.GetOffset());
                     Cout << msg.GetData() << Endl;
                 }
@@ -90,24 +97,29 @@ int main(int argc, const char* argv[]) {
 
     auto commitAckHandler = settings.EventHandlers_.CommitAcknowledgementHandler_;
     settings.EventHandlers_.CommitAcknowledgementHandler(
-        [&readSession, &messagesReceived, &maxReceivedOffsets, &committedOffsets, maxMessagesCount = opts.MessagesCount, &commitAckHandler, &closing, &commitAfterProcessing = opts.CommitAfterProcessing](NYdb::NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent& event) mutable
+        [state, maxMessagesCount = opts.MessagesCount, commitAckHandler, commitAfterProcessing = opts.CommitAfterProcessing](NYdb::NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent& event) mutable
         {
-            committedOffsets[event.GetPartitionStream()->GetPartitionId()] = event.GetCommittedOffset();
+            size_t messagesReceived;
+            {
+                TGuard lock(state->Lock);
+                state->CommittedOffsets[event.GetPartitionStream()->GetPartitionId()] = event.GetCommittedOffset();
+                messagesReceived = state->MessagesReceived;
+            }
             if (messagesReceived >= maxMessagesCount) {
                 bool allCommitted = true;
                 if (commitAfterProcessing) {
-                    for (const auto [partitionId, maxReceivedOffset] : maxReceivedOffsets) {
-                        if (maxReceivedOffset >= committedOffsets[partitionId]) {
+                    TGuard lock(state->Lock);
+                    for (const auto [partitionId, maxReceivedOffset] : state->MaxReceivedOffsets) {
+                        if (maxReceivedOffset >= state->CommittedOffsets[partitionId]) {
                             allCommitted = false;
                             break;
                         }
                     }
                 }
                 bool prev = false;
-                if (allCommitted && !closing && closing.compare_exchange_strong(prev, true)) {
-                    closing = true;
-                    Cerr << "Closing session. Got " << messagesReceived << " messages" << Endl;
-                    readSession->Close(TDuration::Seconds(5));
+                if (allCommitted && state->Closing.compare_exchange_strong(prev, true)) {
+                    Cerr << "Closing session. Got " << state->MessagesReceived << " messages" << Endl;
+                    state->ReadSession->Close(TDuration::Seconds(5));
                     Cerr << "Session closed" << Endl;
                 }
             }
@@ -116,25 +128,25 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-    readSession = persqueueClient.CreateReadSession(settings);
+    state->ReadSession = persqueueClient.CreateReadSession(settings);
 
     // Timeout tracking thread
     NThreading::TPromise<void> barrier = NThreading::NewPromise<void>();
     std::thread timeoutTrackingThread(
-        [barrierFuture = barrier.GetFuture(), &closing, &lastDataReceiveTime, readSession, timeout = opts.Timeout]() mutable {
+        [barrierFuture = barrier.GetFuture(), state, timeout = opts.Timeout]() mutable {
             if (timeout == TDuration::Zero()) {
                 return;
             }
 
             bool futureIsSignalled = false;
-            while (!closing && !futureIsSignalled) {
-                const TInstant lastDataTime = TInstant::FromValue(lastDataReceiveTime);
+            while (!state->Closing && !futureIsSignalled) {
+                const TInstant lastDataTime = TInstant::FromValue(state->LastDataReceiveTime);
                 const TInstant now = TInstant::Now();
                 const TInstant deadline = lastDataTime + timeout;
                 bool prev = false;
-                if (now > deadline && closing.compare_exchange_strong(prev, true)) {
+                if (now > deadline && state->Closing.compare_exchange_strong(prev, true)) {
                     Cerr << "Closing session. No data during " << timeout << Endl;
-                    readSession->Close(TDuration::Seconds(5));
+                    state->ReadSession->Close(TDuration::Seconds(5));
                     Cerr << "Session closed" << Endl;
                     break;
                 }
@@ -142,7 +154,7 @@ int main(int argc, const char* argv[]) {
             }
     });
 
-    auto maybeEvent = readSession->GetEvent(true);
+    auto maybeEvent = state->ReadSession->GetEvent(true);
 
     barrier.SetValue();
 
@@ -164,7 +176,7 @@ int main(int argc, const char* argv[]) {
 
     const NYdb::NPersQueue::TSessionClosedEvent& closedEvent = std::get<NYdb::NPersQueue::TSessionClosedEvent>(*maybeEvent);
     Cerr << "Session closed event: " << closedEvent.DebugString() << Endl;
-    if (closedEvent.IsSuccess() || (closing && closedEvent.GetStatus() == NYdb::EStatus::ABORTED)) {
+    if (closedEvent.IsSuccess() || (state->Closing && closedEvent.GetStatus() == NYdb::EStatus::ABORTED)) {
         return 0;
     } else {
         return 3;

@@ -273,6 +273,7 @@ public:
     bool CheckGroupExists(const TString& group);
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
+    const TPasswordComplexity& GetPasswordCheckParameters() const;
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
     void UpdateCacheSettings(const TCacheSettings& settings);
 

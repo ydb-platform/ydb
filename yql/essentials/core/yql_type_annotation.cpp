@@ -6,6 +6,7 @@
 
 #include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
@@ -15,6 +16,13 @@ namespace NYql {
 using namespace NKikimr;
 
 const TString ModuleResolverComponent = "ModuleResolver";
+
+TTypeAnnotationContext::TTypeAnnotationContext()
+    : RuntimeSettings(MakeRuntimeSettingsMutable())
+{
+}
+
+TTypeAnnotationContext::~TTypeAnnotationContext() = default;
 
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
@@ -519,14 +527,14 @@ bool TModuleResolver::IsSExpr(bool isYql, bool isYqls, const TString& body) cons
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
     auto query = body;
     if (QContext_.CanRead()) {
-        auto item = QContext_.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
+        auto item = QContext_.GetReader()->Get({.Component=ModuleResolverComponent, .Label=fullName}).GetValueSync();
         if (!item) {
             throw yexception() << "Missing replay data";
         }
 
         query = item->Value;
     } else if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
+        QContext_.GetWriter()->Put({.Component=ModuleResolverComponent, .Label=fullName}, query).GetValueSync();
     }
 
     const auto addSubIssues = [](TIssue&& issue, const TIssues& issues) {

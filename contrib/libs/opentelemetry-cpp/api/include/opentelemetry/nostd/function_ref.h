@@ -37,7 +37,9 @@ class function_ref<R(Args...)>
   void BindTo(F &f) noexcept
   {
     callable_ = static_cast<void *>(std::addressof(f));
-    invoker_  = [](void *callable, Args... args) -> R {
+    // Args... matches the referenced signature and is forwarded as such.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param)
+    invoker_ = [](void *callable, Args... args) -> R {
       return (*static_cast<FunctionPointer<F>>(callable))(std::forward<Args>(args)...);
     };
   }
@@ -78,14 +80,21 @@ public:
           int>::type = 0>
   function_ref(F &&f)
   {
+    // Binding by named variable here intentionally keeps function_ref non-owning.
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     BindTo(f);  // not forward
   }
 
   function_ref(std::nullptr_t) {}
 
-  function_ref(const function_ref &) noexcept = default;
-  function_ref(function_ref &&) noexcept      = default;
+  ~function_ref()                                        = default;
+  function_ref(const function_ref &) noexcept            = default;
+  function_ref(function_ref &&) noexcept                 = default;
+  function_ref &operator=(const function_ref &) noexcept = default;
+  function_ref &operator=(function_ref &&) noexcept      = default;
 
+  // Args... is part of the function signature and forwarded to invoker_.
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
   R operator()(Args... args) const { return invoker_(callable_, std::forward<Args>(args)...); }
 
   explicit operator bool() const { return invoker_; }

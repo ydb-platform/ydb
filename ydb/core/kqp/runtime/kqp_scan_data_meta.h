@@ -32,7 +32,7 @@ public:
         return Columns;
     }
 
-    TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta);
+    TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TTypeEnvironment* typeEnv = nullptr);
 };
 
 class TScanDataMetaFull: public TScanDataColumnsMeta, public TScanDataMeta {

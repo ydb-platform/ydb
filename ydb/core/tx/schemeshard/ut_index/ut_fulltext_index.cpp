@@ -2,7 +2,7 @@
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_index_utils.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 
@@ -19,7 +19,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -85,7 +84,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -128,7 +126,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text1"
                 analyzers: {
@@ -179,7 +176,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -222,7 +218,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text_wrong"
                 analyzers: {
@@ -265,7 +260,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
         )";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
@@ -301,7 +295,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {

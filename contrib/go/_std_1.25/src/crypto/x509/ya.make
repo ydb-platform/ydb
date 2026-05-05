@@ -47,5 +47,20 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         verify.go
         x509.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        cert_pool.go
+        oid.go
+        parser.go
+        pem_decrypt.go
+        pkcs1.go
+        pkcs8.go
+        root.go
+        root_unix.go
+        root_wasm.go
+        sec1.go
+        verify.go
+        x509.go
+    )
 ENDIF()
 END()

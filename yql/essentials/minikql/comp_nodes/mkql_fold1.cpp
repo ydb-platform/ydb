@@ -135,8 +135,9 @@ public:
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
             const auto step = PHINode::Create(valueType, 2, "step", stop);
 
-            const auto item1Ptr = codegenItem->CreateRefValue(ctx, block);
-            const auto status1 = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, item1Ptr);
+            const auto [status1, item1Ptr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueNext(iter, ctx, block, itemPtr);
+            });
 
             step->addIncoming(ConstantInt::get(valueType, 0), block);
             BranchInst::Create(next, stop, status1, block);
@@ -150,8 +151,9 @@ public:
             BranchInst::Create(loop, block);
             block = loop;
 
-            const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, itemPtr);
+            const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueNext(iter, ctx, block, itemPtr);
+            });
 
             BranchInst::Create(good, done, status, block);
             block = good;

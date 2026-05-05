@@ -16,6 +16,8 @@ from ._exceptions import TypeCheckError as TypeCheckError
 from ._exceptions import TypeCheckWarning as TypeCheckWarning
 from ._exceptions import TypeHintWarning as TypeHintWarning
 from ._functions import TypeCheckFailCallback as TypeCheckFailCallback
+from ._functions import check_argument_types as check_argument_types
+from ._functions import check_return_type as check_return_type
 from ._functions import check_type as check_type
 from ._functions import warn_on_error as warn_on_error
 from ._importhook import ImportHookManager as ImportHookManager

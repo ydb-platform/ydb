@@ -8,9 +8,9 @@
 #include <ydb/library/actors/retro_tracing/span_buffer.h>
 #include <ydb/library/actors/retro_tracing/universal_span.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include "test_spans.h"
-#include "fake_wilson_uploader.h"
 
 #include <thread>
 
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
 
         std::vector<std::thread> threads;
         
-        ui32 readers = 2;
+        ui32 readers = 1;
         ui32 writers = 10;
 
         TInstant start = TInstant::Now();
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(RetroCollector) {
             actorSystem.RegisterService(MakeRetroCollectorId(), actorId);
         }
 
-        TFakeWilsonUploader* wilson = dynamic_cast<TFakeWilsonUploader*>(CreateFakeWilsonUploader());
+        NWilson::TFakeWilsonUploader* wilson = new NWilson::TFakeWilsonUploader;
         { // register fake wilson collector
             NActors::TActorId actorId = actorSystem.Register(wilson);
             actorSystem.RegisterService(NWilson::MakeWilsonUploaderId(), actorId);

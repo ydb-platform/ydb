@@ -214,6 +214,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
                         partsPtr, Cookie, true, GetWritePriority(), false);
+            if (AppData()->FeatureFlags.GetEnableBlobIdInSectorChecksum()) {
+                ev->BlobId = Item->LogoBlobId;
+            }
             ev->Orbit = std::move(Item->Orbit);
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release(), 0, 0, Span.GetTraceId());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);

@@ -1,6 +1,5 @@
 #include "behaviour_registrator_actor.h"
 
-#include "accessor_snapshot_simple.h"
 #include <ydb/services/metadata/initializer/accessor_init.h>
 
 namespace NKikimr::NMetadata::NProvider {
@@ -32,6 +31,7 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionSuccess::TPtr& ev) {
     Y_ABORT_UNLESS(it != RegistrationData->InRegistration.end());
     it->second->GetOperationsManager()->SetActualSchema(ev->Get()->GetSchema());
     RegistrationData->InitializationFinished(initId);
+    PassAway();
 }
 
 void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
@@ -56,6 +56,7 @@ void TBehaviourRegistrator::Handle(NInitializer::TEvInitializationFinished::TPtr
         Register(new TSchemeDescriptionActor(InternalController, initId, it->second->GetStorageTablePath()));
     } else {
         RegistrationData->InitializationFinished(initId);
+        PassAway();
     }
 }
 
@@ -65,4 +66,4 @@ void TBehaviourRegistrator::Bootstrap() {
     TBase::Sender<TEvStartRegistration>().SendTo(SelfId());
 }
 
-}
+} // namespace NKikimr::NMetadata::NProvider

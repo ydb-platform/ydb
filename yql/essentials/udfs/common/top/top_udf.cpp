@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -453,7 +454,7 @@ private:
 
 public:
     explicit TTopCreate(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -550,7 +551,7 @@ private:
 
 public:
     explicit TTopDeserialize(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -579,7 +580,7 @@ private:
 
 public:
     explicit TTopMerge(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 

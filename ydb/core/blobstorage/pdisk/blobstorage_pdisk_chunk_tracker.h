@@ -439,6 +439,17 @@ public:
     i64 GetTotalHardLimit() const {
         return SharedQuota->GetHardLimit();
     }
+
+    TColor::E GetPDiskCapacityAlert() const {
+        double occupancy;
+        TColor::E sharedColor = SharedQuota->EstimateSpaceColor(0, &occupancy);
+        if (Params.SeparateCommonLog) {
+            TColor::E commonLogColor = GlobalQuota->EstimateSpaceColor(OwnerSystem, 0, &occupancy);
+            return Max(sharedColor, commonLogColor);
+        } else {
+            return sharedColor;
+        }
+    }
     /////////////////////////////////////////////////////
 
     i64 GetOwnerFree(TOwner owner, bool personal) const {

@@ -1,6 +1,7 @@
 #include "ydb_service_scheme.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
@@ -36,6 +37,7 @@ void TCommandMakeDirectory::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to create");
+    SetSchemePathCompletionForDir(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandMakeDirectory::ExtractParams(TConfig& config) {
@@ -71,6 +73,7 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to remove");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
@@ -123,6 +126,7 @@ void TCommandDescribe::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to an object to describe. If object is topic consumer, it must be specified as <topic_path>/<consumer_name>");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandDescribe::Parse(TConfig& config) {
@@ -167,6 +171,7 @@ void TCommandList::Config(TConfig& config) {
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandList::Parse(TConfig& config) {
@@ -237,6 +242,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to grant permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
@@ -283,6 +289,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to revoke permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
@@ -329,6 +336,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to set permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
@@ -375,6 +383,7 @@ void TCommandChangeOwner::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to change owner for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<owner>", "Owner to set");
 }
 
@@ -414,6 +423,7 @@ void TCommandPermissionClear::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to clear permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionClear::ExtractParams(TConfig& config) {
@@ -444,6 +454,7 @@ void TCommandPermissionSetInheritance::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
@@ -474,6 +485,7 @@ void TCommandPermissionClearInheritance::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
@@ -504,6 +516,7 @@ void TCommandPermissionList::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to list permissions for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionList::ExtractParams(TConfig& config) {

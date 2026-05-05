@@ -1,6 +1,8 @@
 #include <library/cpp/threading/future/wait/wait.h>
+#include <queue>
 #include <thread>
 #include <util/system/mutex.h>
+#include <util/system/rusage.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_worker_impl.h"
@@ -23,16 +25,27 @@ struct TFmrWorkerState {
     std::unordered_map<TString, TTask::TPtr> TasksToRun; // taskId -> tasks with already downloaded files, waiting for job start
     std::unordered_map<TString, TTask::TPtr> TasksToDownload; // taskId -> tasks which are downloading files.
     std::unordered_map<TString, std::vector<TFileLinkPtr>> LocalFileCache; // taskId -> downloaded files
+    std::unordered_set<TString> ForceFailedTaskIds; // taskIds force-failed, pending callback cleanup
 
-    void HandleTaskException(const TString& taskId, const TString& exceptionMessage) {
-        // TODO (@cdzyura171) - Restart Fmr Operation in case download of files / resources failed in jobPreparer.
+    void HandleTaskException(const TString& taskId, const TString& exceptionMessage, EFmrErrorReason reason = EFmrErrorReason::Unknown) {
         with_lock(Mutex) {
             YQL_CLOG(ERROR, FastMapReduce) << "Task with id " << taskId << " failed with error message " << exceptionMessage;
-            YQL_ENSURE(TaskStatuses.contains(taskId));
-            auto taskStatus = ETaskStatus::Failed;
-            auto taskError = TFmrError{.Component = EFmrComponent::Worker, .ErrorMessage = exceptionMessage, .TaskId = taskId};
-            auto taskState = MakeTaskState(taskStatus, taskId, taskError, TStatistics());
-            TaskStatuses[taskId] = taskState;
+            if (ForceFailedTaskIds.contains(taskId)) {
+                ForceFailedTaskIds.erase(taskId);
+                return;
+            }
+            if (!TaskStatuses.contains(taskId)) {
+                YQL_CLOG(WARN, FastMapReduce) << "HandleTaskException for task " << taskId
+                    << " which is no longer in TaskStatuses (likely due to worker restart). Error was: " << exceptionMessage;
+                return;
+            }
+            auto taskError = TFmrError{
+                .Component = EFmrComponent::Worker,
+                .Reason = reason,
+                .ErrorMessage = exceptionMessage,
+                .TaskId = taskId
+            };
+            TaskStatuses[taskId] = MakeTaskState(ETaskStatus::Failed, taskId, taskError, TStatistics());
 
             TasksToRun.erase(taskId);
             TasksToDownload.erase(taskId);
@@ -92,9 +105,11 @@ public:
         JobPreparer_(jobPreparer),
         WorkerState_(std::make_shared<TFmrWorkerState>(TMutex(), std::unordered_map<TString, TTaskState::TPtr>{}, EFmrWorkerRuntimeState::Stopped)),
         StopWorker_(false),
+        NeedToRestart_(false),
         RandomProvider_(settings.RandomProvider),
         WorkerId_(settings.WorkerId),
-        TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests)
+        TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests),
+        MemoryLimitBytes_(settings.MemoryLimitBytes)
 {
     YQL_ENSURE(Coordinator_ && RandomProvider_ && JobPreparer_);
     GenerateVolatileId();
@@ -105,13 +120,48 @@ public:
     }
 
     void Start() override {
-        auto mainThreadFunc = [&] () {
-            WorkerState_->State = EFmrWorkerRuntimeState::Running;
+        WorkerState_->State = EFmrWorkerRuntimeState::Running;
 
+        HeartbeatInFlight_ = std::make_shared<std::atomic<bool>>(false);
+
+        auto heartbeatThreadFunc = [&] () {
             while (!StopWorker_) {
                 try {
+                    if (NeedToRestart_.load() || HeartbeatInFlight_->load()) {
+                        Sleep(TimeToSleepBetweenRequests_);
+                        continue;
+                    }
+
+                    if (MemoryLimitBytes_ > 0) {
+                        ui64 currentRss = TRusage::GetCurrentRSS();
+                        if (currentRss > MemoryLimitBytes_) {
+                            with_lock(WorkerState_->Mutex) {
+                                YQL_CLOG(ERROR, FastMapReduce) << "Worker OOM detected (RSS: " << currentRss
+                                    << " bytes, limit: " << MemoryLimitBytes_ << " bytes), failing all tasks";
+                                for (auto& [taskId, taskState] : WorkerState_->TaskStatuses) {
+                                    if (taskState->TaskStatus == ETaskStatus::InProgress) {
+                                        auto taskError = TFmrError{
+                                            .Component = EFmrComponent::Worker,
+                                            .Reason = EFmrErrorReason::WorkerOOM,
+                                            .ErrorMessage = TStringBuilder()
+                                                << "Worker out of memory (RSS: " << currentRss << " bytes, limit: " << MemoryLimitBytes_ << " bytes)",
+                                            .WorkerId = WorkerId_,
+                                            .TaskId = taskId
+                                        };
+                                        taskState = MakeTaskState(ETaskStatus::Failed, taskId, taskError, TStatistics());
+                                        WorkerState_->ForceFailedTaskIds.insert(taskId);
+                                    }
+                                }
+                                WorkerState_->TasksToRun.clear();
+                                WorkerState_->TasksToDownload.clear();
+                            }
+                        }
+                    }
+
                     std::vector<TTaskState::TPtr> taskStates;
                     std::vector<TString> taskIdsToErase;
+                    ui64 availableSlots;
+                    TString volatileId;
                     with_lock(WorkerState_->Mutex) {
                         for (auto& [taskId, taskState]: WorkerState_->TaskStatuses) {
                             auto taskStatus = taskState->TaskStatus;
@@ -124,57 +174,114 @@ public:
                             WorkerState_->TaskStatuses.erase(taskId);
                             TasksCancelStatus_.erase(taskId);
                         }
+
+                        ui64 maxParallelJobCount = JobFactory_->GetMaxParallelJobCount();
+                        YQL_ENSURE(maxParallelJobCount >= WorkerState_->TaskStatuses.size());
+                        availableSlots = maxParallelJobCount - WorkerState_->TaskStatuses.size();
+                        volatileId = VolatileId_;
                     }
 
-                    ui64 maxParallelJobCount = JobFactory_->GetMaxParallelJobCount();
-                    YQL_ENSURE(maxParallelJobCount >= WorkerState_->TaskStatuses.size());
-                    ui64 availableSlots = maxParallelJobCount - WorkerState_->TaskStatuses.size();
                     auto heartbeatRequest = THeartbeatRequest(
                         WorkerId_,
-                        VolatileId_,
+                        volatileId,
                         taskStates,
                         availableSlots
                     );
 
                     YQL_CLOG(TRACE, FastMapReduce) << "Sending heartbeat request to coordinator";
-                    auto heartbeatResponseFuture = Coordinator_->SendHeartbeatResponse(heartbeatRequest);
-                    auto heartbeatResponse = heartbeatResponseFuture.GetValueSync();
+                    HeartbeatInFlight_->store(true);
+                    Coordinator_->SendHeartbeatResponse(heartbeatRequest).Subscribe(
+                        [this, weakState = std::weak_ptr(WorkerState_), heartbeatInFlight = HeartbeatInFlight_](const auto& f) {
+                            try {
+                                auto heartbeatResponse = f.GetValue();
 
-                    if (heartbeatResponse.NeedToRestart) {
+                                if (heartbeatResponse.NeedToRestart) {
+                                    NeedToRestart_.store(true);
+                                    heartbeatInFlight->store(false);
+                                    return;
+                                }
+
+                                std::shared_ptr<TFmrWorkerState> state = weakState.lock();
+                                if (!state) {
+                                    heartbeatInFlight->store(false);
+                                    return;
+                                }
+
+                                with_lock(state->Mutex) {
+                                    for (auto& taskToDeleteId: heartbeatResponse.TaskToDeleteIds) {
+                                        if (TasksCancelStatus_.contains(taskToDeleteId)) {
+                                            TasksCancelStatus_[taskToDeleteId]->store(true);
+                                        }
+                                    }
+
+                                    for (auto task: heartbeatResponse.TasksToRun) {
+                                        auto taskId = task->TaskId;
+                                        if (state->TaskStatuses.contains(taskId)) {
+                                            YQL_CLOG(WARN, FastMapReduce) << "Task " << taskId << " already in TaskStatuses, skipping";
+                                            continue;
+                                        }
+                                        state->TaskStatuses[taskId] = MakeTaskState(ETaskStatus::InProgress, taskId);
+                                        TasksCancelStatus_[taskId] = std::make_shared<std::atomic<bool>>(false);
+                                        PendingTasks_.push(task);
+                                    }
+                                }
+                            } catch (...) {
+                                YQL_CLOG(ERROR, FastMapReduce) << "Error processing heartbeat response: " << CurrentExceptionMessage();
+                            }
+                            heartbeatInFlight->store(false);
+                        }
+                    );
+                } catch (...) {
+                    YQL_CLOG(ERROR, FastMapReduce) << "Error in heartbeat thread: " << CurrentExceptionMessage();
+                }
+                Sleep(TimeToSleepBetweenRequests_);
+            }
+        };
+
+        auto taskProcessingThreadFunc = [&] () {
+            while (!StopWorker_) {
+                try {
+                    if (NeedToRestart_.exchange(false)) {
                         Restart();
                         continue;
                     }
 
-                    std::vector<TTask::TPtr> tasksToRun = heartbeatResponse.TasksToRun;
-                    std::unordered_set<TString> taskToDeleteIds = heartbeatResponse.TaskToDeleteIds;
-                    YQL_ENSURE(tasksToRun.size() <= availableSlots);
+                    std::vector<TTask::TPtr> tasksToProcess;
+                    with_lock(WorkerState_->Mutex) {
+                        while (!PendingTasks_.empty()) {
+                            tasksToProcess.push_back(PendingTasks_.front());
+                            PendingTasks_.pop();
+                        }
+                    }
 
                     std::unordered_map<TString, std::vector<TResource>> downloadResourcesQueue;
                     std::unordered_map<TString, NThreading::TFuture<TTaskState::TPtr>> runningJobFutures;
 
+                    std::vector<std::pair<TString, TString>> failedTaskPreparations;
+
                     with_lock(WorkerState_->Mutex) {
-                        for (auto task: tasksToRun) {
+                        for (auto task: tasksToProcess) {
                             auto taskId = task->TaskId;
-                            YQL_ENSURE(!WorkerState_->TaskStatuses.contains(taskId));
-                            WorkerState_->TaskStatuses[taskId] = MakeTaskState(ETaskStatus::InProgress, taskId);
-                            TasksCancelStatus_[taskId] = std::make_shared<std::atomic<bool>>(false);
-
-                            auto tempDir = JobPreparer_->GenerateJobEnvironmentDir(taskId);
-                            task->JobEnvironmentDir = tempDir;
-
-                            bool needToDownloadResourcesForTask = !(task->Files.empty() && task->YtResources.empty() && task->FmrResources.empty());
-                            if (!needToDownloadResourcesForTask) {
-                                // If we don't have any resources, immediately schedule task to run.
-                                WorkerState_->TasksToRun.emplace(taskId, task);
-                            } else {
-                                WorkerState_->TasksToDownload.emplace(taskId, task);
-                                ScheduleResourcesDownload(task, downloadResourcesQueue);
+                            if (!WorkerState_->TaskStatuses.contains(taskId)) {
+                                YQL_CLOG(WARN, FastMapReduce) << "Task " << taskId << " disappeared from TaskStatuses before processing, skipping";
+                                continue;
                             }
-                        }
 
-                        for (auto& taskToDeleteId: taskToDeleteIds) {
-                            if (TasksCancelStatus_.contains(taskToDeleteId)) {
-                                TasksCancelStatus_[taskToDeleteId]->store(true);
+                            try {
+                                auto tempDir = JobPreparer_->GenerateJobEnvironmentDir(taskId);
+                                task->JobEnvironmentDir = tempDir;
+
+                                bool needToDownloadResourcesForTask = !(task->Files.empty() && task->YtResources.empty() && task->FmrResources.empty());
+                                if (!needToDownloadResourcesForTask) {
+                                    WorkerState_->TasksToRun.emplace(taskId, task);
+                                } else {
+                                    WorkerState_->TasksToDownload.emplace(taskId, task);
+                                    ScheduleResourcesDownload(task, downloadResourcesQueue);
+                                }
+                            } catch (...) {
+                                auto msg = CurrentExceptionMessage();
+                                YQL_CLOG(ERROR, FastMapReduce) << "Error preparing task " << taskId << ": " << msg;
+                                failedTaskPreparations.emplace_back(taskId, msg);
                             }
                         }
 
@@ -184,8 +291,12 @@ public:
                         WorkerState_->TasksToRun.clear();
                     }
 
+                    for (auto& [taskId, msg]: failedTaskPreparations) {
+                        WorkerState_->HandleTaskException(taskId, msg, ParseFmrReasonFromErrorMessage(msg));
+                    }
+
                     for (auto& [taskId, resources]: downloadResourcesQueue) {
-                        std::vector<NThreading::TFuture<void>> allDownloadResourceFutures; // all download resource futures for fixed task
+                        std::vector<NThreading::TFuture<void>> allDownloadResourceFutures;
                         for (auto& resource: resources) {
                             allDownloadResourceFutures.emplace_back(resource.DownloadFuture.IgnoreResult());
                         }
@@ -196,7 +307,16 @@ public:
                                 try {
                                     f.GetValue();
                                     with_lock(state->Mutex) {
-                                        YQL_ENSURE(state->TasksToDownload.contains(taskId));
+                                        if (state->ForceFailedTaskIds.contains(taskId)) {
+                                            YQL_CLOG(DEBUG, FastMapReduce) << "Skipping resource download callback for force-failed task " << taskId;
+                                            state->ForceFailedTaskIds.erase(taskId);
+                                            return;
+                                        }
+                                        if (!state->TasksToDownload.contains(taskId)) {
+                                            YQL_CLOG(WARN, FastMapReduce) << "Resource download callback arrived for task " << taskId
+                                                << " which is no longer in TasksToDownload (likely due to worker restart)";
+                                            return;
+                                        }
                                         auto task = state->TasksToDownload[taskId];
 
                                         YQL_ENSURE(downloadResourcesQueue.contains(taskId));
@@ -207,47 +327,70 @@ public:
                                         state->TasksToDownload.erase(taskId);
                                     }
                                 } catch (...) {
-                                    state->HandleTaskException(taskId, CurrentExceptionMessage());
+                                    state->HandleTaskException(taskId, CurrentExceptionMessage(), EFmrErrorReason::RestartOperation);
                                 }
                             }
                         });
                     }
 
                     for (auto& [taskId, future]: runningJobFutures) {
-                        auto runJobFuture = future.Subscribe([weakState = std::weak_ptr(WorkerState_), taskId](const auto& jobFuture) {
+                        future.Subscribe([weakState = std::weak_ptr(WorkerState_), taskId](const auto& jobFuture) {
                             std::shared_ptr<TFmrWorkerState> state = weakState.lock();
                             if (state) {
-                                auto finalTaskState = jobFuture.GetValue();
                                 try {
+                                    auto finalTaskState = jobFuture.GetValue();
                                     with_lock(state->Mutex) {
-                                        YQL_ENSURE(state->TaskStatuses.contains(taskId));
+                                        if (state->ForceFailedTaskIds.contains(taskId)) {
+                                            state->ForceFailedTaskIds.erase(taskId);
+                                            return;
+                                        }
+                                        if (!state->TaskStatuses.contains(taskId)) {
+                                            YQL_CLOG(WARN, FastMapReduce) << "Job completion callback arrived for task " << taskId
+                                                << " which is no longer in TaskStatuses (likely due to worker restart)";
+                                            return;
+                                        }
                                         state->TaskStatuses[taskId] = finalTaskState;
                                     }
                                 } catch (...) {
-                                    state->HandleTaskException(taskId, CurrentExceptionMessage());
+                                    auto msg = CurrentExceptionMessage();
+                                    state->HandleTaskException(taskId, msg, ParseFmrReasonFromErrorMessage(msg));
                                 }
                             }
                         });
                     }
                 } catch (...) {
-                    YQL_CLOG(ERROR, FastMapReduce) << "Error while processing heartbeat request: " << CurrentExceptionMessage();
+                    YQL_CLOG(ERROR, FastMapReduce) << "Error in task processing thread: " << CurrentExceptionMessage();
                 }
-                Sleep(TimeToSleepBetweenRequests_);
+                Sleep(TDuration::MilliSeconds(100));
             }
         };
-        MainThread_ = std::thread(mainThreadFunc);
+
+        HeartbeatThread_ = std::thread(heartbeatThreadFunc);
+        TaskProcessingThread_ = std::thread(taskProcessingThreadFunc);
     }
 
     void Stop() override {
+        StopWorker_ = true;
+
+        if (HeartbeatThread_.joinable()) {
+            HeartbeatThread_.join();
+        }
+
+        if (HeartbeatInFlight_) {
+            while (HeartbeatInFlight_->load()) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+
         with_lock(WorkerState_->Mutex) {
             StopJobFactoryTasks();
-            StopWorker_ = true;
             WorkerState_->State = EFmrWorkerRuntimeState::Stopped;
         }
-        JobFactory_->Stop();
-        if (MainThread_.joinable()) {
-            MainThread_.join();
+
+        if (TaskProcessingThread_.joinable()) {
+            TaskProcessingThread_.join();
         }
+        JobFactory_->Stop();
     }
 
     EFmrWorkerRuntimeState GetWorkerState() const override {
@@ -257,30 +400,33 @@ public:
 private:
     void Restart() {
         YQL_CLOG(INFO, FastMapReduce) << "Worker with id " << WorkerId_ << " is assumed dead by coordinator, restarting";
-        JobFactory_->Stop();
         with_lock(WorkerState_->Mutex) {
             StopJobFactoryTasks();
+        }
+        JobFactory_->Stop();
+        with_lock(WorkerState_->Mutex) {
             ClearState();
             GenerateVolatileId();
         }
         JobFactory_->Start();
     }
 
-    void StopMainThread() {
-        if (MainThread_.joinable()) {
-            MainThread_.join();
-        }
-    }
-
     void StopJobFactoryTasks() {
         for (auto& taskInfo: TasksCancelStatus_) {
-            taskInfo.second->store(true);
+            if (taskInfo.second) {
+                taskInfo.second->store(true);
+            }
         }
     }
 
     void ClearState() {
         TasksCancelStatus_.clear();
         WorkerState_->TaskStatuses.clear();
+        WorkerState_->TasksToRun.clear();
+        WorkerState_->TasksToDownload.clear();
+        WorkerState_->ForceFailedTaskIds.clear();
+        std::queue<TTask::TPtr> empty;
+        PendingTasks_.swap(empty);
     }
 
     void GenerateVolatileId() {
@@ -301,7 +447,8 @@ private:
                 for (auto& resource: resources) {
                     downloadResourceFutures.emplace_back(TResource(resourceType, downloadFunc(resource)));
                 }
-                downloadResourcesQueue[taskId] = downloadResourceFutures;
+                auto& queue = downloadResourcesQueue[taskId];
+                queue.insert(queue.end(), downloadResourceFutures.begin(), downloadResourceFutures.end());
             }
         };
 
@@ -337,11 +484,16 @@ private:
     std::unordered_map<TString, std::shared_ptr<std::atomic<bool>>> TasksCancelStatus_;
     std::shared_ptr<TFmrWorkerState> WorkerState_;
     std::atomic<bool> StopWorker_;
+    std::atomic<bool> NeedToRestart_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const ui32 WorkerId_;
     TString VolatileId_;
-    std::thread MainThread_;
+    std::thread HeartbeatThread_;
+    std::thread TaskProcessingThread_;
+    std::shared_ptr<std::atomic<bool>> HeartbeatInFlight_;
+    std::queue<TTask::TPtr> PendingTasks_;
     const TDuration TimeToSleepBetweenRequests_;
+    const ui64 MemoryLimitBytes_;
 };
 
 } // namespace

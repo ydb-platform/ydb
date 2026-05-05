@@ -1048,11 +1048,6 @@ Y_UNIT_TEST_LLVM(TestTpch) {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
-    // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
-    if (MKQL_RUNTIME_VERSION < 49U && SPILLING) {
-        return;
-    }
-
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1119,10 +1114,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsPasstroughtRefCounting) {
-    // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
-    if (MKQL_RUNTIME_VERSION < 49U && SPILLING) {
-        return;
-    }
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1191,10 +1182,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
         return;
     }
 
-    // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
-    if (MKQL_RUNTIME_VERSION < 49U && SPILLING) {
-        return;
-    }
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1255,10 +1242,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedInput) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
-    // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
-    if (MKQL_RUNTIME_VERSION < 49U && SPILLING) {
-        return;
-    }
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1315,10 +1298,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDoNotCalculateUnusedOutput) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestThinAllLambdas) {
-    // callable WideLastCombinerWithSpilling was introduced in 49 version of runtime
-    if (MKQL_RUNTIME_VERSION < 49U && SPILLING) {
-        return;
-    }
     TSetup<LLVM, SPILLING> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 

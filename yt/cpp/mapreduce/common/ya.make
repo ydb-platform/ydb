@@ -3,7 +3,10 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    abortable_stream.cpp
     debug_metrics.cpp
+    expected_error_guard.cpp
+    halting_stream.cpp
     helpers.cpp
     retry_lib.cpp
     wait_proxy.cpp
@@ -18,6 +21,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/interface/logging
+    yt/yt/core
 )
 
 END()

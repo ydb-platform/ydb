@@ -16,12 +16,12 @@ public:
     using TStatePtr = TIntrusivePtr<NYTree::TFluentYsonWriterState>;
 
     TOneShotFluentLogEvent(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
-    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) noexcept = default;
     TOneShotFluentLogEvent(const TOneShotFluentLogEvent& other) = delete;
 
     ~TOneShotFluentLogEvent();
 
-    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) noexcept = default;
     TOneShotFluentLogEvent& operator=(const TOneShotFluentLogEvent& other) = delete;
 
 private:

@@ -55,6 +55,7 @@ namespace NKikimr::NHttpProxy {
             , Authorize(!context.Driver)
             , DatabasePath(CanonizePath(context.DatabasePath))
             , StreamName(context.StreamName)
+            , SourceAddress(context.SourceAddress)
         {
         }
 
@@ -122,10 +123,15 @@ namespace NKikimr::NHttpProxy {
         }
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-            if (ev->Get()->Error) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+            NACLib::TUserToken userToken = NACLibProto::TUserToken();
+            if (ev->Get()->HasError()) {
+                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                    return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                }
+            } else {
+                userToken = *ev->Get()->Token;
             }
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
+            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
 
@@ -179,12 +185,12 @@ namespace NKikimr::NHttpProxy {
 
                     ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = "",
+                                                                                                     .PeerName = SourceAddress,
                                                                                                      .Entries = entries}));
                 } else {
                     ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = "",
+                                                                                                     .PeerName = SourceAddress,
                                                                                                      .Entries = entries}));
                 }
                 return;
@@ -312,6 +318,7 @@ namespace NKikimr::NHttpProxy {
         TString DatabaseId;
         TString DatabasePath;
         TString StreamName;
+        TString SourceAddress;
     };
 
     NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)

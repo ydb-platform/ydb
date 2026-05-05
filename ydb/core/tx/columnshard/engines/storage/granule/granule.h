@@ -64,15 +64,19 @@ public:
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
+
     const TDataClassSummary& GetCompacted() const {
         return Compacted;
     }
+
     ui64 GetMetadataMemoryPortionsSize() const {
         return Inserted.GetMetadataMemoryPortionsSize() + Compacted.GetMetadataMemoryPortionsSize();
     }
+
     ui64 GetGranuleSize() const {
         return Inserted.GetTotalPortionsSize() + Compacted.GetTotalPortionsSize();
     }
+
     ui64 GetActivePortionsCount() const {
         return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
     }
@@ -85,7 +89,8 @@ public:
     public:
         TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
             : Counters(counters)
-            , Owner(owner) {
+            , Owner(owner)
+        {
         }
 
         ~TEditGuard() {
@@ -99,6 +104,7 @@ public:
                 Owner.Compacted.AddPortion(info);
             }
         }
+
         void RemovePortion(const TPortionInfo& info) {
             if (info.GetPortionType() == EPortionType::Written) {
                 Owner.Inserted.RemovePortion(info);
@@ -148,7 +154,6 @@ private:
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
         NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
-    YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
@@ -164,6 +169,7 @@ private:
         }
         return it->second;
     }
+
     bool DataAccessorConstructed = false;
 
 public:
@@ -181,6 +187,7 @@ public:
 
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
     }
@@ -281,10 +288,6 @@ public:
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
         return OptimizerPlanner->GetBucketPositions();
-    }
-
-    void OnStartCompaction() {
-        LastCompactionInstant = TMonotonic::Now();
     }
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;

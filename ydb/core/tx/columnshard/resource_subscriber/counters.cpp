@@ -4,7 +4,6 @@
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
-
 std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(const TString& resourceType) {
     TGuard lock(Mutex);
     auto it = ResourceTypeCounters.find(resourceType);
@@ -32,4 +31,4 @@ TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owne
     CountAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Count");
 }
 
-}
+}   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

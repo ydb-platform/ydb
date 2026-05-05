@@ -64,6 +64,9 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast, overload
 
+PreliminaryNameTypePair: typing.TypeAlias = tuple[Constant, "expr | None"]
+NameTypePair: typing.TypeAlias = tuple[Constant, expr]
+
 generator_names = (
     "typing.Generator",
     "collections.abc.Generator",
@@ -767,7 +770,7 @@ class TypeguardTransformer(NodeTransformer):
                     ],
                 )
                 func_name = self._get_import(
-                    "typeguard._functions", "check_argument_types"
+                    "typeguard._functions", "check_argument_types_internal"
                 )
                 args = [
                     self._memo.joined_path,
@@ -790,7 +793,7 @@ class TypeguardTransformer(NodeTransformer):
                 )
             ):
                 func_name = self._get_import(
-                    "typeguard._functions", "check_return_type"
+                    "typeguard._functions", "check_return_type_internal"
                 )
                 return_node = Return(
                     Call(
@@ -920,7 +923,9 @@ class TypeguardTransformer(NodeTransformer):
             and self._memo.should_instrument
             and not self._memo.is_ignored_name(self._memo.return_annotation)
         ):
-            func_name = self._get_import("typeguard._functions", "check_return_type")
+            func_name = self._get_import(
+                "typeguard._functions", "check_return_type_internal"
+            )
             old_node = node
             retval = old_node.value or Constant(None)
             node = Return(
@@ -1011,13 +1016,8 @@ class TypeguardTransformer(NodeTransformer):
                     )
                     targets_arg = List(
                         [
-                            List(
-                                [
-                                    Tuple(
-                                        [Constant(node.target.id), annotation],
-                                        ctx=Load(),
-                                    )
-                                ],
+                            Tuple(
+                                [Constant(node.target.id), annotation],
                                 ctx=Load(),
                             )
                         ],
@@ -1045,18 +1045,22 @@ class TypeguardTransformer(NodeTransformer):
 
         # Only instrument function-local assignments
         if isinstance(self._memo.node, (FunctionDef, AsyncFunctionDef)):
-            preliminary_targets: list[list[tuple[Constant, expr | None]]] = []
+            preliminary_targets: list[
+                PreliminaryNameTypePair | list[PreliminaryNameTypePair]
+            ] = []
             check_required = False
-            for target in node.targets:
+            for node_target in node.targets:
                 elts: Sequence[expr]
-                if isinstance(target, Name):
-                    elts = [target]
-                elif isinstance(target, Tuple):
-                    elts = target.elts
+                if isinstance(node_target, Name):
+                    elts = [node_target]
+                    single_target = True
+                elif isinstance(node_target, Tuple):
+                    elts = node_target.elts
+                    single_target = False
                 else:
                     continue
 
-                annotations_: list[tuple[Constant, expr | None]] = []
+                annotations_: list[PreliminaryNameTypePair] = []
                 for exp in elts:
                     prefix = ""
                     if isinstance(exp, Starred):
@@ -1082,33 +1086,49 @@ class TypeguardTransformer(NodeTransformer):
                         else:
                             annotations_.append((Constant(name), None))
 
-                preliminary_targets.append(annotations_)
+                preliminary_targets.append(
+                    annotations_[0] if single_target else annotations_
+                )
 
             if check_required:
                 # Replace missing annotations with typing.Any
-                targets: list[list[tuple[Constant, expr]]] = []
+                targets: list[NameTypePair | list[NameTypePair]] = []
                 for items in preliminary_targets:
-                    target_list: list[tuple[Constant, expr]] = []
-                    targets.append(target_list)
-                    for key, expression in items:
-                        if expression is None:
-                            target_list.append((key, self._get_import("typing", "Any")))
-                        else:
+                    if isinstance(items, list):
+                        target_list: list[NameTypePair] = []
+                        targets.append(target_list)
+                        for key, expression_or_none in items:
+                            expression = expression_or_none or self._get_import(
+                                "typing", "Any"
+                            )
                             target_list.append((key, expression))
+                    else:
+                        key, expression_or_none = items
+                        expression = expression_or_none or self._get_import(
+                            "typing", "Any"
+                        )
+                        targets.append((key, expression))
 
                 func_name = self._get_import(
                     "typeguard._functions", "check_variable_assignment"
                 )
-                targets_arg = List(
-                    [
-                        List(
-                            [Tuple([name, ann], ctx=Load()) for name, ann in target],
-                            ctx=Load(),
+                elements: list[expr] = []
+                for target in targets:
+                    if isinstance(target, list):
+                        elements.append(
+                            List(
+                                [
+                                    Tuple([name, ann], ctx=Load())
+                                    for name, ann in target
+                                ],
+                                ctx=Load(),
+                            )
                         )
-                        for target in targets
-                    ],
-                    ctx=Load(),
-                )
+                    else:
+                        name_constant, ann = target
+                        elements.append(Tuple([name_constant, ann], ctx=Load()))
+
+                targets_arg = List(elements, ctx=Load())
                 node.value = Call(
                     func_name,
                     [node.value, targets_arg, self._memo.get_memo_name()],
@@ -1187,12 +1207,7 @@ class TypeguardTransformer(NodeTransformer):
                 operator_func, [Name(node.target.id, ctx=Load()), node.value], []
             )
             targets_arg = List(
-                [
-                    List(
-                        [Tuple([Constant(node.target.id), annotation], ctx=Load())],
-                        ctx=Load(),
-                    )
-                ],
+                [Tuple([Constant(node.target.id), annotation], ctx=Load())],
                 ctx=Load(),
             )
             check_call = Call(

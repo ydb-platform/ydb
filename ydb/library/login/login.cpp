@@ -1149,7 +1149,10 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             if (pbSid.GetPasswordHashes()) {
                 sid.PasswordHashes = pbSid.GetPasswordHashes();
             } else if (pbSid.GetArgonHash()) {
-                sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(pbSid.GetArgonHash()));
+                // ignore old hash format because we can't parse it
+                if (const auto argonHashInNewFormat = ArgonHashToNewFormat(pbSid.GetArgonHash())) {
+                    sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*argonHashInNewFormat);
+                }
             }
             sid.FillHashStorage();
 
@@ -1176,6 +1179,10 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
 
 void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity) {
     PasswordChecker.Update(passwordComplexity);
+}
+
+const TPasswordComplexity& TLoginProvider::GetPasswordCheckParameters() const {
+    return PasswordChecker.GetPasswordComplexity();
 }
 
 void TLoginProvider::UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer) {

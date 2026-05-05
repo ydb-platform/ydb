@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: 1, expected_count_w1: 1, expected_sum_w1: 1, expected_count_w3: 1, expected_sum_w3: 1|>,
@@ -56,16 +55,16 @@ FROM
 
 -- Verify w1 matches expected values
 SELECT
-    Ensure(expected_count_w1, count_w1 IS NOT DISTINCT FROM expected_count_w1, 'count_w1: ' || $str(count_w1) || ' expected: ' || $str(expected_count_w1)),
-    Ensure(expected_sum_w1, sum_w1 IS NOT DISTINCT FROM expected_sum_w1, 'sum_w1: ' || $str(sum_w1) || ' expected: ' || $str(expected_sum_w1)),
+    Ensure(count_w1, count_w1 IS NOT DISTINCT FROM expected_count_w1, 'count_w1: ' || $str(count_w1) || ' expected: ' || $str(expected_count_w1)),
+    Ensure(sum_w1, sum_w1 IS NOT DISTINCT FROM expected_sum_w1, 'sum_w1: ' || $str(sum_w1) || ' expected: ' || $str(expected_sum_w1)),
 FROM
     $win_result
 ;
 
 -- Verify w3 matches expected values (different window)
 SELECT
-    Ensure(expected_count_w3, count_w3 IS NOT DISTINCT FROM expected_count_w3, 'count_w3: ' || $str(count_w3) || ' expected: ' || $str(expected_count_w3)),
-    Ensure(expected_sum_w3, sum_w3 IS NOT DISTINCT FROM expected_sum_w3, 'sum_w3: ' || $str(sum_w3) || ' expected: ' || $str(expected_sum_w3)),
+    Ensure(count_w3, count_w3 IS NOT DISTINCT FROM expected_count_w3, 'count_w3: ' || $str(count_w3) || ' expected: ' || $str(expected_count_w3)),
+    Ensure(sum_w3, sum_w3 IS NOT DISTINCT FROM expected_sum_w3, 'sum_w3: ' || $str(sum_w3) || ' expected: ' || $str(expected_sum_w3)),
 FROM
     $win_result
 ;

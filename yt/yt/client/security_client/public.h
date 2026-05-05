@@ -101,6 +101,7 @@ DEFINE_ENUM(EAccessControlObject,
     (SwitchLeader)
     (RequestRestart)
     (CollectCoverage)
+    (SetUserBanned)
 );
 
 DEFINE_ENUM(EInapplicableRowAccessPredicateMode,

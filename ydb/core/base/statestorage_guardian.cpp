@@ -466,7 +466,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-            FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        FollowerTracker.Reset(new TFollowerTracker(replicaSz));
 
         Become(&TThis::StateCalm);
     }

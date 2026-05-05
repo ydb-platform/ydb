@@ -117,6 +117,16 @@ i64 TSchemalessFormatWriterBase::GetWrittenSize() const
     return WrittenSize_;
 }
 
+i64 TSchemalessFormatWriterBase::GetEncodedRowBatchCount() const
+{
+    return 0;
+}
+
+i64 TSchemalessFormatWriterBase::GetEncodedColumnarBatchCount() const
+{
+    return 0;
+}
+
 void TSchemalessFormatWriterBase::FlushWriter()
 { }
 

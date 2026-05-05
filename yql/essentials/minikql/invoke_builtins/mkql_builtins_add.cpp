@@ -37,20 +37,7 @@ using TAggrAdd = TAdd<TType, TType, TType>;
 template <ui8 Precision>
 struct TDecimalAdd {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        const auto a = SafeAdd(l, r);
-
-        using namespace NYql::NDecimal;
-
-        if (IsNormal<Precision>(l) && IsNormal<Precision>(r) && IsNormal<Precision>(a)) {
-            return NUdf::TUnboxedValuePod(a);
-        }
-        if (IsNan(l) || IsNan(r) || !a) {
-            return NUdf::TUnboxedValuePod(Nan());
-        } else {
-            return NUdf::TUnboxedValuePod(a > 0 ? +Inf() : -Inf());
-        }
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::Add(left.GetInt128(), right.GetInt128(), Precision));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

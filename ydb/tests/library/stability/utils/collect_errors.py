@@ -15,6 +15,16 @@ from ydb.tests.library.stability.utils.upload_results import test_event_report
 from ydb.tests.olap.lib.allure_utils import NodeErrors
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
+# Timeouts for background SSH commands executed via execute_ssh + .wait()
+_COREDUMP_ANALYZE_TIMEOUT = 600   # breakpad analyzer can be slow on many cores
+_COREDUMP_SEARCH_TIMEOUT = 300    # find + cat JSON files
+_SANITIZER_TIMEOUT = 600          # unified_agent select + grep
+_VERIFY_TIMEOUT = 1200            # already existed; kept for reference
+_VERIFY_COUNT_TIMEOUT = 300       # simple grep -c
+_OOM_TIMEOUT = 120                # journalctl grep
+_LOG_COLLECT_TIMEOUT = 600        # unified_agent select for full logs
+_TAR_TIMEOUT = 120                # tar -czf archive
+
 
 class ErrorsCollector:
     def __init__(self, hosts: set[str], nodes):
@@ -106,13 +116,13 @@ class ErrorsCollector:
 
         core_hashes = {}
         for h, exec in core_processes.items():
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=_COREDUMP_ANALYZE_TIMEOUT)
             if exec.returncode != 0:
                 logging.error(f'Error while process coredumps on host {h}: {exec.stderr}')
             exec = execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
                                    f'-mmin -{(10 + time.time() - start_time) / 60} -mmin +{(-10 + time.time() - end_time) / 60}'
                                    ' | while read FILE; do cat $FILE; echo -n ","; done'))
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=_COREDUMP_SEARCH_TIMEOUT)
             if exec.returncode == 0:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
                     slot = f"{core.get('slot', '')}@{h}"
@@ -159,7 +169,7 @@ class ErrorsCollector:
 
         host_logs = {}
         for h, exec in core_processes.items():
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=_SANITIZER_TIMEOUT)
             if exec.returncode != 0:
                 logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
             else:
@@ -253,7 +263,7 @@ class ErrorsCollector:
 
         total_host_verify_fails = dict()
         for h, exec in core_processes.items():
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=_VERIFY_COUNT_TIMEOUT)
             if exec.returncode != 0:
                 logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
             else:
@@ -269,7 +279,7 @@ class ErrorsCollector:
         ooms = set()
         for h in self.hosts:
             exec = execute_ssh(h, oom_cmd)
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=_OOM_TIMEOUT)
             if exec.returncode == 0:
                 if exec.stdout:
                     ooms.add(h)
@@ -287,7 +297,7 @@ class ErrorsCollector:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
         end = datetime.fromtimestamp(datetime.now().timestamp(), tz).strftime("%Y-%m-%d %H:%M:%S")
-        cmd = f"sudo journalctl -u nemesis -S '{start}' -U '{end}'"
+        cmd = f"sudo journalctl -u nemesis-agent -S '{start}' -U '{end}'"
         nemesis_logs = {}
         for host in self.hosts:
             try:
@@ -326,7 +336,7 @@ class ErrorsCollector:
         error_log = ''
         for c, execs in exec_start.items():
             for host, e in sorted(execs.items()):
-                e.wait(check_exit_code=False)
+                e.wait(check_exit_code=False, timeout=_LOG_COLLECT_TIMEOUT)
                 error_log += f'{host}:\n{e.stdout if e.returncode == 0 else e.stderr}\n'
             allure.attach(error_log, f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
 
@@ -334,11 +344,11 @@ class ErrorsCollector:
             dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
             os.makedirs(dir, exist_ok=True)
             for host, e in execs.items():
-                e.wait(check_exit_code=False)
+                e.wait(check_exit_code=False, timeout=_LOG_COLLECT_TIMEOUT)
                 with open(os.path.join(dir, host), 'w') as f:
                     f.write(e.stdout if e.returncode == 0 else e.stderr)
             archive = dir + '.tar.gz'
-            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'], timeout=_TAR_TIMEOUT)
             allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
 
     def perform_verification_with_cluster_check(self, workload_names: list[str], nemesis_enabled: bool) -> None:

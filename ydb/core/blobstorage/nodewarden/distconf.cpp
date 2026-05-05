@@ -2,6 +2,7 @@
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -148,6 +149,14 @@ namespace NKikimr::NStorage {
         ApplyStorageConfig(config);
 
         if (!CommittedStorageConfig || CommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+            if (!LocalCommittedStorageConfig) {
+                // we don't have locally committed storage config yet
+            } else if (LocalCommittedStorageConfig->GetGeneration() == config.GetGeneration()) {
+                Y_ABORT_UNLESS(LocalCommittedStorageConfig->GetFingerprint() == config.GetFingerprint());
+            } else {
+                Y_ABORT_UNLESS(LocalCommittedStorageConfig->GetGeneration() < config.GetGeneration());
+            }
+
             // there can be cases when config has been edited manually and has greater version than provided by the leader
             LocalCommittedStorageConfig = CommittedStorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
 
@@ -159,7 +168,13 @@ namespace NKikimr::NStorage {
                 } else if (const auto& committed = m.GetCommittedStorageConfig(); committed.GetGeneration() < config.GetGeneration()) {
                     m.MutableCommittedStorageConfig()->CopyFrom(config);
                 } else if (config.GetGeneration() < committed.GetGeneration()) {
-                    Y_DEBUG_ABORT(); // this is a bit very odd
+                    // this is strange situation: one of disks contains newer config than a locally committed one
+                    Y_DEBUG_ABORT_S("config.Generation# " << config.GetGeneration()
+                        << " committed.Generation# " << committed.GetGeneration()
+                        << " path# " << path
+                        << " StorageConfig# " << StorageConfig->GetGeneration()
+                        << " CommittedStorageConfig# " << i64(CommittedStorageConfig ? CommittedStorageConfig->GetGeneration() : -1)
+                        << " LocalCommittedStorageConfig# " << i64(LocalCommittedStorageConfig ? LocalCommittedStorageConfig->GetGeneration() : -1));
                     return;
                 } else if (config.GetFingerprint() != committed.GetFingerprint()) {
                     Y_ABORT("config fingerprint mismatch");
@@ -171,8 +186,9 @@ namespace NKikimr::NStorage {
             if (!drives.empty()) {
                 PersistConfig({}, drives); // persist committed storage config
             }
-        } else {
-            Y_DEBUG_ABORT_UNLESS(StorageConfig->GetGeneration() == CommittedStorageConfig->GetGeneration());
+        } else if (CommittedStorageConfig->GetGeneration() == config.GetGeneration()) {
+            Y_ABORT_UNLESS(CommittedStorageConfig->GetFingerprint() == config.GetFingerprint());
+            Y_ABORT_UNLESS(CommittedStorageConfig == LocalCommittedStorageConfig);
         }
     }
 
@@ -325,12 +341,19 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(CheckFingerprint(*CommittedStorageConfig));
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(CommittedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration());
-            Y_ABORT_UNLESS(LocalCommittedStorageConfig);
             Y_ABORT_UNLESS(LocalCommittedStorageConfig == CommittedStorageConfig);
         } else if (LocalCommittedStorageConfig) {
             Y_ABORT_UNLESS(CheckFingerprint(*LocalCommittedStorageConfig));
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(LocalCommittedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration());
+        }
+
+        for (const auto& [path, record] : MetadataByPath) {
+            if (record.HasCommittedStorageConfig()) {
+                const auto& config = record.GetCommittedStorageConfig();
+                Y_ABORT_UNLESS(LocalCommittedStorageConfig);
+                Y_ABORT_UNLESS(config.GetGeneration() <= LocalCommittedStorageConfig->GetGeneration());
+            }
         }
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
@@ -475,6 +498,10 @@ namespace NKikimr::NStorage {
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();
         }
+        if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
+            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
+                this, std::placeholders::_1));
+        }
         ConsistencyCheck();
     }
 
@@ -565,7 +592,7 @@ namespace NKikimr::NStorage {
             bridgeInfo->SelfNodePile = &bridgeInfo->Piles[it->second.GetPileIndex()];
         }
 
-        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << SingleLineProto(config));
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
 
         Y_ABORT_UNLESS(config.HasClusterState());
         const NKikimrBridge::TClusterState& state = config.GetClusterState();

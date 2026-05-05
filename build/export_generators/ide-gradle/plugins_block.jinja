@@ -34,4 +34,8 @@ plugins {
 {%- if with_lombok_plugin %}
     id("io.freefair.lombok") version "{{ ver_lombok_plugin }}"
 {%- endif %}
+
+{%- if solomon_checkstyle and not(proto_template) %}
+    checkstyle
+{%- endif %}
 }

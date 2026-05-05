@@ -60,7 +60,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             mirrorFrom
         );
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER});
-        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessageMeta(true);
 
         auto driver = server.AnnoyingClient->GetDriver();
 

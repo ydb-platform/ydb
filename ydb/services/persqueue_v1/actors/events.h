@@ -31,11 +31,6 @@ struct TLocalResponseBase {
     NYql::TIssues Issues;
 };
 
-
-struct TAlterTopicResponse : public TLocalResponseBase {
-    NKikimrSchemeOp::TModifyScheme ModifyScheme;
-};
-
 struct TEvPQProxy {
     enum EEv {
         EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
@@ -90,7 +85,8 @@ struct TEvPQProxy {
         EvReadingFinished,
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
-        EvEnd
+        EvUpdateReadMetrics,
+        EvEnd,
     };
 
 
@@ -406,6 +402,7 @@ struct TEvPQProxy {
         const ui64 AssignId;
     };
 
+    struct TEvUpdateReadMetrics : public NActors::TEventLocal<TEvUpdateReadMetrics, EvUpdateReadMetrics> {};
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
         explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset, const bool readingFinishedSent)
@@ -669,11 +666,6 @@ struct TEvPQProxy {
         std::vector<ui32> ChildPartitionIds;
 
         ui64 EndOffset;
-    };
-
-    struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>
-                                 , public TLocalResponseBase {
-        TAlterTopicResponse Response;
     };
 };
 

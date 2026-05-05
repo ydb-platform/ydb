@@ -71,7 +71,7 @@ void TReadQuoter::HandleWakeUpImpl() {
 
 void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
     for (auto& [consumerStr, consumer] : ConsumerQuotas) {
-        while (!consumer.ReadRequests.empty() && consumer.PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now())) {
+        while (consumer.PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now()) && !consumer.ReadRequests.empty()) {
             CheckTotalPartitionQuota(std::move(consumer.ReadRequests.front()));
             consumer.ReadRequests.pop_front();
         }

@@ -25,7 +25,7 @@ The following describes the settings necessary to enable database node authentic
 
     {% endnote %}
 
-3. The command-line parameters for [starting database nodes](../../deployment-options/manual/initial-deployment.md#start-dynnode) must include options that specify paths to certificate files from trusted certificate authorities, a node certificate, and a node key. The list of additional options is provided in the table below.
+3. The command-line parameters for [starting database nodes](../../deployment-options/manual/initial-deployment/deployment-configuration-v1.md#start-dynnode) must include options that specify paths to certificate files from trusted certificate authorities, a node certificate, and a node key. The list of additional options is provided in the table below.
 
     | **Command-line Option** | **Description** |
     |-------------------------|-----------------|
@@ -47,6 +47,14 @@ The following describes the settings necessary to enable database node authentic
     ```
 
 ## Enabling Database Node Authentication and Authorization
+
+{% note info %}
+
+Starting from [version 25.2](../../../changelog-server.md#25-2), properly configured database node authentication is mandatory.
+
+Node registration in the cluster is impossible without successful authentication.
+
+{% endnote %}
 
 To enable mandatory database node authorization, the following configuration blocks must be added to the [cluster configuration file](../../../reference/configuration/index.md):
 

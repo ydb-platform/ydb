@@ -8,7 +8,8 @@ Y_UNIT_TEST_SUITE(TPyStructTest) {
 Y_UNIT_TEST(FromPyObject) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField<char*>("name", &nameIdx).Build();
 
     engine.ToMiniKQL(personType,
@@ -32,7 +33,8 @@ Y_UNIT_TEST(FromPyObject) {
 Y_UNIT_TEST(FromPyObjectMissingOptionalField) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto optionalStringType = engine.GetTypeBuilder().Optional()->Item<char*>().Build();
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField("name", optionalStringType, &nameIdx).Build();
 
@@ -77,7 +79,8 @@ Y_UNIT_TEST(FromPyObjectBytesAttrWithNullCharacter) {
 Y_UNIT_TEST(FromPyDict) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField<char*>("name", &nameIdx).Build();
 
     engine.ToMiniKQL(personType,
@@ -96,7 +99,8 @@ Y_UNIT_TEST(FromPyDict) {
 Y_UNIT_TEST(FromPyDictMissingOptionalField) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto optionalStringType = engine.GetTypeBuilder().Optional()->Item<char*>().Build();
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField("name", optionalStringType, &nameIdx).Build();
 
@@ -133,7 +137,8 @@ Y_UNIT_TEST(FromPyDictBytesKeyWithNullCharacter) {
 Y_UNIT_TEST(FromPyNamedTuple) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField<char*>("name", &nameIdx).Build();
 
     engine.ToMiniKQL(personType,
@@ -154,7 +159,8 @@ Y_UNIT_TEST(FromPyNamedTuple) {
 Y_UNIT_TEST(FromPyNamedTupleNoneOptionalField) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
     auto optionalStringType = engine.GetTypeBuilder().Optional()->Item<char*>().Build();
     auto personType = engine.GetTypeBuilder().Struct()->AddField<int>("age", &ageIdx).AddField("name", optionalStringType, &nameIdx).Build();
 
@@ -188,7 +194,12 @@ Y_UNIT_TEST(FromPyEmptyStruct) {
 Y_UNIT_TEST(ToPyObject) {
     TPythonTestEngine engine;
 
-    ui32 ageIdx = 0, nameIdx = 0, addressIdx = 0, cityIdx = 0, streetIdx = 0, buildingIdx = 0;
+    ui32 ageIdx = 0;
+    ui32 nameIdx = 0;
+    ui32 addressIdx = 0;
+    ui32 cityIdx = 0;
+    ui32 streetIdx = 0;
+    ui32 buildingIdx = 0;
     auto addressType = engine.GetTypeBuilder().Struct()->AddField<NUdf::TUtf8>("city", &cityIdx).AddField<NUdf::TUtf8>("street", &streetIdx).AddField<ui16>("building", &buildingIdx).Build();
 
     auto personType = engine.GetTypeBuilder().Struct()->AddField<ui16>("age", &ageIdx).AddField<NUdf::TUtf8>("name", &nameIdx).AddField("address", addressType, &addressIdx).Build();
@@ -218,7 +229,10 @@ Y_UNIT_TEST(ToPyObject) {
 Y_UNIT_TEST(ToPyObjectKeywordsAsFields) {
     TPythonTestEngine engine;
 
-    ui32 passIdx = 0, whileIdx = 0, ifIdx = 0, notIdx = 0;
+    ui32 passIdx = 0;
+    ui32 whileIdx = 0;
+    ui32 ifIdx = 0;
+    ui32 notIdx = 0;
     auto structType = engine.GetTypeBuilder().Struct()->AddField<NUdf::TUtf8>("pass", &passIdx).AddField<NUdf::TUtf8>("while", &whileIdx).AddField<NUdf::TUtf8>("if", &ifIdx).AddField<NUdf::TUtf8>("not", &notIdx).Build();
 
     engine.ToPython(structType,
@@ -242,7 +256,8 @@ Y_UNIT_TEST(ToPyObjectKeywordsAsFields) {
 Y_UNIT_TEST(ToPyObjectTryModify) {
     TPythonTestEngine engine;
 
-    ui32 field1Idx = 0, field2Idx = 0;
+    ui32 field1Idx = 0;
+    ui32 field2Idx = 0;
     auto structType = engine.GetTypeBuilder().Struct()->AddField<NUdf::TUtf8>("field1", &field1Idx).AddField<NUdf::TUtf8>("field2", &field2Idx).Build();
 
     engine.ToPython(structType,

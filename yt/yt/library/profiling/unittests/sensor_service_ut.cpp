@@ -51,7 +51,8 @@ TEST(TSensorServiceTest, GetSensor)
         auto options = CreateEphemeralAttributes();
         options->Set("read_all_projections", false);
 
-        return ConvertTo<double>(SyncYPathGet(sensorService, "/yt/foo/bar/baz", /*attributeFilter*/ {}, options));
+        auto future = AsyncYPathGet(sensorService, "/yt/foo/bar/baz", /*attributeFilter*/ {}, options);
+        return ConvertTo<double>(future.BlockingGet().ValueOrThrow());
     }();
 
     EXPECT_EQ(valueByPath, 117.0);

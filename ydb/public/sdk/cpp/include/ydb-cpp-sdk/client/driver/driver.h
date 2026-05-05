@@ -3,6 +3,8 @@
 #include "fwd.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
@@ -11,6 +13,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 
 #include <library/cpp/logger/backend.h>
+
+#include <grpcpp/grpcpp.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -122,6 +126,7 @@ public:
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = "");
+
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
@@ -130,6 +135,16 @@ public:
     //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
+
+    //! Set grpc load balancing policy
+    //! policy - name of the load balancing policy, see grpc documentation for available policies
+    //! default: "round_robin"
+    TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
+
+    //! Set grpc compression algorithm
+    //! algorithm - EGrpcCompressionAlgorithm enum value, see grpc documentation for available algorithms
+    //! default: EGrpcCompressionAlgorithm::None
+    TDriverConfig& SetGRpcCompressionAlgorithm(EGrpcCompressionAlgorithm algorithm);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.
@@ -153,12 +168,26 @@ public:
     //! default: 0
     TDriverConfig& SetMaxMessageSize(uint64_t maxMessageSize);
 
+    //! Append a segment to the SDK build info header (x-ydb-sdk-build-info).
+    //! Do not call this method unless you know exactly what you are doing.
+    //! Segments are joined with ';'. Each segment must match: <name>/<X>.<Y>.<Z>
+    //!   name chars: lowercase latin letters, digits, '-'
+    //!   X, Y, Z chars: lowercase latin letters, digits
+    //! Throws on invalid format or if total extra length exceeds 512 bytes.
+    TDriverConfig& AppendBuildInfo(std::string_view segment);
+
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 
     //! Set executor for async responses.
     //! If not set, default executor will be used.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
+
+    //! Set external metrics registry implementation.
+    TDriverConfig& SetMetricRegistry(std::shared_ptr<NMetrics::IMetricRegistry> registry);
+
+    //! Set external trace provider implementation.
+    TDriverConfig& SetTraceProvider(std::shared_ptr<NTrace::ITraceProvider> provider);
 
 private:
     class TImpl;

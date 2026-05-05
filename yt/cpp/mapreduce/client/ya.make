@@ -18,6 +18,7 @@ SRCS(
     operation_preparer.cpp
     operation_tracker.cpp
     operation.cpp
+    pack_jobstate.cpp
     partition_reader.cpp
     prepare_operation.cpp
     py_helpers.cpp
@@ -35,6 +36,7 @@ SRCS(
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/sighandler
+    library/cpp/string_utils/base64
     library/cpp/threading/blocking_queue
     library/cpp/threading/future
     library/cpp/type_info

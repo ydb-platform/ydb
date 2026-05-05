@@ -56,6 +56,11 @@ public:
                      const BatchSpanProcessorOptions &options,
                      const BatchSpanProcessorRuntimeOptions &runtime_options);
 
+  BatchSpanProcessor(const BatchSpanProcessor &)            = delete;
+  BatchSpanProcessor(BatchSpanProcessor &&)                 = delete;
+  BatchSpanProcessor &operator=(const BatchSpanProcessor &) = delete;
+  BatchSpanProcessor &operator=(BatchSpanProcessor &&)      = delete;
+
   /**
    * Requests a Recordable(Span) from the configured exporter.
    *
@@ -161,6 +166,7 @@ protected:
    * any time
    *
    * @param notify_force_flush Sequence to indicate whether to notify force flush completion.
+   * @param exporter The span exporter instance that handles exporting spans to the backend.
    * @param synchronization_data Synchronization data to be notified.
    */
   static void NotifyCompletion(uint64_t notify_force_flush,

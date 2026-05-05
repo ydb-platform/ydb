@@ -59,6 +59,37 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+
+{%- macro RunsConfigurations(current_target) -%}
+{%-     if current_target.runs|length -%}
+{%-         for run in current_target.runs -%}
+{%-             set classpath = run.classpath -%}
+{%-             if classpath != "" and classpath|replace('.cplst') == classpath -%}
+{#-                 Project in exported classpath -#}
+{%-                 set classpath = '":' + classpath|replace("/", ":") + '"' -%}
+{%-                 include "[generator]/patch_classpath.jinja" %}
+    {{ varprefix }}{{ run['_object_index'] }}Classpath(project({{ classpath }}))
+{%-             endif -%}
+{%-         endfor -%}
+{%      endif -%}
+{%- endmacro -%}
+
+{%- macro TargetsConfigurations() -%}
+{%-     if target is defined -%}
+{%-         set current_target = target -%}
+{#-         Main target codegen -#}
+{%-         set varprefix = MAIN_VARPREFIX -%}
+{{ RunsConfigurations(current_target) }}
+{%-     endif -%}
+{%-     if extra_targets|length -%}
+{%-         for current_target in extra_targets -%}
+{#-             TestN target codegen -#}
+{%-             set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{{ RunsConfigurations(current_target) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
         "$output_root/{{ file_jar }}",
@@ -140,6 +171,8 @@ dependencies {
 {{ Kapts("kaptTest", extra_target.kapt.kapts, file_jars, test_file_jars) }}
 {%-     endfor -%}
 {%- endif -%}
+{#- glue -#}
+{{ TargetsConfigurations() }}
 {#- glue -#}
 {{ AddNonFileDeps(target.consumer, file_classpaths, "implementation", "api") }}
 {%- set target_jars = target.consumer|selectattr('jar')|map(attribute='jar') -%}

@@ -102,15 +102,17 @@ The table shows which aggregate subsets are exported depending on tag settings.
 
 Monitoring can compute metric aggregates during writing.
 
-**Sum only aggregate**.
+### Sum only aggregate
 This is a default mode.
 
 To avoid pointless graphs in Solomon, the library marks values for which aggregation is meaningful with the tag yt_aggr=1.
 
 In shard settings, there must be a single rule enabled: `host=*, yt_aggr=1 -> host=Aggr, yt_aggr=1`.
 
-**Full monitoring aggregates support**.
-This is an experimental feature, disabled by default.
+### Extended monitoring aggregates support
+
+**This is an experimental feature, disabled by default.**
+
 To enable it, set the option `enable_solomon_aggregates` to `%true`.
 
 In this mode, the library tags values that can be meaningfully aggregated with tag `yt_aggr=X`,
@@ -123,3 +125,19 @@ In service settings, there must be the following rules:
 {"condition": {host: "*", yt_aggr: "min"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "MIN"}
 {"condition": {host: "*", yt_aggr: "avg"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "AVG"}
 ```
+
+**Handling Global Sensors**
+
+By default, `sum` aggregation is applied to global sensors.
+If another function is specified (e.g., `max`), the Monitoring stores:
+— the default result (`sum`);
+— the result based on the specified aggregation function.
+
+To avoid pointless graphs in the Monitoring add option `MemOnly` to the sensor.
+In this case, only the aggregation result based on the specified function is stored in the Monitoring.
+
+It may not be convenient to add option `MemOnly` to each global sensor individually.
+Therefore, there is a global parameter in the configuration that allows you to set option `MemOnly` for all global sensors at once.
+
+More details about metric aggregations can be found in the Monitoring
+[documentation](https://docs.yandex-team.ru/monium/metrics/concepts/aggregation).

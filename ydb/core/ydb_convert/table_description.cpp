@@ -5,8 +5,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -16,6 +20,7 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -86,6 +91,10 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         ops.emplace(EAlterOperationKind::RenameIndex);
     }
 
+    if (req->has_compact()) {
+        ops.emplace(EAlterOperationKind::Compact);
+    }
+
     return ops;
 }
 
@@ -97,6 +106,123 @@ std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) 
         ythrow yexception() << "wrong path format '" << path << "'" ;
     }
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+}
+
+bool ValidateRenameIndexRequest(
+    const Ydb::Table::RenameIndexItem& rename,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error
+) {
+    if (rename.source_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source index name must not be empty";
+        return false;
+    }
+
+    if (rename.destination_name().empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Destination index name must not be empty";
+        return false;
+    }
+
+    if (rename.source_name() == rename.destination_name()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Source and destination index names must differ";
+        return false;
+    }
+
+    return true;
+}
+
+template <typename TSettings, typename TProto>
+void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
+    if (ngramSettings.ngram_size()) {
+        ngram->SetNGrammSize(ngramSettings.ngram_size());
+    }
+
+    if (ngramSettings.has_case_sensitive()) {
+        ngram->SetCaseSensitive(ngramSettings.case_sensitive());
+    }
+
+    if (ngramSettings.has_false_positive_probability()) {
+        ngram->SetFalsePositiveProbability(ngramSettings.false_positive_probability());
+    }
+}
+
+bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    if (!in.indexes_size()) {
+        return true;
+    }
+
+    THashMap<TString, ui32> nameToId;
+    ui32 nextColumnId = 1;
+    for (const auto& col : tableDesc.GetSchema().GetColumns()) {
+        nameToId[col.GetName()] = nextColumnId++;
+    }
+
+    auto fail = [&status, &error](const TString& msg) -> bool {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = msg;
+        return false;
+    };
+
+    ui32 nextIndexId = 1;
+    for (const auto& index : in.indexes()) {
+        if (index.name().empty()) {
+            return fail("Index must have a name");
+        }
+
+        if (index.index_columns_size() != 1) {
+            return fail("Only one index column is supported for local bloom indexes");
+        }
+
+        if (!index.data_columns().empty()) {
+            return fail("Data columns are not supported for local bloom indexes");
+        }
+
+        const TString& colName = index.index_columns(0);
+        auto idIt = nameToId.find(colName);
+        if (idIt == nameToId.end()) {
+            return fail(TStringBuilder() << "Unknown index column: " << colName);
+        }
+
+        const ui32 columnId = idIt->second;
+
+        auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
+        olapIndex->SetId(nextIndexId++);
+        olapIndex->SetName(index.name());
+
+        switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                    return fail("Local bloom filter index support is disabled");
+                }
+                olapIndex->SetClassName("BLOOM_FILTER");
+                auto* bloom = olapIndex->MutableBloomFilter();
+                const auto& bloomSettings = index.local_bloom_filter_index();
+                if (bloomSettings.has_false_positive_probability()) {
+                    bloom->SetFalsePositiveProbability(bloomSettings.false_positive_probability());
+                }
+                bloom->AddColumnIds(columnId);
+                break;
+            }
+            case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                    return fail("Local bloom ngram filter index support is disabled");
+                }
+                olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                auto* ngram = olapIndex->MutableBloomNGrammFilter();
+                const auto& ngramSettings = index.local_bloom_ngram_filter_index();
+                FillLocalBloomNgramProto(ngram, ngramSettings);
+                ngram->SetColumnId(columnId);
+                break;
+            }
+            default:
+                return fail("Unsupported index type for column table import");
+        }
+    }
+    return true;
 }
 
 }
@@ -165,9 +291,116 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
         settings->set_if_not_exist(true);
     }
 
+    if (desc.parallel()) {
+        settings->set_max_shards_in_flight(desc.parallel());
+    }
+
     settings->set_source_path(req->path());
     auto tableIndex = settings->mutable_index();
     tableIndex->CopyFrom(req->add_indexes(0));
+
+    return true;
+}
+
+// For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
+// ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid table path";
+        return false;
+    }
+
+    modifyScheme->SetWorkingDir(pathPair.first);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+    auto* tableDesc = modifyScheme->MutableAlterTable();
+    tableDesc->SetName(pathPair.second);
+
+    // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
+    // Last specified FPP wins for each prefix length; 0 means "not set, use default".
+    TMap<ui32, double> bloomPrefixes;
+    for (const auto& index : req->add_indexes()) {
+        if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+            continue;
+        }
+        if (index.index_columns().empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Bloom filter index must specify at least one column";
+            return false;
+        }
+
+        const ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
+        const auto& bloomSettings = index.local_bloom_filter_index();
+        if (bloomSettings.has_false_positive_probability()) {
+            const double fpp = bloomSettings.false_positive_probability();
+            if (fpp <= 0.0 || fpp >= 1.0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "false_positive_probability must be in range (0, 1)";
+                return false;
+            }
+            bloomPrefixes[prefixLen] = fpp;
+        } else {
+            bloomPrefixes.emplace(prefixLen, 0.0);
+        }
+    }
+
+    for (auto&& [prefixLen, fpp] : bloomPrefixes) {
+        auto* entry = tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(prefixLen);
+        if (fpp > 0.0) {
+            entry->SetFalsePositiveProbability(fpp);
+        }
+    }
+
+    return true;
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
+}
+
+bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::Compact) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        error = "Unexpected build alter table compact call.";
+        return false;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableForcedCompactions()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Compact is not allowed";
+        return false;
+    }
+
+    if (req->has_compact()) {
+        if (req->compact().has_cascade()) {
+            settings->set_cascade(req->compact().cascade());
+        }
+        if (req->compact().has_max_shards_in_flight()) {
+            i32 maxShardsInFlight = req->compact().max_shards_in_flight();
+            if (maxShardsInFlight <= 0) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "MAX_SHARDS_IN_FLIGHT should be positive";
+                return false;
+            }
+            settings->set_max_shards_in_flight(maxShardsInFlight);
+        }
+    }
+
+    settings->set_source_path(req->path());
 
     return true;
 }
@@ -326,7 +559,18 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             if (!alter.family().empty()) {
                 column->SetFamilyName(alter.family());
             }
+
+            if (alter.has_compression()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+                return false;
+            }
+
             switch (alter.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromLiteral: {
+                    *column->MutableDefaultFromLiteral() = alter.from_literal();
+                    break;
+                }
                 case Ydb::Table::ColumnMeta::kFromSequence: {
                     auto fromSequence = column->MutableDefaultFromSequence();
                     TString sequenceName = alter.from_sequence().name();
@@ -584,6 +828,22 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         if (column.HasColumnFamilyName()) {
             newColumn->set_family(column.GetColumnFamilyName());
         }
+
+        if (column.HasDataAccessorConstructor()) {
+            switch (column.GetDataAccessorConstructor().Implementation_case()) {
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kDictionary:
+                    newColumn->add_encoding()->mutable_dictionary();
+                    break;
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kPlain:
+                    newColumn->add_encoding()->mutable_off();
+                    break;
+                case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::IMPLEMENTATION_NOT_SET:
+                    newColumn->add_encoding();
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 
     for (auto& name : schema.GetKeyColumnNames()) {
@@ -616,6 +876,96 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     FillColumnDescriptionImpl(out, in);
+}
+
+void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
+    const auto& schema = in.GetSchema();
+    THashMap<ui32, TString> idToName;
+    idToName.reserve(schema.ColumnsSize());
+    for (const auto& col : schema.GetColumns()) {
+        if (col.HasId() && col.HasName()) {
+            idToName[col.GetId()] = col.GetName();
+        }
+    }
+
+    for (const auto& olapIndex : schema.GetIndexes()) {
+        if (!olapIndex.HasName()) {
+            continue;
+        }
+
+        switch (olapIndex.GetImplementationCase()) {
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
+                const auto& bloom = olapIndex.GetBloomFilter();
+                if (bloom.GetColumnIds().empty()) {
+                    continue;
+                }
+
+                bool ok = true;
+                for (auto&& colId : bloom.GetColumnIds()) {
+                    if (!idToName.contains(colId)) {
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (!ok) {
+                    continue;
+                }
+
+                auto* ydbIndex = out.add_indexes();
+                ydbIndex->set_name(olapIndex.GetName());
+                for (auto&& colId : bloom.GetColumnIds()) {
+                    ydbIndex->add_index_columns(idToName.at(colId));
+                }
+
+                if (bloom.HasFalsePositiveProbability()) {
+                    ydbIndex->mutable_local_bloom_filter_index()->set_false_positive_probability(
+                        bloom.GetFalsePositiveProbability());
+                }
+
+                break;
+            }
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
+                const auto& ngram = olapIndex.GetBloomNGrammFilter();
+                auto* ydbIndex = out.add_indexes();
+                ydbIndex->set_name(olapIndex.GetName());
+                if (ngram.HasColumnId()) {
+                    const auto it = idToName.find(ngram.GetColumnId());
+                    if (it != idToName.end()) {
+                        ydbIndex->add_index_columns(it->second);
+                    }
+                }
+
+                auto* settings = ydbIndex->mutable_local_bloom_ngram_filter_index();
+                if (ngram.HasNGrammSize()) {
+                    settings->set_ngram_size(ngram.GetNGrammSize());
+                }
+
+                if (ngram.HasHashesCount()) {
+                    settings->set_hashes_count(ngram.GetHashesCount());
+                }
+
+                if (ngram.HasFilterSizeBytes()) {
+                    settings->set_filter_size_bytes(ngram.GetFilterSizeBytes());
+                }
+
+                if (ngram.HasRecordsCount()) {
+                    settings->set_records_count(ngram.GetRecordsCount());
+                }
+
+                if (ngram.HasCaseSensitive()) {
+                    settings->set_case_sensitive(ngram.GetCaseSensitive());
+                }
+
+                if (ngram.HasFalsePositiveProbability()) {
+                    settings->set_false_positive_probability(ngram.GetFalsePositiveProbability());
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -672,7 +1022,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     for (const auto& column : in) {
-        NKikimrSchemeOp:: TColumnDescription* cd = out.AddColumns();
+        NKikimrSchemeOp::TColumnDescription* cd = out.AddColumns();
         cd->SetName(column.name());
         bool notOptional = !column.type().has_optional_type();
         if (!column.has_not_null()) {
@@ -708,6 +1058,12 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
             cd->SetFamilyName(column.family());
         }
 
+        if (column.has_compression()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+            return false;
+        }
+
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromLiteral: {
                 auto fromLiteral = cd->MutableDefaultFromLiteral();
@@ -738,6 +1094,49 @@ NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterCol
     return out.MutableAlterSchema()->AddAddColumns();
 }
 
+template <class TColumnDesc>
+bool FillColumnCompression(
+    const Ydb::Table::ColumnMeta& from, TColumnDesc* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
+        auto toSerializer = to->MutableSerializer();
+
+        if (fromCompression.has_algorithm()) {
+            toSerializer->SetClassName("ARROW_SERIALIZER");
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            switch (fromCompression.algorithm()) {
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    break;
+
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.algorithm() << " in compression settings";
+                    return false;
+            }
+        }
+
+        if (fromCompression.has_compression_level()) {
+            if (!fromCompression.has_algorithm()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Compression level specified without an algorithm";
+                return false;
+            }
+
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            arrowCompression->SetLevel(fromCompression.compression_level());
+        }
+    }
+    return true;
+}
+
 template <typename TColumnTable>
 bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error) {
@@ -763,8 +1162,14 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
         }
 
-        if (!column.Getfamily().empty()) {
-            columnDesc->SetColumnFamilyName(column.Getfamily());
+        if (column.has_compression()) {
+            if (!FillColumnCompression(column, columnDesc, status, error)) {
+                return false;
+            }
+        }
+
+        if (!column.family().empty()) {
+            columnDesc->SetColumnFamilyName(column.family());
         }
 
         if (column.has_from_literal()) {
@@ -777,6 +1182,33 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             status = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default sequences are not supported in column tables";
             return false;
+        }
+
+        if (column.encoding_size() > 0) {
+            if (column.encoding_size() != 1) {
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = TStringBuilder() << "Several encodings are not yet supported for column: " << column.name();
+                return false;
+            }
+
+            switch (column.encoding(0).encoding_settings_case()) {
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                    columnDesc->MutableDataAccessorConstructor()->MutablePlain();
+                    break;
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+                    columnDesc->MutableDataAccessorConstructor()->MutableDictionary();
+                    break;
+                case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+                    break;
+                default:
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = TStringBuilder() << "Unsupported encoding for column: " << column.name();
+                    return false;
+
+            }
         }
     }
 
@@ -826,43 +1258,6 @@ bool FillColumnFamily(
         status = Ydb::StatusIds::BAD_REQUEST;
         error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << from.name() << "'";
         return false;
-    }
-    return true;
-}
-
-
-bool FillColumnCompression(
-    const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
-    to->SetName(from.name());
-    if (from.has_compression()) {
-        const auto fromCompression = from.compression();
-        auto toSerializer = to->MutableSerializer();
-
-        if (from.compression().algorithm()) {
-            toSerializer->SetClassName("ARROW_SERIALIZER");
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            switch (fromCompression.algorithm()) {
-                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
-                    break;
-
-                default:
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
-                    return false;
-            }
-        }
-
-        if (from.compression().has_compression_level()) {
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            arrowCompression->SetLevel(fromCompression.compression_level());
-        }
     }
     return true;
 }
@@ -922,6 +1317,33 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     return false;
                 }
             }
+
+            if (alter.encoding_size() > 0) {
+                if (alter.encoding_size() != 1) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << name;
+                    return false;
+                }
+
+                switch (alter.encoding(0).encoding_settings_case()) {
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                        alterColumn->MutableDataAccessorConstructor()->MutablePlain();
+                        break;
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+                        alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
+                        break;
+                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+                        break;
+                    default:
+                        status = Ydb::StatusIds::UNSUPPORTED;
+                        error = TStringBuilder() << "Unsupported encoding for column: " << name;
+                        return false;
+
+                }
+            }
         }
 
         for (const auto& add : req->add_column_families()) {
@@ -947,6 +1369,118 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         } else if (req->has_drop_ttl_settings()) {
             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
         }
+    } else if (OpType == EAlterOperationKind::AddIndex) {
+        if (req->add_indexes_size() != 1) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = "Only one index can be added by one operation";
+            return false;
+        }
+
+        const auto& index = req->add_indexes(0);
+        if (index.name().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Index must have a name";
+            return false;
+        }
+
+        if (index.index_columns_size() > 1) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Only one index column is supported for local bloom indexes";
+            return false;
+        }
+
+        if (!index.data_columns().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Data columns are not supported for local bloom indexes";
+            return false;
+        }
+
+        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        auto* upsert = alterColumnTable->MutableAlterSchema()->AddUpsertIndexes();
+        upsert->SetName(index.name());
+
+        switch (index.type_case()) {
+            case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = "Local bloom filter index support is disabled";
+                    return false;
+                }
+
+                upsert->SetClassName("BLOOM_FILTER");
+                auto* bloom = upsert->MutableBloomFilter();
+                const auto& bloomSettings = index.local_bloom_filter_index();
+                if (bloomSettings.has_false_positive_probability()) {
+                    bloom->SetFalsePositiveProbability(bloomSettings.false_positive_probability());
+                } else if (index.index_columns_size() == 1) {
+                    bloom->SetFalsePositiveProbability(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                }
+
+                if (index.index_columns_size() == 1) {
+                    bloom->AddColumnNames(index.index_columns(0));
+                }
+
+                break;
+            }
+            case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = "Local bloom ngram filter index support is disabled";
+                    return false;
+                }
+
+                upsert->SetClassName("BLOOM_NGRAMM_FILTER");
+                auto* ngram = upsert->MutableBloomNGrammFilter();
+                const auto& ngramSettings = index.local_bloom_ngram_filter_index();
+                if (ngramSettings.ngram_size()) {
+                    ngram->SetNGrammSize(ngramSettings.ngram_size());
+                }
+
+                if (ngramSettings.has_case_sensitive()) {
+                    ngram->SetCaseSensitive(ngramSettings.case_sensitive());
+                }
+
+                if (ngramSettings.has_false_positive_probability()) {
+                    ngram->SetFalsePositiveProbability(ngramSettings.false_positive_probability());
+                }
+
+                if (index.index_columns_size() == 1) {
+                    ngram->SetColumnName(index.index_columns(0));
+                }
+
+                break;
+            }
+            default:
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Only local bloom indexes are supported for column tables";
+                return false;
+        }
+    } else if (OpType == EAlterOperationKind::RenameIndex) {
+        const auto& rename = req->rename_indexes(0);
+        if (!ValidateRenameIndexRequest(rename, status, error)) {
+            return false;
+        }
+
+        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        auto* renameIndex = alterColumnTable->MutableAlterSchema()->AddMoveIndex();
+        renameIndex->SetSourceName(rename.source_name());
+        renameIndex->SetDestinationName(rename.destination_name());
+        renameIndex->SetReplaceDestination(rename.replace_destination());
+    } else if (OpType == EAlterOperationKind::DropIndex) {
+        if (req->drop_indexes_size() != 1) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = "Only one index can be removed by one operation";
+            return false;
+        }
+
+        auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+        alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
     }
 
     return true;
@@ -1130,17 +1664,17 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition)
             );
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(1)
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition)
             );
             const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
             if (prefixVectorIndex) {
                 FillGlobalIndexSettings(
                     *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
-                    tableIndex.GetIndexImplTableDescriptions(2)
+                    tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition)
                 );
             }
 
@@ -1159,12 +1693,30 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_relevance_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
+                *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_docs_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_stats_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
             );
 
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+            FillGlobalIndexSettings(
+                *index->mutable_global_json_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
             break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
@@ -1179,6 +1731,35 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_BUILDING);
             }
             index->set_size_bytes(tableIndex.GetDataSize());
+        }
+    }
+
+    // Synthesize LocalBloomFilter index entries for DataShard tables.
+    // ByKeyFilterPrefixes stores prefix lengths (not index names), so names are generated
+    // as "idx_bloom_<prefixLen>".
+    if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
+        const auto& pkCols = in.GetKeyColumnNames();
+        for (auto&& filterPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+            const ui32 prefixLen = filterPrefix.GetPrefixLength();
+            if (prefixLen == 0 || static_cast<int>(prefixLen) > pkCols.size()) {
+                continue;
+            }
+
+            auto index = out.add_indexes();
+            index->set_name(TStringBuilder() << "idx_bloom_" << prefixLen);
+            for (ui32 i = 0; i < prefixLen; ++i) {
+                index->add_index_columns(pkCols[i]);
+            }
+
+            auto* bloom = index->mutable_local_bloom_filter_index();
+            if (filterPrefix.HasFalsePositiveProbability() &&
+                filterPrefix.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
+                bloom->set_false_positive_probability(filterPrefix.GetFalsePositiveProbability());
+            }
+
+            if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
+                index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+            }
         }
     }
 }
@@ -1204,6 +1785,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
     for (const auto& index : in.indexes()) {
         auto indexDesc = out.MutableIndexDescription()->Add();
+
+        if (index.name().empty()) {
+            return returnError(Ydb::StatusIds::BAD_REQUEST, "Index must have a name");
+        }
 
         if (!index.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Data column feature is not supported yet");
@@ -1249,6 +1834,14 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
 
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson);
+            break;
+
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
+
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type
             // so it's not possible to return an invalid index type error here for now
@@ -1282,6 +1875,8 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     out.set_name(in.GetName());
     out.set_virtual_timestamps(in.GetVirtualTimestamps());
     out.set_schema_changes(in.GetSchemaChanges());
+    out.set_user_sids(in.GetUserSIDs());
+    out.set_trace_ids(in.GetTraceIds());
     out.set_aws_region(in.GetAwsRegion());
 
     if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
@@ -1349,6 +1944,8 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetVirtualTimestamps(in.virtual_timestamps());
     out.SetSchemaChanges(in.schema_changes());
     out.SetAwsRegion(in.aws_region());
+    out.SetUserSIDs(in.user_sids());
+    out.SetTraceIds(in.trace_ids());
 
     if (in.has_resolved_timestamps_interval()) {
         out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());
@@ -1842,6 +2439,10 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
+        return false;
+    }
+
+    if (!FillColumnTableIndexesFromCreateRequest(tableDesc, in, status, error)) {
         return false;
     }
 

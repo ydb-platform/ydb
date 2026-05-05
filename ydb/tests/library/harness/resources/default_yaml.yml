@@ -165,10 +165,6 @@ kqpconfig:
   settings:
   - name: "_ResultRowsLimit"
     value: "{ydb_result_rows_limit}"
-  - name: "_KqpYqlSyntaxVersion"
-    value: "{ydb_yql_syntax_version}"
-  - name: "_KqpAllowNewEngine"
-    value: "true"
 interconnect_config:
   start_tcp: true
 sqs_config:
@@ -195,6 +191,7 @@ pqconfig:
 pqcluster_discovery_config:
   enabled: false
 table_service_config:
+  sql_version: {ydb_yql_syntax_version}
   resource_manager:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576

@@ -56,8 +56,9 @@ public:
 
 */
 
-#if 0
-#else // 0
+#if __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
+#error  include <__cxx03/typeinfo>
+#else
 #  include <__config>
 #  include <__cstddef/size_t.h>
 #  include <__exception/exception.h>
@@ -375,7 +376,7 @@ class type_info : public std::type_info {};
 
 #  if defined(_LIBCPP_ABI_VCRUNTIME) && _HAS_EXCEPTIONS == 0
 
-namespace std {
+_LIBCPP_BEGIN_UNVERSIONED_NAMESPACE_STD
 
 class bad_cast : public exception {
 public:
@@ -393,7 +394,7 @@ private:
   bad_typeid(const char* const __message) _NOEXCEPT : exception(__message) {}
 };
 
-} // namespace std
+_LIBCPP_END_UNVERSIONED_NAMESPACE_STD
 
 #  endif // defined(_LIBCPP_ABI_VCRUNTIME) && _HAS_EXCEPTIONS == 0
 
@@ -412,6 +413,6 @@ _LIBCPP_END_NAMESPACE_STD
 #    include <cstdlib>
 #    include <type_traits>
 #  endif
-#endif // 0
+#endif // __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
 
 #endif // _LIBCPP_TYPEINFO

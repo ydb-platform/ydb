@@ -64,6 +64,17 @@ Adds the option to assign `NULL` to the passed type.
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 ```
 
+## AsOptionalType {#asoptionaltype}
+
+Available since version [2026.01](../changelog/2026.01.md). Idempotently adds the ability to contain `NULL` to the passed type. If the type is already optional, PostgreSQL type or `NULL`, it returns the type unchanged. Unlike [OptionalType](#optionaltype), it does not add an additional level of nesting for already optional types.
+
+#### Examples
+
+```yql
+SELECT FormatType(AsOptionalType(DataType("Bool"))); -- Bool?
+SELECT FormatType(AsOptionalType(ParseType("Bool?"))); -- Bool?
+```
+
 ## ListType and StreamType {#listtype}
 
 Builds a list type or stream type based on the passed element type.

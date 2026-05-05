@@ -6,8 +6,10 @@
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/persqueue/constants.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
@@ -17,6 +19,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
@@ -35,6 +38,8 @@ template <bool UseMigrationProtocol>
 using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Codec, i32>;
 
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
+
+static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
@@ -117,6 +122,8 @@ inline void FillExtraFieldsForDataChunk(
             logType = item.second;
         } else if (item.first == "file") {
             file = item.second;
+        } else if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+            continue;
         } else {
             auto res = data.MutableExtraFields()->AddItems();
             res->SetKey(item.first);
@@ -715,7 +722,9 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
         return;
     }
 
-    CreatePartitionWriterCache(ctx);
+    if (!CreatePartitionWriterCache(ctx)) {
+        return;
+    }
 
     State = ES_WAIT_WRITER_INIT;
 
@@ -733,7 +742,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
 }
 
 template <bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
+bool TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
 {
     NPQ::TPartitionWriterOpts opts;
 
@@ -741,6 +750,25 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+
+    if constexpr (!UseMigrationProtocol) {
+        for (const auto& item : InitRequest.write_session_meta()) {
+            if (item.first == NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+                bool trackProducerId = opts.TrackProducerId;
+                if (!TryFromString<bool>(item.second, trackProducerId)) {
+                    CloseSession(
+                        Sprintf("invalid value for write_session_meta key '%s': expected boolean, got '%s'",
+                                TString{NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
+                                item.second.c_str()),
+                        PersQueue::ErrorCode::BAD_REQUEST,
+                        ctx);
+                    return false;
+                }
+                opts.WithTrackProducerId(trackProducerId);
+                break;
+            }
+        }
+    }
 
     if constexpr (UseMigrationProtocol) {
         opts.WithTopicPath(InitRequest.topic());
@@ -767,6 +795,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -1168,14 +1197,6 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
 
-    if constexpr (!UseMigrationProtocol) {
-        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-            CloseSession("Disabled transaction support for TopicService.",
-                         PersQueue::ErrorCode::ERROR, ctx);
-            return;
-        }
-    }
-
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (!UseMigrationProtocol) {
@@ -1237,6 +1258,9 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
+            if (metaItem.key() == PARTITION_KEY_META_KEY) {
+                w->SetChoosePartitionKey(metaItem.value());
+            }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
@@ -1254,12 +1278,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
     pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
-
-    auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
-    if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
-        CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
 
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(

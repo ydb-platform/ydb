@@ -33,6 +33,7 @@ struct TTopicSessionMetrics {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+            PartitionGroup = PartitionGroup->GetSubgroup("host", "");   // This partition report metrics only on one host. 
         }
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
@@ -275,7 +276,7 @@ private:
     const TActorId RowDispatcherActorId;
     const ui32 PartitionId;
     const NYdb::TDriver Driver;
-    const NYql::IPqGateway::TPtr PqGateway;
+    const NYql::IPqStaticGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const TRowDispatcherSettings Config;
     const TActorId CompileServiceActorId;
@@ -323,7 +324,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         ui64 maxBufferSize,
         bool enableStreamingQueriesCounters);
 
@@ -412,7 +413,7 @@ TTopicSession::TTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters)
     : ReadGroup(readGroup)
@@ -518,7 +519,8 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
-        .ReadFromTimestamp(minTime);
+        .ReadFromTimestamp(minTime)
+        .AutoPartitioningSupport(true);
 
     if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
      || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {
@@ -693,6 +695,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
     LOG_ROW_DISPATCHER_WARN("TEndPartitionSessionEvent");
+
+    Self.ThrowFatalError(TStatus::Fail(
+        EStatusId::SCHEME_ERROR,
+        TStringBuilder() << "Topic (" << Self.TopicPath << ") with auto partitioning is not supported."));
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
@@ -1002,7 +1008,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
+    LOG_ROW_DISPATCHER_TRACE("TEvGetEventByTimerEvent");
     // Workaround for a partition reading bug:
     // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
     // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
@@ -1073,7 +1079,7 @@ std::unique_ptr<IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters) {
     return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));

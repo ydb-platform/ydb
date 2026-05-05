@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TValidateErrorPolicyNone;
 struct TValidateErrorPolicyThrow;
@@ -22,7 +21,6 @@ struct TValidate {
     static void WrapCallable(const TCallableType* callableType, NUdf::TUnboxedValue& callable, const TString& message);
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 #include "mkql_validate_impl.h"

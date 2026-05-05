@@ -30,15 +30,15 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuil
         schemas = &defaultSchemas;
     }
     if (read.TableMetadataAccessor->NeedStalenessChecker()) {
-        if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
+        if (!self->MayStartScanAt(read.GetSnapshot())) {
             return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
-                                                            << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
+                                                            << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
         }
     }
 
     auto readMetadata = std::make_shared<TReadMetadata>(read.TableMetadataAccessor->GetVersionedIndexCopyVerified(*schemas), read);
 
-    auto initResult = readMetadata->Init(self, read, false);
+    auto initResult = readMetadata->Init(self, read, EReaderClass::Simple);
     if (!initResult) {
         return initResult;
     }

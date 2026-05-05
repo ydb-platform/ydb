@@ -1,6 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/actions/future.h>
@@ -28,14 +29,34 @@ TEST(TFairShareThreadPoolTest, Configure)
         }
     }
 
-    AllSucceeded(std::move(futures))
-        .Get();
+    WaitUntilSet(AllSucceeded(std::move(futures)));
     threadPool->Shutdown();
     EXPECT_EQ(N, counter->load());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Test correct draining on Shutdown.
+// Reproducing bug from YTADMINREQ-56377.
+TEST(TFairShareThreadPoolTest, ShutdownClearsHeap)
+{
+    // Probability of missing bug in Shutdown is about 20%. Make it almost zero by repeating.
+    for (int iter = 0; iter < 100; ++iter) {
+        auto threadPool = CreateFairShareThreadPool(2, "Test");
+        auto invoker = threadPool->GetInvoker("tag");
+
+        // Enqueue tasks — Shutdown() will drain them but (before fix) leave the bucket in the heap.
+        for (int i = 0; i < 10; ++i) {
+            invoker->Invoke(BIND([] {
+                Sleep(TDuration::MilliSeconds(1)); // Blocking wait.
+            }));
+        }
+
+        threadPool->Shutdown();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NConcurrency
-

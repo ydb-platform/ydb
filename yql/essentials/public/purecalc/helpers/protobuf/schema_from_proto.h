@@ -7,8 +7,7 @@
 
 #include <google/protobuf/descriptor.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 enum class EEnumPolicy {
     Int32,
     String,
@@ -56,5 +55,4 @@ NYT::TNode MakeSchemaFromProto(const google::protobuf::Descriptor&, const TProto
  * Build variant over tuple type from protobuf descriptors.
  */
 NYT::TNode MakeVariantSchemaFromProtos(const TVector<const google::protobuf::Descriptor*>&, const TProtoSchemaOptions& = {});
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

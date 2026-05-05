@@ -14,6 +14,7 @@ def post_install(self):
                 ]
             ),
         )
+        m.before("END", "SUPPRESSIONS(tsan.supp)")
 
 
 libbacktrace = GNUMakeNixProject(
@@ -24,4 +25,5 @@ libbacktrace = GNUMakeNixProject(
     platform_dispatchers=["config.h"],
     post_install=post_install,
     disable_includes=["sys/link.h"],
+    keep_paths=["tsan.supp"],
 )

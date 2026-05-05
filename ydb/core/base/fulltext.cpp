@@ -54,7 +54,7 @@ namespace {
         return !IsAlphabetic(c) && !IsDecdigit(c);
     }
 
-    void Tokenize(const TString& text, TVector<TString>& tokens, auto isDelimiter) {
+    void Tokenize(const TStringBuf text, TVector<TString>& tokens, auto isDelimiter) {
         const unsigned char* ptr = (const unsigned char*)text.data();
         const unsigned char* end = ptr + text.size();
 
@@ -91,7 +91,7 @@ namespace {
         }
     }
 
-    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::unordered_set<wchar32> ignoredDelimiter) {
+    TVector<TString> Tokenize(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::unordered_set<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
@@ -110,7 +110,7 @@ namespace {
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 if (UTF8Detect(text) != NotUTF8) {
-                    tokens.push_back(text);
+                    tokens.push_back(TString(text));
                 }
                 break;
             default:
@@ -283,7 +283,7 @@ Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::Fu
     return analyzers;
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
+TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
     TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiters);
 
     if (settings.use_filter_lowercase()) {
@@ -353,12 +353,11 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
         for (const auto& term : StringSplitter(pattern).SplitBySet("%_")) {
             const TString token(term.Token());
             const i64 tokenLength = GetLengthUTF8(token);
-            if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {
-                continue;
-            }
 
-            const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
-            BuildNgrams(token, upper, upper, edge, searchTerms);
+            if (tokenLength != 0 && analyzersForQuery.filter_ngram_min_length() <= tokenLength) {
+                const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
+                BuildNgrams(token, upper, upper, edge, searchTerms);
+            }
 
             if (edge) {
                 break;
@@ -421,40 +420,39 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
-bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& name, const TString& value, TString& error) {
+bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
     Ydb::Table::FulltextIndexSettings::Analyzers* analyzers = settings.columns().empty()
         ? settings.add_columns()->mutable_analyzers()
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
-    const TString nameLower = to_lower(name);
     if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);
     } else if (nameLower == "use_filter_lowercase") {
-        analyzers->set_use_filter_lowercase(ParseBool(name, value, error));
+        analyzers->set_use_filter_lowercase(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_stopwords") {
-        analyzers->set_use_filter_stopwords(ParseBool(name, value, error));
+        analyzers->set_use_filter_stopwords(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_ngram") {
-        analyzers->set_use_filter_ngram(ParseBool(name, value, error));
+        analyzers->set_use_filter_ngram(ParseBool(nameLower, value, error));
     } else if (nameLower == "use_filter_edge_ngram") {
-        analyzers->set_use_filter_edge_ngram(ParseBool(name, value, error));
+        analyzers->set_use_filter_edge_ngram(ParseBool(nameLower, value, error));
     } else if (nameLower == "filter_ngram_min_length") {
-        analyzers->set_filter_ngram_min_length(ParseInt32(name, value, error));
+        analyzers->set_filter_ngram_min_length(ParseInt32(nameLower, value, error));
     } else if (nameLower == "filter_ngram_max_length") {
-        analyzers->set_filter_ngram_max_length(ParseInt32(name, value, error));
+        analyzers->set_filter_ngram_max_length(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_length") {
-        analyzers->set_use_filter_length(ParseBool(name, value, error));
+        analyzers->set_use_filter_length(ParseBool(nameLower, value, error));
     } else if (nameLower == "filter_length_min") {
-        analyzers->set_filter_length_min(ParseInt32(name, value, error));
+        analyzers->set_filter_length_min(ParseInt32(nameLower, value, error));
     } else if (nameLower == "filter_length_max") {
-        analyzers->set_filter_length_max(ParseInt32(name, value, error));
+        analyzers->set_filter_length_max(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_snowball") {
-        analyzers->set_use_filter_snowball(ParseBool(name, value, error));
+        analyzers->set_use_filter_snowball(ParseBool(nameLower, value, error));
     } else {
-        error = TStringBuilder() << "Unknown index setting: " << name;
+        error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;
     }
 

@@ -64,6 +64,7 @@ constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 #define PDISK_DATA_VERSION 2
 #define PDISK_DATA_VERSION_2 3
 #define PDISK_DATA_VERSION_3 4
+#define PDISK_DATA_VERSION_4 5
 #define PDISK_SYS_LOG_RECORD_VERSION_2 2
 #define PDISK_SYS_LOG_RECORD_VERSION_3 3
 #define PDISK_SYS_LOG_RECORD_VERSION_4 4
@@ -77,17 +78,64 @@ constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 #define NONCE_JUMP_DLOG_CHUNKS 16
 #define NONCE_JUMP_DLOG_RECORDS 4
 
+// Originally there were two options for writing data:
+// * Always encrypted (default).
+// * Never encrypted (a special build with the YDB_DISABLE_PDISK_ENCRYPTION flag, which sets CFLAG
+//   DISABLE_PDISK_ENCRYPTION).
+// We want to migrate from "always encrypted":
+// * Old data is decrypted when it is read.
+// * New data is never decrypted.
+// * If encryption is turned on again, non-encrypted data is read without decryption.
+// This makes the on/off setting backward compatible. However, after turning off encryption,
+// it is not possible to downgrade to a YDB version that does not support this feature.
 #pragma pack(push, 1)
 struct TDataSectorFooter {
     ui64 Nonce;
-    ui64 Version;
+private:
+    ui64 VersionAndFlags;
+public:
     THash Hash;
+
+    static constexpr ui64 VersionMask = 0xff;
+
+    // we use NoEncryptionFlag vs. EncryptedFlag, because this makes
+    // backward compatibility easier: not set – encrypted (as before this feature)
+    static constexpr ui64 NoEncryptionFlag = 1ull << 8;
 
     TDataSectorFooter()
         : Nonce(0)
-        , Version(PDISK_DATA_VERSION)
+        , VersionAndFlags(PDISK_DATA_VERSION)
         , Hash(0)
     {}
+
+    ui8 GetVersion() const {
+        return static_cast<ui8>(VersionAndFlags & VersionMask);
+    }
+
+    void SetVersionAndEncryption(bool enableSectorEncryption) {
+#ifdef DISABLE_PDISK_ENCRYPTION
+        Y_UNUSED(enableSectorEncryption);
+        VersionAndFlags = PDISK_DATA_VERSION;
+        return;
+#else
+        if (enableSectorEncryption) {
+            // use old version
+            VersionAndFlags = PDISK_DATA_VERSION;
+            return;
+        }
+        VersionAndFlags = static_cast<ui64>(PDISK_DATA_VERSION_4) | NoEncryptionFlag;
+#endif
+    }
+
+    // note, it's backward compatible with both old version types,
+    // where we either set DISABLE_PDISK_ENCRYPTION or always encrypt
+    bool IsEncrypted() const {
+#ifdef DISABLE_PDISK_ENCRYPTION
+        return false;
+#else
+        return (VersionAndFlags & NoEncryptionFlag) == 0;
+#endif
+    }
 };
 
 struct TParitySectorFooter {
@@ -880,7 +928,7 @@ struct TDiskFormat {
         }
     }
 
-    void Clear(bool enableFormatEncryption) {
+    void Clear(bool enableFormatAndMetadataEncryption) {
         Version = PDISK_FORMAT_VERSION;
         DiskSize = 0;
         Guid = 0;
@@ -902,7 +950,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptData;
 
-        if (enableFormatEncryption) {
+        if (enableFormatAndMetadataEncryption) {
             FormatFlags |= FormatFlagEncryptFormat;
         }
 

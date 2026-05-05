@@ -1,9 +1,6 @@
 #include "optimizer.h"
 
 #include "level/one_layer.h"
-#include "level/zero_level.h"
-#include "selector/snapshot.h"
-#include "selector/transparent.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
 
@@ -12,7 +9,8 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+    std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
     std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit)
     : TBase(pathId, nodePortionsCountLimit)
     , Counters(counters)
@@ -20,7 +18,8 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     , Selectors(std::move(selectors))
     , Levels(std::move(levels))
     , StoragesManager(storagesManager)
-    , PrimaryKeysSchema(primaryKeysSchema) {
+    , PrimaryKeysSchema(primaryKeysSchema)
+{
     RefreshWeights();
 }
 
@@ -31,37 +30,31 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     TSaverContext saverContext(StoragesManager);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
     bool hasOneLayer = false;
-    for (const auto& [weight, level]: LevelsByWeight) {
+    const auto mayUsePortion = [&](const TPortionInfo::TConstPtr& p) {
+        return !locksManager->IsLocked(p, NDataLocks::ELockCategory::Compaction);
+    };
+    for (const auto& [weight, level] : LevelsByWeight) {
         if (weight == 0) {
             break;
         }
-        auto tasks = level->GetOptimizationTasks();
-        for (auto& data: tasks) {
+        auto tasks = level->GetOptimizationTasks(mayUsePortion);
+        for (auto& data : tasks) {
             if (data.IsEmpty()) {
                 continue;
             }
             hasOneLayer |= dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr;
-            if (!results.empty() && hasOneLayer) {
+            if (hasOneLayer && !results.empty()) {
                 return results;
             }
-            std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
-            //    if (level->GetLevelId() == 0) {
-            result =
-                std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-            //    } else {
-            //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
-            //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-            //        result->AddMovePortions(data.GetMovePortions());
-            //    }
+
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
+                granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
                 "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
             result->SetCheckPoints(std::move(positions));
-            for (auto&& i : result->GetSwitchedPortions()) {
-                AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
-            }
             results.push_back(result);
             if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {
                 return results;

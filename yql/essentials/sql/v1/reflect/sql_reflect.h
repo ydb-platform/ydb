@@ -13,8 +13,8 @@ struct TLexerGrammar {
     TVector<TString> OtherNames;
     THashMap<TString, TString> BlockByName;
 
-    static const TStringBuf KeywordBlockByName(const TStringBuf name);
-    static const TString KeywordNameByBlock(const TStringBuf block);
+    static TStringBuf KeywordBlockByName(TStringBuf name);
+    static TString KeywordNameByBlock(TStringBuf block);
 };
 
 TLexerGrammar LoadLexerGrammar();

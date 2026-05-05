@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
@@ -19,6 +20,9 @@ public:
     NCommon::TConfSetting<TString, Static> Consumer;
     NCommon::TConfSetting<TString, Static> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.
     NCommon::TConfSetting<TString, Static> PqReadByRtmrCluster_;
+    NCommon::TConfSetting<TDuration, Static> MaxPartitionReadSkew;
+    NCommon::TConfSetting<ui64, Static> ReadSessionBufferBytes;
+    NCommon::TConfSetting<bool, Static> EnableDeduplication;
 };
 
 struct TPqClusterConfigurationSettings {

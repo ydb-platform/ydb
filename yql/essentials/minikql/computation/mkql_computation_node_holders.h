@@ -23,8 +23,7 @@
 #include <optional>
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo;
 
@@ -40,6 +39,7 @@ using TMKQLMap = std::map<Key, T, TComp, TMKQLAllocator<std::pair<const Key, T>,
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
+using TUnboxedValueView = std::span<NUdf::TUnboxedValue>;
 using TTemporaryUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 using TUnboxedValueDeque = std::deque<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
 using TKeyPayloadPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
@@ -854,7 +854,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return GetPtr();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -1002,10 +1006,10 @@ public:
         TMaybe<ui64> skip, TMaybe<ui64> take,
         TMaybe<ui64> knownLength) const;
 
-    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
-    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
 
     template <bool IsStream>
     NUdf::TUnboxedValuePod Collect(NUdf::TUnboxedValuePod list) const;
@@ -1020,7 +1024,7 @@ public:
     NUdf::TUnboxedValuePod CreateIteratorOverList(NUdf::TUnboxedValuePod list) const;
     NUdf::TUnboxedValuePod CreateForwardList(NUdf::TUnboxedValuePod stream) const;
 
-    NUdf::TUnboxedValuePod CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
+    NUdf::TUnboxedValuePod CloneArray(NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
 
     TMemoryUsageInfo& GetMemInfo() const {
         return MemInfo_;
@@ -1165,5 +1169,4 @@ private:
     const ui32 ObjectIndex_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

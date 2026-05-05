@@ -390,7 +390,7 @@ public:
         : Context_(ZSTD_createCCtx())
     { }
 
-    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other)
+    TDictionaryCompressionContextGuard(TDictionaryCompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;
@@ -424,7 +424,7 @@ public:
         : Context_(ZSTD_createDCtx())
     { }
 
-    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other)
+    TDictionaryDecompressionContextGuard(TDictionaryDecompressionContextGuard&& other) noexcept
         : Context_(other.Context_)
     {
         other.Context_ = nullptr;

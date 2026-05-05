@@ -341,6 +341,19 @@ public:
         const TChaosLeaseAttachOptions& options),
         (chaosLeaseId, options));
 
+    DELEGATE_METHOD(TFuture<void>, SetUserBanned, (
+        const std::string& user,
+        bool isBanned,
+        const TSetUserBannedOptions& options = {}),
+        (user, isBanned, options))
+    DELEGATE_METHOD(TFuture<bool>, GetUserBanned, (
+        const std::string& user,
+        const TGetUserBannedOptions& options = {}),
+        (user, options))
+    DELEGATE_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (
+        const TListBannedUsersOptions& options = {}),
+        (options))
+
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (
         const NYPath::TYPath& path,
         const TGetTablePivotKeysOptions& options),

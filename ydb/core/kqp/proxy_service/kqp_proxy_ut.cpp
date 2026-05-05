@@ -17,11 +17,17 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 
 #include <util/generic/vector.h>
+#include <util/system/hp_timer.h>
+
+#include <atomic>
 #include <memory>
+#include <thread>
 
 namespace NKikimr::NKqp {
 
@@ -660,6 +666,124 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
         const auto& serverlessInfo = ydb->GetServerlessTenantInfo();
         checkCache(serverlessTenant, TStringBuilder() << ":" << serverlessInfo.PathId << ":" << serverlessTenant, serverlessInfo.NodeIdx);
+    }
+
+    Y_UNIT_TEST(CreateDeleteSessionsSequential) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_ERROR);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+
+        TActorId kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        const ui32 SessionsCount = 1000;
+
+        THPTimer timer;
+
+        for (ui32 i = 0; i < SessionsCount; ++i) {
+            TString sessionId = CreateSession(runtime, kqpProxy, sender);
+            UNIT_ASSERT(!sessionId.empty());
+
+            auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+            closeEv->Record.MutableRequest()->SetSessionId(sessionId);
+            runtime->Send(new IEventHandle(kqpProxy, sender, closeEv.Release()));
+        }
+
+        double elapsed = timer.Passed();
+        Cerr << "Sequential create+close: " << SessionsCount << " sessions in " << elapsed << " seconds" << Endl;
+        Cerr << "Throughput: " << (SessionsCount / elapsed) << " create+close ops/sec" << Endl;
+
+        auto counters = GetServiceCounters(runtime->GetAppData(0).Counters, "ydb");
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            ui64 activeSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+            if (activeSessions == 0) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ui64 activeSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+        UNIT_ASSERT_VALUES_EQUAL_C(activeSessions, 0, "All sessions should be closed after cleanup");
+    }
+
+    Y_UNIT_TEST(CreateDeleteSessionsStress) {
+        NKikimrConfig::TAppConfig appConfig;
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_ERROR);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+
+        const ui32 ThreadCount = 10;
+        const ui32 SessionsPerThread = 100;
+
+        std::atomic<ui32> totalCreated{0};
+        std::atomic<ui32> totalDeleted{0};
+        std::atomic<bool> hasErrors{false};
+
+        THPTimer timer;
+
+        TVector<std::thread> threads;
+        threads.reserve(ThreadCount);
+        for (ui32 t = 0; t < ThreadCount; ++t) {
+            threads.emplace_back([&clientConfig, &totalCreated, &totalDeleted, &hasErrors, sessionsPerThread = SessionsPerThread]() {
+                for (ui32 i = 0; i < sessionsPerThread; ++i) {
+                    TString sessionId = NTestHelpers::CreateQuerySession(clientConfig);
+                    if (sessionId.empty()) {
+                        Cerr << "Failed to create session" << Endl;
+                        hasErrors.store(true);
+                        return;
+                    }
+                    totalCreated.fetch_add(1);
+
+                    bool deleteOk = true;
+                    NTestHelpers::CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, deleteOk);
+                    if (!deleteOk) {
+                        Cerr << "Failed to delete session: " << sessionId << Endl;
+                        hasErrors.store(true);
+                        return;
+                    }
+                    totalDeleted.fetch_add(1);
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        double elapsed = timer.Passed();
+        ui32 totalOps = totalCreated.load() + totalDeleted.load();
+
+        Cerr << "Concurrent stress test: " << ThreadCount << " threads, "
+             << SessionsPerThread << " sessions/thread" << Endl;
+        Cerr << "Created: " << totalCreated.load() << ", Deleted: " << totalDeleted.load() << Endl;
+        Cerr << "Total time: " << elapsed << " seconds" << Endl;
+        Cerr << "Throughput: " << (totalOps / elapsed) << " ops/sec" << Endl;
+
+        UNIT_ASSERT_C(!hasErrors.load(), "No errors during stress test");
+        UNIT_ASSERT_VALUES_EQUAL(totalCreated.load(), ThreadCount * SessionsPerThread);
+        UNIT_ASSERT_VALUES_EQUAL(totalDeleted.load(), ThreadCount * SessionsPerThread);
+
+        auto counters = GetServiceCounters(server.Server_->GetRuntime()->GetAppData(0).Counters, "ydb");
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            ui64 activeSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+            if (activeSessions == 0) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ui64 activeSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+        UNIT_ASSERT_VALUES_EQUAL_C(activeSessions, 0, "All sessions should be closed after stress test");
     }
 
 } // namespace NKqp

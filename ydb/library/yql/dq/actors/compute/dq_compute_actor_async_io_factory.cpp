@@ -94,4 +94,19 @@ void TDqAsyncIoFactory::RegisterOutputTransform(const TString& type, TOutputTran
     Y_ABORT_UNLESS(registered);
 }
 
+NActors::IActor* TDqAsyncIoFactory::CreateDqControlPlane(TControlPlaneArguments&& args) {
+    const TString& type = args.Type;
+    YQL_ENSURE(!type.empty(), "Attempt to create control plane of empty type");
+    const auto* creatorFunc = ControlPlaneCreatorsByType.FindPtr(type);
+    YQL_ENSURE(creatorFunc, "Unknown type of control plane: \"" << type << "\"");
+    NActors::IActor* actor = (*creatorFunc)(std::move(args));
+    Y_ABORT_UNLESS(actor);
+    return actor;
+}
+
+void TDqAsyncIoFactory::RegisterControlPlane(const TString& type, TControlPlaneCreatorFunction creator) {
+    const auto registered = ControlPlaneCreatorsByType.emplace(type, std::move(creator)).second;
+    Y_ABORT_UNLESS(registered);
+}
+
 } // namespace NYql::NDq

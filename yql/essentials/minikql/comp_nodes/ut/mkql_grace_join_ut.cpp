@@ -851,10 +851,6 @@ Y_UNIT_TEST_LLVM(TestImp3) {
 Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -918,10 +914,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -991,10 +983,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1059,10 +1047,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1129,10 +1113,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1204,10 +1184,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyUuid) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1283,10 +1259,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyUuid) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1351,10 +1323,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1419,10 +1387,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1489,10 +1453,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1560,10 +1520,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1626,10 +1582,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1696,10 +1648,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1765,10 +1713,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1834,10 +1778,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1902,10 +1842,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1966,10 +1902,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2031,10 +1963,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2101,10 +2029,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2169,10 +2093,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2238,10 +2158,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2309,10 +2225,6 @@ Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
 }
 
 Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
-    if (SPILLING && RuntimeVersion < 50) {
-        return;
-    }
-
     for (ui32 pass = 0; pass < 1; ++pass) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

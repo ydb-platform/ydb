@@ -1,11 +1,15 @@
-#include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/library/security/util.h>
+#include "oidc_impersonate_start_page_nebius.h"
+
+#include "oidc_session_create.h"
+#include "openid_connect.h"
+
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/mvp_tokens.h>
-#include "openid_connect.h"
-#include "oidc_session_create.h"
-#include "oidc_impersonate_start_page_nebius.h"
+
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
+
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NMVP::NOIDC {
 
@@ -13,7 +17,8 @@ THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& send
                                                    const NHttp::THttpIncomingRequestPtr& request,
                                                    const NActors::TActorId& httpProxyId,
                                                    const TOpenIdConnectSettings& settings)
-    : Sender(sender)
+    : TMvpLogContextProvider(CreateMvpLogContext(request))
+    , Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
@@ -91,6 +96,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const NJson::TJsonValue&
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue, expiresIn));
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     ReplyAndPassAway(Request->CreateResponse("200", "OK", responseHeaders));
 }
 
@@ -112,6 +118,7 @@ void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRespon
                 responseHeaders.Set("Content-Type", headers.Get("Content-Type"));
             }
             SetCORS(Request, &responseHeaders);
+            SetRequestIdHeader(responseHeaders, GetRequestId());
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     }
@@ -128,6 +135,7 @@ void THandlerImpersonateStart::ReplyBadRequestAndPassAway(const TString& errorMe
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/plain");
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
 

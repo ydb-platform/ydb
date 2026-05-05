@@ -48,6 +48,8 @@ public:
 
     // Clear all memory
     virtual void Terminate() = 0;
+
+    virtual void Unlink() = 0;
 };
 
 struct TKqpBufferTableLookupSettings {
@@ -58,6 +60,7 @@ struct TKqpBufferTableLookupSettings {
     ui64 LockTxId;
     ui64 LockNodeId;
     NKikimrDataEvents::ELockMode LockMode;
+    ui64 QuerySpanId = 0;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     IKqpTransactionManagerPtr TxManager;
@@ -70,6 +73,9 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TTraceId ParentTraceId;
+
+    TString Database;
+    TString PoolId;
 };
 
 std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings);

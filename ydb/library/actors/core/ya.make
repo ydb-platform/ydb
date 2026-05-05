@@ -36,6 +36,7 @@ SRCS(
     defs.h
     event.cpp
     event.h
+    event_flat.h
     event_load.cpp
     event_local.h
     event_pb.cpp
@@ -94,6 +95,8 @@ SRCS(
     scheduler_cookie.cpp
     scheduler_cookie.h
     scheduler_queue.h
+    subsystem.cpp
+    subsystem.h
     servicemap.h
 )
 
@@ -103,6 +106,7 @@ GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
     ydb/library/actors/actor_type
+    ydb/library/actors/core/subsystems
     ydb/library/actors/interconnect/rdma
     ydb/library/actors/core/harmonizer
     ydb/library/actors/memory_log

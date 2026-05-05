@@ -30,7 +30,7 @@ using TCodicilBuilder = std::function<void(TCodicilFormatter* formatter)>;
 void PushCodicilBuilder(TCodicilBuilder&& builder);
 
 //! Removes the top codicil builder from the stack.
-void PopCodicilBuilder();
+void PopCodicilBuilder() noexcept;
 
 //! Returns the list of all currently installed codicil builders.
 TRange<TCodicilBuilder> GetCodicilBuilders();
@@ -57,15 +57,15 @@ public:
     ~TCodicilGuard();
 
     TCodicilGuard(const TCodicilGuard& othter) = delete;
-    TCodicilGuard(TCodicilGuard&& other);
+    TCodicilGuard(TCodicilGuard&& other) noexcept;
 
     TCodicilGuard& operator=(const TCodicilGuard& other) = delete;
-    TCodicilGuard& operator=(TCodicilGuard&& other);
+    TCodicilGuard& operator=(TCodicilGuard&& other) noexcept;
 
 private:
     bool Active_ = false;
 
-    void Release();
+    void Release() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

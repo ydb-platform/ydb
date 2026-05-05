@@ -928,6 +928,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
+    req->set_allow_missing_key_columns(options.AllowMissingKeyColumns);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
@@ -939,7 +940,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -979,6 +980,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
+    req->set_allow_missing_key_columns(options.AllowMissingKeyColumns);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
@@ -993,7 +995,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1034,6 +1036,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
         protoSubrequest->set_enable_partial_result(subrequestOptions.EnablePartialResult);
         YT_OPTIONAL_SET_PROTO(protoSubrequest, use_lookup_cache, subrequestOptions.UseLookupCache);
         YT_OPTIONAL_TO_PROTO(protoSubrequest, execution_pool, subrequestOptions.ExecutionPool);
+        protoSubrequest->set_allow_missing_key_columns(subrequestOptions.AllowMissingKeyColumns);
 
         auto rowset = SerializeRowset(
             subrequest.NameTable,
@@ -1078,7 +1081,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
 
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1168,7 +1171,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
     YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         ext->set_execution_tag(ToString(traceContext->GetTraceId()));
     }
 
@@ -1191,6 +1194,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
+    YT_OPTIONAL_SET_PROTO(req, max_join_batch_size, options.MaxJoinBatchSize);
+    YT_OPTIONAL_SET_PROTO(req, rowset_processing_batch_size, options.RowsetProcessingBatchSize);
+    YT_OPTIONAL_SET_PROTO(req, write_rowset_size, options.WriteRowsetSize);
     req->set_read_from(ToProto(options.ReadFrom));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {

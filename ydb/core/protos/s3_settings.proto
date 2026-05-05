@@ -1,3 +1,4 @@
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 
 package NKikimrSchemeOp;
@@ -29,8 +30,8 @@ message TS3Settings {
     optional EScheme Scheme = 2 [default = HTTPS];
     optional string Bucket = 3;
     optional string ObjectKeyPattern = 4; // dst for backup, src for restore
-    optional string AccessKey = 5;
-    optional string SecretKey = 6;
+    optional string AccessKey = 5 [(Ydb.sensitive) = true];
+    optional string SecretKey = 6 [(Ydb.sensitive) = true];
     optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
     optional bool VerifySSL = 8;
     optional string ProxyHost = 9;

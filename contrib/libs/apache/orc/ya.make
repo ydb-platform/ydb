@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.2.2)
+VERSION(2.3.0)
 
-ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.2.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/apache/orc/archive/rel/release-2.3.0.tar.gz)
 
 PEERDIR(
     contrib/libs/apache/orc-format
@@ -47,6 +47,7 @@ SRCS(
     c++/src/ConvertColumnReader.cc
     c++/src/CpuInfoUtil.cc
     c++/src/Dictionary.cc
+    c++/src/DictionaryLoader.cc
     c++/src/Exceptions.cc
     c++/src/Geospatial.cc
     c++/src/Int128.cc

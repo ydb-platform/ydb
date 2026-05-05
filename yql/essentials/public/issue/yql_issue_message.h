@@ -6,11 +6,9 @@
 
 namespace NYql {
 
-namespace NIssue {
-namespace NProto {
+namespace NIssue::NProto {
 class IssueMessage;
-} // namespace NProto
-} // namespace NIssue
+} // namespace NIssue::NProto
 
 template <typename TIssueMessage>
 TIssue IssueFromMessage(const TIssueMessage& issueMessage);

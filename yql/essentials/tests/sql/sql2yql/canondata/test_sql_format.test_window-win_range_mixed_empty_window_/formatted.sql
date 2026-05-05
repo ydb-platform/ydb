@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: 1, expected_count: 0, expected_sum: NULL|>,
@@ -37,8 +36,8 @@ $str = ($x) -> {
 
 -- Verify empty window (left > right)
 SELECT
-    Ensure(expected_count, count_w1 IS NOT DISTINCT FROM expected_count, 'count_w1: ' || $str(count_w1) || ' expected: ' || $str(expected_count)),
-    Ensure(expected_sum, sum_w1 IS NOT DISTINCT FROM expected_sum, 'sum_w1: ' || $str(sum_w1) || ' expected: ' || $str(expected_sum)),
+    Ensure(count_w1, count_w1 IS NOT DISTINCT FROM expected_count, 'count_w1: ' || $str(count_w1) || ' expected: ' || $str(expected_count)),
+    Ensure(sum_w1, sum_w1 IS NOT DISTINCT FROM expected_sum, 'sum_w1: ' || $str(sum_w1) || ' expected: ' || $str(expected_sum)),
 FROM
     $win_result
 ;

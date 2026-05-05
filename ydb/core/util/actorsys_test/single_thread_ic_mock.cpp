@@ -1,5 +1,6 @@
 #include "single_thread_ic_mock.h"
 #include "testactorsys.h"
+#include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
@@ -87,6 +88,7 @@ public:
 
     TActorId CreateSession();
     void ForwardToSession(TAutoPtr<IEventHandle> ev);
+    void ForwardToSession(TEvForwardSubscribeSession::TPtr ev);
 
     void DropSessionEvent(std::unique_ptr<IEventHandle> ev);
     void HandleDropPendingEvents(TAutoPtr<IEventHandle> ev);
@@ -98,6 +100,7 @@ public:
     STRICT_STFUNC(StateFunc,
         fFunc(EvDropPendingEvents, HandleDropPendingEvents);
         fFunc(TEvInterconnect::EvForward, ForwardToSession);
+        hFunc(TEvForwardSubscribeSession, ForwardToSession);
         fFunc(TEvInterconnect::EvConnectNode, ForwardToSession);
         fFunc(TEvents::TSystem::Subscribe, ForwardToSession);
         fFunc(TEvents::TSystem::Unsubscribe, ForwardToSession);
@@ -215,6 +218,27 @@ public:
         }
     }
 
+    void HandleForwardWithSubscribe(TEvForwardSubscribeSession::TPtr ev) {
+        auto *msg = ev->Get();
+        Y_ABORT_UNLESS(msg->Event);
+
+        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM05, Prefix << "HandleForwardWithSubscribe", (SelfId, SelfId()),
+            (Type, msg->Event->Type), (TypeName, Proxy->Mock->TestActorSystem->GetEventName(msg->Event->Type)),
+            (Sender, msg->Event->Sender), (Recipient, msg->Event->Recipient), (Flags, msg->Event->Flags),
+            (Cookie, msg->Event->Cookie));
+
+        Subscribe(msg->Event->Sender, msg->Event->Cookie);
+
+        TAutoPtr<IEventHandle> forwarded(msg->Event.Release());
+        if (SendPending) {
+            const ui16 ch = forwarded->GetChannel();
+            Outbox[ch].emplace_back(forwarded.Release());
+        } else {
+            ScheduleSendEvent(forwarded);
+            HandleSend(forwarded);
+        }
+    }
+
     void HandleSend(TAutoPtr<IEventHandle> ev) {
         while (ev) {
             STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM03, Prefix << "HandleSend", (SelfId, SelfId()),
@@ -274,7 +298,7 @@ public:
             auto fw = std::make_unique<IEventHandle>(
                 SelfId(),
                 ev->Type,
-                ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                ev->Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession),
                 ev->Recipient,
                 ev->Sender,
                 ev->ReleaseChainBuffer(),
@@ -338,6 +362,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         fFunc(TEvInterconnect::EvForward, HandleForward);
+        hFunc(TEvForwardSubscribeSession, HandleForwardWithSubscribe);
         fFunc(EvSend, HandleSend);
         fFunc(EvReceive, HandleReceive);
         hFunc(TEvInterconnect::TEvConnectNode, Handle);
@@ -385,6 +410,11 @@ void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
     }
 }
 
+void TMock::TProxyActor::ForwardToSession(TEvForwardSubscribeSession::TPtr ev) {
+    TAutoPtr<IEventHandle> forwarded(ev.Release());
+    ForwardToSession(forwarded);
+}
+
 void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
     switch (ev->GetTypeRewrite()) {
         case TEvInterconnect::EvForward:
@@ -393,6 +423,16 @@ void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
             }
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected));
             break;
+
+        case TEvForwardSubscribeSession::EventType: {
+            auto msg = ev->Release<TEvForwardSubscribeSession>();
+            if (msg->Event) {
+                Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                    TEvents::TEvUndelivered::Disconnected));
+            }
+            break;
+        }
 
         case TEvInterconnect::EvConnectNode:
         case TEvents::TSystem::Subscribe:

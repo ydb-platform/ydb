@@ -40,8 +40,8 @@ private:
 
     void Visit(const TTupleExprType& type) override {
         const auto& items = type.GetItems();
-        for (size_t i = 0; i < items.size(); ++i) {
-            if (!TIsValidValueSupportedVisitor(items[i]).IsSupported()) {
+        for (const auto* item : items) {
+            if (!TIsValidValueSupportedVisitor(item).IsSupported()) {
                 Result_ = false;
                 return;
             }
@@ -51,8 +51,8 @@ private:
 
     void Visit(const TStructExprType& type) override {
         const auto& items = type.GetItems();
-        for (size_t i = 0; i < items.size(); ++i) {
-            if (!TIsValidValueSupportedVisitor(items[i]->GetItemType()).IsSupported()) {
+        for (const auto* item : items) {
+            if (!TIsValidValueSupportedVisitor(item->GetItemType()).IsSupported()) {
                 Result_ = false;
                 return;
             }

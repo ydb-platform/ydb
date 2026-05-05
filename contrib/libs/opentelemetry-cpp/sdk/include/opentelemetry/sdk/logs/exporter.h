@@ -23,6 +23,12 @@ class OPENTELEMETRY_EXPORT LogRecordExporter
 {
 public:
   LogRecordExporter();
+
+  LogRecordExporter(const LogRecordExporter &)            = delete;
+  LogRecordExporter(LogRecordExporter &&)                 = delete;
+  LogRecordExporter &operator=(const LogRecordExporter &) = delete;
+  LogRecordExporter &operator=(LogRecordExporter &&)      = delete;
+
   virtual ~LogRecordExporter();
 
   /**

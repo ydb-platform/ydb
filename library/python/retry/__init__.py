@@ -6,7 +6,6 @@ import logging
 import random
 import time
 
-
 """
 Retry library provides an ability to retry function calls in a configurable way.
 

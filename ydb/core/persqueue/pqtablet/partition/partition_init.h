@@ -70,6 +70,8 @@ public:
     virtual void Execute(const TActorContext& ctx) = 0;
     virtual bool Handle(STFUNC_SIG);
 
+    void RestartTablet(const std::string_view message) const;
+
     TPartition* Partition() const;
     const TPartitionId& PartitionId() const;
     const TString& TopicName() const;

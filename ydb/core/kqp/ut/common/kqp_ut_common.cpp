@@ -7,6 +7,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
@@ -20,36 +21,6 @@
 
 namespace NKikimr {
 namespace NKqp {
-
-namespace {
-
-void TerminateHandler() {
-    Cerr << "======= terminate() call stack ========" << Endl;
-    FormatBackTrace(&Cerr);
-    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
-        Cerr << "======== exception call stack =========" << Endl;
-        backtrace.PrintTo(Cerr);
-    }
-    Cerr << "=======================================" << Endl;
-
-    if (std::current_exception()) {
-        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
-    } else {
-        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
-    }
-
-    abort();
-}
-
-void BackTraceSignalHandler(int signal) {
-    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << "===============================================" << Endl;
-
-    abort();
-}
-
-} // anonymous namespace
 
 using namespace NYdb::NTable;
 
@@ -108,21 +79,8 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     return funcRegistry.Release();
 }
 
-TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
-    if (!Freeze) {
-        LogPriorities.emplace(service, priority);
-    }
-
-    return *this;
-}
-
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
-    EnableYDBBacktraceFormat();
-
-    std::set_terminate(&TerminateHandler);
-    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
-        signal(sig, &BackTraceSignalHandler);
-    }
+    NTestUtils::SetupSignalHandlers();
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
@@ -150,6 +108,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetVerbose(settings.Verbose);
+    for (const auto& storagePoolType : settings.StoragePoolTypes) {
+        ServerSettings->AddStoragePoolType(storagePoolType);
+    }
+    ServerSettings->SetDynamicNodeCount(settings.DynamicNodeCount);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
@@ -194,7 +156,16 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     if (settings.LogStream) {
-        ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+        if (settings.NodeCount > 1) {
+            auto* logStream = settings.LogStream;
+            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
+                runtime.SetLogBackendFactory([logStream]() {
+                    return new TStreamLogBackend(logStream);
+                });
+            });
+        } else {
+            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+        }
     }
 
     if (settings.InitFederatedQuerySetupFactory) {
@@ -207,7 +178,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
-    Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
+    Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {
         auto options = settings.GrpcServerOptions;
@@ -237,6 +208,33 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     CountersRoot = settings.CountersRoot;
 
     Initialize(settings);
+}
+
+TString TKikimrRunner::CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount, TDuration timeout, bool acceptIfExists) {
+    TString databasePath = TStringBuilder() << CanonizePath(ServerSettings->DomainName) << "/" << name;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(databasePath);
+
+    for (auto& [attrName, attrValue] : attributes) {
+        request.mutable_attributes()->emplace(attrName, attrValue);
+    }
+
+    auto& storage = *request.mutable_resources()->add_storage_units();
+    storage.set_unit_kind(storagePoolType);
+    storage.set_count(1);
+
+    if (!Tenants) {
+        Tenants = MakeHolder<Tests::TTenants>(Server);
+    }
+    Tenants->CreateTenant(std::move(request), nodesCount, timeout, acceptIfExists);
+
+    // Setup discovery
+    for (auto nodeIdx : Tenants->List(databasePath)) {
+        GetTestServer().EnableGRpc(PortManager.GetPort(), nodeIdx, databasePath);
+    }
+
+    return databasePath;
 }
 
 TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken,
@@ -620,48 +618,6 @@ void TKikimrRunner::CreateSampleTables() {
     driver.Stop(true);
 }
 
-static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
-    static const THashMap<TString, NActors::NLog::EPriority> levels = {
-        { "TRACE", NActors::NLog::PRI_TRACE },
-        { "DEBUG", NActors::NLog::PRI_DEBUG },
-        { "INFO", NActors::NLog::PRI_INFO },
-        { "NOTICE", NActors::NLog::PRI_NOTICE },
-        { "WARN", NActors::NLog::PRI_WARN },
-        { "ERROR", NActors::NLog::PRI_ERROR },
-        { "CRIT", NActors::NLog::PRI_CRIT },
-        { "ALERT", NActors::NLog::PRI_ALERT },
-        { "EMERG", NActors::NLog::PRI_EMERG },
-    };
-
-    TString l = level;
-    l.to_upper();
-    const auto levelIt = levels.find(l);
-    if (levelIt != levels.end()) {
-        return levelIt->second;
-    } else {
-        Cerr << "Failed to parse test log level [" << level << "]" << Endl;
-        return Nothing();
-    }
-}
-
-bool TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
-    if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-            return true;
-        }
-    }
-
-    if (const TString commonParam = GetTestParam("KQP_LOG")) {
-        if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
-            Server->GetRuntime()->SetLogPriority(service, *level);
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // You can enable logging for these services in test using test option:
     // `--test-param KQP_LOG=<level>`
@@ -669,21 +625,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-    for (i32 i = 0; i < descriptor->value_count(); ++i) {
-        const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
-        if (SetupLogLevelFromTestParam(service)) {
-            continue;
-        }
-
-        if (const auto& logSettings = settings.LogSettings) {
-            if (const auto it = logSettings->LogPriorities.find(service); it != logSettings->LogPriorities.end()) {
-                Server->GetRuntime()->SetLogPriority(service, it->second);
-            } else {
-                Server->GetRuntime()->SetLogPriority(service, settings.LogSettings->DefaultLogPriority);
-            }
-        }
-    }
+    NTestUtils::SetupLogLevel(*Server->GetRuntime(), settings.LogSettings, "KQP");
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
@@ -716,8 +658,67 @@ TString ReformatYson(const TString& yson) {
     return output.Str();
 }
 
+static void SplitYsonListAtTopLevel(const TString& yson, std::vector<TString>& items) {
+    int depth = 0;
+    char inQuote = 0;
+    bool escape = false;
+    size_t start = 0;
+    const size_t len = yson.size();
+    for (size_t i = 0; i < len; ++i) {
+        const char c = yson[i];
+        if (inQuote) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && (inQuote == '"' || inQuote == '\'')) {
+                escape = true;
+            } else if (c == inQuote) {
+                inQuote = 0;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            inQuote = c;
+            continue;
+        }
+        if (c == '[') {
+            if (depth == 0) {
+                start = i + 1;
+            }
+            ++depth;
+            continue;
+        }
+        if (c == ']') {
+            if (depth == 1) {
+                TString item = yson.substr(start, i - start);
+                items.push_back(StripString(item));
+            }
+            --depth;
+            continue;
+        }
+        if (c == ';' && depth == 1) {
+            TString item = yson.substr(start, i - start);
+            items.push_back(StripString(item));
+            start = i + 1;
+        }
+    }
+}
+
+TString SortYsonList(const TString& yson) {
+    std::vector<TString> items;
+    SplitYsonListAtTopLevel(yson, items);
+    std::sort(items.begin(), items.end());
+    return "[" + JoinSeq(";", items) + "]";
+}
+
 void CompareYson(const TString& expected, const TString& actual, const TString& message) {
     UNIT_ASSERT_VALUES_EQUAL_C(ReformatYson(expected), ReformatYson(actual), message);
+}
+
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message) {
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        ReformatYson(SortYsonList(expected)),
+        ReformatYson(SortYsonList(actual)),
+        message);
 }
 
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message) {
@@ -1942,7 +1943,7 @@ TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
     Tenants = MakeHolder<Tests::TTenants>(Server);
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 }
 
@@ -1972,12 +1973,37 @@ Tests::TClient& TTestExtEnv::GetClient() const {
     return *Client;
 }
 
+const TString& TTestExtEnv::GetEndpoint() const {
+    return Endpoint;
+}
+
 void CheckOwner(TSession& session, const TString& path, const TString& name) {
     TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NYdb::EStatus::SUCCESS);
     auto tableDesc = describe.GetTableDescription();
     const auto& currentOwner = tableDesc.GetOwner();
     UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
+}
+
+void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
+    auto driver = NYdb::TDriver(NYdb::TDriverConfig()
+        .SetEndpoint(kikimr.GetEndpoint())
+        .SetDatabase("/Root")
+        .SetAuthToken(subject));
+
+    NYdb::NQuery::TQueryClient client(driver);
+    while (true) {
+        auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
+        NYdb::EStatus scriptStatus = result.Status().GetStatus();
+        UNIT_ASSERT_C(
+            scriptStatus == NYdb::EStatus::UNAVAILABLE ||
+            scriptStatus == NYdb::EStatus::SUCCESS ||
+            scriptStatus == NYdb::EStatus::UNAUTHORIZED,
+            result.Status().GetIssues().ToString());
+        if (scriptStatus == NYdb::EStatus::SUCCESS)
+            return;
+        Sleep(TDuration::Seconds(1));
+    };
 }
 
 } // namspace NKqp

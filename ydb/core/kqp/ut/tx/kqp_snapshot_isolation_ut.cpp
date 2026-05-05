@@ -331,7 +331,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST(TSnapshotTwoInsertOlap) {
         TSnapshotTwoInsert tester;
         tester.SetIsOlap(true);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
@@ -339,7 +338,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST(TSnapshotTwoInsertOltp) {
         TSnapshotTwoInsert tester;
         tester.SetIsOlap(false);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
@@ -464,7 +462,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOlap, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(true);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.UpdateAfterInsert = UpdateAfterInsert;
@@ -474,7 +471,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOltp, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(false);
-        tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.UpdateAfterInsert = UpdateAfterInsert;

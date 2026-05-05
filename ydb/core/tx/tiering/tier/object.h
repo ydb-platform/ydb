@@ -35,6 +35,7 @@ public:
     NJson::TJsonValue SerializeConfigToJson() const;
 
     TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
+    TTierConfig BuildWithPatchedSecrets(const TString& accessKeyValue, const TString& secretKeyValue) const;
 
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;

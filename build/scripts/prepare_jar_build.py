@@ -8,7 +8,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
 import java_pack_to_file as jcov
-import resolve_java_srcs as  resolve
+import resolve_java_srcs as resolve
 from autotar_gendirs import unpack_dir
 
 
@@ -153,7 +153,8 @@ def main():
     src_consumer = SourcesConsumer(
         source_root=args.source_root,
         with_kotlin=True if args.kotlin else False,
-        with_coverage=True if args.coverage else False)
+        with_coverage=True if args.coverage else False,
+    )
 
     jsrcs_dir = None
     for src in src_sorter.sort_args(remaining_args):

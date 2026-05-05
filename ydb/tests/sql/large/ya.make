@@ -6,7 +6,7 @@ ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
 # INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
-REQUIREMENTS(ram:48 cpu:all)
+REQUIREMENTS(ram:48 cpu:2)
 
 TEST_SRCS(
     test_bulkupserts_tpch.py

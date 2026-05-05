@@ -47,12 +47,13 @@ revision: 5191643
  class SSLContext(_SSLContext):
      """An SSLContext holds various SSL-related configuration options and
      data, such as certificates and possibly a private key."""
-@@ -591,6 +605,9 @@ class SSLContext(_SSLContext):
+@@ -591,6 +605,10 @@ class SSLContext(_SSLContext):
      def load_default_certs(self, purpose=Purpose.SERVER_AUTH):
          if not isinstance(purpose, _ASN1Object):
              raise TypeError(purpose)
 +
-+        self.load_verify_locations(cadata=builtin_cadata())
++        if os.getenv("SSL_CERT_FILE") is None and os.getenv("SSL_CERT_DIR") is None:
++            self.load_verify_locations(cadata=builtin_cadata())
 +
          if sys.platform == "win32":
              for storename in self._windows_cert_stores:

@@ -2,8 +2,7 @@
 
 #include <yql/essentials/core/yql_graph_transformer.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * A transformer which wraps the given input node with the pipeline
  * converting the input type to the block one.
@@ -46,8 +45,8 @@ TExprNode::TPtr NodeToBlocks(
  */
 TExprNode::TPtr ApplyToIterable(
     const TPositionHandle& pos,
-    const TExprNode::TPtr iterable,
-    const TExprNode::TPtr lambda,
+    const TExprNode::TPtr& iterable,
+    const TExprNode::TPtr& lambda,
     bool wrapLMap,
     TExprContext& ctx);
 
@@ -74,5 +73,4 @@ const TStructExprType* WrapBlockStruct(
 const TStructExprType* UnwrapBlockStruct(
     const TStructExprType* structType,
     TExprContext& ctx);
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

@@ -129,6 +129,12 @@ struct TTestMetricConsumer
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TRenameTest
+    : public ::testing::TestWithParam<bool>
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TSolomonRegistryTest, Registration)
 {
     auto impl = New<TSolomonRegistry>();
@@ -155,6 +161,28 @@ TTestMetricConsumer CollectSensors(TSolomonRegistryPtr impl, int subsample = 1, 
 
     TReadOptions options;
     options.EnableSolomonAggregationWorkaround = enableHack;
+    options.Times = {{{}, TInstant::Now()}};
+    for (int j = subsample - 1; j >= 0; --j) {
+        options.Times[0].first.push_back(impl->IndexOf(i - j));
+    }
+
+    impl->ReadSensors(options, &testConsumer);
+    Cerr << "-------------------------------------" << Endl;
+
+    return testConsumer;
+}
+
+TTestMetricConsumer CollectSensorsWithRenameDisabled(TSolomonRegistryPtr impl, int subsample = 1)
+{
+    impl->ProcessRegistrations();
+
+    auto i = impl->GetNextIteration();
+    impl->Collect();
+
+    TTestMetricConsumer testConsumer;
+
+    TReadOptions options;
+    options.DisableSensorsRename = true;
     options.Times = {{{}, TInstant::Now()}};
     for (int j = subsample - 1; j >= 0; --j) {
         options.Times[0].first.push_back(impl->IndexOf(i - j));
@@ -895,8 +923,10 @@ TEST(TSolomonRegistryTest, ExtensionTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=ssd_blobs;location_id=store0;device=sdb;model=M5100}"));
 }
 
-TEST(TSolomonRegistryTest, RenameTag)
+TEST_P(TRenameTest, RenameTag)
 {
+    bool recreate_sensor = GetParam();
+
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
     TProfiler r(impl, "/d");
@@ -910,9 +940,9 @@ TEST(TSolomonRegistryTest, RenameTag)
     tagSet.AddExtensionTag({"model", "M5100"}, -1);
 
     auto mediumTag = tagSet.AddDynamicTag(1);
+    r = r.WithTags(tagSet);
 
-    auto c0 = r.WithTags(tagSet)
-        .Counter("/bytes_read");
+    auto c0 = r.Counter("/bytes_read");
     c0.Increment();
 
     auto result = CollectSensors(impl);
@@ -924,6 +954,11 @@ TEST(TSolomonRegistryTest, RenameTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=ssd_blobs;location_id=store0;device=sdb;model=M5100}"));
 
     r.RenameDynamicTag(mediumTag, "medium", "default");
+
+    if (recreate_sensor) {
+        c0 = r.Counter("/bytes_read");
+    }
+
     c0.Increment();
 
     result = CollectSensors(impl);
@@ -934,6 +969,12 @@ TEST(TSolomonRegistryTest, RenameTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=default}"));
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    TRenameTest,
+    TRenameTest,
+    ::testing::Values(false, true)
+);
 
 struct TBlinkingProducer
     : ISensorProducer
@@ -1173,6 +1214,225 @@ TEST(TSolomonRegistryTest, IncorrectSolomonLabelsStrongPolicy)
                 },
             },
         });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TSensorSetTest, ReadSensorsDisableSensorsRenameNullopt)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    ASSERT_FALSE(options.DisableSensorsRename.has_value());
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensors(impl).Counters;
+    ASSERT_TRUE(result.contains("yt.d.foo.bar{}"));
+    ASSERT_FALSE(result.contains("yt/d/foo/bar{}"));
+}
+
+TEST(TSensorSetTest, ReadSensorsDisableSensorsRenameTrue)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    options.DisableSensorsRename = true;
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensors(impl).Counters;
+    ASSERT_TRUE(result.contains("yt/d/foo/bar{}"));
+    ASSERT_FALSE(result.contains("yt.d.foo.bar{}"));
+}
+
+TEST(TSensorSetTest, ReadSensorsDisableSensorsRenameFalse)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    options.DisableSensorsRename = false;
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensors(impl).Counters;
+    ASSERT_TRUE(result.contains("yt.d.foo.bar{}"));
+    ASSERT_FALSE(result.contains("yt/d/foo/bar{}"));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TSensorSetTest, ReadSensorsWithExternalRenameDisabledNullopt)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    ASSERT_FALSE(options.DisableSensorsRename.has_value());
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensorsWithRenameDisabled(impl).Counters;
+
+    ASSERT_TRUE(result.contains("yt/d/foo/bar{}"));
+    ASSERT_FALSE(result.contains("yt.d.foo.bar{}"));
+}
+
+TEST(TSensorSetTest, ReadSensorsWithExternalRenameDisabledTrue)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    options.DisableSensorsRename = true;
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensorsWithRenameDisabled(impl).Counters;
+
+    ASSERT_TRUE(result.contains("yt/d/foo/bar{}"));
+    ASSERT_FALSE(result.contains("yt.d.foo.bar{}"));
+}
+
+TEST(TSensorSetTest, ReadSensorsWithExternalRenameDisabledFalse)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TSensorOptions options;
+    options.DisableSensorsRename = false;
+
+    TProfiler profiler("/d", /*_namespace*/ "yt", /*tags*/ {}, impl, options);
+    auto c = profiler.Counter("/foo/bar");
+    c.Increment();
+
+    auto result = CollectSensorsWithRenameDisabled(impl).Counters;
+    ASSERT_TRUE(result.contains("yt.d.foo.bar{}"));
+    ASSERT_FALSE(result.contains("yt/d/foo/bar{}"));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TSensorSetTest, DumpCubeDisableSensorsRenameNullopt)
+{
+    TSensorOptions sensorOptions;
+    TSensorSet sensorSet(sensorOptions, 0, 10, 1);
+    NProto::TCube cube;
+    sensorSet.DumpCube(&cube, {});
+    ASSERT_FALSE(cube.has_disable_sensors_rename());
+}
+
+TEST(TSensorSetTest, DumpCubeDisableSensorsRenameTrue)
+{
+    TSensorOptions sensorOptions;
+    sensorOptions.DisableSensorsRename = true;
+    TSensorSet sensorSet(sensorOptions, 0, 10, 1);
+    NProto::TCube cube;
+    sensorSet.DumpCube(&cube, {});
+    ASSERT_TRUE(cube.has_disable_sensors_rename());
+    ASSERT_TRUE(cube.disable_sensors_rename());
+}
+
+TEST(TSensorSetTest, DumpCubeDisableSensorsRenameFalse)
+{
+    TSensorOptions sensorOptions;
+    sensorOptions.DisableSensorsRename = false;
+    TSensorSet sensorSet(sensorOptions, 0, 10, 1);
+    NProto::TCube cube;
+    sensorSet.DumpCube(&cube, {});
+    ASSERT_TRUE(cube.has_disable_sensors_rename());
+    ASSERT_FALSE(cube.disable_sensors_rename());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+NProto::TSensorDump BuildSingleCounterDump(
+    const std::string& sensorName,
+    std::optional<bool> disableSensorsRename,
+    i64 counterValue = 1)
+{
+    NProto::TSensorDump dump;
+    dump.add_tags();
+
+    auto* cube = dump.add_cubes();
+    cube->set_name(sensorName);
+    if (disableSensorsRename.has_value()) {
+        cube->set_disable_sensors_rename(*disableSensorsRename);
+    }
+
+    auto* projection = cube->add_projections();
+    projection->set_has_value(true);
+    projection->set_counter(counterValue);
+
+    return dump;
+}
+
+} // namespace
+
+TEST(TRemoteRegistryTest, TransferDisableSensorsRenameNullopt)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TRemoteRegistry remoteRegistry(impl.Get());
+
+    impl->Collect();
+
+    auto dump = BuildSingleCounterDump("/foo/bar", /*disableSensorsRename*/ std::nullopt);
+    remoteRegistry.Transfer(dump);
+
+    impl->Collect();
+    auto sensors = ReadSensors(impl);
+    ASSERT_EQ(1, sensors.Counters["foo.bar{}"]);
+    ASSERT_TRUE(sensors.Counters.find("/foo/bar{}") == sensors.Counters.end());
+}
+
+TEST(TRemoteRegistryTest, TransferDisableSensorsRenameTrue)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TRemoteRegistry remoteRegistry(impl.Get());
+
+    impl->Collect();
+
+    auto dump = BuildSingleCounterDump("/foo/bar", /*disableSensorsRename*/ true);
+    remoteRegistry.Transfer(dump);
+
+    impl->Collect();
+    auto sensors = ReadSensors(impl);
+    ASSERT_EQ(1, sensors.Counters["/foo/bar{}"]);
+    ASSERT_TRUE(sensors.Counters.find("foo.bar{}") == sensors.Counters.end());
+}
+
+TEST(TRemoteRegistryTest, TransferDisableSensorsRenameFalse)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TRemoteRegistry remoteRegistry(impl.Get());
+
+    impl->Collect();
+
+    auto dump = BuildSingleCounterDump("/foo/bar", /*disableSensorsRename*/ false);
+    remoteRegistry.Transfer(dump);
+
+    impl->Collect();
+    auto sensors = ReadSensors(impl);
+    ASSERT_EQ(1, sensors.Counters["foo.bar{}"]);
+    ASSERT_TRUE(sensors.Counters.find("/foo/bar{}") == sensors.Counters.end());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

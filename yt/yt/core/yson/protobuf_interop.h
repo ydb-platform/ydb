@@ -44,7 +44,7 @@ const TProtobufEnumType* ReflectProtobufEnumType(const ::google::protobuf::EnumD
 const ::google::protobuf::Descriptor* UnreflectProtobufMessageType(const TProtobufMessageType* type);
 
 //! Extracts the underlying ::google::protobuf::EnumDescriptor from a reflected instance.
-const ::google::protobuf::EnumDescriptor* UnreflectProtobufMessageType(const TProtobufEnumType* type);
+const ::google::protobuf::EnumDescriptor* UnreflectProtobufEnumType(const TProtobufEnumType* type);
 
 ////////////////////////////////////////////////////////////////////////////////
 

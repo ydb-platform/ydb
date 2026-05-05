@@ -191,6 +191,7 @@ message TPDiskInfo {
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
     reserved 21;
+    optional string MaintenanceStatus = 22;
     // metrics ?
     // physical location ?
     // config ?

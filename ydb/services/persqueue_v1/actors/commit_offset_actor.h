@@ -34,16 +34,8 @@ public:
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
 
-     TCommitOffsetActor(
-             NKikimr::NGRpcService::IRequestOpCtx* ctx, const NPersQueue::TTopicsListController& topicsHandler,
-             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
-     );
-
      TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
 
-     TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request);
-     
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);

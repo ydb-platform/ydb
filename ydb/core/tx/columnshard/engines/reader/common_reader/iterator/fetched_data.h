@@ -4,7 +4,6 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -213,7 +212,8 @@ public:
     TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , Table(table) {
+        , Table(table)
+    {
     }
 };
 
@@ -234,12 +234,14 @@ public:
     TFetchedResult(
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, columnIds, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+    {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, {}, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+    {
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {
@@ -274,6 +276,13 @@ public:
 
     bool HasResultChunk() const {
         return !!ChunkToReply;
+    }
+
+    ui32 GetResultChunkRowsCount() const {
+        if (!ChunkToReply || !ChunkToReply->HasData()) {
+            return 0;
+        }
+        return ChunkToReply->GetTable()->num_rows();
     }
 
     std::optional<TSourceChunkToReply> ExtractResultChunk() {

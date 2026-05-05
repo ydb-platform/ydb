@@ -8,6 +8,7 @@ description = 'List pdisks'
 
 def add_options(p):
     p.add_argument('--show-pdisk-usage', action='store_true', help='Show columns with PDisk usage')
+    p.add_argument('--check-leaked-slots', action='store_true', help='Perform additional check of the state consistency between BSController and PDisk')
     table.TableOutput([], col_units=[]).add_options(p)
 
 
@@ -31,6 +32,7 @@ def do(args):
         'BoxId',
         'Guid',
         'NumStaticSlots',
+        'NumActiveSlots',
         'ExpectedSlotCount',
         'SlotSizeInUnits',
         'PDiskConfig',
@@ -68,6 +70,17 @@ def do(args):
     if args.show_pdisk_usage:
         visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
 
+    num_active_slots_map = None
+    if args.all_columns or args.check_leaked_slots or (args.columns and 'NumActiveSlots' in args.columns):
+        num_active_slots_map = common.build_pdisk_usage_map(base_config, count_donors=True)
+
+    pdisk_whiteboard_info = {}
+    if args.check_leaked_slots:
+        pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
+        pdisk_whiteboard_info = common.fetch_json_info('pdiskinfo', nodes=pdisk_node_ids)
+        all_columns.insert(all_columns.index('NumActiveSlots')+1, 'LeakedSlots')
+        visible_columns.extend(['NumActiveSlots', 'LeakedSlots'])
+
     table_output = table.TableOutput(
         all_columns,
         col_units=col_units,
@@ -92,6 +105,11 @@ def do(args):
         row['Kind'] = pdisk.Kind
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
+        row['NumActiveSlots'] = num_active_slots_map.get((pdisk.NodeId, pdisk.PDiskId), 0) if num_active_slots_map else None
+        if args.check_leaked_slots:
+            wb_info = pdisk_whiteboard_info.get((pdisk.NodeId, pdisk.PDiskId), {})
+            pdisk_reported = wb_info.get('NumActiveSlots')
+            row['LeakedSlots'] = pdisk_reported - row['NumActiveSlots'] if pdisk_reported is not None else None
         row['ExpectedSlotCount'], row['SlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
         row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize

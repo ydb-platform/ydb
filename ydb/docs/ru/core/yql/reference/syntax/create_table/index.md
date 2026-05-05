@@ -15,10 +15,11 @@
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
+  [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
-      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )
@@ -62,7 +63,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md) и [векторные индексы](vector_index.md).
+Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md) и [полнотекстовые индексы](fulltext_index.md).
 
 ### PRIMARY KEY
 
@@ -86,8 +87,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% note info %}
 
-## Типы таблиц
-
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
 * [Строковые](../../../../concepts/datamodel/table.md#row-oriented-tables).
@@ -110,10 +109,15 @@ WITH (
 
 {% endnote %}
 
+{% note info %}
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
+
 ### AS SELECT
 
 Создание и заполнение таблицы на основе результатов запроса `SELECT`. Подробнее в разделе [{#T}](as_select.md).
-
 
 ## Примеры создания таблиц
 
@@ -156,8 +160,6 @@ WITH (
     PRIMARY KEY (id)
   );
   ```
-
-
 
   {% if feature_column_container_type == true %}
 
@@ -216,7 +218,7 @@ WITH (
   );
   ```
 
-  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [{#T}](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
+  Такой код создаст строковую таблицу с включенным автоматическим партиционированием по размеру партиции (`AUTO_PARTITIONING_BY_SIZE`) и предпочитаемым размером каждой партиции (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) в 512 мегабайт. Полный список опций партиционирования строковой таблицы находится в разделе [Партиционирование строковой таблицы](../../../../concepts/datamodel/table.md#partitioning_row_table) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 - Создание колоночной таблицы
 
@@ -311,6 +313,7 @@ CREATE TABLE <table_name> (
 
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
+* [Полнотекстовый индекс](fulltext_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).

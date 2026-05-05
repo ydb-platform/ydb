@@ -1847,6 +1847,144 @@ obj: {value: 2} # comment2
             UNIT_ASSERT_VALUES_EQUAL(res, exp);
         }
     }
+
+Y_UNIT_TEST(FuseConfigs_ConsoleWins) {
+    // Console has key, base has same key -> console wins
+    const char* base = R"(
+actor_system_config:
+  threads: 4
+log_config:
+  level: INFO
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+  version: 1
+config:
+  actor_system_config:
+    threads: 8
+allowed_labels:
+  tenant:
+    type: string
+selector_config: []
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto root = result.Root().Map();
+
+    // Console value preserved
+    UNIT_ASSERT_VALUES_EQUAL(root.at("config").Map().at("actor_system_config").Map().at("threads").Scalar(), "8");
+    // Base value added (missing in console)
+    UNIT_ASSERT(root.at("config").Map().Has("log_config"));
+    // Metadata from console
+    UNIT_ASSERT(root.Has("metadata"));
+    // Selectors preserved
+    UNIT_ASSERT(root.Has("selector_config"));
+    // Allowed labels preserved
+    UNIT_ASSERT(root.Has("allowed_labels"));
+}
+
+Y_UNIT_TEST(FuseConfigs_BaseFillsGaps) {
+    // Base has key not in console -> base value added
+    const char* base = R"(
+log_config:
+  level: DEBUG
+feature_flags:
+  enable_x: true
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console value wins for existing key
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+    // Base fills gap for missing key
+    UNIT_ASSERT(configMap.Has("feature_flags"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("feature_flags").Map().at("enable_x").Scalar(), "true");
+}
+
+Y_UNIT_TEST(FuseConfigs_EmptyBase) {
+    // Empty base config
+    const char* base = R"()";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console config preserved
+    UNIT_ASSERT(configMap.Has("log_config"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+}
+
+Y_UNIT_TEST(FuseConfigs_EmptyConsoleConfig) {
+    // Console has empty config section
+    const char* base = R"(
+log_config:
+  level: DEBUG
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config: {}
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Base fills all gaps
+    UNIT_ASSERT(configMap.Has("log_config"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "DEBUG");
+}
+
+Y_UNIT_TEST(FuseConfigs_ExcludesStorageOnlyKeys) {
+    // Storage-only keys from base should be excluded
+    const char* base = R"(
+log_config:
+  level: DEBUG
+hosts:
+  - host: node1
+    port: 19001
+host_configs:
+  - host_config_id: 1
+blob_storage_config:
+  service_set: {}
+nameservice_config:
+  node:
+    - node_id: 1
+static_erasure: mirror-3-dc
+feature_flags:
+  enable_x: true
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console value wins
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+    // Non-storage key from base is included
+    UNIT_ASSERT(configMap.Has("feature_flags"));
+    // Storage-only keys are excluded
+    UNIT_ASSERT(!configMap.Has("hosts"));
+    UNIT_ASSERT(!configMap.Has("host_configs"));
+    UNIT_ASSERT(!configMap.Has("blob_storage_config"));
+    UNIT_ASSERT(!configMap.Has("nameservice_config"));
+    UNIT_ASSERT(!configMap.Has("static_erasure"));
+}
 }
 
 Y_UNIT_TEST_SUITE(YamlConfigResolveUnique) {

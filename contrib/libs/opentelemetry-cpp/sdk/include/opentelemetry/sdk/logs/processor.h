@@ -22,6 +22,13 @@ class Recordable;
 class LogRecordProcessor
 {
 public:
+  LogRecordProcessor() = default;
+
+  LogRecordProcessor(const LogRecordProcessor &)            = delete;
+  LogRecordProcessor(LogRecordProcessor &&)                 = delete;
+  LogRecordProcessor &operator=(const LogRecordProcessor &) = delete;
+  LogRecordProcessor &operator=(LogRecordProcessor &&)      = delete;
+
   virtual ~LogRecordProcessor() = default;
 
   /**

@@ -1,5 +1,21 @@
 LMDB 0.9 Change Log
 
+LMDB 0.9.35 Release (2026/01/27)
+    ITS#10434 - Fix typo affecting Mac OSX
+
+LMDB 0.9.34 Release (2026/01/26)
+	ITS#9564 - fix race condition freeing spilled pages at end of transaction
+	ITS#10222 - Update mdb_dump(1) and mdb_load(1) man pages for append (-a) option
+	ITS#10275 - mdb_load: add -Q option to use NOSYNC
+	ITS#10296 - fix fdatasync on MacOS
+	ITS#10342 - fix memleak in mdb_txn_begin for nested txns
+	ITS#10346 - fix mdb_env_copy2 with values > (2GB-16)
+	ITS#10355 - fix mplay build on musl
+	ITS#10396 - fix mdb_cursor_del0 with multiple DUPSORT cursors
+	ITS#10419 - add support for NetBSD
+	ITS#10420 - add support for Haiku
+	ITS#10421 - mdb_load: check for malicious input
+
 LMDB 0.9.33 Release (2024/05/21)
 	ITS#9037 mdb_page_search: fix error code when DBI record is missing
 	ITS#10198 For win32, stop passing ignored parameter

@@ -2,6 +2,8 @@
 
 namespace NYdb::NBS::NBlockStore {
 
+////////////////////////////////////////////////////////////////////////////////
+
 void TVHostStatsSimple::RequestStarted(
     TLog& log,
     TMetricRequest& metricRequest,
@@ -23,7 +25,6 @@ void TVHostStatsSimple::RequestCompleted(
 {
     Y_UNUSED(log);
     Y_UNUSED(callContext);
-    Y_UNUSED(error);
 
     auto& stat = AccessStats(metricRequest.RequestType);
     if (error.GetCode() == S_OK) {
@@ -45,5 +46,7 @@ TVHostStatsSimple::TStat& TVHostStatsSimple::AccessStats(
 {
     return Stats[static_cast<size_t>(requestType)];
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

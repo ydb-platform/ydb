@@ -26,7 +26,11 @@ public:
   Resource(const ResourceAttributes &attributes, const std::string &schema_url) noexcept;
 
   Resource(const Resource &)            = default;
+  Resource(Resource &&)                 = default;
   Resource &operator=(const Resource &) = default;
+  Resource &operator=(Resource &&)      = default;
+
+  ~Resource() = default;
 
   const ResourceAttributes &GetAttributes() const noexcept;
   const std::string &GetSchemaURL() const noexcept;
@@ -38,7 +42,7 @@ public:
    *
    * The specification notes that if schema urls collide, the resulting
    * schema url is implementation-defined. In the C++ implementation, the
-   * schema url of @param other is picked.
+   * schema url of @p other is picked.
    *
    * @param other the Resource that will be merged with this.
    * @returns the newly merged Resource.
@@ -50,6 +54,7 @@ public:
    * Returns a newly created Resource with the specified attributes.
    * It adds (merge) SDK attributes and OTEL attributes before returning.
    * @param attributes for this resource
+   * @param schema_url The schema URL for this resource.
    * @returns the newly created Resource.
    */
 

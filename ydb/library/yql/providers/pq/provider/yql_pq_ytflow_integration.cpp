@@ -116,6 +116,8 @@ public:
 
         auto clusterInfoIterator = State_->Configuration->ClustersConfigurationSettings.find(topic.Cluster());
         YQL_ENSURE(clusterInfoIterator != State_->Configuration->ClustersConfigurationSettings.end());
+        const auto& clusterInfo = clusterInfoIterator->second;
+
         NYtflow::NProto::TPQSourceMessage sourceSettings;
         if (federatedClustersIterator != topic.Props().end()) {
             auto clusterList = (*federatedClustersIterator).Value().Cast<TDqPqFederatedClusterList>();
@@ -123,11 +125,15 @@ public:
                 sourceSettings.AddEndpoints(cluster.Endpoint().StringValue());
             }
         } else {
-            sourceSettings.AddEndpoints(clusterInfoIterator->second.Endpoint);
+            sourceSettings.AddEndpoints(clusterInfo.Endpoint);
         }
-        sourceSettings.SetClusterType(clusterInfoIterator->second.ClusterType);
+        sourceSettings.SetCluster(topic.Cluster().StringValue());
+        sourceSettings.SetCmEndpoint(clusterInfo.ConfigManagerEndpoint);
+        sourceSettings.SetClusterType(clusterInfo.ClusterType);
         sourceSettings.SetDatabase(topic.Database().StringValue());
         sourceSettings.SetTopicPath(topic.Path().StringValue());
+        sourceSettings.SetUseSsl(clusterInfo.UseSsl);
+        sourceSettings.SetAddBearerToToken(clusterInfo.AddBearerToToken);
 
         settings.PackFrom(sourceSettings);
     }
@@ -142,10 +148,16 @@ public:
         NYtflow::NProto::TPQSinkMessage sinkSettings;
         auto clusterInfoIterator = State_->Configuration->ClustersConfigurationSettings.find(topic.Cluster());
         YQL_ENSURE(clusterInfoIterator != State_->Configuration->ClustersConfigurationSettings.end());
-        sinkSettings.SetCluster(clusterInfoIterator->second.Endpoint);
-        sinkSettings.SetClusterType(clusterInfoIterator->second.ClusterType);
+        const auto& clusterInfo = clusterInfoIterator->second;
+
+        sinkSettings.SetCluster(topic.Cluster().StringValue());
+        sinkSettings.SetEndpoint(clusterInfo.Endpoint);
+        sinkSettings.SetCmEndpoint(clusterInfo.ConfigManagerEndpoint);
+        sinkSettings.SetClusterType(clusterInfo.ClusterType);
         sinkSettings.SetDatabase(topic.Database().StringValue());
         sinkSettings.SetTopicPath(topic.Path().StringValue());
+        sinkSettings.SetUseSsl(clusterInfo.UseSsl);
+        sinkSettings.SetAddBearerToToken(clusterInfo.AddBearerToToken);
 
         settings.PackFrom(sinkSettings);
     }

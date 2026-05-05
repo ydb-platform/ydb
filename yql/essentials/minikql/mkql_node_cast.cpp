@@ -35,8 +35,7 @@
         return static_cast<const T##name##Type*>(type);          \
     }
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 MKQL_AS_TYPE(Any)
 MKQL_AS_TYPE(Callable)
@@ -97,5 +96,4 @@ TCallable* AsCallable(
     return callable;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

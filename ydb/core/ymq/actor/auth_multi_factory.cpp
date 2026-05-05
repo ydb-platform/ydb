@@ -250,21 +250,25 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
 
-    if (result.Error) {
+    if (result.HasError()) {
         if (CanRetry() && result.Error.Retryable) {
             ScheduleAuthorizationRetry();
+            return;
         } else {
-            RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
-            SetError(
-                result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
-                "IAM authorization error."
-            );
-            SendReplyAndDie();
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                SetError(
+                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    "IAM authorization error."
+                );
+                SendReplyAndDie();
+                return;
+            }
         }
-        return;
+    } else {
+        UserSID_ = result.Token->GetUserSID();
     }
 
-    UserSID_ = result.Token->GetUserSID();
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
 
     // Of course, in practice the accounts that come in aren’t always of the "service_account" type.
@@ -411,11 +415,15 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     } else {
         TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.Error.Message = "mocked_auth_error: empty access key";
-            result.Error.Retryable = false;
+            result.SetError({
+                .Message = "mocked_auth_error: empty access key",
+                .Retryable = false
+            });
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.Error.Message = "mocked_auth_error: correct process retries";
-            result.Error.Retryable = true;
+            result.SetError({
+                .Message = "mocked_auth_error: correct process retries",
+                .Retryable = true
+            });
         } else {
             result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
         }
@@ -603,8 +611,9 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
+        auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, data.Requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {

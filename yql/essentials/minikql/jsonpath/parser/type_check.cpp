@@ -1,6 +1,6 @@
 #include "type_check.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 namespace NYql::NJsonPath {
 
@@ -124,7 +124,7 @@ void TJsonPathTypeChecker::VisitLikeRegexPredicate(const TLikeRegexPredicateNode
     node.GetInput()->Accept(*this);
 }
 
-void TJsonPathTypeChecker::Error(const TAstNodePtr node, const TStringBuf message) {
+void TJsonPathTypeChecker::Error(const TAstNodePtr& node, const TStringBuf message) {
     Issues_.AddIssue(node->GetPos(), message);
     Issues_.back().SetCode(TIssuesIds::JSONPATH_TYPE_CHECK_ERROR, TSeverityIds::S_ERROR);
 }

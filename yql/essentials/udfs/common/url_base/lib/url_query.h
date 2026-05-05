@@ -114,7 +114,7 @@ class TBuildQueryString: public TQueryStringConv {
     } FirstArgTypeId_;
 
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
         : Pos_(std::move(pos))
@@ -129,6 +129,8 @@ public:
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder,
                       const TUnboxedValuePod* args) const override;
+
+    static const TStringRef& BuildPolyArgs();
 
     static bool DeclareSignature(const TStringRef& name,
                                  TType* userType,

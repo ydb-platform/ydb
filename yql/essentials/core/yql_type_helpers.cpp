@@ -89,6 +89,11 @@ const TTypeAnnotationNode* GetSequenceItemType(NNodes::TExprBase listNode, bool 
 const TTypeAnnotationNode* GetSequenceItemType(TPositionHandle pos, const TTypeAnnotationNode* inputType, bool allowMultiIO,
                                                TExprContext& ctx)
 {
+    if (!inputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), "No type (untyped lambda)"));
+        return nullptr;
+    }
+
     const TTypeAnnotationNode* itemType = nullptr;
     TIssue error;
     if (!SilentGetSequenceItemType(ctx.GetPosition(pos), *inputType, allowMultiIO, itemType, error)) {

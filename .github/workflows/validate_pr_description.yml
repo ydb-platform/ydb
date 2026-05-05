@@ -1,14 +1,15 @@
 name: PR-description
 
 on:
-  pull_request_target:
-    types:
-      - opened
-      - edited
+  # # We don't want to support this workflow for now
+  # pull_request_target:
+  #   types:
+  #     - opened
+  #     - edited
 
-    branches:
-      - main
-      - stable-*
+  #   branches:
+  #     - main
+  #     - stable-*
 
   workflow_dispatch:
     inputs:

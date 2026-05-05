@@ -37,6 +37,8 @@ public:
     TMaybe<size_t> GetReadByteCount() const override;
     bool IsEndOfStream() const override;
     bool IsRawReaderExhausted() const override;
+    void Abort() override;
+    bool IsAborted() const override;
 
 private:
     bool Retry(const std::exception_ptr& error);

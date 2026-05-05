@@ -162,7 +162,7 @@ static_assert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t GetDataWeight(EValueType type)
+inline i64 GetDataWeight(EValueType type)
 {
     switch (type) {
         case EValueType::Null:
@@ -188,7 +188,7 @@ inline size_t GetDataWeight(EValueType type)
     }
 }
 
-inline size_t GetDataWeight(const TUnversionedValue& value)
+inline i64 GetDataWeight(const TUnversionedValue& value)
 {
     if (IsStringLikeType(value.Type)) {
         return value.Length;
@@ -251,9 +251,10 @@ TFingerprint GetFarmFingerprint(TUnversionedRow row);
 size_t GetUnversionedRowByteSize(ui32 valueCount);
 
 //! Returns the storage-invariant data weight of a given row.
-size_t GetDataWeight(TUnversionedRow row);
+i64 GetDataWeight(TUnversionedRow row);
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows);
+//! Returns the sum of data weights of rows.
+i64 GetDataWeight(TRange<TUnversionedRow> rows);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -431,18 +432,19 @@ bool ValidateNonKeyColumnsAgainstLock(
 /*! The components must pass #ValidateKeyValue check. */
 void ValidateClientKey(TLegacyKey key);
 
-//! Checks that #key is a valid client-side key. Throws on failure.
 /*! The key must obey the following properties:
  *  1. It cannot be null.
- *  2. It must contain exactly #schema.GetKeyColumnCount() components.
+ *  2. It must contain at most #schema.GetKeyColumnCount() components.
+ *     If #allowMissingKeyColumns is false, it must contain exactly that many.
  *  3. Value ids must be a permutation of {0, ..., #schema.GetKeyColumnCount() - 1}.
- *  4. Value types must either be null of match those given in schema.
+ *  4. Value types must either be null or match those given in schema.
  */
 void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable);
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns = false);
 
 //! Checks if #timestamp is sane and can be used for data.
 //! Allows timestamps in range [MinTimestamp, MaxTimestamp] plus some sentinels
@@ -773,7 +775,7 @@ public:
         return *this;
     }
 
-    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other)
+    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other) noexcept
     {
         RowData_ = std::move(other.RowData_);
         StringData_ = std::move(other.StringData_);

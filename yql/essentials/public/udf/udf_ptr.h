@@ -3,8 +3,7 @@
 #include <util/system/yassert.h> // Y_ASSERT
 #include "udf_type_size_check.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace NDetails {
 struct TDelete {
@@ -267,5 +266,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

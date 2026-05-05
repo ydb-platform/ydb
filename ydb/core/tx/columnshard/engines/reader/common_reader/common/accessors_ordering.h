@@ -49,6 +49,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
+
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
@@ -145,6 +146,16 @@ public:
         return Sorting;
     }
 
+    template <typename F>
+    void ForEachObject(F&& f) const {
+        for (const auto& obj : AlreadySorted) {
+            f(obj);
+        }
+        for (const auto& obj : HeapObjects) {
+            f(obj);
+        }
+    }
+
     const std::deque<TObject>& GetObjects() const {
         if (AlreadySorted.size()) {
             AFL_VERIFY(!HeapObjects.size());
@@ -235,6 +246,16 @@ public:
         if (Finished) {
             return;
         }
+
+        if (accessors.HasErrors()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + accessors.GetErrorMessage());
+        }
+
+        if (accessors.HasRemovedData()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+                "error", TStringBuilder{} << "Data accessor result with removed data, " << accessors.GetRemovedData().size());
+        }
+
         AFL_VERIFY(InFlightRequests);
         if (Accessors.empty()) {
             Accessors = std::move(accessors.ExtractPortions());
@@ -275,10 +296,12 @@ private:
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual void DoAbort() override {
         Constructors.Clear();
         Accessors.Stop();
     }
+
     virtual bool DoIsFinished() const override {
         return Constructors.IsEmpty();
     }
@@ -317,6 +340,11 @@ private:
     }
 
 public:
+    template <typename F>
+    void ForEachConstructor(F&& f) const {
+        Constructors.ForEachObject(std::forward<F>(f));
+    }
+
     const std::deque<TConstructor>& GetConstructors() const {
         return Constructors.GetObjects();
     }
@@ -341,7 +369,8 @@ public:
     public:
         TObjectWithAccessor(TConstructor&& obj, std::shared_ptr<TPortionDataAccessor>&& acc)
             : Object(std::move(obj))
-            , Accessor(std::move(acc)) {
+            , Accessor(std::move(acc))
+        {
         }
 
         TConstructor& MutableObject() {
@@ -357,7 +386,8 @@ public:
     }
 
     TSourcesConstructorWithAccessors(const ERequestSorting sorting)
-        : Constructors(sorting) {
+        : Constructors(sorting)
+    {
     }
 
     void InitializeConstructors(std::deque<TConstructor>&& objects) {

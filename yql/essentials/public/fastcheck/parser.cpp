@@ -4,8 +4,7 @@
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -89,5 +88,4 @@ std::unique_ptr<ICheckRunner> MakeParserRunner() {
     return std::make_unique<TParserRunner>();
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

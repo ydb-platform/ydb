@@ -7,8 +7,6 @@
 
 namespace NYql::NFmr {
 
-using TOperationPartitions = std::vector<TTaskParams>;
-
 struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
@@ -24,7 +22,7 @@ struct THeartbeatResponse {
 };
 
 struct TStartOperationRequest {
-    ETaskType TaskType;
+    EOperationType OperationType;
     TOperationParams OperationParams;
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
@@ -39,9 +37,11 @@ struct TStartOperationRequest {
 struct TStartOperationResponse {
     EOperationStatus Status;
     TString OperationId;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TPrepareOperationRequest {
+    EOperationType OperationType;
     TOperationParams OperationParams;
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
     TMaybe<NYT::TNode> FmrOperationSpec;
@@ -50,6 +50,7 @@ struct TPrepareOperationRequest {
 struct TPrepareOperationResponse {
     TString PartitionId;
     ui64 TasksNum;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TGetOperationRequest {
@@ -115,7 +116,6 @@ struct TPingSessionRequest {
 struct TPingSessionResponse {
     bool Success;
 };
-
 
 class IFmrCoordinator: public TThrRefBase {
 public:

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ydb/library/testlib/service_mocks/common.h"
+
+#include <util/system/mutex.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/accessservice/access_service.grpc.pb.h>
 
@@ -39,6 +42,9 @@ public:
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData;
 
+    TMutex UserIpMutex;
+    TString CapturedXUserIP;
+
     template <class TResonseProto>
     void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
         if (resp.RequireRequestId) {
@@ -74,6 +80,12 @@ public:
             grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
+
+        {
+            std::lock_guard guard(UserIpMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
+
         const TString& lastResourceId = request->resource_path(request->resource_path_size() - 1).id();
         const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + request->permission() + "-" + lastResourceId;
         auto it = AuthorizeData.find(token);
@@ -165,12 +177,20 @@ public:
     THashSet<TString> AllowedResourceIds = {};
     THashSet<TString> UnavailableUserPermissions;
 
+    TMutex UserIPMutex;
+    TString CapturedXUserIP;
+
     grpc::Status Authorize(
-            grpc::ServerContext*,
+            grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
 
         // Do not use authentication for "Authorize" handler
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
 
         ++AuthorizeCount;
         if (request->has_signature()) {
@@ -220,6 +240,7 @@ public:
     bool ShouldGenerateOneRetryableError = false;
     bool isUserAuthenticated = true;
 
+    TString UnauthenticatedErrorMessage = "User is unauthenticated";
     THashSet<TString> AllowedServiceAuthTokens;
     THashSet<TString> UnavailableUserPermissions;
     THashSet<TString> AllowedResourceIds;
@@ -230,11 +251,20 @@ public:
     };
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
 
+    TMutex UserIPMutex;
+    TString CapturedXUserIP;
+
 public:
-    ::grpc::Status BulkAuthorize(::grpc::ServerContext* context,
+    ::grpc::Status BulkAuthorize(::grpc::ServerContext* ctx,
                                  const ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
                                  ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) {
-        if (!IsServiceAuthenticated(AllowedServiceAuthTokens, context)) {
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
+
+        if (!IsServiceAuthenticated(AllowedServiceAuthTokens, ctx)) {
             return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Unauthenticated service");
         }
 
@@ -253,7 +283,7 @@ public:
         } else {
             if (!isUserAuthenticated) {
                 auto error = response->mutable_unauthenticated_error();
-                error->set_message("User is unauthenticated");
+                error->set_message(UnauthenticatedErrorMessage);
                 return grpc::Status(grpc::StatusCode::OK, "OK");
             }
             TString token = request->has_iam_token() ? request->iam_token() : request->api_key();

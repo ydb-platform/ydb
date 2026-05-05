@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/threading/spin_lock.h>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -129,6 +131,34 @@ private:
     TTimer* Timer_;
 
     void TryStopTimer() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Wraps #TTimer to make GetElapsedTime safe to call concurrently with Start/Stop.
+/*!
+ *  Start and Stop are NOT intended to be called concurrently with each other;
+ *  the caller must serialize them externally (e.g., by driving the timer from
+ *  a single thread). The internal lock exists solely so that a concurrent
+ *  GetElapsedTime sees a consistent timer state.
+ */
+template <class TTimer>
+class TConcurrentTimer
+{
+public:
+    template <class... TArgs>
+    explicit TConcurrentTimer(TArgs&&... args);
+
+    TConcurrentTimer(const TConcurrentTimer&) = delete;
+    TConcurrentTimer& operator=(const TConcurrentTimer&) = delete;
+
+    bool Start();
+    bool Stop();
+    TDuration GetElapsedTime() const;
+
+private:
+    YT_DECLARE_SPIN_LOCK(mutable NThreading::TSpinLock, Lock_);
+    TTimer Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -752,26 +752,28 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, bool throttled = false) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
-        auto state = Reads[id].Shard;
+        auto* state = Reads[id].Shard;
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
-                NDqProto::StatusIds::UNAVAILABLE);
-        }
-        ++TotalRetries;
+        if (!throttled) {
+            if (CheckTotalRetriesExeeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
+                    NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetries;
 
-        if (CheckShardRetriesExeeded(id)) {
-            ResetRead(id);
-            return ResolveShard(state);
+            if (CheckShardRetriesExeeded(id)) {
+                ResetRead(id);
+                return ResolveShard(state);
+            }
         }
         ++state->RetryAttempt;
 
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry && !throttled); // TODO: account potential quota shortage
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -884,8 +886,17 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
+        if (Settings->HasQuerySpanId()) {
+            record.SetQuerySpanId(Settings->GetQuerySpanId());
+        }
+
         if (Settings->HasVectorTopK()) {
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
+        if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
+            record.SetPoolId(Settings->GetPoolId());
         }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
@@ -1020,12 +1031,13 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
+                if (!isThrottled && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false);
+                return RetryRead(id, false, isThrottled);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
@@ -1060,6 +1072,19 @@ public:
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);
+        }
+
+        // Collect deferred breaker info for TLI logging
+        {
+            const auto& traceIds = record.GetDeferredBreakerQuerySpanIds();
+            const auto& nodeIds = record.GetDeferredBreakerNodeIds();
+            for (int i = 0; i < traceIds.size(); ++i) {
+                DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
+            }
+        }
+
+        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
+            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
         }
 
         if (UseFollowers) {
@@ -1513,6 +1538,14 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        // Add deferred breaker info for TLI logging
+        for (const auto& breaker : DeferredBreakers) {
+            resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
+            resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
+        }
+        if (DeferredVictimQuerySpanId) {
+            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
+        }
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
             auto cells = BatchOperationMaxRow.GetCells();
@@ -1585,6 +1618,12 @@ private:
 
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
+    ui64 DeferredVictimQuerySpanId = 0;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

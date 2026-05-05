@@ -158,6 +158,38 @@ def strip_roots(path):
     return path
 
 
+def split_list_by_value(lst, delimiter):
+    """
+    Split a list into sublists using a delimiter value.
+
+    Args:
+        lst: The list to split
+        delimiter: The value to split by
+
+    Returns:
+        A list of sublists, excluding the delimiter values
+
+    Example:
+        >>> split_list_by_value([0, 1, 2, 0, 0, 0, 3, 4, 0, 5], 0)
+        [[1, 2], [3, 4], [5]]
+    """
+    result = []
+    current = []
+
+    for item in lst:
+        if item == delimiter:
+            if current:
+                result.append(current)
+                current = []
+        else:
+            current.append(item)
+
+    if current:
+        result.append(current)
+
+    return result
+
+
 def to_yesno(x):
     return "yes" if x else "no"
 

@@ -41,7 +41,7 @@ void TSpscQueue<T>::Push(T&& element)
     auto count = Count_.load(std::memory_order::acquire);
     size_t position = count - Tail_->Offset;
 
-    if (Y_UNLIKELY(position == BufferSize)) {
+    if (position == BufferSize) [[unlikely]] {
         auto oldTail = Tail_;
         Tail_ = new TNode();
         Tail_->Offset = count;
@@ -56,7 +56,7 @@ void TSpscQueue<T>::Push(T&& element)
 template <class T>
 T* TSpscQueue<T>::Front() const
 {
-    if (Y_UNLIKELY(Offset_ >= CachedCount_)) {
+    if (Offset_ >= CachedCount_) [[unlikely]] {
         auto count = Count_.load(std::memory_order::acquire);
         CachedCount_ = count;
 
@@ -65,7 +65,7 @@ T* TSpscQueue<T>::Front() const
         }
     }
 
-    while (Y_UNLIKELY(Offset_ >= Head_->Offset + BufferSize)) {
+    while (Offset_ >= Head_->Offset + BufferSize) [[unlikely]] {
         auto next = Head_->Next.load(std::memory_order::acquire);
         YT_VERIFY(next);
         delete Head_;

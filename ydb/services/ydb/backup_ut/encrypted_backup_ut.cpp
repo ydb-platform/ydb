@@ -1,8 +1,10 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
@@ -39,7 +41,7 @@ public:
     void MakeFullExport(bool encrypted = false) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
         if (encrypted) {
-            settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         }
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpSuccess(res);
@@ -842,8 +844,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
     }
 
 protected:
-    bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+    bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
+        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
@@ -858,8 +860,16 @@ protected:
         return TString(encrypted.Data(), encrypted.Size());
     }
 
-    void TestCommonEncryptionRequirements(bool useSchemaSecrets) {
+    void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
         using namespace ::fmt::literals;
+
+        THolder<TTempDir> tempDirHolder;
+        TString basePath;
+        if (isFsBackup) {
+            tempDirHolder = MakeHolder<TTempDir>();
+            basePath = tempDirHolder->Path();
+            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
         {
@@ -1002,7 +1012,15 @@ protected:
         }
 
         // Create recursive export
-        {
+        if (isFsBackup) {
+            NExport::TExportToFsSettings settings;
+            settings
+                .BasePath(basePath)
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+            WaitOpSuccess(res);
+        } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -1011,17 +1029,26 @@ protected:
             WaitOpSuccess(res);
         }
 
-        Cerr << "Export files:\n";
-        for (const auto& [key, _] : S3Mock().GetData()) {
-            Cerr << key << Endl;
-        }
-
         NBackup::TEncryptionKey encryptionKey("Cool random key!");
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
-        for (const auto& [key, content] : S3Mock().GetData()) {
-            // Nonencrypted keys
-            if (NotEncryptedFileName(key)) {
+
+        THolder<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
+        if (isFsBackup) {
+            fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
+            fsMockOwner->Refresh();
+        }
+        auto& mock = isFsBackup
+            ? static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(*fsMockOwner)
+            : static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(S3Mock());
+
+        const TString metadataPrefix = isFsBackup ? "" : "/test_bucket/Prefix/";
+
+        Cerr << "Export files:\n";
+        for (const auto& [key, content] : mock.GetData()) {
+            Cerr << key << Endl;
+
+            if (NotEncryptedFileName(key, metadataPrefix)) {
                 continue;
             }
 
@@ -1046,6 +1073,12 @@ protected:
             UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
         }
 
+        if (isFsBackup) {
+            // TODO: FS import with encryption and recursive mode is not yet fully implemented
+            // Skip import tests for FS backups for now
+            Cerr << "Skipping import tests for FS backup (not yet fully implemented)" << Endl;
+            return;
+        }
 
         NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
         importSettings
@@ -1103,5 +1136,13 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
 
     Y_UNIT_TEST(CommonEncryptionRequirementsWithSchemaSecrets) {
         TestCommonEncryptionRequirements(/* useSchemaSecrets */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFs) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false, /* isFsBackup */ true);
+    }
+
+    Y_UNIT_TEST(CommonEncryptionRequirementsFsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true, /* isFsBackup */ true);
     }
 }

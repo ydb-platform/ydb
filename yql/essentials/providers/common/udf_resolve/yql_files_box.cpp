@@ -8,8 +8,7 @@
 #include <util/system/sysstat.h>
 #include <util/folder/dirut.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TFilesBox::TFilesBox(TFsPath dir, TRandGuid randGuid)
     : Dir_(std::move(dir))
@@ -83,5 +82,4 @@ THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir) {
     return MakeHolder<TFilesBox>(std::move(path), std::move(randGuid));
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

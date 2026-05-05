@@ -8,7 +8,9 @@
 #include <util/system/env.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
@@ -1037,6 +1039,25 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
+        if (appConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
+            auto& kqpConfig = *appConfig.MutableKQPConfig();
+
+            bool hasSpillingSetting = false;
+            constexpr char spillingSettings[] = "_KqpEnableSpilling";
+            for (const auto& setting : kqpConfig.GetSettings()) {
+                if (setting.GetName() == spillingSettings) {
+                    hasSpillingSetting = true;
+                    break;
+                }
+            }
+
+            if (!hasSpillingSetting) {
+                auto& setting = *kqpConfig.AddSettings();
+                setting.SetName(spillingSettings);
+                setting.SetValue("true");
+            }
+        }
+
         if (!DefaultLogPriority) {
             DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
         }
@@ -1118,7 +1139,7 @@ private:
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    SetupSignalActions();
+    NTestUtils::SetupSignalHandlers();
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     NMonitoring::TDynamicCounterPtr memoryProfilingCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

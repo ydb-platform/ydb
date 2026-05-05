@@ -1,8 +1,7 @@
 #include "yql_position.h"
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 NYql::TPosition ExtractPosition(TCallable& callable) {
     const TStringBuf file = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef();
@@ -11,5 +10,4 @@ NYql::TPosition ExtractPosition(TCallable& callable) {
     return NYql::TPosition(column, row, TString(file));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

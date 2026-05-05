@@ -4,8 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMiniKQLNodeCast: public TTestBase {
     UNIT_TEST_SUITE(TMiniKQLNodeCast);
@@ -68,5 +67,4 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLNodeCast);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

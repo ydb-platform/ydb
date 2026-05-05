@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TUnboxedValueStream::TUnboxedValueStream()
     : Value_(NUdf::TUnboxedValuePod::Zero())
@@ -18,5 +17,4 @@ void TUnboxedValueStream::DoWrite(const void* buf, size_t len) {
     Value_ = AppendString(Value_.Release(), NUdf::TStringRef(static_cast<const char*>(buf), len));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -40,7 +40,7 @@ namespace exporter
 namespace trace
 {
 
-std::ostream &operator<<(std::ostream &os, trace_api::SpanKind span_kind)
+static std::ostream &operator<<(std::ostream &os, trace_api::SpanKind span_kind)
 {
   switch (span_kind)
   {

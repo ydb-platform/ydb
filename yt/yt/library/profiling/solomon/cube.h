@@ -38,6 +38,7 @@ struct TReadOptions
 
     bool MarkAggregates = false;
     bool EnableSolomonAggregates = false;
+    bool ExportGlobalsAsMemOnly = false;
 
     std::optional<std::string> Host;
 

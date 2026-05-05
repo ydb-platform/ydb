@@ -208,16 +208,16 @@ void AppendLogMessageWithFormat(
 {
     if (HasMessageTags(loggingContext, logger)) {
         if (format.size() >= 2 && format[format.size() - 1] == ')') {
-            builder->AppendFormat(format.substr(0, format.size() - 1), std::forward<TArgs>(args)...);
+            builder->AppendFormat(TRuntimeFormat{format.substr(0, format.size() - 1)}, std::forward<TArgs>(args)...);
             builder->AppendString(TStringBuf(", "));
         } else {
-            builder->AppendFormat(format, std::forward<TArgs>(args)...);
+            builder->AppendFormat(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
             builder->AppendString(TStringBuf(" ("));
         }
         AppendMessageTags(builder, loggingContext, logger);
         builder->AppendChar(')');
     } else {
-        builder->AppendFormat(format, std::forward<TArgs>(args)...);
+        builder->AppendFormat(TRuntimeFormat{format}, std::forward<TArgs>(args)...);
     }
 }
 

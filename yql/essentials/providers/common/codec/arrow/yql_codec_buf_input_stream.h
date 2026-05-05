@@ -5,8 +5,7 @@
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TInputBufArrowInputStream: public arrow::io::InputStream {
 public:
@@ -48,5 +47,4 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

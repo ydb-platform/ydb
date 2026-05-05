@@ -36,7 +36,7 @@ class TExpression {
     bool IsColumnAccess() const;
 
     // Check if the expression is a just a single callable on top of a column expression
-    bool IsSingleCallable(THashSet<TString> allowedCallables) const;
+    bool IsSingleCallable(const THashSet<TString>& allowedCallables) const;
 
     // Check if the expression is a cast
     bool IsCast() const;
@@ -44,8 +44,11 @@ class TExpression {
     // Check is the expression can be folded
     bool IsConstantExpr() const;
 
-    // Check if this is a potential join condition
-    bool MaybeJoinCondition(bool includeExpressions = false) const;
+    // Check if this is a potential equi-join condition
+    bool MaybeEquiJoinCondition() const;
+
+    // Check if this is a potential equi-join condition over simple expressions
+    bool MaybeExprEquiJoinCondition() const;
 
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
@@ -74,15 +77,18 @@ class TExpression {
     TExprNode::TPtr Node;
     TExprContext* Ctx;
     TPlanProps* PlanProps;
+
+  private:
+    bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
 };
 
 /**
  * Model a generic potential join condition
  */
-class TJoinCondition {
+class TEquiJoinCondition {
   public:
 
-    TJoinCondition(const TExpression& expr);
+    TEquiJoinCondition(const TExpression& expr);
 
     // In case this is a simple predicate that contains a single column reference on each side, return left column
     TInfoUnit GetLeftIU() const;
@@ -98,14 +104,13 @@ class TJoinCondition {
     TVector<TInfoUnit> RightIUs;
 
     bool IncludesExpressions = true;
-    bool EquiJoin = false;
 };
 
 // Create an expression that accesses a single column
-TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
 // Create a constant expression. Constant expressions don't need plan properties
-TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx);
+TExpression MakeConstant(const TString& type, const TString& value, TPositionHandle pos, TExprContext* ctx);
 
 // Create. a null expression of a specific type, also doesn't need plan properties
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx);
@@ -114,17 +119,20 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 // from one of the conjuncts.
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
 
+// Negate a predicate
+TExpression MakeNegation(const TExpression& expr);
+
 // Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
-TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
+TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right);
 
 // Get all members from a expression node
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
 
 // Get all members from an expression node, but also mark subplan context separately and optionally include 
 // dependencies in correlated subqueries
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
 
-TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext& ctx);
 
 }
 }

@@ -187,11 +187,9 @@ if __name__ == '__main__':
         f.write(content)
 
     with open(args.gradle_properties, 'w') as f:
-        f.write(
-            '''android.enableJetifier=true
+        f.write('''android.enableJetifier=true
         android.useAndroidX=true
-        org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=512m'''
-        )
+        org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=512m''')
 
     if args.bundle_name:
         with open(args.settings_gradle, 'w') as f:

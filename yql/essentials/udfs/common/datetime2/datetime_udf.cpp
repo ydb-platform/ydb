@@ -8,8 +8,10 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
+#include <util/string/join.h>
 
 #include <concepts>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -60,6 +62,81 @@ extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
 
 namespace {
+
+void AddBoundaryResourcePolyArgs(bool first, TStringBuilder& sb, TStringBuf argResourceName, TStringBuf intervalType) {
+    if (!first) {
+        sb << ';';
+    }
+
+    sb << "[{cmd=or;value=[";
+    sb << "    {arg=T0;cmd=type;value=[ResourceType;" << argResourceName << "]};";
+    sb << "    {arg=T0;cmd=type;value=[OptionalType;[ResourceType;" << argResourceName << "]]}";
+    sb << "]};{args=[[ResourceType;" << argResourceName << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+void AddBoundaryDatePolyArgs(bool last, TStringBuilder& sb, TStringBuf dateType, TStringBuf intervalType) {
+    sb << ';';
+
+    if (last) {
+        sb << "[[];";
+    } else {
+        sb << "[{cmd=or;value=[";
+        sb << "    {arg=T0;cmd=type;value=[DataType;" << dateType << "]};";
+        sb << "    {arg=T0;cmd=type;value=[OptionalType;[DataType;" << dateType << "]]}";
+        sb << "]};";
+    }
+
+    sb << "{args=[[DataType;" << dateType << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+enum class ESecondPolyArg {
+    None,
+    Interval,
+    Shift
+};
+
+TStringBuf GetSecondPolyArgType(ESecondPolyArg secondArg, bool wide) {
+    switch (secondArg) {
+        case ESecondPolyArg::None:
+            return {};
+        case ESecondPolyArg::Interval:
+            return wide ? "Interval64" : "Interval";
+        case ESecondPolyArg::Shift:
+            return "Int32";
+    }
+}
+
+TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
+    TStringBuilder sb;
+    sb << "[";
+    AddBoundaryResourcePolyArgs(true, sb, TMResourceName, GetSecondPolyArgType(secondArg, false));
+    AddBoundaryResourcePolyArgs(false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, true));
+    TVector<std::pair<TStringBuf, TStringBuf>> plainDates;
+    for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+        if (DataTypeInfos[i].Features & NUdf::ExtDateType) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, true)));
+        }
+
+        if (DataTypeInfos[i].Features & (NUdf::DateType | NUdf::TzDateType)) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, false)));
+        }
+    }
+
+    for (ui32 i = 0; i < plainDates.size(); ++i) {
+        AddBoundaryDatePolyArgs(i == plainDates.size() - 1, sb, plainDates[i].first, plainDates[i].second);
+    }
+
+    sb << "]";
+    return sb;
+}
 
 template <typename Type>
 static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
@@ -142,7 +219,7 @@ template <
     ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
@@ -197,6 +274,58 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
+    }
+
+    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
+        TStringBuilder sb;
+        if (full) {
+            sb << "[";
+        }
+
+        TVector<TStringBuf> plainTypes;
+        for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+            if (DataTypeInfos[i].Features & (NUdf::ExtDateType | NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
+                plainTypes.emplace_back(DataTypeInfos[i].Name);
+            }
+        }
+
+        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
+        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
+        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+
+        for (auto type : plainTypes) {
+            AddPolyArgs(sb, type, langverPredicate, langverAction);
+        }
+
+        sb << "[";
+        if (langverPredicate) {
+            sb << "[" << langverPredicate;
+        }
+
+        sb << "{cmd=error;message=\"Expected types: ";
+        sb << JoinSeq(", ", plainTypes);
+        sb << "\"}";
+        if (langverPredicate) {
+            sb << "]";
+        }
+
+        sb << ";{}]";
+        if (full) {
+            sb << "]";
+        }
+
+        return sb;
+    }
+
+    static void AddPolyArgs(TStringBuilder& sb, TStringBuf dataType, const TString& langverPredicate, const TString& langverAction) {
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[DataType;" << dataType << "]}];{" << langverAction << "args=[[DataType;" << dataType << "]]}];";
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
+        sb << "{" << langverAction << "args=[[OptionalType;[DataType;" << dataType << "]]]}]";
+        sb << ';';
     }
 
     template <typename TTzDate, typename TOutput>
@@ -372,7 +501,7 @@ public:
                 return true;
             }
 
-            Y_UNREACHABLE();
+            Y_ENSURE(false, "Unreachable");
         }
         return true;
     }
@@ -383,11 +512,15 @@ template <const char* TFuncName, typename TFieldStorage,
           TFieldStorage (*WAccessor)(const TUnboxedValuePod&),
           ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
 struct TGetTimeComponent {
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1283,11 +1416,15 @@ template <const char* TUdfName,
           typename TResultWType, TResultWType (*WAccessor)(const TUnboxedValuePod&)>
 class TGetDateComponent: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1394,10 +1531,15 @@ private:
 template <const char* TUdfName, auto Accessor, auto WAccessor>
 class TGetDateComponentName: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
+
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1617,11 +1759,15 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
 
 class TUpdate: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Update");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1852,11 +1998,24 @@ DATETIME_FROM_CONVERTER_UDF(Interval64FromMicroseconds, TInterval64, i64, 1);
 template <const char* TUdfName, typename TResult, typename TWResult, i64 ScaleSeconds>
 class TToConverter: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=or;value=[
+                   {cmd=type;arg=T0;value=[DataType;Interval64]};
+                   {cmd=type;arg=T0;value=[OptionalType;[DataType;Interval64]]}
+                ]};{args=[[DataType;Interval64]]}];
+               [[];{args=[[DataType;Interval]]}]
+            ])");
+
+        return Config;
     }
 
     static bool DeclareSignature(
@@ -1976,7 +2135,7 @@ TUnboxedValue SimpleDatetimeToDatetimeUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOf: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2059,6 +2218,10 @@ public:
 
         SetUnexpectedTagError(builder, resource.GetTag());
         return true;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
 private:
@@ -2306,7 +2469,7 @@ TUnboxedValue SimpleDatetimeToIntervalUdf(const IValueBuilder* valueBuilder, con
 template <const char* TUdfName, auto Boundary, auto WBoundary>
 class TBoundaryOfInterval: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
@@ -2345,7 +2508,7 @@ public:
         TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
         Y_ENSURE(argsTuple, "Tuple with args expected");
         if (argsTuple.GetElementsCount() != 2) {
-            builder.SetError("Single argument expected");
+            builder.SetError("Two arguments expected");
             return true;
         }
 
@@ -2391,6 +2554,10 @@ public:
         return true;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Interval);
+    }
+
 private:
     template <auto Func>
     class TImpl: public TBoxedValue {
@@ -2429,11 +2596,15 @@ struct TTimeOfDayKernelExec: TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTrait
 
 class TTimeOfDay: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef::Of("TimeOfDay");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -2556,11 +2727,15 @@ struct TAddKernelExec: TBinaryKernelExec<TAddKernelExec<Core>> {
 template <const char* TUdfName, auto Shifter, auto WShifter>
 class TShift: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Shift);
     }
 
     static bool DeclareSignature(
@@ -2731,6 +2906,8 @@ static size_t PrintTzOffset(char* out, i32 offset) {
 
 class TFormat: public TBoxedValue {
 public:
+    using TTypeAwareMarker = bool;
+
     explicit TFormat(TSourcePosition pos, size_t optionalArgs)
         : Pos_(pos)
         , OptionalArgs_(optionalArgs)
@@ -2740,6 +2917,16 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Format");
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=ver;value="2025.05"};{ver="2025.05"}];
+               [[];{}]
+            ])");
+
+        return Config;
     }
 
     static bool DeclareSignature(
@@ -2753,7 +2940,7 @@ public:
         }
 
         size_t optionalArgs = 0;
-        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(25, 5)) {
+        if (builder.GetCurrentLangVer() >= NYql::MakeLangVersion(2025, 5)) {
             optionalArgs = 2;
             builder.OptionalArgs(optionalArgs).Args()->Add<char*>().Add<TOptional<bool>>().Name("AlwaysWriteFractionalSeconds").Add<TOptional<bool>>().Name("WriteOffsetWithColon");
         } else {
@@ -2833,7 +3020,7 @@ private:
 
         TImpl(TSourcePosition pos, TUnboxedValue format, bool alwaysWriteFractionalSeconds, bool writeOffsetWithColon)
             : Pos_(pos)
-            , Format_(format)
+            , Format_(std::move(format))
         {
             const std::string_view formatView(Format_.AsStringRef());
             auto dataStart = formatView.begin();
@@ -2944,7 +3131,7 @@ private:
                                                           GetSecond<TM64ResourceName>(value),
                                                           timezoneId, shift))
                             {
-                                Y_UNREACHABLE();
+                                Y_ENSURE(false, "Unreachable");
                             }
 
                             if (shift == 0) {
@@ -2967,7 +3154,7 @@ private:
                     case 'b': {
                         static constexpr size_t Size = 3;
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "Jan",
                                 "Feb",
                                 "Mar",
@@ -2979,7 +3166,8 @@ private:
                                 "Sep",
                                 "Oct",
                                 "Nov",
-                                "Dec"};
+                                "Dec",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             std::memcpy(out, Mp[month - 1].data(), Size);
@@ -2990,7 +3178,7 @@ private:
                     }
                     case 'B': {
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                            static constexpr std::string_view Mp[]{
+                            static constexpr auto Mp = std::to_array<std::string_view>({
                                 "January",
                                 "February",
                                 "March",
@@ -3002,7 +3190,8 @@ private:
                                 "September",
                                 "October",
                                 "November",
-                                "December"};
+                                "December",
+                            });
                             auto month = GetMonth<TM64ResourceName>(value);
                             Y_ENSURE(month > 0 && month <= sizeof(Mp) / sizeof(Mp[0]), "Invalid month value");
                             const std::string_view monthFullName = Mp[month - 1];

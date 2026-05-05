@@ -16,13 +16,13 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NNodes;
 
 namespace {
-constexpr std::array<std::string_view, 8> FormatsForInput = {
+constexpr std::array<std::string_view, 9> FormatsForInput = {
+    "csv"sv,
     "csv_with_names"sv,
     "tsv_with_names"sv,
     "json_list"sv,
@@ -1125,10 +1125,10 @@ void GetToken(const TString& string, TString& out, const TTypeAnnotationContext&
 }
 
 void FillSecureParams(
-    const TExprNode::TPtr& root,
+    const TExprNode::TPtr& node,
     const TTypeAnnotationContext& types,
     THashMap<TString, TString>& secureParams) {
-    NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) {
+    NYql::VisitExpr(node, [&secureParams](const TExprNode::TPtr& node) {
         if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) {
             const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value());
             secureParams.insert({secureParamName, TString()});
@@ -1928,5 +1928,4 @@ bool RenamePgSelectColumns(
     return true;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -38,6 +38,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 requestType,                                                           \
                 YDB_API_DEFAULT_COUNTER_BLOCK(tablet, methodName),                     \
                 auditMode,                                                             \
+                EEmptyDatabaseMode::EmptyDatabaseAllowed,                              \
                 COMMON,                                                                \
                 ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \

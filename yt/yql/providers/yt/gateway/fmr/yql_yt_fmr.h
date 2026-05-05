@@ -22,6 +22,10 @@ enum class ETablePresenceStatus {
 struct TFmrServices: public TYtBaseServices {
     using TPtr = TIntrusivePtr<TFmrServices>;
 
+    TFmrServices() {
+        CheckSpecDoesntUseNativeYtTypes = false;
+    }
+
     TString CoordinatorServerUrl;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;
@@ -32,6 +36,7 @@ struct TFmrServices: public TYtBaseServices {
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;
+    TMaybe<TFmrTvmGatewaySettings> TvmSettings;
 };
 
 struct TFmrYtGatewaySettings {

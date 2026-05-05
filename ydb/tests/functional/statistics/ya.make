@@ -7,9 +7,11 @@ PY_SRCS (
 
 TEST_SRCS(
     test_restarts.py
+    test_analyze.py
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 DEPENDS(
 )

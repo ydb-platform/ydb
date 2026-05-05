@@ -7,6 +7,10 @@
 
 namespace NKikimr {
 
+bool IsDomainLoginOnlyEnabled(const NKikimrProto::TAuthConfig& config) {
+    return config.GetDomainLoginOnly();
+}
+
 bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config) {
     return config.HasLdapAuthentication();
 }

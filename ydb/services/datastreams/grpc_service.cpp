@@ -53,6 +53,7 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         requestType,                                             \
         YDB_API_DEFAULT_COUNTER_BLOCK(data_streams, methodName), \
         auditMode,                                               \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,              \
         COMMON,                                                  \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,      \
         GRpcRequestProxyId_,                                     \

@@ -388,7 +388,7 @@ TDuration TTraceContext::GetDuration() const
 
 void TTraceContext::CheckForLeak(TCpuInstant now)
 {
-    if (Y_UNLIKELY(now > LeakDeadline_)) {
+    if (now > LeakDeadline_) [[unlikely]] {
         if (!LeakDetected_.exchange(true)) {
             YT_LOG_DEBUG("Trace context leak detected (TraceId: %v, StartTime: %v)",
                 GetTraceId(),

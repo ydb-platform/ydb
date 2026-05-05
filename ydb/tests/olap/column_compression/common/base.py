@@ -2,6 +2,7 @@ import yatest.common
 import os
 import time
 import logging
+import json
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -33,6 +34,15 @@ class ColumnTestBase(object):
                 "compaction_actualization_lag_ms": 0,
                 "optimizer_freshness_check_duration_ms": 0,
                 "small_portion_detect_size_limit": 0,
+                "default_compaction_constructor": {
+                    "class_name" : "tiling",
+                    "tiling" : {
+                        "json" : json.dumps({
+                            "max_levels": 1,
+                            "max_accumulate_portion_size": 0,
+                            })
+                    }
+                },
             },
         )
         cls.cluster = KiKiMR(config)

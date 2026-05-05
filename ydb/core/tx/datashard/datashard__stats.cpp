@@ -2,6 +2,7 @@
 #include <ydb/core/tablet_flat/flat_scan_spent.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/core/split/split.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_bio_stats.h>
@@ -246,6 +247,15 @@ public:
         Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
         Result->Record.SetFollowerId(Self->FollowerId());
 
+        const auto appData = AppData(ctx);
+        const bool dropHistogram = appData->FeatureFlags.GetEnableDataShardSplitHistogramOmission();
+        const bool selectSplitKey = dropHistogram || appData->FeatureFlags.GetEnableDataShardSplitKeySelection();
+        const bool sortHistogram = selectSplitKey || appData->FeatureFlags.GetEnableDataShardSplitHistogramSorting();
+
+        // Set split protocol version before anything else.
+        // Follower wouldn't know what table it serves until the first read.
+        FillSplitProtocolVersion(Result->Record.MutableTableStats(), sortHistogram, selectSplitKey, dropHistogram);
+
         const auto tableInfoIt = Self->TableInfos.find(tableId);
 
         if (tableInfoIt == Self->TableInfos.end()) {
@@ -260,7 +270,6 @@ public:
         // NOTE: This must be done before calling EnableKeyAccessSampling()
         //       because this function resets StopKeyAccessSamplingAt and clears
         //       the current key access data (if available)
-        const auto appData = AppData(ctx);
         const auto currentTime = appData->TimeProvider->Now();
 
         const TDuration sampleMinCollection = TDuration::Seconds(
@@ -297,10 +306,7 @@ public:
             //       the split-by-load operation (and use the key access data)
             //       even if it did not want to do the split-by-load when sending
             //       the EvGetTableStats message
-            FillKeyAccessSample(
-                tableInfo.Stats.AccessStats,
-                *Result->Record.MutableTableStats()->MutableKeyAccessSample()
-            );
+            FillSplitByLoad(Result->Record.MutableTableStats(), tableInfo, sortHistogram, selectSplitKey, dropHistogram);
         }
 
         // Start collecting key samples or extend the duration of the active collection
@@ -330,12 +336,14 @@ public:
 
         if (ready) {
             const TStats& stats = tableInfo.Stats.DataStats;
+            const auto totalDataSize = stats.DataSize.Size + memSize;
             Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
             Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
-            Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
+            Result->Record.MutableTableStats()->SetDataSize(totalDataSize);
             Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
-            FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
             FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
+
+            FillSplitBySize(Result->Record.MutableTableStats(), tableInfo, totalDataSize, selectSplitKey, dropHistogram);
 
             Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
             Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
@@ -376,11 +384,73 @@ private:
         }
     }
 
-    static void FillKeyAccessSample(const TKeyAccessSample& s, NKikimrTableStats::THistogram& pb) {
-        for (const auto& k : s.GetSample()) {
-            auto bucket = pb.AddBuckets();
-            bucket->SetKey(k.first);
-            bucket->SetValue(1);
+    static void FillSplitProtocolVersion(NKikimrTableStats::TTableStats* pb, bool sortHistogram, bool selectSplitKey, bool dropHistogram) {
+        const ui32 protocolVersion = [&]() {
+            if (dropHistogram) {
+                return 3;
+            } else if (selectSplitKey) {
+                return 2;
+            } else if (sortHistogram) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }();
+        pb->SetSplitProtocolVersion(protocolVersion);
+    }
+
+    static void FillSplitBySize(NKikimrTableStats::TTableStats* pb, const TUserTable& tableInfo, ui64 totalDataSize, bool selectSplitKey, bool dropHistogram) {
+        // Fill SplitBySizeSuggestedKey.
+        if (selectSplitKey) {
+            const auto& dataSizeHist = tableInfo.Stats.DataStats.DataSizeHistogram;
+            const auto splitBoundary = NSplitMerge::SelectShortestMedianKeyPrefix(dataSizeHist, totalDataSize, tableInfo.KeyColumnTypes);
+            pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(splitBoundary.GetCells()));
+        }
+        // Fill DataSizeHistogram.
+        if (!dropHistogram) {
+            const auto& dataSizeHist = tableInfo.Stats.DataStats.DataSizeHistogram;
+            FillHistogram(dataSizeHist, *pb->MutableDataSizeHistogram());
+        }
+    }
+
+    static void FillSplitByLoad(NKikimrTableStats::TTableStats* pb, const TUserTable& tableInfo, bool sortHistogram, bool selectSplitKey, bool dropHistogram) {
+        const auto& sample = tableInfo.Stats.AccessStats.GetSample();
+
+        // Fill nothing if there is no sample yet
+        if (sample.empty()) {
+            return;
+        }
+
+        NSplitMerge::TKeyAccessHistogram keysHist;
+        keysHist.reserve(sample.size());
+        for (const auto& [key, _] : sample) {
+            keysHist.emplace_back(std::make_pair(TSerializedCellVec(key), 1));
+        }
+
+        // Convert sample to a histogram with sorted, deduplicated entries with accumulated weights.
+        // Selection of split boundary also requires this, regardless of sortHistogram.
+        if (sortHistogram || selectSplitKey) {
+            NSplitMerge::MakeKeyAccessHistogram(keysHist, tableInfo.KeyColumnTypes);
+        }
+
+        // Fill KeyAccessSample
+        // NOTE: fill it before keyHist is converted to cumulative histogram
+        if (!dropHistogram) {
+            auto* keyAccessSample = pb->MutableKeyAccessSample();
+            for (const auto& [key, value] : keysHist) {
+                auto bucket = keyAccessSample->AddBuckets();
+                bucket->SetKey(TSerializedCellVec::Serialize(key.GetCells()));
+                bucket->SetValue(value);
+            }
+        }
+
+        // Select split boundary (key prefix) on top of that.
+        // Fill SplitByLoadSuggestedKey.
+        if (selectSplitKey) {
+            NSplitMerge::ConvertToCumulativeHistogram(keysHist);
+            const auto splitBoundary = NSplitMerge::SelectShortestMedianKeyPrefix(keysHist, tableInfo.KeyColumnTypes);
+            // NOTE: Field will be set to empty cellvec if split boundary cannot be found
+            pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize(splitBoundary.GetCells()));
         }
     }
 };
@@ -473,7 +543,6 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TAc
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
     TTxInitiateStatsUpdate(TDataShard* ds)

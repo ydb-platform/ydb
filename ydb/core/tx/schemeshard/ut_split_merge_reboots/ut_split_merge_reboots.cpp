@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
 
@@ -25,8 +26,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }
     }
 
-    Y_UNIT_TEST(ReTryMerge) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ReTryMerge, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -111,8 +111,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeMergeAlterParallel) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeAlterParallel, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -212,18 +211,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         };
     };
 
-    Y_UNIT_TEST(MergeMergeCopyParallelReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeCopyParallelReboots, 2, 1, false) {
         t.RunWithTabletReboots(MergeMergeCopyParallelScenario(t));
     }
 
-    Y_UNIT_TEST(MergeMergeCopyParallelPipeResets) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeCopyParallelPipeResets, 2, 1, false) {
         t.RunWithPipeResets(MergeMergeCopyParallelScenario(t));
     }
 
-    Y_UNIT_TEST(MergeMergeDropParallel) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeMergeDropParallel, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -268,8 +264,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitSameShardTwice) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitSameShardTwice, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -327,9 +322,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-
-    Y_UNIT_TEST(SplitTableWithReboots) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -398,8 +391,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(SplitTableOneToOneWithReboots) {
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableOneToOneWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -439,8 +431,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeTableWithReboots) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -481,8 +472,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeTableWithRebootsAndDropAfter) { //+
-        TTestWithReboots t(false);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableWithRebootsAndDropAfter, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -558,8 +548,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeSplitParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeSplitParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -608,8 +597,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitAlterParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitAlterParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -654,8 +642,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeAlterSplitParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeAlterSplitParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -716,8 +703,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeAlterAlterParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeAlterAlterParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
 
@@ -777,8 +763,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitDropParallel) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitDropParallel, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -822,8 +807,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeCopyParallelWithChannelsBindings) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeCopyParallelWithChannelsBindings, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -896,8 +880,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, false);
     }
 
-    Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathsAreLocked) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceDropAndCopyInParallelAllPathsAreLocked, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 expectedDomainPaths;
             ui64 dirAPathId;
@@ -951,8 +934,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(MergeCopyParallelAndSplitCopyAfter) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeCopyParallelAndSplitCopyAfter, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1031,8 +1013,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
     }
 
 
-    Y_UNIT_TEST(SplitThenMerge) { //+
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitThenMerge, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1092,8 +1073,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(MergeThenSplit) {
-        TTestWithReboots t(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeThenSplit, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -1155,9 +1135,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
         }, true);
     }
 
-    Y_UNIT_TEST(SplitWithTxInFlightWithReboots) { //+
-        TTestWithReboots t(true);
-
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitWithTxInFlightWithReboots, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

@@ -13,8 +13,7 @@
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 namespace {
 
@@ -525,5 +524,4 @@ ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type) {
     YQL_ENSURE(false, "Unknown kind");
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

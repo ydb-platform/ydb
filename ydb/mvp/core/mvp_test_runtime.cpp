@@ -55,5 +55,6 @@ void TMvpTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
         node->ActorSystem = MakeActorSystem(nodeIndex, node);
     }
 
+    node->ActorSystem->AppData<NMVP::TMVPAppData>()->MetricRegistry = std::make_shared<NMonitoring::TMetricRegistry>();
     node->ActorSystem->Start();
 }

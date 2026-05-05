@@ -628,7 +628,7 @@ void TAggregatedLabeledCounters::FillGetRequestV2(
         labeledCounter.SetValue(GetValue(i));
         labeledCounter.SetNameId(context->GetNameId(Names[i]));
         labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(AggrFunc[i]));
-        labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i])); 
+        labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i]));
     }
 }
 

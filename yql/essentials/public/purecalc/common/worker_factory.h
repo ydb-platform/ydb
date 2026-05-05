@@ -9,10 +9,10 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <utility>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 struct TWorkerFactoryOptions {
     IProgramFactoryPtr Factory;
     const TInputSpecBase& InputSpec;
@@ -57,7 +57,7 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        const TString& issueReportTarget)
+        TString issueReportTarget)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -78,7 +78,7 @@ struct TWorkerFactoryOptions {
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
-        , IssueReportTarget(issueReportTarget)
+        , IssueReportTarget(std::move(issueReportTarget))
     {
     }
 };
@@ -110,6 +110,7 @@ protected:
     bool UseSystemColumns_;
     bool UseWorkerPool_;
     TLangVersion LangVer_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TVector<THolder<IWorker>> WorkerPool_;
     const TString IssueReportTarget_;
 
@@ -178,5 +179,4 @@ public:
 public:
     TWorkerHolder<IPushStreamWorker> MakeWorker() override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

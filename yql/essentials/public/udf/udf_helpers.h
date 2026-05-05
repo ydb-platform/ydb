@@ -9,13 +9,14 @@
 #include "udf_version.h"
 #include "udf_type_printer.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
+
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <class T>
 concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -27,6 +28,7 @@ template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgsWithVersion);
 
 public:
     using TTypeAwareMarker = bool;
@@ -47,6 +49,30 @@ public:
         Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
         return TActualUDF::Name();
     }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+    static TString BuildPolyArgs() {
+        if constexpr (THasBuildPolyArgsWithVersion<TActualUDF>::value) {
+            Y_ENSURE(THasBuildPolyArgsWithVersion<TLegacyUDF>::value);
+            TStringBuilder builder;
+            builder << "[";
+            builder << TActualUDF::BuildPolyArgsWithVersion(V);
+            builder << ";";
+            builder << TLegacyUDF::BuildPolyArgsWithVersion(0);
+            builder << "]";
+            return builder;
+        } else {
+            TStringBuilder builder;
+            auto verStr = *FormatLangVersion(V);
+            builder << "[[{cmd=ver;value=\"";
+            builder << verStr;
+            builder << "\"};{ver=\"";
+            builder << verStr;
+            builder << "\"}];[[];{}]]";
+            return builder;
+        }
+    }
+#endif
 
     static bool DeclareSignature(
         const TStringRef& name, TType* userType,
@@ -82,8 +108,7 @@ inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf re
     Y_UNUSED(functionName);
 #endif
 }
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
     #define APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_) sb << valueBuilder->WithCalleePosition(Pos_) << " ";
@@ -278,13 +303,12 @@ inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf re
         return ::NYql::NUdf::TUnboxedValue(); \
     }
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <bool CheckOptional, bool CheckBlock, const char* TFuncName, template <class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
 public:
     static const ::NYql::NUdf::TStringRef& Name() {
@@ -390,12 +414,60 @@ public:
 
         return true;
     }
+
+    static TString BuildPolyArgs() {
+        TStringBuilder sb;
+        sb << "[";
+        AppendPolyArgsItem<TUserTypes...>(sb);
+        sb << "[{cmd=error;message=\"Expected types: ";
+        AppendTypeNames<TUserTypes...>(sb, true);
+        sb << "\"};{}]";
+        sb << "]";
+        return sb;
+    }
+
+private:
+    template <typename THead, typename... TTail>
+    static void AppendTypeNames(TStringBuilder& sb, bool first) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if (!first) {
+            sb << ", ";
+        }
+
+        sb << typeName;
+        if constexpr (sizeof...(TTail)) {
+            AppendTypeNames<TTail...>(sb, false);
+        }
+    }
+
+    template <typename THead, typename... TTail>
+    static void AppendPolyArgsItem(TStringBuilder& sb) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if constexpr (CheckOptional) {
+            sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
+               << "]]}]};{args=[[DataType;" << typeName << "]]}]";
+        } else {
+            sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{args=[[DataType;" << typeName << "]]}]";
+        }
+
+        sb << ";";
+        if constexpr (sizeof...(TTail)) {
+            AppendPolyArgsItem<TTail...>(sb);
+        }
+    }
 };
 
 template <CUDF... TUdfs>
 class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
+    Y_HAS_MEMBER(BuildPolyArgs);
 
 public:
     void CleanupOnTerminate() const override {
@@ -407,6 +479,15 @@ public:
         if (THasTTypeAwareMarker<TUdfType>::value) {
             r->SetTypeAwareness();
         }
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 46)
+        if constexpr (THasBuildPolyArgs<TUdfType>::value) {
+            auto str = TUdfType::BuildPolyArgs();
+            if (str.size() > 0) {
+                r->SetPolyArgs(str);
+            }
+        }
+#endif
 
         if constexpr (THasTBlockType<TUdfType>::value) {
             if constexpr (!std::is_same_v<typename TUdfType::TBlockType, void>) {
@@ -480,5 +561,4 @@ public:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

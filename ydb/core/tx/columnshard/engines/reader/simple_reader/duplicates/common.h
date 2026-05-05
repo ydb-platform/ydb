@@ -47,6 +47,7 @@ public:
     std::partial_ordering operator<=>(const TRowRange& other) const {
         return std::tie(Begin, End) <=> std::tie(other.Begin, other.End);
     }
+
     bool operator==(const TRowRange& other) const {
         return (*this <=> other) == std::partial_ordering::equivalent;
     }
@@ -55,7 +56,7 @@ public:
         return End - Begin;
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         return CombineHashes(Begin, End);
     }
 
@@ -100,11 +101,16 @@ public:
     static TPortionBorderView First(const ui64 portionId) {
         return TPortionBorderView(portionId, EBorder::FIRST);
     }
+
     static TPortionBorderView Last(const ui64 portionId) {
         return TPortionBorderView(portionId, EBorder::LAST);
     }
 
-    operator size_t() const {
+    bool operator==(const TPortionBorderView& other) const {
+        return std::tie(PortionId, Border) == std::tie(other.PortionId, other.Border);
+    }
+
+    explicit operator size_t() const {
         return CombineHashes(PortionId, (ui64)Border);
     }
 
@@ -156,11 +162,16 @@ public:
     const TPortionBorderView& GetBegin() const {
         return Begin;
     }
+
     const TPortionBorderView& GetEnd() const {
         return End;
     }
 
-    operator size_t() const {
+    bool operator==(const TIntervalBordersView& other) const {
+        return std::tie(Begin, End) == std::tie(other.Begin, other.End);
+    }
+
+    explicit operator size_t() const {
         return CombineHashes((size_t)Begin, (size_t)End);
     }
 
@@ -206,12 +217,13 @@ public:
     {
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         size_t h = (size_t)MaxVersion;
         h = CombineHashes(h, (size_t)Interval);
         h = CombineHashes(h, PortionId);
         return h;
     }
+
     bool operator==(const TDuplicateMapInfo& other) const {
         return std::tie(MaxVersion, Interval, PortionId) == std::tie(other.MaxVersion, other.Interval, other.PortionId);
     }
@@ -242,6 +254,7 @@ public:
     static TIntervalBorder First(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
         return TIntervalBorder(false, key, portionId);
     }
+
     static TIntervalBorder Last(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const ui64 portionId) {
         return TIntervalBorder(true, key, portionId);
     }
@@ -249,7 +262,9 @@ public:
     bool operator<(const TIntervalBorder& other) const {
         return std::tie(*Key, IsLast, PortionId) < std::tie(*other.Key, other.IsLast, other.PortionId);
     }
+
     bool operator==(const TIntervalBorder& other) = delete;
+
     bool IsEquivalent(const TIntervalBorder& other) const {
         return *Key == *other.Key && IsLast == other.IsLast;
     };
@@ -292,9 +307,11 @@ public:
         AFL_VERIFY(IsExclusive());
         return ExclusivePortionId;
     }
+
     bool IsExclusive() const {
         return IntersectingPortionsCount == 1;
     }
+
     bool IsEmpty() const {
         return IntersectingPortionsCount == 0;
     }

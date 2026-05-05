@@ -10,6 +10,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -109,6 +110,53 @@ struct TReadIteratorVectorTop {
 namespace {
 
 constexpr ui64 MinRowsPerCheck = 1000;
+
+TMaybe<ui64> ResolveVictimQuerySpanId(TMaybe<ui64> lockVictimQuerySpanId, ui64 currentQuerySpanId) {
+    if (lockVictimQuerySpanId) {
+        return lockVictimQuerySpanId;
+    }
+
+    if (currentQuerySpanId) {
+        return TMaybe<ui64>(currentQuerySpanId);
+    }
+
+    return Nothing();
+}
+
+template <typename TReadResultRecord>
+void EmitVictimAndDeferredBreakerTli(
+    const TActorContext& ctx,
+    ui64 tabletId,
+    TReadResultRecord& record,
+    TMaybe<ui64> victimQuerySpanId,
+    ui64 currentQuerySpanId,
+    ui64 breakerQuerySpanId,
+    ui32 breakerNodeId)
+{
+    NDataIntegrity::LogVictimDetected(ctx, tabletId,
+        "Read transaction was a victim of broken locks",
+        victimQuerySpanId,
+        currentQuerySpanId ? TMaybe<ui64>(currentQuerySpanId) : Nothing());
+
+    if (!victimQuerySpanId) {
+        return;
+    }
+
+    record.SetDeferredVictimQuerySpanId(*victimQuerySpanId);
+
+    if (!breakerQuerySpanId) {
+        return;
+    }
+
+    TVector<ui64> victimIds = {*victimQuerySpanId};
+    NDataIntegrity::LogLocksBroken(ctx, tabletId,
+        "Write transaction broke other locks (deferred)",
+        {},
+        TMaybe<ui64>(breakerQuerySpanId),
+        victimIds);
+    record.AddDeferredBreakerQuerySpanIds(breakerQuerySpanId);
+    record.AddDeferredBreakerNodeIds(breakerNodeId);
+}
 
 class TRowCountBlockBuilder : public IBlockBuilder {
 public:
@@ -1993,7 +2041,7 @@ public:
         }
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
             bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
@@ -2030,9 +2078,29 @@ public:
             }
         }
 
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead && !schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::OVERLOADED,
+                TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
+                    << " (shard# " << Self->TabletID()
+                    << " node# " << ctx.SelfID.NodeId() << ")");
+            Result->Record.SetThrottled(true);
+            return EExecutionStatus::DelayComplete;
+        }
+
         LWTRACK(ReadExecute, state.Request->Orbit);
-        if (!Read(txc, ctx, state))
+        bool readResult = Read(txc, ctx, state);
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+        }
+
+        if (!readResult) {
             return EExecutionStatus::Restart;
+        }
 
         // Check if successful result depends on unresolved volatile transactions
         if (Result && !Result->Record.HasStatus() && !Reader->GetVolatileReadDependencies().empty()) {
@@ -2149,6 +2217,7 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
+        state.QuerySpanId = request->Record.GetQuerySpanId();
         state.LockMode = request->Record.GetLockMode();
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
@@ -2162,6 +2231,21 @@ public:
                     TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
                 return;
+        }
+
+        if (Self->Pipeline.HasDrop()) {
+            // We already checked this in the event handler, but the drop could have been added while
+            // this request was in the low priority queue.
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::INTERNAL_ERROR,
+                TStringBuilder() << "Request " << record.GetReadId()
+                    << " rejected, because pipeline is in process of drop"
+                    << " (shard# " << Self->TabletID()
+                    << " node# " << Self->SelfId().NodeId()
+                    << " state# " << DatashardStateName(Self->State) << ")"
+            );
+            return;
         }
 
         // Note: some checks already performed in TTxReadViaPipeline::Execute
@@ -2275,7 +2359,8 @@ public:
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
-                    error = "Target vector has invalid format";
+                    error = TStringBuilder() << "Target vector has invalid format: "
+                        << topState->KMeans->FormatError(topK.GetTargetVector());
                 }
             }
             for (auto& colIdx: topK.GetDistinctColumns()) {
@@ -2603,10 +2688,127 @@ private:
         ValidationInfo.SetLoaded();
     }
 
+    // Handle deferred lock break detection: determine victim, log TLI events, and
+    // pass breaker info to SessionActor via the result proto.
+    void HandleDeferredLockBreak(TReadIteratorState& state, TSysLocks& sysLocks, const TActorContext& ctx) {
+        // Check if lock was already broken before we call BreakSetLocks
+        bool lockWasAlreadyBroken = false;
+        ui64 storedBreakerSpanId = 0;
+        ui32 storedBreakerNodeId = 0;
+        TLockInfo::TPtr rawLockPtr;
+
+        if (state.LockId) {
+            rawLockPtr = sysLocks.GetRawLock(state.LockId);
+            if (rawLockPtr) {
+                lockWasAlreadyBroken = rawLockPtr->IsBroken();
+                storedBreakerSpanId = rawLockPtr->GetBreakerQuerySpanId();
+                storedBreakerNodeId = rawLockPtr->GetBreakerNodeId();
+            }
+        }
+
+        sysLocks.BreakSetLocks();
+
+        // Determine victim query trace ID:
+        // - If lock was already broken (e.g., breaker wrote to same key), use the original victim
+        // - If lock wasn't broken before (deferred scenario), use current query as victim
+        TMaybe<ui64> victimQuerySpanId;
+        if (lockWasAlreadyBroken) {
+            victimQuerySpanId = state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing();
+        } else {
+            victimQuerySpanId = state.QuerySpanId
+                ? TMaybe<ui64>(state.QuerySpanId)
+                : (state.LockId ? sysLocks.GetVictimQuerySpanIdForLock(state.LockId) : Nothing());
+
+            // Update the lock's VictimQuerySpanId so SessionActor receives the correct victim info
+            if (state.LockId && state.QuerySpanId) {
+                if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                    rawLock->SetVictimQuerySpanId(state.QuerySpanId);
+                }
+            }
+        }
+
+        NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
+            "Read transaction was a victim of broken locks",
+            victimQuerySpanId,
+            state.QuerySpanId ? TMaybe<ui64>(state.QuerySpanId) : Nothing());
+
+        // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
+        if (victimQuerySpanId) {
+            Result->Record.SetDeferredVictimQuerySpanId(*victimQuerySpanId);
+
+            TVector<ui64> victimIds = {*victimQuerySpanId};
+            bool foundBreaker = false;
+
+            if (storedBreakerSpanId) {
+                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
+                    "Write transaction broke other locks (deferred)",
+                    {},
+                    TMaybe<ui64>(storedBreakerSpanId),
+                    victimIds);
+                Result->Record.AddDeferredBreakerQuerySpanIds(storedBreakerSpanId);
+                Result->Record.AddDeferredBreakerNodeIds(storedBreakerNodeId);
+                foundBreaker = true;
+            }
+
+            if (!foundBreaker) {
+                auto breakerInfos = Self->FindBreakerInfoForTli(state.ReadVersion);
+                for (const auto& info : breakerInfos) {
+                    if (rawLockPtr) {
+                        rawLockPtr->SetBreakerInfo(info.QuerySpanId, info.SenderNodeId);
+                    }
+                    NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
+                        "Write transaction broke other locks (deferred)",
+                        {},
+                        TMaybe<ui64>(info.QuerySpanId),
+                        victimIds);
+                    Result->Record.AddDeferredBreakerQuerySpanIds(info.QuerySpanId);
+                    Result->Record.AddDeferredBreakerNodeIds(info.SenderNodeId);
+                }
+            }
+
+            if (rawLockPtr) {
+                rawLockPtr->ConsumeBreakerInfo();
+            }
+        }
+    }
+
+    // Log TLI for a broken lock found by ApplyLocks or TTxReadContinue when
+    // HandleDeferredLockBreak was not called (read was consistent, but lock was
+    // broken by a concurrent write on different keys).
+    void HandleBrokenLockTli(TReadIteratorState& state, TSysLocks& sysLocks,
+                             const TSysTables::TLocksTable::TLock& lock, const TActorContext& ctx) {
+        const TMaybe<ui64> victimQuerySpanId = ResolveVictimQuerySpanId(
+            sysLocks.GetVictimQuerySpanIdForLock(lock.LockId),
+            state.QuerySpanId);
+
+        ui64 breakerQuerySpanId = 0;
+        ui32 breakerNodeId = 0;
+        auto rawLock = sysLocks.GetRawLock(lock.LockId);
+        if (rawLock && rawLock->GetBreakerQuerySpanId() && !rawLock->IsBreakerConsumed()) {
+            breakerQuerySpanId = rawLock->GetBreakerQuerySpanId();
+            breakerNodeId = rawLock->GetBreakerNodeId();
+        }
+
+        EmitVictimAndDeferredBreakerTli(
+            ctx,
+            Self->TabletID(),
+            Result->Record,
+            victimQuerySpanId,
+            state.QuerySpanId,
+            breakerQuerySpanId,
+            breakerNodeId);
+
+        if (rawLock) {
+            rawLock->ConsumeBreakerInfo();
+        }
+    }
+
     void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {
         auto& sysLocks = Self->SysLocksTable();
 
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
+
+        bool handledDeferredBreak = false;
 
         switch (state.LockMode) {
         case NKikimrDataEvents::OPTIMISTIC:
@@ -2634,16 +2836,22 @@ private:
             }
 
             if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-                sysLocks.BreakSetLocks();
+                HandleDeferredLockBreak(state, sysLocks, ctx);
+                handledDeferredBreak = true;
             }
 
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
             if (Reader->HadInconsistentResult()) {
-                sysLocks.BreakSetLocks();
+                HandleDeferredLockBreak(state, sysLocks, ctx);
+                handledDeferredBreak = true;
             }
 
+            break;
+
+        default:
+            // Other cases are unsupported and rejected during initialization
             break;
         }
 
@@ -2653,6 +2861,10 @@ private:
             NKikimrDataEvents::TLock* addLock;
             if (lock.IsError()) {
                 addLock = Result->Record.AddBrokenTxLocks();
+
+                if (!handledDeferredBreak) {
+                    HandleBrokenLockTli(state, sysLocks, lock, ctx);
+                }
             } else {
                 addLock = Result->Record.AddTxLocks();
             }
@@ -3174,16 +3386,40 @@ public:
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
-        Reader.reset(new TReader(
+        Reader = std::make_unique<TReader>(
             state,
             *BlockBuilder,
             TableInfo,
             AppData()->MonotonicTimeProvider->Now(),
-            Self));
+            Self);
 
         LWTRACK(ReadExecute, state.Request->Orbit);
+
+        // Try to consume schedulable read quota before reading
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead) {
+            if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+                // KQP read quota exhausted, reschedule with delay.
+                // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
+                state.ReadContinuePending = true;
+                Reader.reset();
+                Result.reset();
+                ctx.Schedule(
+                    schedulableRead->EstimateQuotaDelay(TDuration::MilliSeconds(10)),
+                    new TEvDataShard::TEvReadContinue(LocalReadId));
+                return true;
+            }
+        }
+
+        // Return read quota after reading
+        Y_DEFER {
+            if (schedulableRead) {
+                Reader->UpdateCycles();
+                schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            }
+        };
 
         if (Reader->Read(txc)) {
             // Retry later when dependencies are resolved
@@ -3276,6 +3512,27 @@ public:
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
                     << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId());
 
+                // Emit TLI for victim and breaker.
+                const TMaybe<ui64> victimQuerySpanId = ResolveVictimQuerySpanId(
+                    state.Lock->GetVictimQuerySpanId()
+                        ? TMaybe<ui64>(state.Lock->GetVictimQuerySpanId())
+                        : Nothing(),
+                    state.QuerySpanId);
+                const ui64 breakerQuerySpanId = !state.Lock->IsBreakerConsumed()
+                    ? state.Lock->GetBreakerQuerySpanId()
+                    : 0;
+                const ui32 breakerNodeId = breakerQuerySpanId ? state.Lock->GetBreakerNodeId() : 0;
+
+                EmitVictimAndDeferredBreakerTli(
+                    ctx,
+                    Self->TabletID(),
+                    Result->Record,
+                    victimQuerySpanId,
+                    state.QuerySpanId,
+                    breakerQuerySpanId,
+                    breakerNodeId);
+                state.Lock->ConsumeBreakerInfo();
+
                 // A broken write lock means we are reading inconsistent results and must abort
                 if (state.Lock->IsWriteLock()) {
                     SetStatusError(record, Ydb::StatusIds::ABORTED, "Read conflict with concurrent transaction");
@@ -3349,6 +3606,7 @@ public:
             Reader->UpdateState(state, useful);
             if (!state.IsExhausted()) {
                 state.ReadContinuePending = true;
+
                 ctx.Send(
                     Self->SelfId(),
                     new TEvDataShard::TEvReadContinue(LocalReadId));
@@ -3465,10 +3723,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    size_t totalInFly = ReadIteratorsInFly() + TxInFly() + ImmediateInFly()
-        + MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + TxWaiting();
-
-    if (totalInFly > GetMaxTxInFly()) {
+    if (!Pipeline.CheckInflightLimit()) {
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Request " << readId.ReadId << " rejected, MaxTxInFly was exceeded"
@@ -3530,14 +3785,18 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         sessionId = ev->InterconnectSession;
     }
 
+    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory && *SchedulableReadFactory) {
+        schedulableRead = (*SchedulableReadFactory)->Get(record.GetDatabaseId(), record.GetPoolId());
+    }
+
     ui64 localReadId = NextTieBreakerIndex++;
     auto pr = ReadIterators.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(readId),
         std::forward_as_tuple(
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
-            sessionId, readVersion, isHeadRead,
-            AppData()->MonotonicTimeProvider->Now()));
+            sessionId, readVersion, isHeadRead, AppData()->MonotonicTimeProvider->Now(), schedulableRead));
     Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;
@@ -3788,6 +4047,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
     if (state.EnqueuedLocalTxId) {
         Executor()->CancelTransaction(state.EnqueuedLocalTxId);
     }
+
     ReadIteratorsByLocalReadId.erase(state.LocalReadId);
     ReadIterators.erase(it);
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());

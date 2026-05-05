@@ -4,7 +4,6 @@
 #include <yt/yql/providers/yt/provider/yql_yt_optimize.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -15,61 +14,6 @@ namespace NYql {
 
 using namespace NNodes;
 using namespace NPrivate;
-
-TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& innerLambda, const TCoLambda& outerLambda, TExprContext& ctx) const {
-    auto maxJobMemoryLimit = State_->Configuration->MaxExtraJobMemoryToFuseOperations.Get();
-    auto maxOperationFiles = State_->Configuration->MaxOperationFiles.Get().GetOrElse(DEFAULT_MAX_OPERATION_FILES);
-    TMap<TStringBuf, ui64> memUsage;
-
-    TExprNode::TPtr updatedBody = innerLambda.Body().Ptr();
-    if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
-        if (status.Level != TStatus::Ok) {
-            return {};
-        }
-    }
-    size_t innerFiles = 1; // jobstate. Take into account only once
-    ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, maxJobMemoryLimit ? &memUsage : nullptr, nullptr, &innerFiles);
-
-    auto prevMemory = Accumulate(memUsage.begin(), memUsage.end(), 0ul,
-        [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
-
-    updatedBody = outerLambda.Body().Ptr();
-    if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
-        if (status.Level != TStatus::Ok) {
-            return {};
-        }
-    }
-    size_t outerFiles = 0;
-    ScanResourceUsage(*updatedBody, *State_->Configuration, State_->Types, maxJobMemoryLimit ? &memUsage : nullptr, nullptr, &outerFiles);
-
-    auto currMemory = Accumulate(memUsage.begin(), memUsage.end(), 0ul,
-        [](ui64 sum, const std::pair<const TStringBuf, ui64>& val) { return sum + val.second; });
-
-    if (maxJobMemoryLimit && currMemory != prevMemory && currMemory > *maxJobMemoryLimit) {
-        YQL_CLOG(DEBUG, ProviderYt) << "Memory usage: innerLambda=" << prevMemory
-            << ", joinedLambda=" << currMemory << ", MaxJobMemoryLimit=" << *maxJobMemoryLimit;
-        return false;
-    }
-    if (innerFiles + outerFiles > maxOperationFiles) {
-        YQL_CLOG(DEBUG, ProviderYt) << "Files usage: innerLambda=" << innerFiles
-            << ", outerLambda=" << outerFiles << ", MaxOperationFiles=" << maxOperationFiles;
-        return false;
-    }
-
-    if (auto maxReplcationFactor = State_->Configuration->MaxReplicationFactorToFuseOperations.Get()) {
-        double replicationFactor1 = NCommon::GetDataReplicationFactor(innerLambda.Ref(), ctx);
-        double replicationFactor2 = NCommon::GetDataReplicationFactor(outerLambda.Ref(), ctx);
-        YQL_CLOG(DEBUG, ProviderYt) << "Replication factors: innerLambda=" << replicationFactor1
-            << ", outerLambda=" << replicationFactor2 << ", MaxReplicationFactorToFuseOperations=" << *maxReplcationFactor;
-
-        if (replicationFactor1 > 1.0 && replicationFactor2 > 1.0 && replicationFactor1 * replicationFactor2 > *maxReplcationFactor) {
-            return false;
-        }
-    }
-    return true;
-}
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
     auto outerReduce = node.Cast<TYtReduce>();
@@ -162,7 +106,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
 
     auto innerLambda = innerReduce.Reducer();
     auto outerLambda = outerReduce.Reducer();
-    auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx);
+    auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx, State_);
     if (!fuseRes) {
         // Some error
         return {};
@@ -409,7 +353,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
                 continue;
             }
 
-            auto fuseRes = CanFuseLambdas(mapLambda, outerReduce.Reducer(), ctx);
+            auto fuseRes = CanFuseLambdas(mapLambda, outerReduce.Reducer(), ctx, State_);
             if (!fuseRes) {
                 // Some error
                 return {};
@@ -699,7 +643,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
         return node;
     }
 
-    auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx);
+    auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx, State_);
     if (!fuseRes) {
         // Some error
         return {};
@@ -850,7 +794,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
 
     auto lambda = inner.Maybe<TYtMapReduce>() ? inner.Cast<TYtMapReduce>().Reducer() : inner.Cast<TYtReduce>().Reducer();
 
-    auto fuseRes = CanFuseLambdas(lambda, outerLambda, ctx);
+    auto fuseRes = CanFuseLambdas(lambda, outerLambda, ctx, State_);
     if (!fuseRes) {
         // Some error
         return {};
@@ -925,237 +869,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-    auto outerMapReduce = node.Cast<TYtMapReduce>();
-    auto maybeOuterLambda = outerMapReduce.Mapper().Maybe<TCoLambda>();
-    if (maybeOuterLambda && HasYtRowNumber(maybeOuterLambda.Cast().Body().Ref())) {
-        return node;
-    }
-
-    for (size_t index = 0; index < outerMapReduce.Input().Size(); index++) {
-        // Validate input
-        if (NYql::HasNonEmptyKeyFilter(outerMapReduce.Input().Item(index))) {
-            continue;
-        }
-        // TODO(mpereskokova): Support multiple paths in mapReduce input
-        if (outerMapReduce.Input().Item(index).Paths().Size() != 1) {
-            continue;
-        }
-
-        TYtPath path = outerMapReduce.Input().Item(index).Paths().Item(0);
-        auto maybeInnerMap = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMap>();
-        if (!maybeInnerMap) {
-            continue;
-        }
-        TYtMap innerMap = maybeInnerMap.Cast();
-        if (innerMap.Ref().StartsExecution() || innerMap.Ref().HasResult()) {
-            continue;
-        }
-        if (innerMap.Output().Size() > 1) {
-            continue;
-        }
-        if (outerMapReduce.DataSink().Cluster().Value() != innerMap.DataSink().Cluster().Value()) {
-            continue;
-        }
-
-        if (maybeOuterLambda) {
-            auto outerLambda = maybeOuterLambda.Cast();
-
-            auto fuseRes = CanFuseLambdas(innerMap.Mapper(), outerLambda, ctx);
-            if (!fuseRes) {
-                // Some error
-                return {};
-            }
-            if (!*fuseRes) {
-                // Cannot fuse
-                continue;
-            }
-        }
-
-        if (NYql::HasAnySetting(innerMap.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
-            continue;
-        }
-        if (NYql::HasAnySetting(outerMapReduce.Input().Item(index).Settings().Ref(),
-            EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied)) {
-            continue;
-        }
-
-        if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMapReduce.Settings().Ref(), EYtSettingType::Flow)) {
-            continue;
-        }
-        if (!path.Ranges().Maybe<TCoVoid>()) {
-            continue;
-        }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
-            continue;
-        }
-
-        const TParentsMap* parentsMap = getParents();
-        if (IsOutputUsedMultipleTimes(innerMap.Ref(), *parentsMap)) {
-            // Inner map output is used more than once
-            continue;
-        }
-
-        // Check world dependencies
-        auto parentsIt = parentsMap->find(innerMap.Raw());
-        bool failed = false;
-        YQL_ENSURE(parentsIt != parentsMap->cend());
-        for (auto dep: parentsIt->second) {
-            if (!TYtOutput::Match(dep)) {
-                failed = true;
-                break;
-            }
-        }
-        if (failed) {
-            continue;
-        }
-
-        const bool unorderedOut = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
-        auto innerLambda = TCoLambda(ctx.DeepCopyLambda(innerMap.Mapper().Ref()));
-        innerLambda = FallbackLambdaOutput(innerLambda, ctx);
-        if (unorderedOut) {
-            innerLambda = Build<TCoLambda>(ctx, innerLambda.Pos())
-                .Args({"stream"})
-                .Body<TCoUnordered>()
-                    .Input<TExprApplier>()
-                        .Apply(innerLambda)
-                        .With(0, "stream")
-                    .Build()
-                .Build()
-                .Done();
-        }
-
-        TVector<TExprBase> updatedInputs;
-        TVector<TExprBase> switchArgs;
-        updatedInputs.reserve(innerMap.Input().Size() + outerMapReduce.Input().Size() - 1);
-        switchArgs.reserve(6);
-        auto identityLambda = Build<TCoLambda>(ctx, node.Pos())
-            .Args({"stream"})
-            .Body("stream")
-            .Done();
-
-        {
-            if (index > 0) {
-                auto atomListBuilder = Build<TCoAtomList>(ctx, node.Pos());
-                for (size_t inputIndex = 0; inputIndex < index; inputIndex++) {
-                    atomListBuilder.Add().Value(ToString(inputIndex)).Build();
-                    updatedInputs.push_back(outerMapReduce.Input().Item(inputIndex));
-                }
-                switchArgs.push_back(atomListBuilder.Done());
-                switchArgs.push_back(identityLambda);
-            }
-        }
-
-        TVector<TCoAtom> keys;
-        keys.reserve(innerMap.Input().Size());
-        for (size_t inputIndex = 0; inputIndex < innerMap.Input().Size(); inputIndex++) {
-            updatedInputs.push_back(innerMap.Input().Item(inputIndex));
-            keys.emplace_back(ctx.NewAtom(node.Pos(), inputIndex + index));
-        }
-        switchArgs.push_back(Build<TCoAtomList>(ctx, node.Pos()).Add(keys).Done());
-        switchArgs.push_back(innerLambda);
-
-        {
-            if (index + 1 < outerMapReduce.Input().Size()) {
-                auto atomListBuilder = Build<TCoAtomList>(ctx, node.Pos());
-                for (size_t inputIndex = index + 1; inputIndex < outerMapReduce.Input().Size(); inputIndex++) {
-                    atomListBuilder.Add().Value(ToString(inputIndex + innerMap.Input().Size() - 1)).Build();
-                    updatedInputs.push_back(outerMapReduce.Input().Item(inputIndex));
-                }
-                switchArgs.push_back(atomListBuilder.Done());
-                switchArgs.push_back(identityLambda);
-            }
-        }
-
-        innerLambda = Build<TCoLambda>(ctx, innerLambda.Pos())
-            .Args({"stream"})
-            .Body<TCoSwitch>()
-                .Input("stream")
-                .BufferBytes()
-                    .Value(ToString(State_->Configuration->SwitchLimit.Get().GetOrElse(DEFAULT_SWITCH_MEMORY_LIMIT)))
-                .Build()
-                .FreeArgs()
-                    .Add(switchArgs)
-                .Build()
-            .Build()
-            .Done();
-
-        TMaybeNode<TCoLambda> resultLambda = innerLambda;
-        if (maybeOuterLambda) {
-            auto outerLambda = maybeOuterLambda.Cast();
-            auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerLambda.Ptr(), ctx, State_->Types);
-            if (!placeHolder) {
-                return {};
-            }
-
-            if (lambdaWithPlaceholder != outerLambda.Ptr()) {
-                outerLambda = TCoLambda(lambdaWithPlaceholder);
-            }
-            outerLambda = FallbackLambdaInput(outerLambda, ctx);
-
-            if (!path.Columns().Maybe<TCoVoid>()) {
-                auto columns = TYtColumnsInfo(path.Columns());
-                if (!columns.HasColumns() || columns.GetRenames()) {
-                    // TODO(mpereskokova): Implement fusing with filters with renames
-                    continue;
-                }
-
-                auto columnNameListBuilder = Build<TCoAtomList>(ctx, path.Columns().Pos());
-                bool hasTypes = false;
-                for (const auto& column : *columns.GetColumns()) {
-                    if (column.Type) {
-                        hasTypes = true;
-                        break;
-                    }
-                    columnNameListBuilder.Add().Value(column.Name).Build();
-                }
-                if (hasTypes) {
-                    // TODO(mpereskokova): Implement fusing with filters with types
-                    continue;
-                }
-
-                outerLambda = MapEmbedInputFieldsFilter(outerLambda, /*ordered*/false, columnNameListBuilder.Done(), ctx);
-            } else if (TYqlRowSpecInfo(innerMap.Output().Item(0).RowSpec()).HasAuxColumns()) {
-                auto itemType = GetSequenceItemType(path, false, ctx);
-                if (!itemType) {
-                    return {};
-                }
-                TSet<TStringBuf> fields;
-                for (auto item: itemType->Cast<TStructExprType>()->GetItems()) {
-                    fields.insert(item->GetName());
-                }
-                outerLambda = MapEmbedInputFieldsFilter(outerLambda, /*ordered*/false, TCoAtomList(ToAtomList(fields, node.Pos(), ctx)), ctx);
-            }
-            resultLambda = Build<TCoLambda>(ctx, node.Pos())
-                .Args({"stream"})
-                .Body<TExprApplier>()
-                    .Apply(outerLambda)
-                    .With<TExprApplier>(0)
-                        .Apply(innerLambda)
-                        .With(0, "stream")
-                    .Build()
-                    .With(TExprBase(placeHolder), "stream")
-                .Build()
-                .Done();
-        }
-
-        auto resultSettings = MergeSettings(
-            *NYql::RemoveSettings(outerMapReduce.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
-            *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted | EYtSettingType::BlockInputReady | EYtSettingType::BlockOutputReady, ctx), ctx);
-        return Build<TYtMapReduce>(ctx, node.Pos())
-            .InitFrom(outerMapReduce)
-            .World<TCoSync>()
-                .Add(innerMap.World())
-                .Add(outerMapReduce.World())
-            .Build()
-            .Input()
-                .Add(updatedInputs)
-            .Build()
-            .Mapper(resultLambda.Cast())
-            .Settings(resultSettings)
-            .Done();
-    }
-
-    return node;
+    return NYql::FuseMapToMapReduce(node, ctx, getParents, State_);
 }
 
 }  // namespace NYql

@@ -32,6 +32,7 @@ namespace NYdb {
             bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
+            bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
@@ -44,13 +45,25 @@ namespace NYdb {
             std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
         };
 
+        struct TTopicWorkloadConfiguratorParams;
+        struct TTopicWorkloadDescriberParams;
+
         class TTopicWorkloadWriterProducer;
         class TTopicWorkloadWriterWorker {
         public:
             static const size_t GENERATED_MESSAGES_COUNT = 32;
+
             static void RetryableWriterLoop(const TTopicWorkloadWriterParams& params);
             static void WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime);
+
             static std::vector<TString> GenerateMessages(size_t messageSize);
+
+            static void RetryableConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params);
+            static void ConfiguratorLoop(const TTopicWorkloadConfiguratorParams& params, TInstant endTime);
+
+            static void RetryableDescriberLoop(const TTopicWorkloadDescriberParams& params);
+            static void DescriberLoop(const TTopicWorkloadDescriberParams& params, TInstant endTime);
+
         private:
             TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params);
             ~TTopicWorkloadWriterWorker();
@@ -58,7 +71,8 @@ namespace NYdb {
             void Close();
             void CloseProducers();
 
-            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
+            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId,
+                                                                         NTopic::TTopicClient& topicClient);
 
             void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(std::shared_ptr<TTopicWorkloadWriterProducer> producer);
 

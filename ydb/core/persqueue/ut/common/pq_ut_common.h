@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/user_info.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -264,10 +265,19 @@ struct TTabletPreparationParameters {
     bool enableCompactificationByKey{false};
     std::optional<uint32_t> metricsLevel;
     std::optional<TString> monitoringProjectId;
+    bool AddDefaultConsumer{true};
 };
+
+struct TConsumerPreparationParameters {
+    TString Name;
+    bool Important = false;
+    std::optional<uint32_t> MetricsLevel;
+    std::optional<TString> MonitoringProjectId;
+};
+
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
-    const TVector<std::pair<TString, bool>>& users,
+    const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);

@@ -27,6 +27,8 @@
 #include <util/string/cast.h>
 #include <util/system/user.h>
 
+#include <utility>
+
 namespace NYql {
 
 TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
@@ -42,7 +44,8 @@ void ParseAst(const TString& sexpr, TExprNode::TPtr& root, TExprContext& ctx) {
 
 void CompareAst(const TString& sexpr1, const TString& sexpr2) {
     TExprContext ctx;
-    TExprNode::TPtr root1, root2;
+    TExprNode::TPtr root1;
+    TExprNode::TPtr root2;
     ParseAst(sexpr1, root1, ctx);
     ParseAst(sexpr2, root2, ctx);
     const TExprNode* ptr1 = root1.Get();
@@ -173,8 +176,8 @@ struct TRunSingleProgram {
     IOutputStream& Err;
     TVector<TString> Res;
 
-    TRunSingleProgram(const TString& src, IOutputStream& err)
-        : Src(src)
+    TRunSingleProgram(TString src, IOutputStream& err)
+        : Src(std::move(src))
         , Err(err)
     {
     }

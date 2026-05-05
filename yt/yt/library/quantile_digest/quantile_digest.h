@@ -18,6 +18,8 @@ struct IQuantileDigest
     virtual double GetRank(double value) = 0;
 
     virtual TString Serialize() = 0;
+
+    virtual void MergeWith(const IQuantileDigestPtr& other) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IQuantileDigest)

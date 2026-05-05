@@ -6,8 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/digest/numeric.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using THashType = ui64;
 
@@ -673,5 +672,4 @@ inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnb
     Y_ENSURE(false, "Incorrect data slot: " << (ui32)type);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

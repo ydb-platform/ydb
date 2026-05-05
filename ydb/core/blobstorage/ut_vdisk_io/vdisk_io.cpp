@@ -37,9 +37,9 @@ Y_UNIT_TEST_SUITE(VDiskIOTest) {
             auto device = rot->GetSubgroup("subsystem", "device");
             auto pDisk = rot->GetSubgroup("subsystem", "pdisk");
 
-            ui64 deviceWrites = device->FindCounter("DeviceWrites")->GetAtomic();
-            ui64 writesLog = pDisk->GetSubgroup("req", "WriteLog")->FindCounter("Requests")->GetAtomic();
-            ui64 writesHugeUser = pDisk->GetSubgroup("req", "WriteHugeUser")->FindCounter("Requests")->GetAtomic();
+            ui64 deviceWrites = AtomicGet(device->FindCounter("DeviceWrites")->GetAtomic());
+            ui64 writesLog = AtomicGet(pDisk->GetSubgroup("req", "WriteLog")->FindCounter("Requests")->GetAtomic());
+            ui64 writesHugeUser = AtomicGet(pDisk->GetSubgroup("req", "WriteHugeUser")->FindCounter("Requests")->GetAtomic());
 
             return std::make_tuple(deviceWrites, writesLog, writesHugeUser);
         };

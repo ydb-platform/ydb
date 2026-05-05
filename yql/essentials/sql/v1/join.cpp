@@ -9,6 +9,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -34,8 +36,8 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    explicit TJoinDescr(const TString& op)
-        : Op(op)
+    explicit TJoinDescr(TString op)
+        : Op(std::move(op))
     {
     }
 };
@@ -338,8 +340,8 @@ protected:
             JoinDescrs_.push_back(std::move(newDescr));
         }
 
-        JoinDescrs_.back().Keys.push_back({{leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-                                           {rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr}});
+        JoinDescrs_.back().Keys.push_back({{.Source = leftSourceIdx, .Column = op ? op->GetArgs()[leftArg] : nullptr},
+                                           {.Source = rightSourceIdx, .Column = op ? op->GetArgs()[rightArg] : nullptr}});
         KeysInitializing_ = false;
         return true;
     }
@@ -527,8 +529,7 @@ public:
 
         TNodePtr equiJoin(Y("EquiJoin"));
         bool ordered = false;
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (const auto& source : Sources_) {
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;

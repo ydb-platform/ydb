@@ -59,7 +59,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::BuildDistributedEraseTxOutRS:
         return CreateBuildDistributedEraseTxOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildKqpDataTxOutRS:
-        return CreateBuildKqpDataTxOutRSUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::BuildWriteOutRS:
         return CreateBuildWriteOutRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreAndSendOutRS:
@@ -69,7 +69,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::PrepareDataTxInRS:
         return CreatePrepareDataTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareKqpDataTxInRS:
-        return CreatePrepareKqpDataTxInRSUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::PrepareWriteTxInRS:
         return CreatePrepareWriteTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::PrepareDistributedEraseTxInRS:
@@ -83,7 +83,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:
-        return CreateExecuteKqpDataTxUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::ExecuteDistributedEraseTx:
         return CreateExecuteDistributedEraseTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteCommitWritesTx:
@@ -93,7 +93,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     case EExecutionUnitKind::CompleteWrite:
         return CreateCompleteWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpScanTx:
-        return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
+        return nullptr;
     case EExecutionUnitKind::MakeScanSnapshot:
         return CreateMakeScanSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::WaitForStreamClearance:
@@ -124,6 +124,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateDropTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::DirectOp:
         return CreateDirectOpUnit(dataShard, pipeline);
+    case EExecutionUnitKind::PrepareIndexValidation:
+        return CreatePrepareIndexValidationUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreatePersistentSnapshot:
         return CreateCreatePersistentSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropPersistentSnapshot:
@@ -206,7 +208,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         // TODO: Return SCHEME_CHANGED if the shard has been split
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
-        } else {        
+        } else {
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
@@ -241,7 +243,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
 
             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::ChangesQueueOverflow, writeOp->GetWriteResult()->Record);
-        } else {                
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
@@ -260,7 +262,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
-        } else {            
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }

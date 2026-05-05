@@ -13,6 +13,7 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/raw_socket/sock_ssl.h>
 
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -334,6 +335,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
+class TMonPersistentBufferInitializer : public IKikimrServicesInitializer {
+public:
+    TMonPersistentBufferInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+};
+
 class TPersQueueL2CacheInitializer : public IKikimrServicesInitializer {
 public:
     TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig);
@@ -629,6 +637,9 @@ public:
 
 class TKafkaProxyServiceInitializer : public IKikimrServicesInitializer {
 public:
+    template<typename T>
+    using TSslHolder = NRawSocket::TSslLayer<TStreamSocket>::TSslHolder<T>;
+
     TKafkaProxyServiceInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;

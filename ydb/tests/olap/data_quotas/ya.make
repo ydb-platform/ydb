@@ -9,9 +9,11 @@ TEST_SRCS(
     test_quota_exhaustion.py
 )
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:4)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -26,4 +28,3 @@ ydb/tests/library/test_meta
 )
 
 END()
-

@@ -36,8 +36,7 @@
 #define YQL_PROFILE_FUNC_VAL(level) YQL_PROFILE_SCOPE_VAL(level, __FUNCTION__)
 #define YQL_PROFILE_FUNCSIG_VAL(level) YQL_PROFILE_SCOPE_VAL(level, Y_FUNC_SIGNATURE)
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 /**
  * @brief Adds elapsed execution time to log when goes outside of scope.
@@ -70,5 +69,4 @@ private:
     std::pair<TString, TString> LogCtxPath_;
 };
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

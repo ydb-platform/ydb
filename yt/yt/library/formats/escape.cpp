@@ -2,6 +2,7 @@
 
 #ifdef __SSE4_2__
     #include <util/system/cpu_id.h>
+    #include <util/system/compiler.h>
 #endif
 
 namespace NYT::NFormats {
@@ -12,9 +13,9 @@ namespace {
 
 #ifdef __SSE4_2__
 
-const char _m128i_shift_right[31] = {
-     0,  1,  2,  3,  4,  5,  6,  7,
-     8,  9, 10, 11, 12, 13, 14, 15,
+const char M128iShiftRight[31] = {
+    0,  1,  2,  3,  4,  5,  6,  7,
+    8,  9, 10, 11, 12, 13, 14, 15,
     -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1
 };
@@ -29,9 +30,12 @@ const char _m128i_shift_right[31] = {
 // then unaligned read will read 16 - 4 = 12 bytes from the next page causing
 // a page fault; if the next page is unmapped this will incur a segmentation
 // fault and terminate the process.
-YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline __m128i AlignedPrefixLoad(
+Y_NO_SANITIZE("address")
+Y_NO_SANITIZE("memory")
+Y_NO_SANITIZE("thread")
+inline __m128i AlignedPrefixLoad(
     const void* p,
-    int* length) Y_NO_SANITIZE("memory")
+    int* length)
 {
     int offset = reinterpret_cast<ui64>(p) & 15;
     *length = 16 - offset;
@@ -41,18 +45,21 @@ YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline __m128i AlignedPrefixLoad(
         // (Kudos to glibc authors for fast implementation).
         return _mm_shuffle_epi8(
             _mm_load_si128(reinterpret_cast<const __m128i*>((char*)p - offset)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(_m128i_shift_right + offset)));
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(M128iShiftRight + offset)));
     } else {
         // Just load.
         return _mm_load_si128(reinterpret_cast<const __m128i*>(p));
     }
 }
 
-YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline const char* FindNextSymbol(
+Y_NO_SANITIZE("address")
+Y_NO_SANITIZE("memory")
+Y_NO_SANITIZE("thread")
+inline const char* FindNextSymbol(
     const char* begin,
     const char* end,
     __m128i symbols,
-    int count) Y_NO_SANITIZE("memory")
+    int count)
 {
     const char* current = begin;
     int length = end - begin;

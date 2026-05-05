@@ -3,17 +3,18 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -23,6 +24,16 @@ namespace {
 class TQueryRunner final : public TExecuteGenericQuery {
     using TBase = TExecuteGenericQuery;
 
+    static constexpr ui64 MAX_RESULT_ROWS = 1000;
+    static constexpr ui64 MAX_RESULT_SIZE = 100_KB;
+
+    struct TResultSetInfo {
+        bool Truncated = false;
+        ui64 RowCount = 0;
+        ui64 ByteCount = 0;
+        NJson::TJsonValue ResultSet;
+    };
+
 public:
     explicit TQueryRunner(const TDriver& driver)
         : TBase(driver)
@@ -30,16 +41,26 @@ public:
 
     NJson::TJsonValue ExtractResults() {
         NJson::TJsonValue result;
-        std::swap(result, ResultSets);
-        InittedResultSets.clear();
+        for (auto& [resultSetIndex, resultSetInfo] : ResultSets) {
+            result[resultSetIndex] = std::move(resultSetInfo.ResultSet);
+            result[resultSetIndex]["truncated"] = resultSetInfo.Truncated;
+            result[resultSetIndex]["row_count"] = resultSetInfo.RowCount;
+            result[resultSetIndex]["byte_count"] = resultSetInfo.ByteCount;
+
+            if (resultSetInfo.Truncated) {
+                result[resultSetIndex]["truncatedMessage"] = TStringBuilder() << "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_ROWS << " rows or " << MAX_RESULT_SIZE << " bytes, try to reformulate query to get less rows or bytes";
+            }
+        }
+        ResultSets.clear();
         return result;
     }
 
 protected:
     void OnResultPart(ui64 resultSetIndex, const TResultSet& resultSet) final {
-        auto& result = ResultSets[resultSetIndex];
+        const auto [it, inserted] = ResultSets.emplace(resultSetIndex, TResultSetInfo());
+        auto& result = it->second.ResultSet;
 
-        if (InittedResultSets.emplace(resultSetIndex).second) {
+        if (inserted) {
             const auto& columnMeta = resultSet.GetColumnsMeta();
             auto& columns = result["columns"].SetType(NJson::JSON_ARRAY).GetArraySafe();
             for (const auto& column : columnMeta) {
@@ -50,12 +71,30 @@ protected:
         }
 
         auto& rows = result["rows"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        auto& rowCount = it->second.RowCount;
+        auto& byteCount = it->second.ByteCount;
+        auto& truncated = it->second.Truncated;
         TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
+            rowCount++;
+            if (!truncated && rowCount > MAX_RESULT_ROWS) {
+                truncated = true;
+                YDB_CLI_LOG(Info, "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_ROWS << " rows");
+            }
+
             try {
-                TJsonParser row;
-                Y_VALIDATE(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Invalid serialized JSON row value");
-                rows.emplace_back(row.GetValue());
+                const auto& rowString = FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode);
+                byteCount += rowString.size();
+                if (!truncated && byteCount > MAX_RESULT_SIZE) {
+                    truncated = true;
+                    YDB_CLI_LOG(Info, "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_SIZE << " bytes");
+                }
+
+                if (!truncated) {
+                    TJsonParser row;
+                    Y_VALIDATE(row.Parse(rowString), "Invalid serialized JSON row value");
+                    rows.emplace_back(row.GetValue());
+                }
             } catch (const std::exception& e) {
                 YDB_CLI_LOG(Warning, "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what());
                 rows.emplace_back(TStringBuilder() << "Row conversion to JSON format failed: " << e.what() << ". Try to simplify result column types");
@@ -64,8 +103,7 @@ protected:
     }
 
 private:
-    NJson::TJsonValue ResultSets;
-    std::unordered_set<ui64> InittedResultSets;
+    std::unordered_map<ui64, TResultSetInfo> ResultSets;
 };
 
 class TExecQueryTool final : public TToolBase, public TInterruptableCommand {
@@ -93,6 +131,9 @@ SELECT Data || "-second" FROM $filtered;
 Tool will return:
 [
     {
+        "truncated": false,
+        "row_count": 2,
+        "byte_count": 100,
         "rows": [
             {"Data": "A-first"},
             {"Data": "B-first"}
@@ -102,6 +143,9 @@ Tool will return:
         ]
     },
     {
+        "truncated": false,
+        "row_count": 2,
+        "byte_count": 100,
         "rows": [
             {"Data": "A-second"},
             {"Data": "B-second"}
@@ -116,7 +160,6 @@ Tool will return:
 
     enum class EAction {
         Approve,
-        Reject,
         Edit,
         Abort,
     };
@@ -125,7 +168,6 @@ Tool will return:
         std::vector<TString> options = {
             "Approve execution",
             "Edit query",
-            "Skip query (don't execute, let agent retry)",
             "Abort operation",
         };
 
@@ -135,11 +177,13 @@ Tool will return:
         }
 
         switch (*result) {
-            case 0: return EAction::Approve;
-            case 1: return EAction::Edit;
-            case 2: return EAction::Reject;
-            case 3: return EAction::Abort;
-            default: return EAction::Abort;
+            case 0:
+                return EAction::Approve;
+            case 1:
+                return EAction::Edit;
+            case 2:
+            default:
+                return EAction::Abort;
         }
     }
 
@@ -158,7 +202,6 @@ protected:
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
         UserMessage = "";
-        IsSkipped = false;
     }
 
     bool AskPermissions() final {
@@ -171,15 +214,14 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        YDB_CLI_LOG(Notice, "Agent wnt to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
+        YDB_CLI_LOG(Notice, "Agent wants to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
 
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
-        Cout << Endl;
 
         const auto action = RunFtxuiActionDialog();
 
         if (action == EAction::Abort) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";
         }
 
@@ -187,36 +229,22 @@ protected:
             if (RequestQueryText()) {
                 return true;
             }
-            IsSkipped = true;
-            return true;
+            throw yexception() << "Interrupted by user";
         }
 
-        if (action == EAction::Approve) {
-            return true;
-        }
-
-        Cout << Endl;
-
-        IsSkipped = true;
         return true;
     }
 
     TResponse DoExecute() final {
-        if (IsSkipped) {
-            NJson::TJsonValue jsonResult;
-            jsonResult["status"] = "skipped";
-            return TResponse::Success(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
-        }
-
         Y_DEFER { ResetInterrupted(); };
 
         try {
             if (ExecuteRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
                 YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
-                return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
+                return TResponse::Error("Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {
-            Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
+            Cout << Endl << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Flush;
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
@@ -225,8 +253,6 @@ protected:
 
 private:
     bool RequestQueryText() {
-        Cout << Endl;
-
         const auto lineReader = CreateLineReader({
             .Driver = Driver,
             .Database = Database,
@@ -235,10 +261,11 @@ private:
             .ContinueAfterCancel = false,
         });
 
+        Cout << Endl;
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish(false);
         if (!response) {
-            Cout << Endl << "<Interrupted by user>" << Endl << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             return false;
         }
 
@@ -254,7 +281,6 @@ private:
 
     static NJson::TJsonValue CreateParametersSchema() {
         return TJsonSchemaBuilder()
-            .Type(TJsonSchemaBuilder::EType::Object)
             .Property(QUERY_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Description("Query to execute on YQL (SQL dialect), for example 'SELECT * FROM my_table'")
@@ -271,7 +297,6 @@ private:
 
     TString Query;
     TString UserMessage;
-    bool IsSkipped = false;
 };
 
 } // anonymous namespace

@@ -6,14 +6,16 @@
 
 #include <util/generic/string.h>
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 class TErrorCollectorOverIssues: public NAST::IErrorCollector {
 public:
-    TErrorCollectorOverIssues(NYql::TIssues& issues, size_t maxErrors, const TString& file)
+    TErrorCollectorOverIssues(NYql::TIssues& issues, size_t maxErrors, TString file)
         : IErrorCollector(maxErrors)
         , Issues_(issues)
-        , File_(file)
+        , File_(std::move(file))
     {
     }
 

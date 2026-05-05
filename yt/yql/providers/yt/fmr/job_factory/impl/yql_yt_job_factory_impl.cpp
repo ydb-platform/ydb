@@ -1,8 +1,23 @@
+#include <library/cpp/resource/resource.h>
 #include <util/system/mutex.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
 namespace NYql::NFmr {
+
+TFmrJobFactorySettings GetDefaultJobFactorySettings(const TMaybe<NYT::TNode>& fmrOperationSpec) {
+    TFmrJobFactorySettings settings;
+    if (fmrOperationSpec.Defined() && fmrOperationSpec->IsMap() && fmrOperationSpec->HasKey("job_factory")) {
+        auto& jobFactoryNode = (*fmrOperationSpec)["job_factory"];
+        if (jobFactoryNode.HasKey("num_threads")) {
+            settings.NumThreads = jobFactoryNode["num_threads"].AsInt64();
+        }
+        if (jobFactoryNode.HasKey("max_queue_size")) {
+            settings.MaxQueueSize = jobFactoryNode["max_queue_size"].AsInt64();
+        }
+    }
+    return settings;
+}
 
 namespace {
 

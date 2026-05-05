@@ -3,6 +3,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
+#include <util/string/builder.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 using namespace NThreading;
@@ -474,10 +476,9 @@ TZeroRequest::TResponseFuture TZeroRequest::ModifyAndWrite()
 TUnalignedDeviceHandler::TUnalignedDeviceHandler(
     TDeviceHandlerParams params,
     ui32 maxSubRequestSize)
-    : Backend(
-          std::make_shared<TAlignedDeviceHandler>(
-              std::move(params),
-              maxSubRequestSize))
+    : Backend(std::make_shared<TAlignedDeviceHandler>(
+          std::move(params),
+          maxSubRequestSize))
     , BlockSize(Backend->GetBlockSize())
     , MaxUnalignedBlockCount(MaxUnalignedRequestSize / BlockSize)
 {}

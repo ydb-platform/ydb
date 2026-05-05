@@ -106,10 +106,7 @@ public:
         }
 
         block = fail;
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDecimalToStringWrapper::Throw>());
-        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-        CallInst::Create(doFuncType, doFuncPtr, {}, "", block);
+        EmitFunctionCall<&TDecimalToStringWrapper::Throw>(Type::getVoidTy(context), {}, ctx, block);
         new UnreachableInst(context, block);
 
         block = nice;

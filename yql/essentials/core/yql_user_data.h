@@ -28,8 +28,8 @@ enum class EUserDataBlockUsage {
     PgExt,
     End,
 };
-typedef TEnumBitSet<EUserDataBlockUsage, static_cast<int>(EUserDataBlockUsage::Begin),
-    static_cast<int>(EUserDataBlockUsage::End)> TUserDataBlockUsage;
+using TUserDataBlockUsage = TEnumBitSet<EUserDataBlockUsage, static_cast<int>(EUserDataBlockUsage::Begin),
+    static_cast<int>(EUserDataBlockUsage::End)>;
 
 struct TUserDataBlock {
     EUserDataType Type = EUserDataType::PATH;

@@ -1,6 +1,9 @@
 #include "mkql_window_frames_collector_params_deserializer.h"
 
+#include <yql/essentials/minikql/comp_nodes/mkql_window_range_pg_caller.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_window_comparator_bounds.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_datetime.h>
 #include <yql/essentials/core/sql_types/window_direction.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
@@ -16,9 +19,41 @@ constexpr TStringBuf KeyRangeIncrementals = "RangeIncrementals";
 constexpr TStringBuf KeyRowIncrementals = "RowIncrementals";
 constexpr TStringBuf KeySortOrder = "SortOrder";
 constexpr TStringBuf KeyBounds = "Bounds";
-constexpr TStringBuf KeySortColumnName = "SortColumnName";
 constexpr TStringBuf KeyDirection = "Direction";
 constexpr TStringBuf KeyNumber = "Number";
+constexpr TStringBuf KeySortedColumn = "SortedColumn";
+constexpr TStringBuf KeyFiniteValue = "FiniteValue";
+constexpr TStringBuf KeyProcId = "ProcId";
+
+struct TCurrentRowTag {};
+struct TInfTag {};
+
+struct TPgFiniteBound {
+    TRuntimeNode Node;
+    ui32 ProcId;
+};
+
+template <auto TScaler, typename T>
+struct TPromoteToRangeType {
+    using type = T;
+};
+
+template <typename T>
+    requires(std::is_integral_v<T>)
+struct TPromoteToRangeType<TPlainNumericTag{}, T> {
+    using TUnsigned = std::make_unsigned_t<T>;
+    using type = std::conditional_t<(sizeof(TUnsigned) <= 2), ui32, TUnsigned>;
+};
+
+template <>
+struct TPromoteToRangeType<TPlainNumericTag{}, NYql::NDecimal::TInt128> {
+    using type = NYql::NDecimal::TInt128;
+};
+
+using TBlackboxTypeData = TBlackboxTypeData<TComputationContext, NUdf::TUnboxedValue>;
+using TRangeBound = TRangeBound<TComputationContext, NUdf::TUnboxedValue>;
+using TColumnTypeWithScale = TColumnTypeWithScale<TComputationContext, NUdf::TUnboxedValue>;
+using TRangeTypeWithScale = TRangeTypeWithScale<TComputationContext, NUdf::TUnboxedValue>;
 
 TRuntimeNode GetMember(const TStructLiteral* structLit, TStringBuf name) {
     auto index = structLit->GetType()->FindMemberIndex(name);
@@ -39,56 +74,138 @@ T GetValue(const TRuntimeNode& node) {
     return AS_VALUE(TDataLiteral, node)->AsValue().Get<T>();
 }
 
-// Get the data slot from a NumberAndDirection node.
-// Returns Nothing if the bound is unbounded (void type).
-TMaybe<NUdf::EDataSlot> GetDataSlotFromBound(const TRuntimeNode& boundNode) {
+std::variant<TCurrentRowTag, TInfTag, TDataType*> GetDataTypeFromBound(const TRuntimeNode& boundNode) {
     auto structLit = AS_VALUE(TStructLiteral, boundNode);
     auto numberNode = GetMember(structLit, KeyNumber);
     MKQL_ENSURE(numberNode.GetStaticType(), "Static type expected.");
-    if (numberNode.GetStaticType()->IsVoid()) {
-        return Nothing();
+    TType* type = numberNode.GetStaticType();
+    if (type->IsTagged()) {
+        auto tag = AS_TYPE(TTaggedType, type)->GetTag();
+        if (tag == "zero") {
+            return TCurrentRowTag{};
+        }
+        if (tag == "inf") {
+            return TInfTag{};
+        } else {
+            ythrow yexception() << "Unknown tag for window frame range bound: " << tag;
+        }
     }
-    auto dataType = AS_TYPE(TDataType, numberNode.GetStaticType());
-    return *dataType->GetDataSlot();
+    if (type->IsStruct()) {
+        auto innerStruct = AS_VALUE(TStructLiteral, numberNode);
+        numberNode = GetMember(innerStruct, KeyFiniteValue);
+        type = numberNode.GetStaticType();
+        auto dataType = AS_TYPE(TDataType, type);
+        return dataType;
+    }
+    ythrow yexception() << "Expected tagged or struct type for window frame range bound";
 }
 
-template <typename TCallback>
-auto DispatchByDataSlot(TMaybe<NUdf::EDataSlot> slot, TCallback&& callback) {
-    if (!slot.Defined()) {
-        return callback.template operator()<void>();
+std::variant<TCurrentRowTag, TInfTag, TPgFiniteBound> GetPgBound(const TRuntimeNode& boundNode) {
+    auto structLit = AS_VALUE(TStructLiteral, boundNode);
+    auto numberNode = GetMember(structLit, KeyNumber);
+    MKQL_ENSURE(numberNode.GetStaticType(), "Static type expected.");
+    TType* type = numberNode.GetStaticType();
+    if (type->IsTagged()) {
+        auto tag = AS_TYPE(TTaggedType, type)->GetTag();
+        if (tag == "zero") {
+            return TCurrentRowTag{};
+        } else if (tag == "inf") {
+            return TInfTag{};
+        }
+        MKQL_ENSURE(false, "Unknown tag: " << tag);
+    }
+    MKQL_ENSURE(type->IsStruct(), "Expected struct type for PG bound");
+    auto innerStruct = AS_VALUE(TStructLiteral, numberNode);
+    auto finiteValueNode = GetMember(innerStruct, KeyFiniteValue);
+    auto procIdIndex = innerStruct->GetType()->FindMemberIndex(KeyProcId);
+    MKQL_ENSURE(procIdIndex, "ProcId is required for PG bounds");
+    ui32 procId = GetValue<ui32>(GetMember(innerStruct, KeyProcId));
+    return TPgFiniteBound{finiteValueNode, procId};
+}
+
+template <bool IsRangeBound, typename TCallback>
+auto DispatchByDataSlot(std::variant<TCurrentRowTag, TInfTag, TDataType*> slot, TCallback&& callback) {
+    if constexpr (IsRangeBound) {
+        if (std::holds_alternative<TInfTag>(slot)) {
+            return callback.template operator()<nullptr, TInfTag, void>();
+        } else if (std::holds_alternative<TCurrentRowTag>(slot)) {
+            return callback.template operator()<nullptr, TCurrentRowTag, void>();
+        }
+    } else {
+        MKQL_ENSURE(std::holds_alternative<TDataType*>(slot), "Slot must be defined");
     }
 
-    switch (*slot) {
+    using TScaledInterval = TScaledDateType<NUdf::TInterval>;
+    using TScaledInterval64 = TScaledDateType<NUdf::TInterval64>;
+
+    switch (*std::get<TDataType*>(slot)->GetDataSlot()) {
         case NUdf::EDataSlot::Int8:
-            return callback.template operator()<i8>();
+            return callback.template operator()<TPlainNumericTag{}, i8, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Uint8:
-            return callback.template operator()<ui8>();
+            return callback.template operator()<TPlainNumericTag{}, ui8, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Int16:
-            return callback.template operator()<i16>();
+            return callback.template operator()<TPlainNumericTag{}, i16, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Uint16:
-            return callback.template operator()<ui16>();
+            return callback.template operator()<TPlainNumericTag{}, ui16, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Int32:
-            return callback.template operator()<i32>();
+            return callback.template operator()<TPlainNumericTag{}, i32, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Uint32:
-            return callback.template operator()<ui32>();
+            return callback.template operator()<TPlainNumericTag{}, ui32, TNoScaledType<ui32>>();
         case NUdf::EDataSlot::Int64:
-            return callback.template operator()<i64>();
+            return callback.template operator()<TPlainNumericTag{}, i64, TNoScaledType<ui64>>();
         case NUdf::EDataSlot::Uint64:
-            return callback.template operator()<ui64>();
+            return callback.template operator()<TPlainNumericTag{}, ui64, TNoScaledType<ui64>>();
         case NUdf::EDataSlot::Float:
-            return callback.template operator()<float>();
+            return callback.template operator()<TPlainNumericTag{}, float, TNoScaledType<float>>();
         case NUdf::EDataSlot::Double:
-            return callback.template operator()<double>();
-        case NUdf::EDataSlot::Interval64:
-            return callback.template operator()<NUdf::TDataType<NUdf::TInterval64>::TLayout>();
+            return callback.template operator()<TPlainNumericTag{}, double, TNoScaledType<double>>();
         case NUdf::EDataSlot::Interval:
-            return callback.template operator()<NUdf::TDataType<NUdf::TInterval>::TLayout>();
+            return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TInterval>>, NUdf::TDataType<NUdf::TInterval>::TLayout, TScaledInterval>();
+        case NUdf::EDataSlot::Interval64:
+            return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TInterval64>>, NUdf::TDataType<NUdf::TInterval64>::TLayout, TScaledInterval64>();
+        case NUdf::EDataSlot::Decimal: {
+            const auto precision = TMaybe<ui8>(static_cast<TDataDecimalType*>(std::get<TDataType*>(slot))->GetParams().first);
+            return callback.template operator()<TPlainNumericTag{}, NYql::NDecimal::TInt128, TNoScaledType<NYql::NDecimal::TInt128>>(precision);
+        }
         default:
-            ythrow yexception() << "Unsupported data slot for range type: " << *slot;
+            break;
     }
+
+    if constexpr (!IsRangeBound) {
+        switch (*std::get<TDataType*>(slot)->GetDataSlot()) {
+            case NUdf::EDataSlot::Date:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TDate>>, NUdf::TDataType<NUdf::TDate>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::Datetime:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TDatetime>>, NUdf::TDataType<NUdf::TDatetime>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::Timestamp:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTimestamp>>, NUdf::TDataType<NUdf::TTimestamp>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::TzDate:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzDate>>, NUdf::TDataType<NUdf::TTzDate>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::TzDatetime:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime>>, NUdf::TDataType<NUdf::TTzDatetime>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::TzTimestamp:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp>>, NUdf::TDataType<NUdf::TTzTimestamp>::TLayout, TScaledInterval>();
+            case NUdf::EDataSlot::Date32:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TDate32>>, NUdf::TDataType<NUdf::TDate32>::TLayout, TScaledInterval64>();
+            case NUdf::EDataSlot::Datetime64:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TDatetime64>>, NUdf::TDataType<NUdf::TDatetime64>::TLayout, TScaledInterval64>();
+            case NUdf::EDataSlot::Timestamp64:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTimestamp64>>, NUdf::TDataType<NUdf::TTimestamp64>::TLayout, TScaledInterval64>();
+            case NUdf::EDataSlot::TzDate32:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzDate32>>, NUdf::TDataType<NUdf::TTzDate32>::TLayout, TScaledInterval64>();
+            case NUdf::EDataSlot::TzDatetime64:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzDatetime64>>, NUdf::TDataType<NUdf::TTzDatetime64>::TLayout, TScaledInterval64>();
+            case NUdf::EDataSlot::TzTimestamp64:
+                return callback.template operator()<ToScaledDate<NUdf::TDataType<NUdf::TTzTimestamp64>>, NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout, TScaledInterval64>();
+            default:
+                break;
+        }
+    }
+
+    ythrow yexception() << "Unsupported data slot: " << *std::get<TDataType*>(slot)->GetDataSlot();
 }
 
-TVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNode) {
+TUnboxedValueVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNode, const TStructType* streamType, std::vector<IComputationNode*>& dependentNodes, TNodeExtractor nodeExtractor, ui32& ctxIndex) {
     auto structLit = AS_VALUE(TStructLiteral, boundNode);
 
     EDirection direction;
@@ -96,26 +213,82 @@ TVariantBound DeserializeBoundAsVariant(const TRuntimeNode& boundNode) {
 
     auto numberNode = GetMember(structLit, KeyNumber);
     MKQL_ENSURE(numberNode.GetStaticType(), "Static type expected.");
+    auto sortedColumnNode = GetMember(structLit, KeySortedColumn);
+    TString sortedColumn = GetString(sortedColumnNode);
+    ui32 memberIndex = streamType->GetMemberIndex(sortedColumn);
+    auto columnType = streamType->GetMemberType(memberIndex);
+    if (columnType->IsOptional()) {
+        columnType = AS_TYPE(TOptionalType, columnType)->GetItemType();
+    }
 
-    TMaybe<NUdf::EDataSlot> slot = GetDataSlotFromBound(boundNode);
+    if (columnType->IsPg()) {
+        auto pgBound = GetPgBound(boundNode);
+        return std::visit(TOverloaded{
+                              [&](TInfTag) -> TUnboxedValueVariantBound {
+                                  return TUnboxedValueVariantBound::Inf(direction);
+                              },
+                              [&](TCurrentRowTag) -> TUnboxedValueVariantBound {
+                                  TBlackboxTypeData::TPtr blackbox = new TPgWindowRangeCaller(AS_TYPE(TPgType, columnType), TPgWindowRangeCaller::TCurrentRowTag{}, ctxIndex++);
+                                  return TUnboxedValueVariantBound(
+                                      TRangeBound(TNoScaledType<TBlackboxTypeData::TPtr>{.Value = std::move(blackbox)}, TNoScaledType<TBlackboxTypeData::TPtr>{.Value = nullptr}, memberIndex), direction);
+                              },
+                              [&](TPgFiniteBound& bound) -> TUnboxedValueVariantBound {
+                                  MKQL_ENSURE(bound.Node.GetStaticType()->IsPg(), "Expected pg type");
+                                  auto* computationNode = dependentNodes.emplace_back(nodeExtractor(bound.Node));
+                                  TBlackboxTypeData::TPtr blackbox = new TPgWindowRangeCaller(AS_TYPE(TPgType, columnType), std::make_tuple(bound.ProcId, computationNode, AS_TYPE(TPgType, bound.Node.GetStaticType())), ctxIndex++);
+                                  return TUnboxedValueVariantBound(
+                                      TRangeBound(TNoScaledType<TBlackboxTypeData::TPtr>{.Value = std::move(blackbox)}, TNoScaledType<TBlackboxTypeData::TPtr>{.Value = nullptr}, memberIndex), direction);
+                              }}, pgBound);
+    }
 
-    return DispatchByDataSlot(slot, [&]<typename TRangeType>() -> TVariantBound {
-        // Void means unbounded.
-        if constexpr (std::is_void_v<TRangeType>) {
-            return TVariantBound::Inf(direction);
+    auto type = GetDataTypeFromBound(boundNode);
+    MKQL_ENSURE(columnType->IsData() && AS_TYPE(TDataType, columnType)->GetDataSlot().Defined(), "Column type must be data slot");
+    auto visitColumnLambda = [&]<auto TColumnScaler, typename TColumnType, typename TZeroBoundType>(TMaybe<ui8> precision = {})
+        -> std::pair<TColumnTypeWithScale, TRangeTypeWithScale> {
+        if constexpr (std::is_same_v<TColumnType, NYql::NDecimal::TInt128>) {
+            return std::make_pair(TWithScale<TColumnScaler, TColumnType>{.Value = TColumnType{0}, .Precision = *precision},
+                                  TZeroBoundType{.Value = {}, .Precision = *precision});
         } else {
-            TRangeType value = GetValue<TRangeType>(numberNode);
-            return TVariantBound(TRangeVariant(value), direction);
+            return std::make_pair(TWithScale<TColumnScaler, TColumnType>{.Value = TColumnType{0}},
+                                  TZeroBoundType{.Value = {}});
+        }
+    };
+    auto [column, scaledZeroBound] = DispatchByDataSlot</*IsRangeBound=*/false>(AS_TYPE(TDataType, columnType),
+                                                                                visitColumnLambda);
+
+    auto finiteValueNode = numberNode;
+    if (numberNode.GetStaticType()->IsStruct()) {
+        auto innerStruct = AS_VALUE(TStructLiteral, numberNode);
+        finiteValueNode = GetMember(innerStruct, KeyFiniteValue);
+    }
+
+    auto bound = DispatchByDataSlot</*IsRangeBound=*/true>(type, [&]<auto TRangeScaler, typename TRangeType, typename TUnused>(TMaybe<ui8> precision = {}) -> TUnboxedValueVariantBound {
+        if constexpr (std::is_same_v<TInfTag, TRangeType>) {
+            return TUnboxedValueVariantBound::Inf(direction);
+        } else if constexpr (std::is_same_v<TCurrentRowTag, TRangeType>) {
+            return TUnboxedValueVariantBound(TRangeBound(std::move(scaledZeroBound), std::move(column), memberIndex), direction);
+        } else {
+            using TPromoted = typename TPromoteToRangeType<TRangeScaler, TRangeType>::type;
+            MKQL_ENSURE(GetValue<TRangeType>(finiteValueNode) >= 0, "Range value must be non-negative");
+            auto value = static_cast<TPromoted>(GetValue<TRangeType>(finiteValueNode));
+            if constexpr (std::is_same_v<TRangeType, NYql::NDecimal::TInt128>) {
+                TRangeTypeWithScale bound = TWithScale<TRangeScaler, TPromoted>{.Value = value, .Precision = *precision};
+                return TUnboxedValueVariantBound(TRangeBound(std::move(bound), std::move(column), memberIndex), direction);
+            } else {
+                TRangeTypeWithScale bound = TWithScale<TRangeScaler, TPromoted>{.Value = value};
+                return TUnboxedValueVariantBound(TRangeBound(std::move(bound), std::move(column), memberIndex), direction);
+            }
         }
     });
+    return bound;
 }
 
 // Deserialize a WindowFrame (with Min and Max bounds) into variant-based representation
-TWindowFrame<TVariantBound> DeserializeWindowFrameAsVariant(const TRuntimeNode& frameNode) {
+TWindowFrame<TUnboxedValueVariantBound> DeserializeWindowFrameAsVariant(const TRuntimeNode& frameNode, const TStructType* streamType, std::vector<IComputationNode*>& dependentNodes, TNodeExtractor nodeExtractor, ui32& ctxIndex) {
     auto structLit = AS_VALUE(TStructLiteral, frameNode);
 
-    TVariantBound minBound = DeserializeBoundAsVariant(GetMember(structLit, KeyMin));
-    TVariantBound maxBound = DeserializeBoundAsVariant(GetMember(structLit, KeyMax));
+    TUnboxedValueVariantBound minBound = DeserializeBoundAsVariant(GetMember(structLit, KeyMin), streamType, dependentNodes, nodeExtractor, ctxIndex);
+    TUnboxedValueVariantBound maxBound = DeserializeBoundAsVariant(GetMember(structLit, KeyMax), streamType, dependentNodes, nodeExtractor, ctxIndex);
 
     return {std::move(minBound), std::move(maxBound)};
 }
@@ -129,11 +302,20 @@ TNumberAndDirection<T> DeserializeNumberAndDirection(const TRuntimeNode& node) {
 
     auto boundLiteral = GetMember(structLit, KeyNumber);
     MKQL_ENSURE(boundLiteral.GetStaticType(), "Static type expected.");
-    if (boundLiteral.GetStaticType()->IsVoid()) {
-        return TNumberAndDirection<T>::Inf(direction);
-    } else {
-        return TNumberAndDirection<T>(GetValue<T>(boundLiteral), direction);
+    TType* type = boundLiteral.GetStaticType();
+    if (type->IsTagged()) {
+        auto tag = AS_TYPE(TTaggedType, type)->GetTag();
+        MKQL_ENSURE(tag != "zero", "Zero bound must already be normalized");
+        if (tag == "inf") {
+            return TNumberAndDirection<T>::Inf(direction);
+        }
+        ythrow yexception() << "Unknown tag for window frame range bound: " << tag;
     }
+    if (type->IsStruct()) {
+        auto innerStruct = AS_VALUE(TStructLiteral, boundLiteral);
+        boundLiteral = GetMember(innerStruct, KeyFiniteValue);
+    }
+    return TNumberAndDirection<T>(GetValue<T>(boundLiteral), direction);
 }
 
 template <typename T>
@@ -143,16 +325,16 @@ TWindowFrame<TNumberAndDirection<T>> DeserializeWindowFrame(const TRuntimeNode& 
             DeserializeNumberAndDirection<T>(GetMember(structLit, KeyMax))};
 }
 
-TVariantBounds DeserializeBoundsAsVariantImpl(const TRuntimeNode& boundsNode) {
+std::pair<TUnboxedValueVariantBounds, std::vector<IComputationNode*>> DeserializeBoundsAsVariantImpl(const TRuntimeNode& boundsNode, const TStructType* streamType, TNodeExtractor nodeExtractor, ui32& ctxIndex) {
     auto structLit = AS_VALUE(TStructLiteral, boundsNode);
 
     // No deduplication is allowed here. We must add as much bounds as provided by |node|.
-    TVariantBounds bounds;
-
+    TUnboxedValueVariantBounds bounds;
+    std::vector<IComputationNode*> dependentNodes;
     // Deserialize range intervals
     auto rangeIntervalsTuple = GetTuple(GetMember(structLit, KeyRangeIntervals));
     for (ui32 i = 0; i < rangeIntervalsTuple->GetValuesCount(); ++i) {
-        bounds.AddRange(DeserializeWindowFrameAsVariant(rangeIntervalsTuple->GetValue(i)));
+        bounds.AddRange(DeserializeWindowFrameAsVariant(rangeIntervalsTuple->GetValue(i), streamType, dependentNodes, nodeExtractor, ctxIndex));
     }
 
     // Row intervals don't need variant - pass through as-is
@@ -164,7 +346,7 @@ TVariantBounds DeserializeBoundsAsVariantImpl(const TRuntimeNode& boundsNode) {
     // Deserialize range incrementals
     auto rangeIncrementalsTuple = GetTuple(GetMember(structLit, KeyRangeIncrementals));
     for (ui32 i = 0; i < rangeIncrementalsTuple->GetValuesCount(); ++i) {
-        bounds.AddRangeIncremental(DeserializeBoundAsVariant(rangeIncrementalsTuple->GetValue(i)));
+        bounds.AddRangeIncremental(DeserializeBoundAsVariant(rangeIncrementalsTuple->GetValue(i), streamType, dependentNodes, nodeExtractor, ctxIndex));
     }
 
     // Row incrementals don't need variant - pass through as-is
@@ -173,16 +355,16 @@ TVariantBounds DeserializeBoundsAsVariantImpl(const TRuntimeNode& boundsNode) {
         bounds.AddRowIncremental(DeserializeNumberAndDirection<ui64>(rowIncrementalsTuple->GetValue(i)));
     }
 
-    return bounds;
-}
-
-TVariantBounds DeserializeBoundsAsVariant(const TRuntimeNode& node) {
-    auto structLit = AS_VALUE(TStructLiteral, node);
-    auto boundsNode = GetMember(structLit, KeyBounds);
-    return DeserializeBoundsAsVariantImpl(boundsNode);
+    return {std::move(bounds), std::move(dependentNodes)};
 }
 
 } // anonymous namespace
+
+std::pair<TUnboxedValueVariantBounds, std::vector<IComputationNode*>> DeserializeBoundsAsVariant(const TRuntimeNode& node, const TStructType* streamType, TNodeExtractor nodeExtractor, ui32& ctxIndex) {
+    auto structLit = AS_VALUE(TStructLiteral, node);
+    auto boundsNode = GetMember(structLit, KeyBounds);
+    return DeserializeBoundsAsVariantImpl(boundsNode, streamType, nodeExtractor, ctxIndex);
+}
 
 ESortOrder DeserializeSortOrder(const TRuntimeNode& node) {
     auto structLit = AS_VALUE(TStructLiteral, node);
@@ -190,28 +372,6 @@ ESortOrder DeserializeSortOrder(const TRuntimeNode& node) {
     MKQL_ENSURE(TryParseSortOrderFromString(GetString(GetMember(structLit, KeySortOrder)), sortOrder), "Unknown sort order");
     return sortOrder;
 }
-
-TString DeserializeSortColumnName(const TRuntimeNode& node) {
-    auto structLit = AS_VALUE(TStructLiteral, node);
-    return GetString(GetMember(structLit, KeySortColumnName));
-}
-
-template <typename TStreamElement>
-TComparatorBounds<TStreamElement> DeserializeBounds(const TRuntimeNode& node, ESortOrder sortOrder) {
-    TVariantBounds variantBounds = DeserializeBoundsAsVariant(node);
-    return ConvertBoundsToComparators<TStreamElement>(variantBounds, sortOrder);
-}
-
-template TComparatorBounds<i8> DeserializeBounds<i8>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<ui8> DeserializeBounds<ui8>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<i16> DeserializeBounds<i16>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<ui16> DeserializeBounds<ui16>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<i32> DeserializeBounds<i32>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<ui32> DeserializeBounds<ui32>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<i64> DeserializeBounds<i64>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<ui64> DeserializeBounds<ui64>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<float> DeserializeBounds<float>(const TRuntimeNode&, ESortOrder);
-template TComparatorBounds<double> DeserializeBounds<double>(const TRuntimeNode&, ESortOrder);
 
 bool AnyRangeProvided(const TRuntimeNode& node) {
     auto boundsLit = AS_VALUE(TStructLiteral, GetMember(AS_VALUE(TStructLiteral, node), KeyBounds));

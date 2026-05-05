@@ -114,6 +114,8 @@ protected:
             TxCacheQuota->ReleaseQuota(size);
     }
 
+    void SetExternalExecutor(IExecutor* executor);
+
 private:
     IExecutor* CreateExecutor(const TActorContext &ctx);
 

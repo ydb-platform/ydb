@@ -21,6 +21,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <util/system/compiler.h>
+
 #include <optional>
 #include <utility>
 
@@ -469,7 +471,7 @@ private:
         i64 DequeuedActionCount_ = 0;
         i64 ExecutedActionCount_ = 0;
 
-        YT_ATTRIBUTE_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
+        Y_NO_UNIQUE_ADDRESS THandle ProfilerHandle_;
 
         TDuration GetTotalTimeEstimate(TInstant now) const
         {
@@ -496,7 +498,7 @@ private:
 
     IFairShareCallbackQueuePtr Queue_;
 
-    YT_ATTRIBUTE_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
+    Y_NO_UNIQUE_ADDRESS TPoolProfilerObject Profiler_;
 
     class TCpuTimeAccounter
     {

@@ -39,9 +39,15 @@ struct TSession: public TSessionBase {
     void EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings);
     void InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings);
 
+    template <typename TCallable>
+    [[nodiscard]]
+    ::NThreading::TFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>> Async(TCallable&& func) {
+        return TAsyncQueue::Async(Queue_, std::move(func));
+    }
+
     const TStatWriter StatWriter_;
     const bool DeterministicMode_;
-    TAsyncQueue::TPtr Queue_;
+    TAsyncQueue::TWeakPtr Queue_;
     TOperationTracker::TPtr OpTracker_;
     NThreading::TAsyncSemaphore::TPtr OperationSemaphore;
     TMutex Mutex_;
@@ -52,8 +58,12 @@ struct TSession: public TSessionBase {
     const TQContext QContext_;
     const IYtFullCapture::TPtr FullCapture_;
 
+    TMutex SecureTmpFolderPreparationsMutex_;
+    THashMap<TString, NThreading::TFuture<void>> SecureTmpFolderPreparationsByCluster_;
+
 private:
     void StopQueueAndTracker();
+    TAsyncQueue::TPtr QueueOwned_;
 };
 
 } // NNative

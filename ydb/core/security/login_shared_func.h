@@ -9,6 +9,7 @@
 
 namespace NKikimr {
 
+bool IsDomainLoginOnlyEnabled(const NKikimrProto::TAuthConfig& config);
 bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config);
 bool IsUsernameFromLdapAuthDomain(const TString& username, const NKikimrProto::TAuthConfig& config);
 TString PrepareLdapUsername(const TString& username, const NKikimrProto::TAuthConfig& config);

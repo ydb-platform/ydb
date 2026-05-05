@@ -25,6 +25,7 @@ struct TYtBaseServices: public TThrRefBase {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TYtGatewayConfigPtr Config;
     bool NeedToTransformTmpTablePaths = true;
+    bool CheckSpecDoesntUseNativeYtTypes = true;
     TFileStoragePtr FileStorage;
 };
 
@@ -37,6 +38,7 @@ struct TInputInfo {
     TString Cluster;
     bool Temp = false;
     bool Dynamic = false;
+    bool RLS = false;
     bool Strict = true;
     ui64 Records = 0;
     ui64 DataSize = 0;
@@ -84,9 +86,9 @@ protected:
     );
 
 public:
-    TString GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const;
-    TString GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
+    TString GetInputSpec(bool ensureOldTypesOnly, bool intermediateInput) const;
+    TString GetOutSpec(bool ensureOldTypesOnly) const;
+    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly) const;
 
     TString GetSessionId() const;
 
@@ -101,15 +103,15 @@ protected:
 
     void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings);
 
-    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash);
+    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash);
 
     virtual void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash);
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash);
 
     void SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings);
 
     template <class TTableType>
-    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
+    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, bool intermediateInput);
 
     virtual void FillRichPathForPullCaseInput(NYT::TRichYPath& path, TYtTableBaseInfo::TPtr tableInfo);
     virtual void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest);
@@ -136,6 +138,7 @@ public:
     TMaybe<TSampleParams> Sampling;
     const TSessionBase::TPtr BaseSession_;
     const bool NeedToTransformTmpTablePaths_;
+    const bool CheckSpecDoesntUseNativeYtTypes_;
 };
 
 
@@ -169,7 +172,8 @@ public:
     }
 
     virtual void SetOutput(NNodes::TYtOutSection output) {
-        TExecContextBaseSimple::SetOutput(output, Options_.Config(), Options_.OperationHash());
+        TExecContextBaseSimple::SetOutput(output, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     void SetSingleOutput(const TYtOutTableInfo& outTable) {

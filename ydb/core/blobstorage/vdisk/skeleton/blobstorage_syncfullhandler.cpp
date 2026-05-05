@@ -153,10 +153,7 @@ namespace NKikimr {
             TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
                     Db->LsnMngr->GetConfirmedLsnForSyncLog());
 
-            std::optional<TActorId> oldActorId = DeleteUnorderedDataSession(evInfo.SessionKey);
-            if (oldActorId) {
-                Send(*oldActorId, new TEvents::TEvPoisonPill);
-            }
+            DeleteUnorderedDataSession(evInfo.SessionKey);
 
             TActorId actorId = Register(CreateHullSyncFullActorUnorderedDataProtocol(
                     Db->Config,
@@ -185,7 +182,7 @@ namespace NKikimr {
             }
         }
 
-        std::optional<TActorId> DeleteUnorderedDataSession(const TSessionKey& sessionKey) {
+        void DeleteUnorderedDataSession(const TSessionKey& sessionKey) {
             auto it1 = UnorderedDataFullSyncSessions.find(sessionKey);
             if (it1 != UnorderedDataFullSyncSessions.end()) {
                 // Recipient demanded fullsync restart, kill existing actor
@@ -194,9 +191,7 @@ namespace NKikimr {
                 UnorderedDataFullSyncSessions.erase(it1);
                 bool erased = UnorderedDataFullSyncSessionLookup.erase(actorId);
                 Y_VERIFY(erased);
-                return actorId;
             }
-            return std::nullopt;
         }
 
         void Handle(TEvents::TEvGone::TPtr& ev) {

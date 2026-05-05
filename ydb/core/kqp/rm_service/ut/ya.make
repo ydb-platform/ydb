@@ -2,15 +2,14 @@ UNITTEST_FOR(ydb/core/kqp/rm_service)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_rm_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/threading/local_executor
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

@@ -38,6 +38,7 @@ SRCS(
     rpc_describe_external_data_source.cpp
     rpc_describe_external_table.cpp
     rpc_describe_path.cpp
+    rpc_describe_secret.cpp
     rpc_describe_system_view.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
@@ -178,6 +179,7 @@ IF (OS_LINUX)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/libs/service
         ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/public/api/protos
         ydb/core/nbs/cloud/storage/core/libs/common
     )

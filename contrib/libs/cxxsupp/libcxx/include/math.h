@@ -291,9 +291,11 @@ long double    truncl(long double x);
 
 */
 
-#  if defined(__CUDACC__)
+#  if defined(__cplusplus) && __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
+#error  include <__cxx03/math.h>
+# elif defined(__CUDACC__)
 #    include <math_cuda.h>
-#  else // 0
+#  else
 #    include <__config>
 
 #    if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -378,9 +380,7 @@ extern "C++" {
 #      include <__math/traits.h>
 #      include <__math/trigonometric_functions.h>
 #      include <__type_traits/enable_if.h>
-#      include <__type_traits/is_floating_point.h>
 #      include <__type_traits/is_integral.h>
-#      include <stdlib.h>
 
 // fpclassify relies on implementation-defined constants, so we can't move it to a detail header
 _LIBCPP_BEGIN_NAMESPACE_STD
@@ -431,19 +431,12 @@ using std::__math::isnormal;
 using std::__math::isunordered;
 #      endif // _LIBCPP_MSVCRT
 
-// abs
-//
-// handled in stdlib.h
-
-// div
-//
-// handled in stdlib.h
-
 // We have to provide double overloads for <math.h> to work on platforms that don't provide the full set of math
 // functions. To make the overload set work with multiple functions that take the same arguments, we make our overloads
 // templates. Functions are preferred over function templates during overload resolution, which means that our overload
 // will only be selected when the C library doesn't provide one.
 
+using std::__math::abs;
 using std::__math::acos;
 using std::__math::acosh;
 using std::__math::asin;
@@ -505,7 +498,7 @@ using std::__math::trunc;
 } // extern "C++"
 
 #    endif // __cplusplus
-#  endif // __CUDACC__
+#  endif   // defined(__cplusplus) && __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
 
 #else // _LIBCPP_MATH_H
 

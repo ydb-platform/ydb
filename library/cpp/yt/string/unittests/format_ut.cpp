@@ -2,6 +2,7 @@
 
 #include <library/cpp/yt/string/format.h>
 
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/generic/hash_set.h>
@@ -357,6 +358,18 @@ TEST(TFormatTest, CustomFlagsCollectionTwoLevels)
 TEST(TFormatTest, ManyEscapes)
 {
     EXPECT_EQ("a%b%c%d%e%f%g", Format("%v%%%v%%%v%%%v%%%v%%%v%%%g", "a", "b", "c", "d", "e", "f", "g"));
+}
+
+TEST(TFormatTest, TTruncatedString)
+{
+    EXPECT_EQ("", Format("%v", TTruncatedStringView("", 3)));
+    EXPECT_EQ("abc", Format("%v", TTruncatedStringView("abc", 3)));
+    EXPECT_EQ("abcd", Format("%v", TTruncatedStringView("abcd", 3)));
+    EXPECT_EQ("abcdefghijklmnopq", Format("%v", TTruncatedStringView("abcdefghijklmnopq", 3)));
+    EXPECT_EQ("abc...<truncated>", Format("%v", TTruncatedStringView("abcdefghijklmnopqr", 3)));
+    EXPECT_EQ("a: \"abc...<truncated>\",", Format("a: %Qv,", TTruncatedStringView("abcdefghijklmnopqr", 3)));
+    EXPECT_EQ("a: \'abc...<truncated>\',", Format("a: %qv,", TTruncatedStringView("abcdefghijklmnopqr", 3)));
+    EXPECT_EQ("aQ: \'abc...<truncated>\',", Format("aQ: %qv,", TTruncatedStringView("abcdefghijklmnopqr", 3)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

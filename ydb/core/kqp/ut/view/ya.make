@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     view_ut.cpp

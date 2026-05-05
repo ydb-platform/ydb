@@ -8,8 +8,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 namespace {
 TStringBuf GetTzPayloadWireType(NUdf::EDataSlot slot) {
@@ -32,7 +31,7 @@ TStringBuf GetTzPayloadWireType(NUdf::EDataSlot slot) {
 } // namespace
 
 struct TSkiffTypeLoader {
-    typedef NYT::TNode TType;
+    using TType = NYT::TNode;
 
     explicit TSkiffTypeLoader(ui64 nativeYTTypesFlags)
         : NativeYTTypesFlags(nativeYTTypesFlags)
@@ -40,10 +39,10 @@ struct TSkiffTypeLoader {
     }
 
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_VOID) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", NativeYTTypesFlags ? "nothing" : "yson32");
     }
     TMaybe<TType> LoadNullType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_NULL) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", NativeYTTypesFlags ? "nothing" : "yson32");
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";
@@ -276,5 +275,4 @@ NYT::TNode ParseSkiffTypeFromYson(const NYT::TNode& node, ui64 nativeYTTypesFlag
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(NYT::TNode());
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -49,6 +49,7 @@ struct TServerConfig
     TDuration BindRetryBackoff;
 
     bool EnableKeepAlive;
+    std::optional<TDuration> MaxConnectionAge;
 
     std::optional<bool> CancelFiberOnConnectionClose;
 

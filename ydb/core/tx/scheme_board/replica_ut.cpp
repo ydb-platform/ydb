@@ -1,4 +1,5 @@
 #include "replica.h"
+#include "helpers.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -68,6 +69,8 @@ public:
     UNIT_TEST(AckNotifications);
     UNIT_TEST(AckNotificationsUponPathRecreation);
     UNIT_TEST(StrongNotificationAfterCommit);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId1);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId2);
     UNIT_TEST_SUITE_END();
 
     void Handshake();
@@ -95,6 +98,9 @@ public:
     void AckNotifications();
     void AckNotificationsUponPathRecreation();
     void StrongNotificationAfterCommit();
+    void PathIdLessThanImpl(ui64 badRootSchemeshardId);
+    void PathIdLessThanBadRootSchemeshardId1();
+    void PathIdLessThanBadRootSchemeshardId2();
 
 private:
     THolder<TTestContext> Context;
@@ -779,7 +785,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                  << " DomainId: " << std::get<0>(winId)
                  << " IsDeletion: " << std::get<1>(winId)
                  << " PathId: " << std::get<2>(winId)
-                 << " Verions: " << std::get<3>(winId)
+                 << " Versions: " << std::get<3>(winId)
                  << Endl;
             Cerr << "=========== WIN =="
                  << ev->Get()->GetRecord().GetPath()
@@ -883,6 +889,60 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
             }
         }
     }
+}
+
+void TReplicaTest::PathIdLessThanImpl(ui64 badRootSchemeshardId) {
+    // Verify PathIdLessThan(curSubdomainId, subdomainId) branch in replica.cpp:
+    // on a misconfigured cluster the bad root schemeshard owner-id is numerically higher than
+    // the tenant schemeshard owner-id, so without the fix the TSS update would be dropped.
+
+    constexpr ui64 tenantSchemeshardId = 100ULL;
+    constexpr auto path = "/Root/Tenant/table";
+
+    // Subdomain roots have local-path-id 1; inner paths have local-path-id > 1.
+    const TPathId gssSubdomainId{badRootSchemeshardId, 2};
+    const TPathId gssPathId{badRootSchemeshardId, 5};
+    const TPathId tssSubdomainId{tenantSchemeshardId, 1};
+    const TPathId tssPathId{tenantSchemeshardId, 5};
+
+    const TActorId edge = Context->AllocateEdgeActor();
+
+    const TActorId gssPopulator = Context->AllocateEdgeActor();
+    Context->HandshakeReplica(Replica, gssPopulator, badRootSchemeshardId, 1);
+
+    Context->SubscribeReplica(Replica, edge, path);
+
+    // GSS update: after this curPathId = gssPathId, curSubdomainId = gssSubdomainId.
+    auto describeGSS = GenerateDescribe(path, gssPathId, 1, gssSubdomainId);
+    Context->Send(Replica, gssPopulator, GenerateUpdate(describeGSS, badRootSchemeshardId, 1));
+    {
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->GetRecord().GetPath());
+        UNIT_ASSERT_VALUES_EQUAL(badRootSchemeshardId, ev->Get()->GetRecord().GetPathOwnerId());
+    }
+
+    const TActorId tssPopulator = Context->AllocateEdgeActor();
+    Context->HandshakeReplica(Replica, tssPopulator, tenantSchemeshardId, 1);
+
+    // TSS update reaches PathIdLessThan(curSubdomainId, tssSubdomainId) because:
+    // curPathId.OwnerId != tssPathId.OwnerId, curPathId != tssSubdomainId,
+    // curSubdomainId != tssPathId, curSubdomainId != tssSubdomainId.
+    // PathIdLessThan returns true (bad ID treated as lower) -> TSS wins.
+    auto describeTSS = GenerateDescribe(path, tssPathId, 1, tssSubdomainId);
+    Context->Send(Replica, tssPopulator, GenerateUpdate(describeTSS, tenantSchemeshardId, 1));
+    {
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->GetRecord().GetPath());
+        UNIT_ASSERT_VALUES_EQUAL(tenantSchemeshardId, ev->Get()->GetRecord().GetPathOwnerId());
+    }
+}
+
+void TReplicaTest::PathIdLessThanBadRootSchemeshardId1() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_1);
+}
+
+void TReplicaTest::PathIdLessThanBadRootSchemeshardId2() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_2);
 }
 
 } // NSchemeBoard

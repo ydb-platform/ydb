@@ -4,8 +4,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 struct TOptions {
     bool IsSql = true;
@@ -19,5 +18,4 @@ struct TOptions {
 
 bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors);
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

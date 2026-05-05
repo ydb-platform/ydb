@@ -1,7 +1,5 @@
 #include "ut_helpers.h"
 
-#include <ydb/core/testlib/basics/appdata.h>
-
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/retry/retry.h>
@@ -50,6 +48,7 @@ void InitAsyncOutput(
             0,
             NYql::NDq::TCollectStatsLevel::None,
             "TxId-42",
+            777,
             secureParams,
             &actor.GetAsyncOutputCallbacks(),
             counters,

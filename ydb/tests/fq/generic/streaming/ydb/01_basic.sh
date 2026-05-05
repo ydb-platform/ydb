@@ -35,12 +35,15 @@ set -ex
       (56, 12, "2a02:1812:1713:4f00:517e:1d79:c88b:704", "Elena", 2),
       (18, 17, "ivalid ip", "newUser", 12);
     COMMIT;
-    CREATE TABLE db (b STRING NOT NULL, c Int32, a Int32 NOT NULL, d Int32, f Int32, e Int32, g Int32, h Int32, PRIMARY KEY(b, a));
+    CREATE TABLE db (b STRING NOT NULL, c Uint32, a Int32 NOT NULL, d Int8, f Int32, e Int64, g Int32, h Int32, is_odd Bool NOT NULL, is_true Bool NOT NULL, is_false Bool NOT NULL, opt_odd Bool, opt_true Bool, opt_false Bool, opt_null Bool, ts Timestamp, dur Interval, tsd Date, PRIMARY KEY(b, a));
     COMMIT;
-    INSERT INTO db (a, b, c, d, e, f) VALUES
-      (1, "2", 3, 4, 5, 6),
-      (7, "8", 9, 10, 11, 12);
+    INSERT INTO db (a, b, c, d, e, f, is_odd, is_true, is_false, opt_odd, opt_true, opt_false, opt_null, ts, dur, tsd) VALUES
+      (1, "2", 3, 4, 5, 6, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:12Z"), Interval("PT13S"), Date("1970-01-05")),
+      (7, "8", 9, 10, 11, 12, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:13Z"), Interval("PT14S"), Date("1970-01-06")),
+      (2, "3", 6, NULL, 8, 9, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:14Z"), Interval("PT15S"), Date("1970-01-07")),
+      (4, "5", 4, 15, 17, NULL, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:15Z"), Interval("PT16S"), Date("1970-01-08"));
     COMMIT;
+    SELECT * FROM db;
   '
 
 retVal=$?

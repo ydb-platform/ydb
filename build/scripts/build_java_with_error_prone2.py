@@ -3,7 +3,6 @@ import os
 import subprocess
 import platform
 
-
 JAVA10_EXPORTS = [
     '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
     '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
@@ -55,7 +54,7 @@ def fix_cmd_line(error_prone_tool, cmd):
         cmd
         + JAVA10_EXPORTS
         + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile']
-        + [(' '.join(['-Xplugin:ErrorProne'] + error_prone_flags))]
+        + [' '.join(['-Xplugin:ErrorProne'] + error_prone_flags)]
     )
 
 
@@ -77,7 +76,7 @@ def just_do_it(argv):
         [javac]
         + JAVA10_EXPORTS
         + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile']
-        + [(' '.join(['-Xplugin:ErrorProne'] + error_prone_flags))]
+        + [' '.join(['-Xplugin:ErrorProne'] + error_prone_flags)]
         + javac_cmd
     )
     if platform.system() == 'Windows':

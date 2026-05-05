@@ -61,7 +61,7 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit fa47b1d0f9d3d30601d7e5ed158d3055cbe6ff44);
+- BoringSSL (commit db1a8456167249f95b854a1cd24c6b553d0f1567);
   or aws-lc >= 1.39.0
 - Picotls (commit 4e443c11eb48949e597911b1b772a9d2588b4769)
 - wolfSSL >= 5.5.0
@@ -115,7 +115,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout fa47b1d0f9d3d30601d7e5ed158d3055cbe6ff44
+   $ git checkout db1a8456167249f95b854a1cd24c6b553d0f1567
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -142,7 +142,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.61.2 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.62.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -170,10 +170,11 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v4.1.0 https://github.com/libressl/portable.git libressl
+   $ LIBRESSL_VERSION=v4.2.0
+   $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
-   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.1.0"
+   $ export LIBRESSL_GIT_OPTIONS="-b libressl-$LIBRESSL_VERSION"
    $ ./autogen.sh
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install

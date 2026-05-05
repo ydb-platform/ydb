@@ -89,6 +89,8 @@ protected:
         NYPath::TYPath path,
         bool mutating);
 
+    TYPathRequest(const TYPathRequest& other);
+
     NRpc::NProto::TRequestHeader Header_;
 
     virtual TSharedRef SerializeBody() const = 0;
@@ -122,10 +124,20 @@ public:
             mutating)
     { }
 
+    TTypedYPathRequest(const TTypedYPathRequest& other)
+        : TYPathRequest(other)
+        , TRequestMessage(other)
+    { }
+
+    NRpc::IClientRequestPtr Clone() const override
+    {
+        return New<TTypedYPathRequest>(*this);
+    }
+
 protected:
     TSharedRef SerializeBody() const override
     {
-        // COPMAT(danilalexeev): legacy RPC codecs
+        // COMPAT(danilalexeev): legacy RPC codecs
         if (Header_.has_request_codec()) {
             YT_VERIFY(Header_.request_codec() == NYT::ToProto(NCompression::ECodec::None));
             return SerializeProtoToRefWithCompression(*this);

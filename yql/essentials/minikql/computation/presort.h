@@ -6,8 +6,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TPresortCodec {
 public:
@@ -66,5 +65,4 @@ private:
     TVector<ui8> Buffer_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

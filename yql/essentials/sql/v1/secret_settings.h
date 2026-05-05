@@ -26,6 +26,7 @@ static const TVector<TSecretSettingsNames> EDS_SECRETS_SETTINGS = {
     TSecretSettingsNames("service_account_secret"),
     TSecretSettingsNames("aws_access_key_id_secret"),
     TSecretSettingsNames("aws_secret_access_key_secret"),
+    TSecretSettingsNames("initial_token_secret"),
 };
 
 static const TVector<TSecretSettingsNames> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = {
@@ -52,6 +53,8 @@ void AdjustSecretPaths(
     const TVector<TSecretSettingsNames>& secretSettings,
     TStringBuf tablePathPrefix);
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TExternalDataSourceAuthFields final {
 public:
     TExternalDataSourceAuthFields() = default;

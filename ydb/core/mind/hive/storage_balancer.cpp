@@ -83,7 +83,7 @@ protected:
     }
 
     void ReassignNextTablet() {
-        while (NextReassign != Operations.end() && ReassignInFlight < Settings.MaxInFlight) {
+        for (; NextReassign != Operations.end() && ReassignInFlight < Settings.MaxInFlight; ++NextReassign) {
             auto tablet = Hive->FindTablet(NextReassign->first);
             if (!tablet) {
                 continue;
@@ -91,7 +91,6 @@ protected:
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
             BLOG_D("StorageBalancer initiating reassign for tablet " << NextReassign->first);
             Send(Hive->SelfId(), NextReassign->second.release());
-            ++NextReassign;
             ++ReassignInFlight;
         }
         if (ReassignInFlight == 0) {

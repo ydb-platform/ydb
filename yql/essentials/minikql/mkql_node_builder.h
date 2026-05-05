@@ -2,8 +2,7 @@
 #include "defs.h"
 #include "mkql_node.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::TDataTypeId type, const TTypeEnvironment& env);
 inline TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::EDataSlot slot, const TTypeEnvironment& env) {
@@ -112,7 +111,7 @@ public:
     TCallableTypeBuilder(const TCallableTypeBuilder&) = default;
     TCallableTypeBuilder& operator=(const TCallableTypeBuilder&) = default;
     void Reserve(ui32 size);
-    TCallableTypeBuilder& Add(TType* time);
+    TCallableTypeBuilder& Add(TType* type);
     TCallableTypeBuilder& SetArgumentName(const TStringBuf& name);
     TCallableTypeBuilder& SetArgumentFlags(ui64 flags);
     TCallableTypeBuilder& SetOptionalArgs(ui32 count);
@@ -161,5 +160,4 @@ private:
     bool HasPayload_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

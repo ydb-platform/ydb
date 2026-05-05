@@ -400,6 +400,7 @@ NApi::TCreateNodeOptions SerializeOptionsForCreate(
             NYson::TYsonString(NodeToYsonString(*options.Attributes_, NYson::EYsonFormat::Binary)));
     }
     result.IgnoreExisting = options.IgnoreExisting_;
+    result.IgnoreTypeMismatch = options.IgnoreTypeMismatch_;
     result.Recursive = options.Recursive_;
     return result;
 }
@@ -831,7 +832,7 @@ NApi::TFileWriterOptions SerializeOptionsForWriteFile(
             result.Config->UploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
         }
         if (writerOptions->MinUploadReplicationFactor_) {
-            result.Config->MinUploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
+            result.Config->MinUploadReplicationFactor = *writerOptions->MinUploadReplicationFactor_;
         }
         if (writerOptions->DesiredChunkSize_) {
             result.Config->DesiredChunkSize = *writerOptions->DesiredChunkSize_;
@@ -1179,6 +1180,7 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     }
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
+    result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
     return result;
 }
 

@@ -484,6 +484,64 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
+        TBlockLayoutConverterTestData data;
+
+        const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
+        TVector<NKikimr::NMiniKQL::TType*> types{optStringType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        // array has a non-null validity bitmap
+        TPackResult packWithNulls;
+        {
+            auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optStringType,
+                                            *data.ArrowPool, 1024, nullptr);
+            builder->Add(TBlockItem());                             // NULL
+            builder->Add(TBlockItem(TStringRef("hello", 5)));      // valid
+            builder->Add(TBlockItem());                             // NULL
+            auto datum = builder->Build(true);
+
+            TVector<arrow::Datum> columns{datum};
+            converter->Pack(columns, packWithNulls);
+        }
+
+        // arrow omits the bitmap for fully-valid blocks
+        {
+            auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optStringType,
+                                            *data.ArrowPool, 1024, nullptr);
+            builder->Add(TBlockItem(TStringRef("world", 5)));
+            builder->Add(TBlockItem(TStringRef("test", 4)));
+            auto datum = builder->Build(true);
+
+            auto arrayData = datum.array()->Copy();
+            arrayData->buffers[0] = nullptr;
+            arrayData->null_count = 0;
+
+            TVector<arrow::Datum> columns{arrow::Datum(arrayData)};
+            TPackResult packRes;
+            converter->Pack(columns, packRes);
+        }
+
+        TVector<arrow::Datum> unpacked;
+        converter->Unpack(packWithNulls, unpacked);
+        UNIT_ASSERT_VALUES_EQUAL(unpacked.size(), 1u);
+
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), optStringType);
+        const auto& col = *unpacked[0].array();
+
+        TBlockItem item0 = reader->GetItem(col, 0);
+        UNIT_ASSERT_C(!item0, "Row 0 must be NULL");
+
+        TBlockItem item1 = reader->GetItem(col, 1);
+        UNIT_ASSERT_C(item1, "Row 1 must be non-NULL");
+        UNIT_ASSERT_VALUES_EQUAL(item1.AsStringRef(), TStringRef("hello", 5));
+
+        TBlockItem item2 = reader->GetItem(col, 2);
+        UNIT_ASSERT_C(!item2, "Row 2 must be NULL");
+    }
+
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 

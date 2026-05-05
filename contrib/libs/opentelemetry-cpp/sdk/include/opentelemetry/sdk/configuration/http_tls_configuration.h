@@ -14,14 +14,14 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/common.json
+// YAML-SCHEMA: schema/common.yaml
 // YAML-NODE: HttpTls
 class HttpTlsConfiguration
 {
 public:
-  std::string certificate_file;
-  std::string client_key_file;
-  std::string client_certificate_file;
+  std::string ca_file;
+  std::string key_file;
+  std::string cert_file;
 };
 
 }  // namespace configuration

@@ -153,7 +153,7 @@ private:
         TEntryMap EntryMap;
 
         TShard() = default;
-        TShard(TShard&& other) = default;
+        TShard(TShard&& other) noexcept = default;
         TShard(const TShard& other);
     };
 

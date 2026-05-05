@@ -166,6 +166,7 @@ PyDoc_STRVAR(iteritems__doc__,
              "D.iteritems() -> an iterator over the (key, value) items of D");
 #endif
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef LazyDictMethods[] = {
     {"get", TPyLazyDict::Get, METH_VARARGS, get__doc__},
     {"keys", TPyLazyDict::Keys, METH_NOARGS, keys__doc__},

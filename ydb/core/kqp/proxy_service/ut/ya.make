@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/kqp/proxy_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     kqp_proxy_ut.cpp
@@ -15,6 +20,7 @@ PEERDIR(
     ydb/core/kqp/proxy_service
     ydb/core/kqp/ut/common
     ydb/core/kqp/workload_service/ut/common
+    ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/query
     ydb/services/ydb

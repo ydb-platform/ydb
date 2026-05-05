@@ -7,7 +7,7 @@
 #include "executor_pool.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
-#include "cpu_manager.h"
+#include "subsystem.h"
 
 #include <library/cpp/threading/future/future.h>
 #include <ydb/library/actors/util/ticket_lock.h>
@@ -15,6 +15,8 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
+
+#include <type_traits>
 
 namespace NInterconnect::NRdma {
     class IMemPool;
@@ -114,6 +116,7 @@ namespace NActors {
         TAutoPtr<ISchedulerThread> Scheduler;
 
         TInterconnectSetup Interconnect;
+        bool InterconnectCollectSubscriptionStackTrace = false;
 
         bool MonitorStuckActors = false;
 
@@ -121,6 +124,7 @@ namespace NActors {
         TLocalServices LocalServices;
 
         std::shared_ptr<IRcBufAllocator> RcBufAllocator;
+        TSubSystems SubSystems;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -146,6 +150,11 @@ namespace NActors {
             } else {
                 return CpuManager.GetThreadsOptional(poolId);
             }
+        }
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
         }
     };
 
@@ -183,6 +192,7 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
+        TSubSystems SubSystems;
 
         std::atomic_bool StartExecuted = false;
         std::atomic_bool StopExecuted = false;
@@ -312,11 +322,6 @@ namespace NActors {
             return LoggerSettings0.Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStats) const;
-
-        THarmonizerStats GetHarmonizerStats() const;
-
         std::optional<ui32> GetPoolThreadsCount(const ui32 poolId) const {
             if (!SystemSetup) {
                 return {};
@@ -324,20 +329,29 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
-        auto GetPoolMaxThreadsCount(ui32 poolId) const {
-            return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
-        }
+        float GetPoolMaxThreadsCount(ui32 poolId) const;
 
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
-        TVector<IExecutorPool*> GetBasicExecutorPools() const {
-            return CpuManager->GetBasicExecutorPools();
+        TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
+        template<class T>
+        void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
+            Y_ABORT_UNLESS(!StartExecuted.load(), "cannot register subsystem after actor system start");
+            NActors::RegisterSubSystem(SubSystems, std::move(subsystem));
         }
 
-        void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
-        void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
+        template<class T>
+        T* GetSubSystem() {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
+
+        template<class T>
+        const T* GetSubSystem() const {
+            return NActors::GetSubSystem<T>(SubSystems);
+        }
 
         IRcBufAllocator* GetRcBufAllocator() const {
             return RcBufAllocator;

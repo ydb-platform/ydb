@@ -5,8 +5,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
 Y_UNIT_TEST(TestDataBuild) {
@@ -203,5 +202,4 @@ Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

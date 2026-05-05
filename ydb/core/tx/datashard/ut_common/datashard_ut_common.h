@@ -16,6 +16,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+namespace NACLib {
+    class TUserContext;
+}
 
 namespace NKikimr {
 
@@ -363,7 +366,8 @@ public:
 };
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
-                                                      bool dml = true);
+                                                      bool dml = true,
+                                                      TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
 class TLambdaActor : public IActorCallback {
 public:
@@ -452,6 +456,8 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
+        bool UserSIDs = true;
+        bool TraceIds = false;
     };
 
     struct TFamily {
@@ -615,6 +621,13 @@ ui64 AsyncDropTable(
         TActorId sender,
         const TString& workingDir,
         const TString& name);
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
+        NKikimrMiniKQL::TValue&& splitKey);
 
 ui64 AsyncSplitTable(
         Tests::TServer::TPtr server,
@@ -811,7 +824,14 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
-             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext());
+             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
+             TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
+
+void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

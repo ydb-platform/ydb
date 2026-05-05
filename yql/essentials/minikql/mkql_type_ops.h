@@ -9,8 +9,7 @@
 
 #include <util/stream/output.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // TODO remove
 TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
@@ -90,5 +89,4 @@ void SerializeTzTimestamp64(i64 timestamp, ui16 tzId, IOutputStream& out);
 bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId);
 bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId);
 bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId);
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

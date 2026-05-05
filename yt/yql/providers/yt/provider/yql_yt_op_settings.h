@@ -45,11 +45,7 @@ struct TSampleParams {
     double Percentage;
     ui64 Repeat;
 
-    friend bool operator==(const TSampleParams& l, const TSampleParams& r) {
-        return l.Mode == r.Mode
-            && l.Percentage == r.Percentage
-            && l.Repeat == r.Repeat;
-    }
+    friend bool operator==(const TSampleParams& lhs, const TSampleParams& rhs) = default;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

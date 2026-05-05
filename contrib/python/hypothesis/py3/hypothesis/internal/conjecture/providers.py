@@ -18,7 +18,6 @@ from contextlib import AbstractContextManager, contextmanager
 from functools import cached_property
 from random import Random
 from sys import float_info
-from types import ModuleType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -231,6 +230,9 @@ _constant_strings = {
     # Ogham text, which contains the only character in the Space Separators
     # unicode category (Zs) that isn't visually blank:  .  # noqa: RUF003
     "᚛ᚄᚓᚐᚋᚒᚄ ᚑᚄᚂᚑᚏᚅ᚜",
+    # thai consonant + spacing vowel combinations, which have unusual visual combining behavior
+    "กา",
+    "ก ำกำ",
     # readable variations on text (bolt/italic/script)
     "𝐓𝐡𝐞 𝐪𝐮𝐢𝐜𝐤 𝐛𝐫𝐨𝐰𝐧 𝐟𝐨𝐱 𝐣𝐮𝐦𝐩𝐬 𝐨𝐯𝐞𝐫 𝐭𝐡𝐞 𝐥𝐚𝐳𝐲 𝐝𝐨𝐠",
     "𝕿𝖍𝖊 𝖖𝖚𝖎𝖈𝖐 𝖇𝖗𝖔𝖜𝖓 𝖋𝖔𝖝 𝖏𝖚𝖒𝖕𝖘 𝖔𝖛𝖊𝖗 𝖙𝖍𝖊 𝖑𝖆𝖟𝖞 𝖉𝖔𝖌",
@@ -252,6 +254,33 @@ _constant_strings = {
     "मनीष منش",
     "पन्ह पन्ह त्र र्च कृकृ ड्ड न्हृे إلا بسم الله",
     "lorem لا بسم الله ipsum 你好1234你好",
+    # unicode charaacters causing unconditional line breaks, as defined by UAX #14:
+    # https://www.unicode.org/reports/tr14/.
+    #
+    # We've seen multiple bugs caused by assuming `str.splitlines` is equivalent to
+    # splitting over "\n", while it actually splits over all line breaks!
+    #
+    # We intersperse the line breaks with normal characters to increase the likelihood
+    # of triggering such a bug.
+    (
+        "a"
+        "\u000a"  # line feed (class: LF)
+        "b"
+        "\u000d"  # carriage return (class: CR)
+        "c"
+        "\u0085"  # next line (class: NL)
+        "d"
+        "\u000b"  # line tabulation (class: BK)
+        "e"
+        "\u000c"  # form feed (class: BK)
+        "f"
+        "\u2028"  # line separator (class: BK)
+        "g"
+        "\u2029"  # paragraph separator (class: BK)
+        "h"
+        "\u000d\u000a"  # CR+LF
+        "i"
+    ),
 }
 
 
@@ -274,7 +303,9 @@ _local_constants = Constants(
 # are all modules, not necessarily local ones. This lets us quickly see which
 # modules are new without an expensive path.resolve() or is_local_module_file
 # cache lookup.
-_seen_modules: set[ModuleType] = set()
+# We track by module object when hashable, falling back to the module name
+# (str key in sys.modules) for unhashable entries like SimpleNamespace.
+_seen_modules: set = set()
 _sys_modules_len: int | None = None
 
 
@@ -310,20 +341,28 @@ def _get_local_constants() -> Constants:
     # careful: store sys.modules length when we first check to avoid race conditions
     # with other threads loading a module before we set _sys_modules_len.
     if (sys_modules_len := len(sys.modules)) != _sys_modules_len:
-        # set(_seen_modules) shouldn't typically be required, but I have run into
-        # a "set changed size during iteration" error here when running
-        # test_provider_conformance_crosshair.
-        new_modules = set(sys.modules.values()) - set(_seen_modules)
+        new_modules = []
+        for name, module in list(sys.modules.items()):
+            try:
+                seen = module in _seen_modules
+            except TypeError:
+                # unhashable module (e.g. SimpleNamespace); fall back to name
+                seen = name in _seen_modules
+            if not seen:
+                new_modules.append((name, module))
         # Repeated SortedSet unions are expensive. Do the initial unions on a
         # set(), then do a one-time union with _local_constants after.
         new_constants = Constants()
-        for module in new_modules:
+        for name, module in new_modules:
             if (
                 module_file := getattr(module, "__file__", None)
             ) is not None and is_local_module_file(module_file):
                 new_constants |= constants_from_module(module)
+            try:
+                _seen_modules.add(module)
+            except TypeError:
+                _seen_modules.add(name)
         _local_constants |= new_constants
-        _seen_modules.update(new_modules)
         _sys_modules_len = sys_modules_len
 
     # if we add any new constant, invalidate the constant cache for permitted values.
@@ -755,7 +794,7 @@ class HypothesisProvider(PrimitiveProvider):
 
         # split constants into two pools, so we still have a good chance to draw
         # global constants even if there are many local constants.
-        (global_constants, local_constants) = CONSTANTS_CACHE[key]
+        global_constants, local_constants = CONSTANTS_CACHE[key]
         constants_lists = ([global_constants] if global_constants else []) + (
             [local_constants] if local_constants else []
         )

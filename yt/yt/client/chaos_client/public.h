@@ -33,7 +33,7 @@ DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheDynamicConfig)
 struct TReplicationProgress;
 struct TReplicaHistoryItem;
 struct TReplicaInfo;
-struct TReplicationCardFecthOptions;
+struct TReplicationCardFetchOptions;
 
 YT_DEFINE_ERROR_ENUM(
     ((ReplicationCardNotKnown)           (3200))

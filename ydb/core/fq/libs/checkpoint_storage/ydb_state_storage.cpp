@@ -473,8 +473,8 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     context->Callback = [promise, context, size, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
         TStatus status = upsertRowStatus.GetValue();
         if (!status.IsSuccess()) {
-            context->Callback = nullptr;
             promise.SetValue(TSaveStateResult(0, StatusToIssues(status)));
+            context->Callback = nullptr;
             return;
         }
         auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
@@ -486,8 +486,8 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
             nextFuture.Subscribe(context->Callback);
             return;
         }
-        context->Callback = nullptr;
         promise.SetValue(TSaveStateResult(size, StatusToIssues(status)));
+        context->Callback = nullptr;
     };
     future.Subscribe(context->Callback);
     return promise.GetFuture();
@@ -933,8 +933,8 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
                         taskInfo.CurrentProcessingRow = 0;
                     }
                     else {
-                        context->Callback = nullptr;
                         promise.SetValue(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
+                        context->Callback = nullptr;
                         return;
                     }
                 }

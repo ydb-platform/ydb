@@ -10,7 +10,7 @@ using namespace NBus;
 using namespace NBus::NPrivate;
 
 namespace {
-    TBindResult BindOnPortProto(int port, int af, bool reusePort) {
+    TBindResult BindOnPortProto(int port, int af, bool reusePort, bool loopback) {
         Y_ABORT_UNLESS(af == AF_INET || af == AF_INET6, "wrong af");
 
         SOCKET fd = ::socket(af, SOCK_STREAM, 0);
@@ -42,10 +42,11 @@ namespace {
         if (af == AF_INET) {
             len = sizeof(sockaddr_in);
             ((sockaddr_in*)sa)->sin_port = HostToInet((ui16)port);
-            ((sockaddr_in*)sa)->sin_addr.s_addr = INADDR_ANY;
+            ((sockaddr_in*)sa)->sin_addr.s_addr = HostToInet(loopback ? INADDR_LOOPBACK : INADDR_ANY);
         } else {
             len = sizeof(sockaddr_in6);
             ((sockaddr_in6*)sa)->sin6_port = HostToInet((ui16)port);
+            ((sockaddr_in6*)sa)->sin6_addr = loopback ? in6addr_loopback : in6addr_any;
         }
 
         if (af == AF_INET6) {
@@ -73,9 +74,9 @@ namespace {
         return r;
     }
 
-    TMaybe<TBindResult> TryBindOnPortProto(int port, int af, bool reusePort) {
+    TMaybe<TBindResult> TryBindOnPortProto(int port, int af, bool reusePort, bool loopback) {
         try {
-            return {BindOnPortProto(port, af, reusePort)};
+            return {BindOnPortProto(port, af, reusePort, loopback)};
         } catch (const TSystemError&) {
             return {};
         }
@@ -91,35 +92,44 @@ namespace {
         r.second.emplace_back(std::move(r2));
         return r;
     }
-}
+
+    std::pair<unsigned, TVector<TBindResult>> DoBindOnPort(int port, bool reusePort, bool loopback) {
+        std::pair<unsigned, TVector<TBindResult>> r;
+        r.second.reserve(2);
+
+        if (port != 0) {
+            return AggregateBindResults(BindOnPortProto(port, AF_INET, reusePort, loopback),
+                                        BindOnPortProto(port, AF_INET6, reusePort, loopback));
+        }
+
+        // use nothrow versions in cycle
+        for (int i = 0; i < 1000; ++i) {
+            TMaybe<TBindResult> in4 = TryBindOnPortProto(0, AF_INET, reusePort, loopback);
+            if (!in4) {
+                continue;
+            }
+
+            TMaybe<TBindResult> in6 = TryBindOnPortProto(in4->Addr.GetPort(), AF_INET6, reusePort, loopback);
+            if (!in6) {
+                continue;
+            }
+
+            return AggregateBindResults(std::move(*in4), std::move(*in6));
+        }
+
+        TBindResult in4 = BindOnPortProto(0, AF_INET, reusePort, loopback);
+        TBindResult in6 = BindOnPortProto(in4.Addr.GetPort(), AF_INET6, reusePort, loopback);
+        return AggregateBindResults(std::move(in4), std::move(in6));
+    }
+
+} // namespace
 
 std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reusePort) {
-    std::pair<unsigned, TVector<TBindResult>> r;
-    r.second.reserve(2);
+    return DoBindOnPort(port, reusePort, /* loopback = */ false);
+}
 
-    if (port != 0) {
-        return AggregateBindResults(BindOnPortProto(port, AF_INET, reusePort),
-                                    BindOnPortProto(port, AF_INET6, reusePort));
-    }
-
-    // use nothrow versions in cycle
-    for (int i = 0; i < 1000; ++i) {
-        TMaybe<TBindResult> in4 = TryBindOnPortProto(0, AF_INET, reusePort);
-        if (!in4) {
-            continue;
-        }
-
-        TMaybe<TBindResult> in6 = TryBindOnPortProto(in4->Addr.GetPort(), AF_INET6, reusePort);
-        if (!in6) {
-            continue;
-        }
-
-        return AggregateBindResults(std::move(*in4), std::move(*in6));
-    }
-
-    TBindResult in4 = BindOnPortProto(0, AF_INET, reusePort);
-    TBindResult in6 = BindOnPortProto(in4.Addr.GetPort(), AF_INET6, reusePort);
-    return AggregateBindResults(std::move(in4), std::move(in6));
+std::pair<unsigned, TVector<TBindResult>> NBus::BindOnLoopbackPort(int port, bool reusePort) {
+    return DoBindOnPort(port, reusePort, /* loopback = */ true);
 }
 
 void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {

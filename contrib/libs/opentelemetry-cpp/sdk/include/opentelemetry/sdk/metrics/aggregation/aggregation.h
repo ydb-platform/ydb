@@ -48,6 +48,13 @@ public:
 
   virtual PointType ToPoint() const noexcept = 0;
 
+  Aggregation() = default;
+
+  Aggregation(const Aggregation &)            = delete;
+  Aggregation(Aggregation &&)                 = delete;
+  Aggregation &operator=(const Aggregation &) = delete;
+  Aggregation &operator=(Aggregation &&)      = delete;
+
   virtual ~Aggregation() = default;
 };
 

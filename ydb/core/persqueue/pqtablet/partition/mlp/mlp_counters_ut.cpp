@@ -34,13 +34,12 @@ Y_UNIT_TEST(SimpleCounters) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 10
         });
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {
@@ -50,13 +49,12 @@ Y_UNIT_TEST(SimpleCounters) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 10
         });
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {

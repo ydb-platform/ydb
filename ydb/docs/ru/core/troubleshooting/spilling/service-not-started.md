@@ -16,6 +16,6 @@
 
 {% note info %}
 
-Подробнее об архитектуре спиллинга см. в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../../concepts/spilling.md#architecture).
+Подробнее об архитектуре спиллинга см. в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../../concepts/query_execution/spilling.md#architecture).
 
 {% endnote %}

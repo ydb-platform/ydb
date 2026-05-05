@@ -46,9 +46,9 @@ private:
     // Explicitly non-copyable and non-movable.
     // Particularly important in this test to ensure that no copies are made.
     TObject(const TObject&);
-    TObject(TObject&&);
+    TObject(TObject&&) noexcept;
     TObject& operator=(const TObject&);
-    TObject& operator=(TObject&&);
+    TObject& operator=(TObject&&) noexcept;
 };
 
 // A simple mock which also mocks Ref()/Unref() hence mocking reference counting
@@ -66,9 +66,9 @@ private:
     // Explicitly non-copyable and non-movable.
     // Particularly important in this test to ensure that no copies are made.
     TObjectWithRC(const TObjectWithRC&);
-    TObjectWithRC(TObjectWithRC&&);
+    TObjectWithRC(TObjectWithRC&&) noexcept;
     TObjectWithRC& operator=(const TObjectWithRC&);
-    TObjectWithRC& operator=(TObjectWithRC&&);
+    TObjectWithRC& operator=(TObjectWithRC&&) noexcept;
 };
 
 void Ref(TObjectWithRC* obj)
@@ -301,9 +301,9 @@ private:
     // Explicitly non-copyable and non-movable.
     // Thus we prevent BIND() from taking copy of the target (i. e. this fixture).
     TBindTest(const TBindTest&);
-    TBindTest(TBindTest&&);
+    TBindTest(TBindTest&&) noexcept;
     TBindTest& operator=(const TBindTest&);
-    TBindTest& operator=(TBindTest&&);
+    TBindTest& operator=(TBindTest&&) noexcept;
 };
 
 StrictMock<TObject>* TBindTest::StaticObjectPtr = 0;
@@ -1148,7 +1148,7 @@ TEST_F(TBindTest, MoveOnlyLambdaSupport)
 
         TMoveOnly(const TMoveOnly&) = delete;
 
-        TMoveOnly(TMoveOnly&& rhs)
+        TMoveOnly(TMoveOnly&& rhs) noexcept
             : Value_(rhs.Value_)
         {
             rhs.Value_ = 0;

@@ -82,7 +82,7 @@ public:
             BranchInst::Create(loop, block);
             block = loop;
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(Type::getInt32Ty(context), list, ctx.Codegen, block, itemPtr);
+            const auto status = CallBoxedValueFetch(list, ctx, block, itemPtr);
 
             const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block);
 
@@ -106,7 +106,7 @@ public:
             BranchInst::Create(loop, block);
             block = loop;
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, itemPtr);
+            const auto status = CallBoxedValueNext(iter, ctx, block, itemPtr);
             const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
 
             BranchInst::Create(done, good, icmp, block);

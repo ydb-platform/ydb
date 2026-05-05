@@ -178,15 +178,16 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
         Transformers_.push_back(TTransformStage(
             CreateChoiceGraphTransformer(
                 [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
-                    return typesCtx.EnableLineage;
+                    return typesCtx.LineageSettings.EnableLineage;
                 },
                 TTransformStage(
                     CreateSinglePassFunctorTransformer(
                         [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                             output = input;
-                            TString calculatedLineage, loadedLineage;
+                            TString calculatedLineage;
+                            TString loadedLineage;
                             if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
-                                auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, LineageResultLabel}).GetValueSync();
+                                auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = LineageResultLabel}).GetValueSync();
                                 if (loaded.Defined()) {
                                     loadedLineage = loaded->Value;
                                 } else {
@@ -197,8 +198,11 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                             std::exception_ptr lineageError;
                             typeCtx->LineageStats.Correct = true;
                             try {
-                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
+                                TLineageRunOptions lineageOptions;
+                                lineageOptions.Version = typeCtx->LineageSettings.LineageVersion;
+                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
                                 typeCtx->LineageStats.Size = calculatedLineage.size();
+                                typeCtx->LineageStats.Version = typeCtx->LineageSettings.LineageVersion;
                             } catch (const std::exception& e) {
                                 YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                                 typeCtx->LineageStats.Correct = false;
@@ -219,7 +223,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                             }
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->LineageStats.Correct) {
-                                typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
+                                typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageResultLabel}, calculatedLineage).GetValueSync();
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
                             }
                             return IGraphTransformer::TStatus::Ok;
@@ -304,9 +308,30 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
                 try {
-                    lineageOut = CalculateLineage(*input, *typeCtx, ctx, true);
+                    TLineageRunOptions lineageOptions;
+                    lineageOptions.Standalone = true;
+                    lineageOptions.Version = typeCtx->LineageSettings.LineageStandaloneVersion;
+                    if (const auto attrs = typeCtx->OperationOptions.AttrsYson) {
+                        const auto paramData = NYT::NodeFromYsonString(*attrs);
+                        if (const auto param = paramData.AsMap().FindPtr("lineage_version")) {
+                            if (TryFromString(param->AsString(), lineageOptions.Version)) {
+                                YQL_LOG(INFO) << "LineageVersion is provided in attributes: " << lineageOptions.Version;
+                            } else {
+                                YQL_LOG(ERROR) << "LineageVersion from attributes is incorrect: " << param->AsString();
+                            }
+                        }
+                        if (const auto param = paramData.AsMap().FindPtr("lineage_yson_type")) {
+                            if (TryFromString(param->AsString(), lineageOptions.YsonTypeFormat)) {
+                                YQL_LOG(INFO) << "LineageYsonType is provided in attributes: " << lineageOptions.YsonTypeFormat;
+                            } else {
+                                YQL_LOG(ERROR) << "LineageYsonType from attributes is incorrect: " << param->AsString();
+                            }
+                        }
+                    }
+                    lineageOut = CalculateLineage(*input, *typeCtx, ctx, lineageOptions);
                     typeCtx->LineageStats.Size = lineageOut->size();
                     typeCtx->LineageStats.CorrectStandalone = true;
+                    typeCtx->LineageStats.Version = lineageOptions.Version;
                 } catch (const std::exception& e) {
                     YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                     typeCtx->LineageStats.CorrectStandalone = false;
@@ -319,7 +344,7 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                     lineageOut = s.Str();
                 }
                 if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
-                    auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, StandaloneLineageLabel}).GetValueSync();
+                    auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();
                     if (loaded.Defined()) {
                         try {
                             CheckEquvalentLineages(*lineageOut, loaded->Value);
@@ -331,12 +356,12 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                         }
                     }
                 }
-                if (typeCtx->EnableStandaloneLineage) {
+                if (typeCtx->LineageSettings.EnableStandaloneLineage) {
                     if (typeCtx->QContext && typeCtx->QContext.CanWrite()) {
                         try {
                             // need to check correctness of lineage output before saving, e.g. if column-wise lineage section is empty
                             ValidateLineage(*lineageOut);
-                            typeCtx->QContext.GetWriter()->Put({LineageComponent, StandaloneLineageLabel}, *lineageOut).GetValueSync();
+                            typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = StandaloneLineageLabel}, *lineageOut).GetValueSync();
                             YQL_LOG(INFO) << "Standalone Lineage is saved to QStorage";
                         } catch (const std::exception& e) {
                             typeCtx->LineageStats.CorrectStandalone = false;

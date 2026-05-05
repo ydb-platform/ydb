@@ -5,8 +5,8 @@
 using namespace NYql::NMatchRecognize;
 
 Y_UNIT_TEST_SUITE(MatchRecognizePattern) {
-auto factorVar = [](const TString& v) { return TRowPatternFactor{v, 0, 0, false, false, false}; };
-auto factorExpr = [](const TRowPattern& p) { return TRowPatternFactor{p, 0, 0, false, false, false}; };
+auto factorVar = [](const TString& v) { return TRowPatternFactor{.Primary = v, .QuantityMin = 0, .QuantityMax = 0, .Greedy = false, .Output = false, .Unused = false}; };
+auto factorExpr = [](const TRowPattern& p) { return TRowPatternFactor{.Primary = p, .QuantityMin = 0, .QuantityMax = 0, .Greedy = false, .Output = false, .Unused = false}; };
 auto expected = [](std::initializer_list<TString> list) { return THashSet<TString>(list); };
 Y_UNIT_TEST(SingleVarPattern) {
     const TRowPattern pattern = {{factorVar("A")}};

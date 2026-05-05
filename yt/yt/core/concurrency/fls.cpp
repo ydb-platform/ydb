@@ -17,7 +17,7 @@ namespace NDetail {
 constexpr int MaxFlsSize = 256;
 std::atomic<int> FlsSize;
 
-NThreading::TForkAwareSpinLock FlsLock;
+YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, FlsLock);
 std::array<TFlsSlotDtor, MaxFlsSize> FlsDtors;
 
 YT_DEFINE_THREAD_LOCAL(TFls*, PerThreadFls);
@@ -67,7 +67,7 @@ TFls::~TFls()
 
 void TFls::Set(int index, TCookie cookie)
 {
-    if (Y_UNLIKELY(index >= std::ssize(Slots_))) {
+    if (index >= std::ssize(Slots_)) [[unlikely]] {
         int newSize = NDetail::FlsSize.load();
         YT_VERIFY(index < newSize);
         Slots_.resize(newSize);
@@ -85,4 +85,3 @@ TFls* SwapCurrentFls(TFls* newFls)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

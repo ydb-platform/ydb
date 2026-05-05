@@ -22,6 +22,7 @@ namespace NKikimr::NTestShard {
             const ui32 Len = 0;
             ::NTestShard::TStateServer::EEntityState ConfirmedState = ::NTestShard::TStateServer::ABSENT;
             ::NTestShard::TStateServer::EEntityState PendingState = ::NTestShard::TStateServer::ABSENT;
+            bool IsInline = false;
             std::unique_ptr<TEvKeyValue::TEvRequest> Request;
             NWilson::TTraceId TraceId;
             size_t ConfirmedKeyIndex = Max<size_t>();
@@ -32,6 +33,10 @@ namespace NKikimr::NTestShard {
 
             ~TKeyInfo() {
                 Y_ABORT_UNLESS(ConfirmedKeyIndex == Max<size_t>());
+            }
+
+            bool IsPatchable() const {
+                return !IsInline && Len > 0;
             }
         };
 
@@ -86,6 +91,35 @@ namespace NKikimr::NTestShard {
         ui64 BytesProcessed = 0;
         ui32 StallCounter = 0;
         ui64 LastCookie = 0;
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Operation counters for success rate tracking
+
+        struct TOperationCounters {
+            ui64 OkCount = 0;
+            ui64 FailCount = 0;
+
+            void RecordOk(ui64 count = 1) { OkCount += count; }
+            void RecordFail(ui64 count = 1) { FailCount += count; }
+
+            ui64 GetTotalCount() const { return OkCount + FailCount; }
+
+            double GetSuccessRate() const {
+                const ui64 total = GetTotalCount();
+                return total > 0 ? static_cast<double>(OkCount) / total : 1.0;
+            }
+
+            TOperationCounters& operator+=(const TOperationCounters& other) {
+                OkCount += other.OkCount;
+                FailCount += other.FailCount;
+                return *this;
+            }
+        };
+
+        TOperationCounters WriteCounters;
+        TOperationCounters PatchCounters;
+        TOperationCounters DeleteCounters;
+        TOperationCounters ReadCounters;
 
         std::unique_ptr<TEvKeyValue::TEvRequest> CreateRequest();
         void Handle(TEvKeyValue::TEvResponse::TPtr ev);
@@ -143,7 +177,7 @@ namespace NKikimr::NTestShard {
 
         void GenerateKeyValue(TString *key, TString *value, bool *isInline);
         void IssueWrite();
-        void IssuePatch();
+        bool IssuePatch();
         void ProcessWriteResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TWriteResult>& results);
         void ProcessPatchResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TPatchResult>& results);
         void TrimBytesWritten(TInstant now);

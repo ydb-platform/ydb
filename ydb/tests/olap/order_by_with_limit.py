@@ -38,6 +38,11 @@ class TestOrderBy(object):
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def write_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
@@ -295,6 +300,30 @@ class TestOrderBy(object):
 
         assert len(result_sets[0].rows) == 4
 
+    def check_order(self, order, size):
+        assert len(order) == size
+
+        assert order[0] == 6
+
+        expected_groups = [{0, 1}, {2, 3}, {4, 5}]
+
+        current_idx = 1
+        for valid_set in expected_groups:
+
+            chunk = order[current_idx : current_idx + 2]
+
+            if not chunk:
+                break
+
+            assert set(chunk).issubset(valid_set)
+
+            assert len(chunk) == len(set(chunk))
+
+            if size >= current_idx + 2:
+                assert set(chunk) == valid_set
+
+            current_idx += 2
+
     def test_corner(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/test_corner"
@@ -360,7 +389,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        assert order == [6]
+        self.check_order(order, 1)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -369,7 +398,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        assert order == [6, 1]
+        self.check_order(order, 2)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -378,7 +407,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        assert order == [6, 1, 0]
+        self.check_order(order, 3)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -387,9 +416,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        # should be
-        # assert order == [6, 1, 0, 2]
-        assert order == [6, 1, 0, 3]
+        self.check_order(order, 4)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -398,9 +425,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        # should be
-        # assert order == [6, 1, 0, 2, 3]
-        assert order == [6, 1, 0, 3, 2]
+        self.check_order(order, 5)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -409,9 +434,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        # should be
-        # assert order == [6, 1, 0, 2, 3, 4]
-        assert order == [6, 1, 0, 3, 2, 5]
+        self.check_order(order, 6)
 
         result_sets = self.ydb_client.query(
             f"""
@@ -420,9 +443,7 @@ class TestOrderBy(object):
             """
         )
         order = list(map(lambda x: x["order"], result_sets[0].rows))
-        # should be
-        # assert order == [6, 1, 0, 2, 3, 4, 5]
-        assert order == [6, 1, 0, 3, 2, 5, 4]
+        self.check_order(order, 7)
 
     def test_reproduce_with_prefix(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"

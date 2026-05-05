@@ -15,13 +15,7 @@ IF (NOT OS_WINDOWS)
         ut_helpers.cpp
     )
 
-    IF (WITH_VALGRIND)
-        SIZE(LARGE)
-        TAG(ya:fat)
-        SPLIT_FACTOR(20)
-    ELSE()
-        SIZE(MEDIUM)
-    ENDIF()
+    SIZE(MEDIUM)
 
     END()
 ENDIF()

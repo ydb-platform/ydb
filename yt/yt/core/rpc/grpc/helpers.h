@@ -38,10 +38,10 @@ class TGrpcObjectPtr
 public:
     TGrpcObjectPtr();
     explicit TGrpcObjectPtr(T* obj);
-    TGrpcObjectPtr(TGrpcObjectPtr&& other);
+    TGrpcObjectPtr(TGrpcObjectPtr&& other) noexcept;
     ~TGrpcObjectPtr();
 
-    TGrpcObjectPtr& operator=(TGrpcObjectPtr&& other);
+    TGrpcObjectPtr& operator=(TGrpcObjectPtr&& other) noexcept;
 
     TGrpcObjectPtr& operator=(const TGrpcObjectPtr&) = delete;
     TGrpcObjectPtr(const TGrpcObjectPtr& other) = delete;
@@ -83,8 +83,8 @@ public:
             : GuardedCompletionQueue_(guardedCompletionQueue)
         { }
 
-        TLockGuard(TLockGuard&& guard) = default;
-        TLockGuard& operator=(TLockGuard&& guard) = default;
+        TLockGuard(TLockGuard&& guard) noexcept = default;
+        TLockGuard& operator=(TLockGuard&& guard) noexcept = default;
 
         ~TLockGuard()
         {

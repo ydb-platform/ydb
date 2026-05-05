@@ -9,5 +9,5 @@ WITH(
     SCHEMA(
         ts Timestamp NOT NULL
     ),
-    WATERMARK AS (Unwrap(ts - DateTime::IntervalFromSeconds(5)))
+    WATERMARK = ts - DateTime::IntervalFromSeconds(5)
 );

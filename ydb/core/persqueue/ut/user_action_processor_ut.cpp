@@ -266,13 +266,13 @@ void TUserActionProcessorFixture::CreatePartitionActor(const TPartitionId& id,
         Config.AddReadRules(c.Consumer);
     }
 
-    Config.SetTopicName("rt3.dc1--account--topic");
-    Config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    Config.SetTopicName("topic");
+    Config.SetTopicPath("/Root/LbCommunal/account/topic");
     Config.SetFederationAccount("account");
     Config.SetLocalDC(true);
-    Config.SetYdbDatabasePath("");
+    Config.SetYdbDatabasePath("/Root/LbCommunal/account");
 
-    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
+    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/LbCommunal", "dc1");
 
     TopicConverter = factory.MakeTopicConverter(Config);
 
@@ -318,8 +318,8 @@ void TUserActionProcessorFixture::CreateSession(const TString& clientId,
                                                 ui32 generation, ui32 step,
                                                 ui64 cookie)
 {
-    SendCreateSession(cookie,clientId,sessionId, generation, step);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session = sessionId, .Offset = 0}}}});
+    SendCreateSession(cookie, clientId, sessionId, generation, step);
+    WaitCmdWrite({.Count = 2, .UserInfos = {{0, {.Session = sessionId, .Offset = 0}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = cookie});
 }
@@ -331,7 +331,7 @@ void TUserActionProcessorFixture::SetOffset(const TString& clientId,
                                             ui64 cookie)
 {
     SendSetOffset(cookie, clientId, offset, sessionId);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session = sessionId, .Offset = (expected ? *expected : offset)}}}});
+    WaitCmdWrite({.Count = 2, .UserInfos = {{0, {.Session = sessionId, .Offset = (expected ? *expected : offset)}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = cookie});
 }
@@ -369,8 +369,7 @@ void TUserActionProcessorFixture::SendSetOffset(ui64 cookie,
 void TUserActionProcessorFixture::SendGetOffset(ui64 cookie,
                                                 const TString& clientId)
 {
-    auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
-                                                       clientId);
+    auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie, clientId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -481,7 +480,10 @@ void TUserActionProcessorFixture::WaitProxyResponse(const TProxyResponseMatcher&
     if (matcher.Offset) {
         UNIT_ASSERT(event->Response.HasPartitionResponse());
         UNIT_ASSERT(event->Response.GetPartitionResponse().HasCmdGetClientOffsetResult());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Offset, event->Response.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset());
+        UNIT_ASSERT_VALUES_EQUAL(
+            *matcher.Offset,
+            event->Response.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset()
+        );
     }
 }
 
@@ -634,7 +636,6 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     NPQ::TKey key(NPQ::TKeyPrefix::TypeData, 1, begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.Data(), key.Size());
-    //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -701,9 +702,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTr
         Pipe = Ctx->Runtime->ConnectToPipe(Ctx->TabletId, Ctx->Edge, 0, GetPipeConfigWithRetries());
     }
 
-    Ctx->Runtime->SendToPipe(Pipe,
-                             Ctx->Edge,
-                             event.Release());
+    Ctx->Runtime->SendToPipe(Pipe, Ctx->Edge, event.Release());
 }
 
 void TUserActionProcessorFixture::WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher)
@@ -823,18 +822,18 @@ Y_UNIT_TEST_F(Batching, TUserActionProcessorFixture)
 
     SendCreateSession(4, "client-1", "session-id-1", 2, 3);
 
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session = "session-id-1", .Offset=0, .Generation=2, .Step=3}}}});
+    WaitCmdWrite({.Count = 2, .UserInfos = {{0, {.Session = "session-id-1", .Offset = 0, .Generation = 2, .Step = 3}}}});
 
     SendCreateSession(5, "client-2", "session-id-2", 4, 5);
     SendCreateSession(6, "client-3", "session-id-3", 6, 7);
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitProxyResponse({.Cookie=4});
+    WaitProxyResponse({.Cookie = 4});
 
-    WaitCmdWrite({.Count=4, .UserInfos={
-                 {0, {.Session = "session-id-2", .Offset=0, .Generation=4, .Step=5}},
-                 {2, {.Session = "session-id-3", .Offset=0, .Generation=6, .Step=7}}
+    WaitCmdWrite({.Count = 4, .UserInfos = {
+                 {0, {.Session = "session-id-2", .Offset = 0, .Generation = 4, .Step = 5}},
+                 {2, {.Session = "session-id-3", .Offset = 0, .Generation = 6, .Step = 7}}
                  }});
 
     SendSetOffset(7, "client-1", 0, "session-id-1");
@@ -845,20 +844,20 @@ Y_UNIT_TEST_F(Batching, TUserActionProcessorFixture)
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitProxyResponse({.Cookie=5});
-    WaitProxyResponse({.Cookie=6});
+    WaitProxyResponse({.Cookie = 5});
+    WaitProxyResponse({.Cookie = 6});
 
-    WaitCmdWrite({.Count=2, .UserInfos={
-                 {0, {.Session = "session-id-2", .Offset=0, .Generation=8, .Step=9}},
+    WaitCmdWrite({.Count = 2, .UserInfos = {
+                 {0, {.Session = "session-id-2", .Offset = 0, .Generation = 8, .Step = 9}},
                  }});
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitProxyResponse({.Cookie=7, .Status=NMsgBusProxy::MSTATUS_OK});
-    WaitProxyResponse({.Cookie=8, .Status=NMsgBusProxy::MSTATUS_OK});
-    WaitErrorResponse({.Cookie=9, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
-    WaitProxyResponse({.Cookie=10, .Status=NMsgBusProxy::MSTATUS_OK});
-    WaitErrorResponse({.Cookie=11, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
+    WaitProxyResponse({.Cookie = 7, .Status = NMsgBusProxy::MSTATUS_OK});
+    WaitProxyResponse({.Cookie = 8, .Status = NMsgBusProxy::MSTATUS_OK});
+    WaitErrorResponse({.Cookie = 9, .ErrorCode = NPersQueue::NErrorCode::WRONG_COOKIE});
+    WaitProxyResponse({.Cookie = 10, .Status = NMsgBusProxy::MSTATUS_OK});
+    WaitErrorResponse({.Cookie = 11, .ErrorCode = NPersQueue::NErrorCode::WRONG_COOKIE});
 }
 
 Y_UNIT_TEST_F(SetOffset, TUserActionProcessorFixture)
@@ -869,7 +868,7 @@ Y_UNIT_TEST_F(SetOffset, TUserActionProcessorFixture)
     const TString client = "client";
     const TString session = "session";
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end});
 
     //
     // create session
@@ -929,7 +928,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TUserActionProcessorFixture)
     CreateSession(client, session);
 
     SendProposeTransactionRequest(partition,
-                                  0, 2,  // 0 --> 2
+                                  0, 2,
                                   client,
                                   "topic-path",
                                   true,
@@ -937,50 +936,50 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TUserActionProcessorFixture)
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="", .Offset=2}}}});
 
     SendProposeTransactionRequest(partition,
-                                  2, 0,          // begin > end
+                                  2, 0,
                                   client,
                                   "topic-path",
                                   true,
                                   2);
     SendProposeTransactionRequest(partition,
-                                  4, 6,          // begin > client.end
+                                  4, 6,
                                   client,
                                   "topic-path",
                                   true,
                                   3);
     SendProposeTransactionRequest(partition,
-                                  1, 4,          // begin < client.end
+                                  1, 4,
                                   client,
                                   "topic-path",
                                   true,
                                   4);
     SendProposeTransactionRequest(partition,
-                                  2, 4,          // begin == client.end
+                                  2, 4,
                                   client,
                                   "topic-path",
                                   true,
                                   5);
     SendProposeTransactionRequest(partition,
-                                  4, 13,         // end > partition.end
+                                  4, 13,
                                   client,
                                   "topic-path",
                                   true,
                                   6);
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId = 1, .Status = NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="", .Offset=4}}}});
+    WaitCmdWrite({.Count = 2, .UserInfos = {{0, {.Session = "", .Offset = 4}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitProposeTransactionResponse({.TxId=2, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
-    WaitProposeTransactionResponse({.TxId=3, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-    WaitProposeTransactionResponse({.TxId=4, .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
-    WaitProposeTransactionResponse({.TxId=5, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitProposeTransactionResponse({.TxId=6, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
+    WaitProposeTransactionResponse({.TxId = 2, .Status = NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
+    WaitProposeTransactionResponse({.TxId = 3, .Status = NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+    WaitProposeTransactionResponse({.TxId = 4, .Status = NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+    WaitProposeTransactionResponse({.TxId = 5, .Status = NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId = 6, .Status = NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
 
     SendGetOffset(6, client);
-    WaitProxyResponse({.Cookie=6, .Offset=4});
+    WaitProxyResponse({.Cookie = 6, .Offset = 4});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Commit, TUserActionProcessorFixture)
@@ -994,18 +993,18 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TUserActionProcessorFixture)
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    CreatePartition({.Partition=partition, .Begin = begin, .End = end, .PlanStep = step, .TxId = 10000});
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId = txId, .Partition = partition, .Predicate = true});
 
     SendCommitTx(step, txId);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session="", .Offset=2}}}});
+    WaitCmdWrite({.Count=3, .PlanStep = step, .TxId = txId, .UserInfos = {{1, {.Session = "", .Offset = 2}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCommitTxDone({.TxId=txId, .Partition=partition});
+    WaitCommitTxDone({.TxId=txId, .Partition = partition});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TUserActionProcessorFixture)
@@ -1021,27 +1020,27 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TUserActionProcessorFixture)
     const ui64 txId_2 = 67891;
     const ui64 txId_3 = 67892;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end, .PlanStep = step, .TxId = 10000});
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId_1, client, 0, 1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_1, .Partition = partition, .Predicate = true});
 
     SendCalcPredicate(step, txId_2, client, 0, 2);
     SendCalcPredicate(step, txId_3, client, 0, 2);
 
     SendCommitTx(step, txId_1);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_2, .Partition = partition, .Predicate = false});
     SendRollbackTx(step, txId_2);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_3, .Partition = partition, .Predicate = false});
     SendRollbackTx(step, txId_3);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session="", .Offset=1}}}});
+    WaitCmdWrite({.Count = 3, .PlanStep = step, .TxId = txId_3, .UserInfos = {{1, {.Session = "", .Offset = 1}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCommitTxDone({.TxId=txId_1, .Partition=partition});
+    WaitCommitTxDone({.TxId = txId_1, .Partition = partition});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TUserActionProcessorFixture)
@@ -1053,7 +1052,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TUserActionProcessorFixture)
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end});
     CreateSession("client-1", "session-1");
     CreateSession("client-2", "session-2");
 
@@ -1061,17 +1060,17 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TUserActionProcessorFixture)
     SendCalcPredicate(step, txId, "client-2", 0, 1);
     SendSetOffset(2, "client-1", 6, "session-1");
 
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-1", .Offset=3}}}});
+    WaitCmdWrite({.Count = 2, .UserInfos = {{0, {.Session = "session-1", .Offset = 3}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK});
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId, .Partition = partition, .Predicate = true});
     SendCommitTx(step, txId);
 
-    WaitCmdWrite({.Count=5, .UserInfos={
-                 {1, {.Session="", .Offset=1}},
-                 {3, {.Session="session-1", .Offset=6}}
+    WaitCmdWrite({.Count = 5, .UserInfos = {
+                 {1, {.Session = "", .Offset = 1}},
+                 {3, {.Session = "session-1", .Offset = 6}}
                  }});
 }
 
@@ -1084,10 +1083,10 @@ Y_UNIT_TEST_F(OldPlanStep, TUserActionProcessorFixture)
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end, .PlanStep = 99999, .TxId = 55555});
 
     SendCommitTx(step, txId);
-    WaitCommitTxDone({.TxId=txId, .Partition=partition});
+    WaitCommitTxDone({.TxId = txId, .Partition = partition});
 }
 
 Y_UNIT_TEST_F(AfterRestart_1, TUserActionProcessorFixture)
@@ -1104,19 +1103,19 @@ Y_UNIT_TEST_F(AfterRestart_1, TUserActionProcessorFixture)
     txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2, true));
     txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
 
-    CreatePartition({.Partition=partition,
-                    .Begin=begin,
-                    .End=end,
-                    .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs)},
-                    {{.Consumer=consumer, .Offset=0, .Session=session}});
+    CreatePartition({.Partition = partition,
+                     .Begin = begin,
+                     .End = end,
+                     .PlanStep = step, .TxId = 10000,
+                     .Transactions = std::move(txs)},
+                    {{.Consumer = consumer, .Offset = 0, .Session = session}});
 
     SendCommitTx(step, 11111);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=22222, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = 22222, .Partition = partition, .Predicate = true});
     SendCommitTx(step, 22222);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session="", .Offset=4}}}});
+    WaitCmdWrite({.Count = 3, .PlanStep = step, .TxId = 22222, .UserInfos = {{1, {.Session = "", .Offset = 4}}}});
 }
 
 Y_UNIT_TEST_F(AfterRestart_2, TUserActionProcessorFixture)
@@ -1133,14 +1132,14 @@ Y_UNIT_TEST_F(AfterRestart_2, TUserActionProcessorFixture)
     txs.push_back(MakeTransaction(step, 11111, consumer, 0, 2));
     txs.push_back(MakeTransaction(step, 22222, consumer, 2, 4));
 
-    CreatePartition({.Partition=partition,
-                    .Begin=begin,
-                    .End=end,
-                    .PlanStep=step, .TxId=10000,
-                    .Transactions=std::move(txs)},
-                    {{.Consumer=consumer, .Offset=0, .Session=session}});
+    CreatePartition({.Partition = partition,
+                     .Begin = begin,
+                     .End = end,
+                     .PlanStep = step, .TxId = 10000,
+                     .Transactions = std::move(txs)},
+                    {{.Consumer = consumer, .Offset = 0, .Session = session}});
 
-    WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = 11111, .Partition = partition, .Predicate = true});
 }
 
 Y_UNIT_TEST_F(IncorrectRange, TUserActionProcessorFixture)
@@ -1154,29 +1153,29 @@ Y_UNIT_TEST_F(IncorrectRange, TUserActionProcessorFixture)
     const ui64 step = 12345;
     ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end});
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId, client, 4, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId, .Partition = partition, .Predicate = false});
     SendRollbackTx(step, txId);
 
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
+    WaitCmdWrite({.Count = 1, .PlanStep = step, .TxId = txId});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     ++txId;
 
     SendCalcPredicate(step, txId, client, 2, 4);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId, .Partition = partition, .Predicate = false});
     SendRollbackTx(step, txId);
 
-    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
+    WaitCmdWrite({.Count = 1, .PlanStep = step, .TxId = txId});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     ++txId;
 
     SendCalcPredicate(step, txId, client, 0, 11);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId, .Partition = partition, .Predicate = false});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Rollback, TUserActionProcessorFixture)
@@ -1191,16 +1190,16 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TUserActionProcessorFixture)
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end});
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId_1, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_1, .Partition = partition, .Predicate = true});
 
     SendCalcPredicate(step, txId_2, client, 0, 5);
     SendRollbackTx(step, txId_1);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_2, .Partition = partition, .Predicate = true});
 }
 
 Y_UNIT_TEST_F(ChangeConfig, TUserActionProcessorFixture)
@@ -1215,86 +1214,86 @@ Y_UNIT_TEST_F(ChangeConfig, TUserActionProcessorFixture)
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end}, {
-                    {.Consumer="client-1", .Offset=0, .Session="session-1"},
-                    {.Consumer="client-2", .Offset=0, .Session="session-2"},
-                    {.Consumer="client-3", .Offset=0, .Session="session-3"}
+    CreatePartition({.Partition = partition, .Begin = begin, .End = end}, {
+                    {.Consumer = "client-1", .Offset = 0, .Session = "session-1"},
+                    {.Consumer = "client-2", .Offset = 0, .Session = "session-2"},
+                    {.Consumer = "client-3", .Offset = 0, .Session = "session-3"}
                     });
 
     SendCalcPredicate(step, txId_1, "client-1", 0, 2);
-    SendChangePartitionConfig({{.Consumer="client-1", .Generation=0},
-                              { .Consumer="client-3", .Generation=7}});
+    SendChangePartitionConfig({{.Consumer = "client-1", .Generation = 0},
+                               {.Consumer = "client-3", .Generation = 7}});
     //
     // consumer 'client-2' will be deleted
     //
     SendCalcPredicate(step, txId_2, "client-2", 0, 2);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_1, .Partition = partition, .Predicate = true});
     SendCommitTx(step, txId_1);
 
     //
     // consumer 'client-2' was deleted
     //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step = step, .TxId = txId_2, .Partition = partition, .Predicate = false});
     SendRollbackTx(step, txId_2);
 
-    WaitCmdWrite({.Count=7,
-                 .PlanStep=step, .TxId=txId_2,
-                 .UserInfos={
-                 {1, {.Consumer="client-1", .Session="", .Offset=2}},
-                 {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
-                 },
-                 .DeleteRanges={
-                 {0, {.Consumer="client-2"}}
-                 }});
+    WaitCmdWrite({.Count = 7,
+                  .PlanStep = step, .TxId = txId_2,
+                  .UserInfos = {
+                  {1, {.Consumer = "client-1", .Session = "", .Offset = 2}},
+                  {3, {.Consumer = "client-3", .Session = "", .Offset = 0, .ReadRuleGeneration = 7}}
+                  },
+                  .DeleteRanges = {
+                  {0, {.Consumer = "client-2"}}
+                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitPartitionConfigChanged({.Partition=partition});
+    WaitPartitionConfigChanged({.Partition = partition});
 }
 
 Y_UNIT_TEST_F(EvProposeTransaction, TUserActionProcessorFixture)
 {
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
 
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
     const ui64 txId_3 = 67892;
     const ui64 tablet2 = 22222;
 
-    SendProposeTransactionRequest({.TxId=txId_1,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    SendProposeTransactionRequest({.TxId=txId_2,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    SendProposeTransactionRequest({.TxId=txId_3,
-                                  .Senders={tablet2}, .Receivers={tablet2},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  {.Partition=0, .Consumer="consumer", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
+    SendProposeTransactionRequest({.TxId = txId_1,
+                                   .Senders = {tablet2}, .Receivers = {tablet2},
+                                   .TxOps = {
+                                   {.Partition = 0, .Consumer = "user", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   {.Partition = 0, .Consumer = "consumer", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   }});
+    SendProposeTransactionRequest({.TxId = txId_2,
+                                   .Senders = {tablet2}, .Receivers = {tablet2},
+                                   .TxOps = {
+                                   {.Partition = 0, .Consumer = "user", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   {.Partition = 0, .Consumer = "consumer", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   }});
+    SendProposeTransactionRequest({.TxId = txId_3,
+                                   .Senders = {tablet2}, .Receivers = {tablet2},
+                                   .TxOps = {
+                                   {.Partition = 0, .Consumer = "user", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   {.Partition = 0, .Consumer = "consumer", .Begin = 0, .End = 0, .Path = "/topic"},
+                                   }});
 
     //
     // TODO(abcdef): проверить, что в команде CmdWrite есть информация только о txId_1
     //
 
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitProposeTransactionResponse({.TxId = txId_1,
+                                    .Status = NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 
     //
     // TODO(abcdef): проверить, что в команде CmdWrite есть информация о txId_2 и txId_3
     //
 
-    WaitProposeTransactionResponse({.TxId=txId_2,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    WaitProposeTransactionResponse({.TxId=txId_3,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitProposeTransactionResponse({.TxId = txId_2,
+                                    .Status = NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitProposeTransactionResponse({.TxId = txId_3,
+                                    .Status = NKikimrPQ::TEvProposeTransactionResult::PREPARED});
 }
 
 #if 0

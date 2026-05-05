@@ -1,41 +1,42 @@
-#include <util/generic/string.h>
-#include <util/random/random.h>
-#include <util/string/builder.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/library/actors/http/http.h>
-#include "openid_connect.h"
-#include "oidc_settings.h"
 #include "context.h"
+#include "oidc_settings.h"
+#include "openid_connect.h"
+
+#include <ydb/library/actors/http/http.h>
+
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/generic/string.h>
+#include <util/string/builder.h>
 
 namespace NMVP::NOIDC {
 
 TContext::TContext(const TInitializer& initializer)
     : State(initializer.State)
-    , AjaxRequest(initializer.AjaxRequest)
+    , NavigationRequest(initializer.NavigationRequest)
     , RequestedAddress(initializer.RequestedAddress)
 {}
 
 TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
-    : State(GenerateState())
-    , AjaxRequest(DetectAjaxRequest(request))
-    , RequestedAddress(GetRequestedUrl(request, AjaxRequest))
+    : State(GenerateRandomBase64())
+    , NavigationRequest(IsPageNavigationRequest(request))
+    , RequestedAddress(GetRequestedUrl(request, NavigationRequest))
 {}
 
 TString TContext::GetState(const TString& key) const {
     static const TDuration STATE_LIFE_TIME = TDuration::Minutes(10);
-    TInstant expirationTime = TInstant::Now() + STATE_LIFE_TIME;
-    TStringBuilder json;
-    json << "{\"state\":\"" << State
-         << "\",\"expiration_time\":\"" << ToString(expirationTime.TimeT()) << "\"}";
-    TString digest = HmacSHA1(key, json);
-    TStringBuilder signedState;
-    signedState << "{\"container\":\"" << Base64Encode(json) << "\","
-                  "\"digest\":\"" << Base64Encode(digest) << "\"}";
-    return Base64EncodeNoPadding(signedState);
+    TState payload;
+    payload.AntiForgeryToken = State;
+    payload.ExpirationTime = TInstant::Now() + STATE_LIFE_TIME;
+    if (!NavigationRequest) {
+        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
+    }
+    return EncodeState(payload, key);
 }
 
-bool TContext::IsAjaxRequest() const {
-    return AjaxRequest;
+bool TContext::IsNavigationRequest() const {
+    return NavigationRequest;
 }
 
 TString TContext::GetRequestedAddress() const {
@@ -44,7 +45,7 @@ TString TContext::GetRequestedAddress() const {
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
     static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
-    return TStringBuilder() << TOpenIdConnectSettings::YDB_OIDC_COOKIE << "="
+    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
                             " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
@@ -52,42 +53,44 @@ TString TContext::CreateYdbOidcCookie(const TString& secret) const {
 }
 
 TString TContext::GenerateCookie(const TString& key) const {
-    TStringBuilder requestedAddressContext;
-    requestedAddressContext << "{\"requested_address\":\"" << RequestedAddress << "\"}";
+    NJson::TJsonValue json(NJson::JSON_MAP);
+    json["requested_address"] = RequestedAddress;
+    const TString requestedAddressContext = NJson::WriteJson(json, false);
+
     TString digest = HmacSHA256(key, requestedAddressContext);
-    TStringBuilder signedRequestedAddress;
-    signedRequestedAddress << "{\"requested_address_context\":\"" << Base64Encode(requestedAddressContext)
-                           << "\",\"digest\":\"" << Base64Encode(digest) << "\"}";
-    return Base64Encode(signedRequestedAddress);
+
+    NJson::TJsonValue root(NJson::JSON_MAP);
+    root["requested_address_context"] = Base64Encode(requestedAddressContext);
+    root["digest"] = Base64Encode(digest);
+    return Base64Encode(NJson::WriteJson(root, false));
 }
 
-TString TContext::GenerateState() {
-    TStringBuilder sb;
-    static constexpr size_t CHAR_NUMBER = 15;
-    for (size_t i{0}; i < CHAR_NUMBER; i++) {
-        sb << RandomNumber<char>();
-    }
-    return Base64EncodeUrlNoPadding(sb);
-}
-
-bool TContext::DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request) {
-    static const THashMap<TStringBuf, TStringBuf> expectedHeaders {
-        {"Accept", "application/json"}
-    };
+bool TContext::IsPageNavigationRequest(const NHttp::THttpIncomingRequestPtr& request) {
     NHttp::THeaders headers(request->Headers);
-    for (const auto& el : expectedHeaders) {
-        TStringBuf headerValue = headers.Get(el.first);
-        if (!headerValue || headerValue.find(el.second) == TStringBuf::npos) {
-            return false;
-        }
+
+    const TStringBuf mode = headers.Get("Sec-Fetch-Mode");
+    const TStringBuf dest = headers.Get("Sec-Fetch-Dest");
+    const bool hasFetchMetadata = mode && dest;
+    if (hasFetchMetadata) {
+        return mode == "navigate" && dest == "document";
     }
+
+    if (headers.Get("X-Requested-With") == "XMLHttpRequest") {
+        return false;
+    }
+
+    const TStringBuf accept = headers.Get("Accept");
+    if (accept && accept.find("application/json") != TStringBuf::npos) {
+        return false;
+    }
+
     return true;
 }
 
-TStringBuf TContext::GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest) {
+TStringBuf TContext::GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isNavigationRequest) {
     NHttp::THeaders headers(request->Headers);
     TStringBuf requestedUrl = headers.Get("Referer");
-    if (!isAjaxRequest || requestedUrl.empty()) {
+    if (isNavigationRequest || requestedUrl.empty()) {
         return request->URL;
     }
     return requestedUrl;

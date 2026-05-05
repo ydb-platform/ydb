@@ -7,6 +7,18 @@
 
 #include <variant>
 
+#if defined(__x86_64__)
+#include <contrib/restricted/abseil-cpp-tstring/y_absl/crc/internal/non_temporal_memcpy.h>
+#endif
+
+Y_FORCE_INLINE void MemcpyNoCache(void* dst, const void* src, size_t len) {
+#if defined(__x86_64__)
+    y_absl::crc_internal::non_temporal_store_memcpy_avx(dst, src, len);
+#else
+    memcpy(dst, src, len);
+#endif
+}
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -42,11 +54,14 @@ namespace NActors {
         }
     }
 
-    void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
+    int TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
             std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
         Y_DEBUG_ABORT_UNLESS(numBytes);
         auto it = XdcBuffers.begin() + FetchIndex;
         for (;;) {
+            if (it == XdcBuffers.end()) {
+                return -1;
+            }
             Y_DEBUG_ABORT_UNLESS(it != XdcBuffers.end());
             const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
             outQ.emplace_back(channel, span);
@@ -61,6 +76,7 @@ namespace NActors {
                 break;
             }
         }
+        return 0;
     }
 
     static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
@@ -74,7 +90,9 @@ namespace NActors {
             TRcBuf& chunk = it.GetChunk();
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
             if (NeedReallocateRdma(region)) {
-                chunk = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
+                auto newChunk = TRcBuf::Uninitialized(chunk.Size(), chunk.Headroom(), chunk.Tailroom());
+                MemcpyNoCache(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
+                chunk = newChunk;
             }
         }
     }
@@ -245,7 +263,17 @@ namespace NActors {
 
     void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
-        Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+
+        // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
+        // They must be switched off together; otherwise one actor may still assume legacy liveness while the
+        // other already relies on kernel keepalive/user-timeout.
+        //
+        // UseKernelLivenessMode() intentionally mirrors the condition in TInterconnectSessionTCP.
+        if (UseKernelLivenessMode()) {
+            Become(&TThis::WorkingState);
+        } else {
+            Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+        }
         if (RdmaQp) {
             LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
@@ -648,7 +676,7 @@ namespace NActors {
         }
     }
 
-    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
             auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
@@ -659,6 +687,22 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
+            if (alignment > 1) {
+                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
+                // but headroom may still shift the visible data away from the requested alignment, so we always keep
+                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
+                const size_t extra = alignment - 1;
+                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
+                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
+                const size_t misalignment = ptr & (alignment - 1);
+                const size_t shift = misalignment ? alignment - misalignment : 0;
+                tailroom += extra - shift;
+                buffer.TrimFront(size + tailroom);
+                buffer.TrimBack(size);
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
+                return buffer;
+            }
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }
     }
@@ -691,7 +735,7 @@ namespace NActors {
                         if (!isInline) {
                             // allocate buffer and push it into the payload
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
-                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -750,7 +794,10 @@ namespace NActors {
                         XdcCatchStream.Markup.emplace_back(channel, apply, size);
                     } else {
                         // find buffers and acquire data buffer pointers
-                        context.FetchBuffers(channel, size, XdcInputQ);
+                        if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
+                            LOG_CRIT_IC_SESSION("ICIS28", "FetchBuffers: end of buffers");
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
                     }
 
                     ptr += cmdLen;
@@ -803,10 +850,11 @@ namespace NActors {
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
                     if (Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
                     }
+
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
@@ -850,24 +898,45 @@ namespace NActors {
             TRope payload;
             if (!pendingEvent.SerializationInfo.Sections.empty()) {
                 // unshuffle inline and external payloads into single event content
+                auto flushAccumulated = [&](TRope*& prev, size_t& accumSize) {
+                    if (accumSize) {
+                        prev->ExtractFront(accumSize, &payload);
+                        accumSize = 0;
+                    }
+                };
+
                 TRope *prev = nullptr;
                 size_t accumSize = 0;
                 for (const auto& s : pendingEvent.SerializationInfo.Sections) {
                     TRope *rope = s.IsInline
                         ? &pendingEvent.InternalPayload
                         : &pendingEvent.ExternalPayload;
-                    if (rope != prev) {
-                        if (accumSize) {
-                            prev->ExtractFront(accumSize, &payload);
+
+                    if (s.IsInline && s.Alignment > 1 && s.Size) {
+                        flushAccumulated(prev, accumSize);
+                        auto it = rope->Begin();
+                        const bool alreadyAligned = it.Valid()
+                            && it.ContiguousSize() >= s.Size
+                            && reinterpret_cast<uintptr_t>(it.ContiguousData()) % s.Alignment == 0;
+                        if (alreadyAligned) {
+                            rope->ExtractFront(s.Size, &payload);
+                        } else {
+                            // Headroom/tailroom are already handled when the section buffer is allocated; merging only
+                            // sees the serialized bytes of size s.Size and must preserve alignment for inline sections.
+                            TRcBuf buffer = AllocateRcBuf(s.Size, s.Headroom, s.Tailroom, s.Alignment, false);
+                            const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
+                            Y_ABORT_UNLESS(success);
+                            payload.Insert(payload.End(), TRope(std::move(buffer)));
                         }
-                        prev = rope;
-                        accumSize = 0;
+                    } else {
+                        if (rope != prev) {
+                            flushAccumulated(prev, accumSize);
+                            prev = rope;
+                        }
+                        accumSize += s.Size;
                     }
-                    accumSize += s.Size;
                 }
-                if (accumSize) {
-                    prev->ExtractFront(accumSize, &payload);
-                }
+                flushAccumulated(prev, accumSize);
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
                     LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
@@ -898,18 +967,23 @@ namespace NActors {
                 for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
-            } else if (pendingEvent.RdmaCheckSum) {
+                if (checksum != descr.Checksum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+            }
+            if (pendingEvent.RdmaCumulativeCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
-                for (const auto&& [data, size] : payload) {
-                    XXH3_64bits_update(&state, data, size);
+                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
+                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+                    if (!memRegion.Empty()) {
+                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
+                    }
                 }
                 checksum = XXH3_64bits_digest(&state);
-            }
-            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
-            if (expectedChecksum) {
-                if (checksum != expectedChecksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -927,7 +1001,10 @@ namespace NActors {
                 Params.PeerScopeId,
                 std::move(descr.TraceId));
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
-                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                Metrics->IncScopeErrors();
+                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
+                    " LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                    NodeId, Metrics->GetHumanFriendlyPeerHostName().data(),
                     ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
                 ev.reset();
             }

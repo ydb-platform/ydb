@@ -73,6 +73,11 @@ public:
                                    const BatchLogRecordProcessorOptions &options,
                                    const BatchLogRecordProcessorRuntimeOptions &runtime_options);
 
+  BatchLogRecordProcessor(const BatchLogRecordProcessor &)            = delete;
+  BatchLogRecordProcessor(BatchLogRecordProcessor &&)                 = delete;
+  BatchLogRecordProcessor &operator=(const BatchLogRecordProcessor &) = delete;
+  BatchLogRecordProcessor &operator=(BatchLogRecordProcessor &&)      = delete;
+
   /** Makes a new recordable **/
   std::unique_ptr<Recordable> MakeRecordable() noexcept override;
 
@@ -156,6 +161,7 @@ protected:
    * any time
    *
    * @param notify_force_flush Sequence to indicate whether to notify force flush completion.
+   * @param exporter The log exporter instance that handles exporting logs to the backend.
    * @param synchronization_data Synchronization data to be notified.
    */
   static void NotifyCompletion(uint64_t notify_force_flush,

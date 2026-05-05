@@ -1,4 +1,5 @@
 #include "mkql_timezone.h"
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -203,15 +204,7 @@ IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFac
 
     const auto value = LocateNode(ctx.NodeLocator, callable, 0);
     const auto id = LocateNode(ctx.NodeLocator, callable, 1);
-    if (isOptional1 && isOptional2) {
-        return new TAddTimezoneWrapper<true, true>(ctx.Mutables, value, id);
-    } else if (isOptional1) {
-        return new TAddTimezoneWrapper<true, false>(ctx.Mutables, value, id);
-    } else if (isOptional2) {
-        return new TAddTimezoneWrapper<false, true>(ctx.Mutables, value, id);
-    } else {
-        return new TAddTimezoneWrapper<false, false>(ctx.Mutables, value, id);
-    }
+    return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TAddTimezoneWrapper, 2, isOptional1, isOptional2, ctx.Mutables, value, id);
 }
 
 } // namespace NMiniKQL

@@ -4,11 +4,10 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/ast/serialize/yql_expr_serialize.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TFormatCodeWrapper: public TMutableComputationNode<TFormatCodeWrapper> {
-    typedef TMutableComputationNode<TFormatCodeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TFormatCodeWrapper>;
 
 public:
     TFormatCodeWrapper(TComputationMutables& mutables, IComputationNode* code, bool annotatePosition, ui32 exprCtxMutableIndex)
@@ -43,7 +42,7 @@ private:
 };
 
 class TSerializeCodeWrapper: public TMutableComputationNode<TSerializeCodeWrapper> {
-    typedef TMutableComputationNode<TSerializeCodeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSerializeCodeWrapper>;
 
 public:
     TSerializeCodeWrapper(TComputationMutables& mutables, IComputationNode* code, ui32 exprCtxMutableIndex)
@@ -89,5 +88,4 @@ IComputationNode* WrapSerializeCode(TCallable& callable, const TComputationNodeF
     return new TSerializeCodeWrapper(ctx.Mutables, code, exprCtxMutableIndex);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

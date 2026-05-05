@@ -195,6 +195,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
     Y_UNIT_TEST(StartVacuumNoTables) {
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
@@ -208,6 +209,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
     Y_UNIT_TEST(StartVacuumNoTablesWithRestart) {
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
@@ -229,6 +231,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
     Y_UNIT_TEST(StartVacuumLog) {
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, true) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, "Some_value") });
@@ -264,6 +267,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value42(size_t(100 * 1024), 'a');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -295,6 +299,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value44(size_t(100 * 1024), 'c');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, true) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -375,6 +380,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value44(size_t(100 * 1024), 'c');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101, 102, 103 }) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -422,6 +428,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value43(size_t(100 * 1024), 'c');
 
         TMyEnvBase env;
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+        env->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_TRACE);
         env.FireDummyTablet(TestTabletFlags);
 
         env.FireDummyFollower(1);
@@ -464,6 +472,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value43(size_t(90 * 1024), 'f');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -517,6 +526,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
     Y_UNIT_TEST(StartVacuumEmptyTable) {
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
 
@@ -538,6 +548,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value43(size_t(100 * 1024), 'b');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -601,6 +612,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value42(size_t(100 * 1024), 'a');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -645,6 +657,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value43(size_t(100 * 1024), 'b');
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, true) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
@@ -708,6 +721,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         TString value42 = "Some_value";
 
         TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, false, true) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });

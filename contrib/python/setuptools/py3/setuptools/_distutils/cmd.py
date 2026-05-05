@@ -91,13 +91,8 @@ class Command:
 
         # Per-command versions of the global flags, so that the user can
         # customize Distutils' behaviour command-by-command and let some
-        # commands fall back on the Distribution's behaviour.  None means
-        # "not defined, check self.distribution's copy", while 0 or 1 mean
-        # false and true (duh).  Note that this means figuring out the real
-        # value of each flag is a touch complicated -- hence "self._dry_run"
-        # will be handled by __getattr__, below.
-        # XXX This needs to be fixed.
-        self._dry_run = None
+        # commands fall back on the Distribution's behaviour. None means
+        # "not defined, check self.distribution's copy".
 
         # verbose is largely ignored, but needs to be set for
         # backwards compatibility (I think)?
@@ -118,17 +113,6 @@ class Command:
         # this flag: it is the business of 'ensure_finalized()', which
         # always calls 'finalize_options()', to respect/update it.
         self.finalized = False
-
-    # XXX A more explicit way to customize dry_run would be better.
-    def __getattr__(self, attr):
-        if attr == 'dry_run':
-            myval = getattr(self, "_" + attr)
-            if myval is None:
-                return getattr(self.distribution, attr)
-            else:
-                return myval
-        else:
-            raise AttributeError(attr)
 
     def ensure_finalized(self) -> None:
         if not self.finalized:
@@ -381,10 +365,10 @@ class Command:
         msg: object = None,
         level: int = 1,
     ) -> None:
-        util.execute(func, args, msg, dry_run=self.dry_run)
+        util.execute(func, args, msg)
 
     def mkpath(self, name: str, mode: int = 0o777) -> None:
-        dir_util.mkpath(name, mode, dry_run=self.dry_run)
+        dir_util.mkpath(name, mode)
 
     @overload
     def copy_file(
@@ -425,7 +409,6 @@ class Command:
             preserve_times,
             not self.force,
             link,
-            dry_run=self.dry_run,
         )
 
     def copy_tree(
@@ -447,7 +430,6 @@ class Command:
             preserve_times,
             preserve_symlinks,
             not self.force,
-            dry_run=self.dry_run,
         )
 
     @overload
@@ -465,7 +447,7 @@ class Command:
         level: int = 1,
     ) -> str | os.PathLike[str] | bytes | os.PathLike[bytes]:
         """Move a file respecting dry-run flag."""
-        return file_util.move_file(src, dst, dry_run=self.dry_run)
+        return file_util.move_file(src, dst)
 
     def spawn(
         self, cmd: MutableSequence[str], search_path: bool = True, level: int = 1
@@ -473,7 +455,7 @@ class Command:
         """Spawn an external command respecting dry-run flag."""
         from distutils.spawn import spawn
 
-        spawn(cmd, search_path, dry_run=self.dry_run)
+        spawn(cmd, search_path)
 
     @overload
     def make_archive(
@@ -509,7 +491,6 @@ class Command:
             format,
             root_dir,
             base_dir,
-            dry_run=self.dry_run,
             owner=owner,
             group=group,
         )

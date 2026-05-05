@@ -1,6 +1,6 @@
-|  |downloads| |stars| |forks| |contributors| |coverage|
-|  |version| |packages| |license|
-|  |github-actions-wheels|  |github-actions-bsd| |doc| |twitter| |tidelift|
+|  |downloads| |stars| |forks| |contributors| |packages|
+|  |version| |license| |stackoverflow| |twitter| |tidelift|
+|  |github-actions-wheels| |github-actions-bsd|
 
 .. |downloads| image:: https://img.shields.io/pypi/dm/psutil.svg
     :target: https://clickpy.clickhouse.com/dashboard/psutil
@@ -18,6 +18,10 @@
     :target: https://github.com/giampaolo/psutil/graphs/contributors
     :alt: Contributors
 
+.. |stackoverflow| image:: https://img.shields.io/badge/stackoverflow-Ask%20questions-blue.svg
+    :target: https://stackoverflow.com/questions/tagged/psutil
+    :alt: Stackoverflow
+
 .. |github-actions-wheels| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/build.yml.svg?label=Linux%2C%20macOS%2C%20Windows
     :target: https://github.com/giampaolo/psutil/actions?query=workflow%3Abuild
     :alt: Linux, macOS, Windows
@@ -25,14 +29,6 @@
 .. |github-actions-bsd| image:: https://img.shields.io/github/actions/workflow/status/giampaolo/psutil/.github/workflows/bsd.yml.svg?label=FreeBSD,%20NetBSD,%20OpenBSD
     :target: https://github.com/giampaolo/psutil/actions?query=workflow%3Absd-tests
     :alt: FreeBSD, NetBSD, OpenBSD
-
-.. |coverage| image:: https://coveralls.io/repos/github/giampaolo/psutil/badge.svg?branch=master
-    :target: https://coveralls.io/github/giampaolo/psutil?branch=master
-    :alt: Test coverage (coverall.io)
-
-.. |doc| image:: https://readthedocs.org/projects/psutil/badge/?version=latest
-    :target: https://psutil.readthedocs.io/en/latest/
-    :alt: Documentation Status
 
 .. |version| image:: https://img.shields.io/pypi/v/psutil.svg?label=pypi
     :target: https://pypi.org/project/psutil
@@ -46,7 +42,7 @@
     :target: https://github.com/giampaolo/psutil/blob/master/LICENSE
     :alt: License
 
-.. |twitter| image:: https://img.shields.io/twitter/follow/grodola.svg?label=follow&style=flat&logo=twitter&logoColor=4FADFF
+.. |twitter| image:: https://img.shields.io/twitter/follow/grodola?style=flat
     :target: https://twitter.com/grodola
     :alt: Twitter Follow
 
@@ -95,65 +91,47 @@ Supported Python versions are cPython 3.6+ and `PyPy <https://pypy.org/>`__.
 Latest psutil version supporting Python 2.7 is
 `psutil 6.1.1 <https://pypi.org/project/psutil/6.1.1/>`__.
 
-Funding
-=======
-
-While psutil is free software and will always be, the project would benefit
-immensely from some funding.
-Keeping up with bug reports and maintenance has become hardly sustainable for
-me alone in terms of time.
-If you're a company that's making significant use of psutil you can consider
-becoming a sponsor via `GitHub Sponsors <https://github.com/sponsors/giampaolo>`__,
-`Open Collective <https://opencollective.com/psutil>`__ or
-`PayPal <https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A9ZS7PKKRM3S8>`__
-and have your logo displayed in here and psutil `doc <https://psutil.readthedocs.io>`__.
-
 Sponsors
 ========
 
 .. raw:: html
 
-    <div>
-        <a href="https://tidelift.com/subscription/pkg/pypi-psutil?utm_source=pypi-psutil&utm_medium=referral&utm_campaign=readme">
-            <img width="185" src="https://github.com/giampaolo/psutil/raw/master/docs/_static/tidelift-logo.svg" />
-        </a>
-        &nbsp;&nbsp
-        <a href="https://sansec.io/">
-            <img src="https://sansec.io/assets/images/logo.svg" />
-        </a>
-    </div>
+    <table border="0" cellpadding="10" cellspacing="0">
+      <tr>
+        <td align="center">
+          <a href="https://tidelift.com/subscription/pkg/pypi-psutil?utm_source=pypi-psutil&utm_medium=referral&utm_campaign=readme">
+            <img width="200" src="https://github.com/giampaolo/psutil/raw/master/docs/_static/tidelift-logo.svg">
+          </a>
+        </td>
+        <td align="center">
+          <a href="https://sansec.io/">
+            <img src="https://sansec.io/assets/images/logo.svg">
+          </a>
+        </td>
+        <td align="center">
+          <a href="https://www.apivoid.com/">
+            <img width="180" src="https://gmpy.dev/images/apivoid-logo.svg">
+          </a>
+        </td>
+      </tr>
+    </table>
+
     <sup><a href="https://github.com/sponsors/giampaolo">add your logo</a></sup>
 
-Supporters
-==========
+Funding
+=======
 
-.. raw:: html
-
-    <div>
-      <a href="https://github.com/dbwiddis"><img height="40" width="40" title="Daniel Widdis" src="https://avatars1.githubusercontent.com/u/9291703?s=88&amp;v=4" /></a>
-      <a href="https://github.com/aristocratos"><img height="40" width="40" title="aristocratos" src="https://avatars3.githubusercontent.com/u/59659483?s=96&amp;v=4" /></a>
-      <a href="https://github.com/cybersecgeek"><img height="40" width="40" title="cybersecgeek" src="https://avatars.githubusercontent.com/u/12847926?v=4" /></a>
-      <a href="https://github.com/scoutapm-sponsorships"><img height="40" width="40" title="scoutapm-sponsorships" src="https://avatars.githubusercontent.com/u/71095532?v=4" /></a>
-      <a href="https://opencollective.com/chenyoo-hao"><img height="40" width="40" title="Chenyoo Hao" src="https://images.opencollective.com/chenyoo-hao/avatar/40.png" /></a>
-      <a href="https://opencollective.com/alexey-vazhnov"><img height="40" width="40" title="Alexey Vazhnov" src="https://images.opencollective.com/alexey-vazhnov/daed334/avatar/40.png" /></a>
-      <a href="https://github.com/indeedeng"><img height="40" width="40" title="indeedeng" src="https://avatars.githubusercontent.com/u/2905043?s=200&v=4" /></a>
-      <a href="https://github.com/PySimpleGUI"><img height="40" width="40" title="PySimpleGUI" src="https://avatars.githubusercontent.com/u/46163555?v=4" /></a>
-      <a href="https://github.com/u93"><img height="40" width="40" title="Eugenio E Breijo" src="https://avatars.githubusercontent.com/u/16807302?v=4" /></a>
-      <a href="https://github.com/guilt"><img height="40" width="40" title="Karthik Kumar Viswanathan" src="https://avatars.githubusercontent.com/u/195178?v=4" /></a>
-      <a href="https://github.com/eallrich"><img height="40" width="40" title="Evan Allrich" src="https://avatars.githubusercontent.com/u/17393?v=4" /></a>
-      <a href="https://github.com/robusta-dev"><img height="40" width="40" title="Robusta" src="https://avatars.githubusercontent.com/u/82757710?s=200&v=4" /></a>
-      <a href="https://github.com/JeremyGrosser"><img height="40" width="40" title="JeremyGrosser" src="https://avatars.githubusercontent.com/u/2151?v=4" /></a>
-      <a href="https://github.com/getsentry"><img height="40" width="40" title="getsentry" src="https://avatars.githubusercontent.com/u/1396951?s=200&v=4" /></a>
-      <a href="https://github.com/c0m4r"><img height="40" width="40" title="c0m4r" src="https://avatars.githubusercontent.com/u/6292788?v=4" /></a>
-
-    </div>
-    <sup><a href="https://github.com/sponsors/giampaolo">add your avatar</a></sup>
-
-
-Contributing
-============
-
-See `contributing guidelines <https://github.com/giampaolo/psutil/blob/master/CONTRIBUTING.md>`__.
+While psutil is free software and will always be, the project would benefit
+immensely from some funding.
+psutil is among the `top 100 <https://clickpy.clickhouse.com/dashboard/psutil>`__
+most-downloaded Python packages, and keeping up with bug reports, user support,
+and ongoing maintenance has become increasingly difficult to sustain as a
+one-person effort.
+If you're a company that's making significant use of psutil you can consider
+becoming a sponsor via `GitHub <https://github.com/sponsors/giampaolo>`__,
+`Open Collective <https://opencollective.com/psutil>`__ or
+`PayPal <https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A9ZS7PKKRM3S8>`__.
+Sponsors can have their logo displayed here and in the psutil `documentation <https://psutil.readthedocs.io>`__.
 
 Example usages
 ==============
@@ -509,3 +487,46 @@ Portings
 - C: https://github.com/hamon-in/cpslib
 - Rust: https://github.com/rust-psutil/rust-psutil
 - Nim: https://github.com/johnscillieri/psutil-nim
+
+
+Supporters
+==========
+
+People who donated money over the years:
+
+.. raw:: html
+
+    <div>
+      <a href="https://github.com/eallrich"><img height="35" width="35" title="Evan Allrich" src="https://avatars.githubusercontent.com/u/17393?v=4" /></a>
+      <a href="https://github.com/ofek"><img height="35" width="35" title="Ofek Lev" src="https://avatars.githubusercontent.com/u/9677399?v=4" /></a>
+      <a href="https://github.com/roboflow"><img height="35" width="35" title="roboflow.com" src="https://avatars.githubusercontent.com/u/53104118?s=200&v=4" /></a>
+      <a href="https://github.com/sansecio"><img height="35" width="35" title="sansec.io" src="https://avatars.githubusercontent.com/u/60706188?s=200&v=4" /></a>
+      <a href="https://github.com/Trash-Nothing"><img height="35" width="35" title="trashnothing.com" src="https://avatars.githubusercontent.com/u/230028908?s=200&v=4" /></a>
+
+      <a href="https://github.com/abramov-v"><img height="35" width="35" title="Valeriy Abramov" src="https://avatars.githubusercontent.com/u/76448042?v=4" /></a>
+      <a href="https://github.com/alexdlaird"><img height="35" width="35" title="Alex Laird" src="https://avatars.githubusercontent.com/u/1660326?v=4" /></a>
+      <a href="https://github.com/aristocratos"><img height="35" width="35" title="aristocratos" src="https://avatars3.githubusercontent.com/u/59659483?s=96&amp;v=4" /></a>
+      <a href="https://github.com/ArtyomVancyan"><img height="35" width="35" title="Artyom Vancyan" src="https://avatars.githubusercontent.com/u/44609997?v=4" /></a>
+      <a href="https://github.com/c0m4r"><img height="35" width="35" title="c0m4r" src="https://avatars.githubusercontent.com/u/6292788?v=4" /></a>
+      <a href="https://github.com/coskundeniz"><img height="35" width="35" title="Coşkun Deniz" src="https://avatars.githubusercontent.com/u/4516210?v=4" /></a>
+      <a href="https://github.com/cybersecgeek"><img height="35" width="35" title="cybersecgeek" src="https://avatars.githubusercontent.com/u/12847926?v=4" /></a>
+      <a href="https://github.com/dbwiddis"><img height="35" width="35" title="Daniel Widdis" src="https://avatars1.githubusercontent.com/u/9291703?s=88&amp;v=4" /></a>
+      <a href="https://github.com/getsentry"><img height="35" width="35" title="getsentry" src="https://avatars.githubusercontent.com/u/1396951?s=200&v=4" /></a>
+      <a href="https://github.com/great-work-told-is"><img height="35" width="35" title="great-work-told-is" src="https://avatars.githubusercontent.com/u/113922084?v=4" /></a>
+      <a href="https://github.com/guilt"><img height="35" width="35" title="Karthik Kumar Viswanathan" src="https://avatars.githubusercontent.com/u/195178?v=4" /></a>
+      <a href="https://github.com/inarikami"><img height="35" width="35" title="inarikami" src="https://avatars.githubusercontent.com/u/22864465?v=4" /></a>
+      <a href="https://github.com/indeedeng"><img height="35" width="35" title="indeedeng" src="https://avatars.githubusercontent.com/u/2905043?s=200&v=4" /></a>
+      <a href="https://github.com/JeremyGrosser"><img height="35" width="35" title="JeremyGrosser" src="https://avatars.githubusercontent.com/u/2151?v=4" /></a>
+      <a href="https://github.com/maxesisn"><img height="35" width="35" title="Maximilian Wu" src="https://avatars.githubusercontent.com/u/20412597?v=4" /></a>
+      <a href="https://github.com/Mehver"><img height="35" width="35" title="Mehver" src="https://avatars.githubusercontent.com/u/75297777?v=4" /></a>
+      <a href="https://github.com/mirbyte"><img height="35" width="35" title="mirko" src="https://avatars.githubusercontent.com/u/83219244?v=4" /></a>
+      <a href="https://github.com/PySimpleGUI"><img height="35" width="35" title="PySimpleGUI" src="https://avatars.githubusercontent.com/u/46163555?v=4" /></a>
+      <a href="https://github.com/robusta-dev"><img height="35" width="35" title="Robusta" src="https://avatars.githubusercontent.com/u/82757710?s=200&v=4" /></a>
+      <a href="https://github.com/sasozivanovic"><img height="35" width="35" title="Sašo Živanović" src="https://avatars.githubusercontent.com/u/3317028?v=4" /></a>
+      <a href="https://github.com/scoutapm-sponsorships"><img height="35" width="35" title="scoutapm-sponsorships" src="https://avatars.githubusercontent.com/u/71095532?v=4" /></a>
+      <a href="https://github.com/u93"><img height="35" width="35" title="Eugenio E Breijo" src="https://avatars.githubusercontent.com/u/16807302?v=4" /></a>
+      <a href="https://opencollective.com/alexey-vazhnov"><img height="35" width="35" title="Alexey Vazhnov" src="https://images.opencollective.com/alexey-vazhnov/daed334/avatar/40.png" /></a>
+      <a href="https://opencollective.com/chenyoo-hao"><img height="35" width="35" title="Chenyoo Hao" src="https://images.opencollective.com/chenyoo-hao/avatar/40.png" /></a>
+    </div>
+
+    <sup><a href="https://github.com/sponsors/giampaolo">add your avatar</a></sup>

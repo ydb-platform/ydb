@@ -104,7 +104,7 @@ The table below lists the configuration parameters supported by the {{ ydb-short
 | `CredentialsToken` | Token value, to use the token authentication {{ ydb-short-name }} mode |
 | `CredentialsYcMetadata` | Configure as `1` for virtual machine metadata {{ ydb-short-name }} authentication |
 | `CredentialsStatic` | Username and password for {{ ydb-short-name }} authentication, specified in the following format: `username:password@` |
-| `CredentialsYcServiceAccountKeyFile` | Path of a file containing the service account (SA) key, to use the SA key {{ ydb-short-name }} authentication |
+| `CredentialsYcServiceAccountKey` | Path of a file containing the service account (SA) key, to use the SA key {{ ydb-short-name }} authentication |
 | `CredentialsYcServiceAccountKeyJson` | JSON data of the service account key to be used instead of the filename (useful in K8s environment) |
 | `Certificates` | Path to the certificate authority (CA) trusted certificates file, or the literal trusted CA certificate value |
 | `LogLevel` | Plugin-specific logging level should be one of `disabled` (default), `trace`, `debug`, `info`, `warn`, `error`, `fatal` or `panic` |

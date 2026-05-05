@@ -1,8 +1,11 @@
 from contextlib import contextmanager
-from typing import Dict, List
+from typing import Dict, List, Any
 
 
 class _NormalizerMeta(type):
+    rule_value_classes: Any
+    rule_type_classes: Any
+
     def __new__(cls, name, bases, dct):
         new_cls = type.__new__(cls, name, bases, dct)
         new_cls.rule_value_classes = {}
@@ -109,9 +112,6 @@ class NormalizerConfig:
     normalizer_class = Normalizer
 
     def create_normalizer(self, grammar):
-        if self.normalizer_class is None:
-            return None
-
         return self.normalizer_class(grammar, self)
 
 

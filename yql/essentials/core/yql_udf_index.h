@@ -8,6 +8,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 struct TFunctionInfo {
@@ -34,10 +36,10 @@ struct TDownloadLink {
 
     }
 
-    TDownloadLink(bool isUrl, const TString& path, const TString& md5)
+    TDownloadLink(bool isUrl, TString path, TString md5)
         : IsUrl(isUrl)
-        , Path(path)
-        , Md5(md5)
+        , Path(std::move(path))
+        , Md5(std::move(md5))
     {
     }
 
@@ -69,7 +71,7 @@ struct TDownloadLink {
 };
 
 struct TResourceInfo : public TThrRefBase {
-    typedef TIntrusiveConstPtr<TResourceInfo> TPtr;
+    using TPtr = TIntrusiveConstPtr<TResourceInfo>;
 
     bool IsTrusted = false;
     TDownloadLink Link;
@@ -91,7 +93,7 @@ inline bool operator<(const TResourceInfo::TPtr& p1, const TResourceInfo::TPtr& 
 
 class TUdfIndex : public TThrRefBase {
 public:
-    typedef TIntrusivePtr<TUdfIndex> TPtr;
+    using TPtr = TIntrusivePtr<TUdfIndex>;
 
 public:
     // todo: trusted resources should not be replaceble regardless of specified mode

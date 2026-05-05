@@ -14,8 +14,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 class TProgramFactory: public IProgramFactory {
 private:
     TProgramFactoryOptions Options_;
@@ -43,5 +42,4 @@ public:
     IPullListWorkerFactoryPtr MakePullListWorkerFactory(const TInputSpecBase&, const TOutputSpecBase&, TString, ETranslationMode, ui16) override;
     IPushStreamWorkerFactoryPtr MakePushStreamWorkerFactory(const TInputSpecBase&, const TOutputSpecBase&, TString, ETranslationMode, ui16) override;
 };
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

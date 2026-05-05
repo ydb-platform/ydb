@@ -822,7 +822,7 @@ public:
             }
         }
 
-        TPath dstPath = TPath::Resolve(dstPathStr, context.SS);
+        TPath dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
         TPath dstParent = dstPath.Parent();
 
         {
@@ -833,23 +833,28 @@ public:
                 .IsResolved()
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
-                if (dstParent.IsUnderDeleting()) {
-                    checks
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParent.IsUnderMoving()) {
-                    // it means that dstPath is free enough to be the move destination
-                    checks
-                        .IsUnderMoving()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParent.IsUnderCreating()) {
-                    checks
-                        .IsUnderCreating()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks
-                        .NotUnderOperation();
-                }
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            if (dstParent.IsUnderDeleting()) {
+                checks
+                    .IsUnderDeleting()
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else if (dstParent.IsUnderMoving()) {
+                // it means that dstPath is free enough to be the move destination
+                checks
+                    .IsUnderMoving()
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else if (dstParent.IsUnderCreating()) {
+                checks
+                    .IsUnderCreating()
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else {
+                checks
+                    .NotUnderOperation();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

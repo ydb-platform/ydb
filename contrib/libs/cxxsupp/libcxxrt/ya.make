@@ -35,7 +35,6 @@ ENDIF()
 
 SRCS(
     auxhelper.cc
-    dynamic_cast.cc
     guard.cc
     memory.cc
     stdexcept.cc
@@ -49,6 +48,14 @@ IF (NO_CXX_EXCEPTIONS)
 ELSE()
     SRCS(
         exception.cc
+    )
+ENDIF()
+
+IF (NO_CXX_RTTI)
+    BUILD_ONLY_IF(NO_CXX_EXCEPTIONS)
+ELSE()
+    SRCS(
+        dynamic_cast.cc
     )
 ENDIF()
 

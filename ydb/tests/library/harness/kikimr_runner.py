@@ -77,6 +77,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
+        self.http_proxy_port = None
+        self.kafka_api_port = None
+        if configurator.kafka_proxy_enabled:
+            self.kafka_api_port = port_allocator.kafka_api_port
+        if not configurator.simple_config and configurator.http_proxy_enabled:
+            self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
         if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
@@ -112,7 +118,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
                 }
-
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     def is_port_listening(self, port):
@@ -156,6 +161,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def cwd(self):
         return self.__working_dir
+
+    @property
+    def ydbd_log_file_path(self):
+        """Absolute path passed to ydbd --log-file-name when use_log_files is set; otherwise None."""
+        return self.__log_file_name
 
     @property
     def binary_path(self):
@@ -238,6 +248,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--log-file-name=%s" % self.__log_file_name,
             )
 
+        if self.kafka_api_port is not None:
+            command.append(
+                "--kafka-port=%s" % self.kafka_api_port,
+            )
+
         command.extend(
             [
                 "--grpc-port=%s" % self.grpc_port,
@@ -256,6 +271,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
             )
 
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
+
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
 
@@ -264,6 +284,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
+
+        if self.http_proxy_port is not None:
+            command.extend(["--http-proxy-port=%d" % self.http_proxy_port])
 
         if self.data_center is not None:
             command.append(
@@ -319,6 +342,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def pid(self):
         return self.daemon.process.pid
 
+    def get_kafka_api_port(self):
+        return self.kafka_api_port
+
     def start(self):
         try:
             self.update_command(self.__make_run_command())
@@ -348,6 +374,21 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def enable_config_dir(self):
         self.__use_config_store = True
         self.update_command(self.__make_run_command())
+
+    def disable_config_dir(self, cleanup=True):
+        self.__use_config_store = False
+        self.update_command(self.__make_run_command())
+        if cleanup:
+            if self.__configurator.separate_node_configs:
+                node_config_dir = os.path.join(
+                    self.__config_path,
+                )
+                if os.path.exists(node_config_dir):
+                    shutil.rmtree(node_config_dir)
+            else:
+                config_file = os.path.join(self.__config_path, "config.yaml")
+                if os.path.exists(config_file):
+                    os.remove(config_file)
 
     def set_seed_nodes_file(self, seed_nodes_file):
         self.__seed_nodes_file = seed_nodes_file
@@ -793,6 +834,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in node_ids:
             self.nodes[node_id].enable_config_dir()
 
+    def disable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = False
+        for node_id in node_ids:
+            self.nodes[node_id].disable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -815,9 +863,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         else:
             self.__configurator.write_proto_configs(self.__config_path)
 
-    def overwrite_configs(self, config):
+    def overwrite_configs(self, config, node_ids=None):
         self.__configurator.full_config = config
-        self.__write_configs()
+        if node_ids is None:
+            self.__write_configs()
+        else:
+            if not self.__configurator.separate_node_configs:
+                raise ValueError(
+                    "overwrite_configs(node_ids=...) is only supported when "
+                    "separate_node_configs is enabled"
+                )
+            for node_id in node_ids:
+                self.__write_node_config(node_id)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()

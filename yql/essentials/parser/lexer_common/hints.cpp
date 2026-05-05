@@ -5,6 +5,8 @@
 
 #include <util/string/escape.h>
 
+#include <utility>
+
 namespace NSQLTranslation {
 
 using NYql::TPosition;
@@ -31,8 +33,8 @@ namespace {
 
 class TTokenProcessor {
 public:
-    TTokenProcessor(const TString& queryFile, TSQLHints& hints, bool utf8Aware)
-        : QueryFile_(queryFile)
+    TTokenProcessor(TString queryFile, TSQLHints& hints, bool utf8Aware)
+        : QueryFile_(std::move(queryFile))
         , Hints_(hints)
         , Utf8Aware_(utf8Aware)
     {

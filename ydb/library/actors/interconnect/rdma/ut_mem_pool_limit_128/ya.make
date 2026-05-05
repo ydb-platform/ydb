@@ -1,11 +1,12 @@
 GTEST()
 #TIMEOUT(3600)
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
+    REQUIREMENTS(cpu:4)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     TIMEOUT(3600)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

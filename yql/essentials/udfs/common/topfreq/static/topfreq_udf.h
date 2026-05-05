@@ -10,6 +10,7 @@
 #include "topfreq.h"
 #include <algorithm>
 #include <array>
+#include <utility>
 
 using namespace NYql;
 using namespace NUdf;
@@ -57,8 +58,8 @@ private:
 
 public:
     TTopFreqCreate(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -117,8 +118,8 @@ private:
 
 public:
     TTopFreqDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -147,8 +148,8 @@ private:
 
 public:
     TTopFreqMerge(IHash::TPtr hash, IEquate::TPtr equate)
-        : Hash_(hash)
-        , Equate_(equate)
+        : Hash_(std::move(hash))
+        , Equate_(std::move(equate))
     {
     }
 
@@ -363,7 +364,8 @@ public:
             }
 
             if (name == GetName) {
-                ui32 indexF, indexV;
+                ui32 indexF;
+                ui32 indexV;
                 auto itemType = builder.Struct()->AddField<ui64>("Frequency", &indexF).AddField("Value", valueType, &indexV).Build();
                 auto resultType = builder.List()->Item(itemType).Build();
 

@@ -180,6 +180,7 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
                         ) 
                         and build_type = '{build_type}'
                         and branch = '{branch}'
+                        and (pull IS NULL OR NOT String::Contains(pull, 'manual'))
                     order by full_name,run_timestamp desc
                 ) as hist
                 ON test_and_date.full_name=hist.full_name

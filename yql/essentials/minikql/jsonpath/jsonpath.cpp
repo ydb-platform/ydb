@@ -10,11 +10,11 @@ using namespace NJson;
 namespace NYql::NJsonPath {
 
 TResult ExecuteJsonPath(
-    const TJsonPathPtr jsonPath,
+    TJsonPathPtr jsonPath,
     const TValue& json,
     const TVariablesMap& variables,
     const NUdf::IValueBuilder* valueBuilder) {
-    TExecutor executor(jsonPath, {json}, variables, valueBuilder);
+    TExecutor executor(std::move(jsonPath), {json}, variables, valueBuilder);
     return executor.Execute();
 }
 

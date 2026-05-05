@@ -8,14 +8,17 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TString OperationId;
     TPathId PathId;
     TActorId ReplyToActorId;
-    bool Success;
+    NKikimrStat::TEvAnalyzeResponse::EStatus Status;
     NYql::TIssues Issues;
 
-    TTxFinishTraversal(TSelf* self, bool success, NYql::TIssues issues = NYql::TIssues())
+    TTxFinishTraversal(
+            TSelf* self,
+            NKikimrStat::TEvAnalyzeResponse::EStatus status,
+            NYql::TIssues issues = NYql::TIssues())
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
         , PathId(self->TraversalPathId)
-        , Success(success)
+        , Status(status)
         , Issues(std::move(issues))
     {
         auto forceTraversal = Self->CurrentForceTraversalOperation();
@@ -30,7 +33,9 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/!Success);
+        Self->FinishTraversal(
+            db,
+            /*finishAllForceTraversalTables=*/Status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         return true;
     }
@@ -54,10 +59,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 "Send TEvAnalyzeResponse, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
-            response->Record.SetStatus(
-                Success
-                    ? NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS
-                    : NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+            response->Record.SetStatus(Status);
             for (const auto& issue : Issues) {
                 NYql::IssueToMessage(issue, response->Record.AddIssues());
             }
@@ -65,32 +67,13 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         }
     }
 };
-void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {
-    Execute(new TTxFinishTraversal(this, true), TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
-    NYql::TIssue error(TStringBuilder() << "Could not find table id: "
-        << TraversalPathId.LocalPathId << ", deleted its statistics");
-    Execute(new TTxFinishTraversal(this, false, {error}), TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
-    using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
-    switch (ev->Get()->Status) {
-    case EStatus::Success:
-        std::move(
-            ev->Get()->Statistics.begin(), ev->Get()->Statistics.end(),
-            std::back_inserter(StatisticsToSave));
-        SaveStatisticsToTable();
-        return;
-    case EStatus::TableNotFound:
-        DeleteStatisticsFromTable();
-        return;
-    case EStatus::InternalError:
-        Execute(
-            new TTxFinishTraversal(this, false, std::move(ev->Get()->Issues)),
-            TActivationContext::AsActorContext());
-        return;
-    }
+
+void TStatisticsAggregator::DispatchFinishTraversalTx(
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
+        NYql::TIssues issues) {
+    Execute(
+        new TTxFinishTraversal(this, status, std::move(issues)),
+        TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

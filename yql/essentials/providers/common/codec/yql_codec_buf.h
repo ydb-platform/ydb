@@ -17,8 +17,7 @@ using TInstant = ui64;
 #include <functional>
 #include <optional>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 class TTimeoutException: public yexception {
 };
@@ -307,5 +306,4 @@ private:
 #define CHECK_STRING_LENGTH_UNSIGNED(length) \
     YQL_ENSURE(length < (1 << 30), "Bad string length: " << length);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

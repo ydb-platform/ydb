@@ -49,5 +49,20 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM
         value.go
         visiblefields.go
     )
+ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND NOT CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND CGO_ENABLED OR OS_EMSCRIPTEN AND ARCH_WASM32 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        abi.go
+        asm_wasm.s
+        badlinkname.go
+        deepequal.go
+        float32reg_generic.go
+        iter.go
+        makefunc.go
+        map_swiss.go
+        swapper.go
+        type.go
+        value.go
+        visiblefields.go
+    )
 ENDIF()
 END()

@@ -35,9 +35,6 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto empty = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetEmptyContainerLazy>());
-        const auto append = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::Append>());
-
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -45,9 +42,7 @@ public:
 
         const auto list = PHINode::Create(valueType, 2U, "list", work);
 
-        const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, empty, PointerType::getUnqual(funType), "empty", block);
-        const auto first = CallInst::Create(funType, funcPtr, {factory}, "init", block);
+        const auto first = EmitFunctionCall<&THolderFactory::GetEmptyContainerLazy>(valueType, {factory}, ctx, block);
         list->addIncoming(first, block);
 
         BranchInst::Create(work, block);
@@ -63,19 +58,14 @@ public:
         {
             block = good;
 
-            const auto funType = FunctionType::get(valueType, {factory->getType(), list->getType(), item->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, append, PointerType::getUnqual(funType), "append", block);
-            const auto next = CallInst::Create(funType, funcPtr, {factory, list, item}, "next", block);
+            const auto next = EmitFunctionCall<&THolderFactory::Append>(valueType, {factory, list, item}, ctx, block);
             list->addIncoming(next, block);
             BranchInst::Create(work, block);
         }
 
         {
             block = burn;
-            const auto thrower = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCollectFlowWrapper::Throw>());
-            const auto throwerType = FunctionType::get(Type::getVoidTy(context), {}, false);
-            const auto throwerPtr = CastInst::Create(Instruction::IntToPtr, thrower, PointerType::getUnqual(throwerType), "thrower", block);
-            CallInst::Create(throwerType, throwerPtr, {}, "", block);
+            EmitFunctionCall<&TCollectFlowWrapper::Throw>(Type::getVoidTy(context), {}, ctx, block);
             new UnreachableInst(context, block);
         }
 
@@ -121,8 +111,6 @@ public:
 
         const auto factory = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::Collect<!IsList>>());
-
         const auto seq = GetNodeValue(Seq, ctx, block);
 
         if constexpr (IsList) {
@@ -139,19 +127,14 @@ public:
             BranchInst::Create(work, done, null, block);
 
             block = work;
-            const auto funType = FunctionType::get(seq->getType(), {factory->getType(), seq->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, seq}, "res", block);
+            const auto res = EmitFunctionCall<&THolderFactory::Collect<!IsList>>(seq->getType(), {factory, seq}, ctx, block);
             result->addIncoming(res, block);
             BranchInst::Create(done, block);
 
             block = done;
             return result;
         } else {
-            const auto funType = FunctionType::get(seq->getType(), {factory->getType(), seq->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, seq}, "res", block);
-            return res;
+            return EmitFunctionCall<&THolderFactory::Collect<!IsList>>(seq->getType(), {factory, seq}, ctx, block);
         }
     }
 #endif

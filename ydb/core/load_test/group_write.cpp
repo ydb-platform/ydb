@@ -220,7 +220,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
     public:
-        bool ConfirmedSize() {
+        size_t ConfirmedSize() const {
             return ConfirmedBlobs.size();
         }
 
@@ -540,6 +540,16 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         TIntrusivePtr<NJaegerTracing::TThrottler> TracingThrottler;
 
+        bool BarrierLoadEnabled = false;
+        ui32 MaxBarriersInFlight = 10;
+        ui32 BarrierChannelCount = 100;
+        TIntervalGenerator BarrierIntervalGen;
+        ui32 BarriersInFlight = 0;
+        ui64 BarrierTabletId = 0;
+        ui32 BarrierChannel = 0;
+        TMonotonic NextBarrierTimestamp;
+        bool NextBarrierInQueue = false;
+
         bool WriteKeepFlags = false;
 
     public:
@@ -552,6 +562,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 TDuration scriptedRoundDuration, TVector<TReqInfo>&& scriptedRequests,
                 const TInitialAllocation& initialAllocation,
                 const TIntrusivePtr<NJaegerTracing::TThrottler>& tracingThrottler,
+                bool barrierLoadEnabled, ui32 maxBarriersInFlight,
+                ui32 barrierChannelCount, TIntervalGenerator barrierIntervalGen,
                 bool writeKeepFlags)
             : Self(self)
             , TagCounters(counters->GetSubgroup("tag", Sprintf("%" PRIu64, Self.Tag)))
@@ -595,6 +607,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , InitialAllocation(initialAllocation)
             , GarbageCollectIntervalGen(garbageCollectIntervalGen)
             , TracingThrottler(tracingThrottler)
+            , BarrierLoadEnabled(barrierLoadEnabled)
+            , MaxBarriersInFlight(maxBarriersInFlight)
+            , BarrierChannelCount(barrierChannelCount)
+            , BarrierIntervalGen(std::move(barrierIntervalGen))
+            , BarrierTabletId(tabletId + 1)
             , WriteKeepFlags(writeKeepFlags)
         {
             *Counters->GetCounter("tabletId") = tabletId;
@@ -718,6 +735,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ReadSettings.DelayManager->Start(StartTimestamp);
             IssueReadIfPossible(ctx);
             IssueGarbageCollectionIfPossible(ctx);
+            if (BarrierLoadEnabled) {
+                NextBarrierTimestamp = TActivationContext::Monotonic();
+                IssueBarrierIfPossible(ctx);
+            }
             ExposeCounters(ctx);
         }
 
@@ -911,8 +932,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 TABLER() {
                     TABLED() { str << "Writes per second"; }
                     if (IssuedWriteTimestamp.size() > 1) {
-                        const double rps = IssuedWriteTimestamp.size() /
-                            (IssuedWriteTimestamp.back() - IssuedWriteTimestamp.front()).SecondsFloat();
+                        const double intervalSec = (IssuedWriteTimestamp.back() - IssuedWriteTimestamp.front()).SecondsFloat();
+                        const double rps = intervalSec > 0 ? IssuedWriteTimestamp.size() / intervalSec : 0;
                         TABLED() { str << Sprintf("%.2lf", rps); }
                     } else {
                         TABLED() { str << "no writes"; }
@@ -966,6 +987,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 using namespace std::placeholders;
                 Self.WakeupQueue.Put(NextGarbageCollectionTimestamp, std::bind(&TTabletWriter::IssueGarbageCollectionIfPossible, this, _1), ctx);
                 NextGarbageCollectionInQueue = true;
+            }
+
+            if (BarrierLoadEnabled && now < NextBarrierTimestamp && !NextBarrierInQueue) {
+                using namespace std::placeholders;
+                Self.WakeupQueue.Put(NextBarrierTimestamp, std::bind(&TTabletWriter::IssueBarrierIfPossible, this, _1), ctx);
+                NextBarrierInQueue = true;
             }
         }
 
@@ -1039,8 +1066,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
 
                 auto it = SentTimestamp.find(writeQueryId);
-                const auto sendCycles = it->second;
                 Y_ABORT_UNLESS(it != SentTimestamp.end());
+                const auto sendCycles = it->second;
                 const TDuration response = CyclesToDuration(GetCycleCountFast() - sendCycles);
                 SentTimestamp.erase(it);
 
@@ -1153,6 +1180,45 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             NextGarbageCollectionInQueue = false;
         }
 
+        void IssueBarrierIfPossible(const TActorContext& ctx) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            while (BarrierLoadEnabled && BarriersInFlight < MaxBarriersInFlight && NextBarrierTimestamp <= now) {
+                IssueBarrierRequest(ctx);
+            }
+            UpdateNextWakeups(ctx, now);
+        }
+
+        void IssueBarrierRequest(const TActorContext& ctx) {
+            auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(
+                    BarrierTabletId,
+                    std::numeric_limits<ui32>::max(),
+                    std::numeric_limits<ui32>::max(),
+                    BarrierChannel,
+                    std::numeric_limits<ui32>::max(),
+                    std::numeric_limits<ui32>::max(),
+                    TInstant::Max());
+
+            if (++BarrierChannel == BarrierChannelCount) {
+                BarrierChannel = 0;
+                ++BarrierTabletId;
+            }
+
+            auto callback = [this](IEventBase *event, const TActorContext& ctx) {
+                auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
+                Y_ABORT_UNLESS(res);
+                --BarriersInFlight;
+                if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
+                    return;
+                }
+                IssueBarrierIfPossible(ctx);
+            };
+
+            ++BarriersInFlight;
+            SendToBSProxy(ctx, GroupId, ev.Release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
+            NextBarrierTimestamp += BarrierIntervalGen.Generate();
+            NextBarrierInQueue = false;
+        }
+
         void IssueReadIfPossible(const TActorContext& ctx) {
             const TMonotonic now = TActivationContext::Monotonic();
 
@@ -1256,7 +1322,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     };
 
 
-    TString ConfingString;
+    TString ConfigString;
     const ui64 Tag;
     const TActorId Parent;
 
@@ -1298,7 +1364,7 @@ public:
         , Parent(parent)
         , ScheduleCounter(counters->GetSubgroup("subsystem", "scheduler")->GetCounter("ScheduleCounter", true))
     {
-        google::protobuf::TextFormat::PrintToString(cmd, &ConfingString);
+        google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
         if (cmd.HasDurationSeconds()) {
             TestDuration = TDuration::Seconds(cmd.GetDurationSeconds());
         }
@@ -1384,6 +1450,11 @@ public:
 
             TIntervalGenerator garbageCollectIntervalGen(profile.GetFlushIntervals());
 
+            const bool barrierLoadEnabled = profile.BarrierIntervalsSize() > 0;
+            const ui32 maxBarriersInFlight = profile.GetMaxBarriersInFlight();
+            const ui32 barrierChannelCount = profile.GetBarrierChannelCount();
+            TIntervalGenerator barrierIntervalGen(profile.GetBarrierIntervals());
+
             TIntrusivePtr<NJaegerTracing::TThrottler> tracingThrottler;
 
             ui32 throttlerRate = profile.GetTracingThrottlerRate();
@@ -1439,7 +1510,10 @@ public:
                     getHandleClass, readSettings,
                     garbageCollectIntervalGen,
                     scriptedRoundDuration, std::move(scriptedRequests),
-                    initialAllocation, tracingThrottler, writeKeepFlags));
+                    initialAllocation, tracingThrottler,
+                    barrierLoadEnabled, maxBarriersInFlight,
+                    barrierChannelCount, barrierIntervalGen,
+                    writeKeepFlags));
 
                 WorkersInInitialState++;
             }
@@ -1632,7 +1706,7 @@ public:
                 }
             }
             COLLAPSED_BUTTON_CONTENT(Sprintf("configProtobuf%" PRIu64, Tag), "Config") {
-                str << "<pre>" << ConfingString << "</pre>";
+                str << "<pre>" << ConfigString << "</pre>";
             }
         }
         return str.Str();

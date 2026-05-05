@@ -183,7 +183,6 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-    settings.EmitReadsForExists = true;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
     if (settings.PgParser) {
@@ -276,6 +275,9 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 
     settings.ApplicationName = ApplicationName;
     settings.GUCSettings = GUCSettings;
+    if (YqlSelect) {
+        settings.YqlSelect = *YqlSelect;
+    }
 
     return settings;
 }

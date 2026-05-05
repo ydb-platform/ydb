@@ -127,10 +127,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWithContextFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TWithContextFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -139,18 +136,12 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Attach>());
-        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncType, attachFuncPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::Attach>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         const auto value = GetNodeValue(Flow, ctx, block);
         const auto finish = IsFinish(value, block, context);
 
-        const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Detach>());
-        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType, finish->getType()}, false);
-        const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncType, detachFuncPtr, {stateArg, finish}, "", block);
+        EmitFunctionCall<&TState::Detach>(Type::getVoidTy(context), {stateArg, finish}, ctx, block);
 
         return value;
     }
@@ -211,10 +202,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWithContextWideFlowWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TWithContextWideFlowWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -223,10 +211,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Attach>());
-        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncType, attachFuncPtr, {stateArg}, "", block);
+        EmitFunctionCall<&TState::Attach>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
         auto getres = GetNodeValues(Flow, ctx, block);
 
@@ -251,10 +236,7 @@ public:
 
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
 
-        const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Detach>());
-        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType, finish->getType()}, false);
-        const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncType, detachFuncPtr, {stateArg, finish}, "", block);
+        EmitFunctionCall<&TState::Detach>(Type::getVoidTy(context), {stateArg, finish}, ctx, block);
 
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
             getres.second[idx] = [idx, arrayPtr, arrayType, indexType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {

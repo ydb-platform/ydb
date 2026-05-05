@@ -31,7 +31,12 @@ public:
         ::google::protobuf::Message& protoTo,
         const ::google::protobuf::Message& protoFrom,
         const ::google::protobuf::FieldDescriptor* field)>;
-    static std::unordered_map<TMergerKey, TMergerValue> FieldMerger;
+    using TMergeFieldsMap = std::unordered_map<TWhiteboardMergerBase::TMergerKey, TWhiteboardMergerBase::TMergerValue>;
+
+    class TRegistrator {
+    public:
+        explicit TRegistrator(TMergeFieldsMap&& fields);
+    };
 
     template <typename PropertyType>
     static void ProtoMergeField(
@@ -301,4 +306,4 @@ void MergeWhiteboardResponses(ResponseType& result, TMap<ui32, ResponseType>& re
     TWhiteboardInfo<ResponseType>::MergeResponses(result, responses, fields);
 }
 
-}
+} // namespace NKikimr::NViewer

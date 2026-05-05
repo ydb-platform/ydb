@@ -48,12 +48,9 @@ class install_scripts(Command):
             # Set the executable bits (owner, group, and world) on
             # all the scripts we just installed.
             for file in self.get_outputs():
-                if self.dry_run:
-                    log.info("changing mode of %s", file)
-                else:
-                    mode = ((os.stat(file)[ST_MODE]) | 0o555) & 0o7777
-                    log.info("changing mode of %s to %o", file, mode)
-                    os.chmod(file, mode)
+                mode = ((os.stat(file)[ST_MODE]) | 0o555) & 0o7777
+                log.info("changing mode of %s to %o", file, mode)
+                os.chmod(file, mode)
 
     def get_inputs(self):
         return self.distribution.scripts or []

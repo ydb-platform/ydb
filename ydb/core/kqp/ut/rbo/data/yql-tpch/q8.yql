@@ -1,6 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
-/* custom error: :49:5: Error: No such column: o_year */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -9,13 +6,13 @@ SELECT
     Sum(
         CASE
             WHEN nation == 'BRAZIL' THEN volume
-            ELSE 0
+            ELSE $to_decimal(0)
         END
-    ) / (Sum(volume) + 1e-12) AS mkt_share
+    ) / (Sum(volume) + $to_decimal_max_precision("0.000000000001")) AS mkt_share
 FROM (
     SELECT
         DateTime::GetYear(CAST(o_orderdate AS Timestamp)) AS o_year,
-        l_extendedprice * (1 - l_discount) AS volume,
+        l_extendedprice * ($to_decimal(1) - l_discount) AS volume,
         n2.n_name AS nation
     FROM
         `/Root/part` as part

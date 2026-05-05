@@ -36,4 +36,5 @@ END()
 
 RECURSE(
     examples
+    ut
 )

@@ -11,6 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/containers/stack_vector
+    library/cpp/html/escape
     library/cpp/monlib/encode/json
     library/cpp/monlib/encode/spack
     library/cpp/monlib/encode/prometheus

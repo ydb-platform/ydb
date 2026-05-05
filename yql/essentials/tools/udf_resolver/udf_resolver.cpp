@@ -93,6 +93,11 @@
         #endif
     #endif
 
+    #if !defined(SYS_faccessat2)
+        #if defined(__NR_faccessat2)
+            #define SYS_faccessat2 __NR_faccessat2
+        #endif
+    #endif
 #endif
 
 using namespace NKikimr;
@@ -233,7 +238,7 @@ struct my_siginfo_t {
     int __pad0; /* Explicit padding.  */
     #endif
     union {
-        int _pad[__SI_PAD_SIZE];
+        int _pad[__SI_PAD_SIZE]; // NOLINT(modernize-avoid-c-arrays)
         struct
         {
             void* _call_addr;   /* Calling user insn.  */
@@ -261,7 +266,7 @@ int main(int argc, char** argv) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_flags = SA_RESETHAND | SA_SIGINFO;
-        typedef void (*TSigSysHandler)(int, siginfo_t*, void*);
+        using TSigSysHandler = void (*)(int, siginfo_t*, void*);
         sa.sa_sigaction = (TSigSysHandler)SigSysHandler;
         sigfillset(&sa.sa_mask);
         if (sigaction(SIGSYS, &sa, nullptr) == -1) {
@@ -332,7 +337,7 @@ int main(int argc, char** argv) {
         NYql::SendSignalOnParentThreadExit(SIGTERM);
 
 #ifdef _linux_
-        if (rlimit limit = {0, 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
+        if (rlimit limit = {.rlim_cur = 0, .rlim_max = 0}; setrlimit(RLIMIT_CORE, &limit) != 0) {
             ythrow TSystemError() << "Failed to set RLIMIT_CORE";
         }
 #endif
@@ -347,6 +352,7 @@ int main(int argc, char** argv) {
         BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, SYS_##syscall, 0, 1), \
             BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
 
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
             struct sock_filter filter[] = {
                 /* validate arch */
                 BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ArchField),
@@ -378,6 +384,10 @@ int main(int argc, char** argv) {
                 Allow(eventfd2),
                 Allow(exit),
                 Allow(exit_group),
+                Allow(faccessat),
+    #if defined(SYS_faccessat2)
+                Allow(faccessat2),
+    #endif
                 Allow(fadvise64),
                 Allow(fallocate),
                 Allow(flock),
@@ -404,6 +414,7 @@ int main(int argc, char** argv) {
                 Allow(getpriority),
                 Allow(getrandom),
                 Allow(getrlimit),
+                Allow(prlimit64),
                 Allow(getrusage),
                 Allow(getsid),
                 Allow(gettid),

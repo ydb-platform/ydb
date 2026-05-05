@@ -9,11 +9,14 @@
 namespace NYql {
 
 namespace {
+
 struct TSimpleType {
     std::string_view CanonicalSqlName;
     std::string_view YqlName;
     std::string_view Kind;
 };
+
+// NOLINTBEGIN(modernize-use-designated-initializers)
 
 static const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
     {"void", {"Void", "Void", "Void"}},
@@ -79,6 +82,8 @@ static const std::unordered_map<std::string_view, TSimpleType> NewSimpleTypes = 
     {"text", {"", "Utf8", ""}},
     {"bytes", {"", "String", ""}}};
 } // namespace
+
+// NOLINTEND(modernize-use-designated-initializers)
 
 std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_view& alias, bool flexibleTypesEnabled) {
     auto normalized = to_lower(ToString(alias));

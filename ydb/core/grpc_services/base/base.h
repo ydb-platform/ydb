@@ -27,9 +27,11 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/stream/str.h>
 
 namespace NKikimrScheme {
@@ -59,6 +61,46 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 TString DatabaseFromDomain(const TAppData* appdata);
+
+inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
+    // res->data() pointer is used inside grpc code.
+    // So this object should be destroyed during grpc_slice destroying routine
+    auto* res = new TString;
+    res->swap(serializedResult);
+
+    static auto freeResult = [](void* p) -> void {
+        TString* toDelete = reinterpret_cast<TString*>(p);
+        delete toDelete;
+    };
+
+    grpc_slice slice = grpc_slice_new_with_user_data(
+        const_cast<char*>(res->data()), res->size(), freeResult, res);
+    grpc::Slice sl(slice, grpc::Slice::STEAL_REF);
+    return grpc::ByteBuffer(&sl, 1);
+}
+
+inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TRope&& serializedResult) {
+    TStackVec<grpc::Slice, 8> slices;
+    size_t chunkCount = 0;
+    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
+        ++chunkCount;
+    }
+    slices.reserve(chunkCount);
+
+    static auto freeChunk = [](void* p) -> void {
+        TRcBuf* toDelete = reinterpret_cast<TRcBuf*>(p);
+        delete toDelete;
+    };
+
+    for (auto it = serializedResult.Begin(); it != serializedResult.End(); ++it) {
+        auto* owner = new TRcBuf(it.GetChunk());
+
+        grpc_slice slice = grpc_slice_new_with_user_data(
+            const_cast<char*>(it.ContiguousData()), it.ContiguousSize(), freeChunk, owner);
+        slices.emplace_back(slice, grpc::Slice::STEAL_REF);
+    }
+    return grpc::ByteBuffer(slices.data(), slices.size());
+}
 
 inline TActorId CreateGRpcRequestProxyId(int n = 0) {
     if (n == 0) {
@@ -381,6 +423,11 @@ struct TAuditMode {
     }
 };
 
+enum class EEmptyDatabaseMode {
+    EmptyDatabaseAllowed,
+    EmptyDatabaseForbidden,
+};
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing
@@ -396,6 +443,7 @@ struct TRequestAuxSettings {
     void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
+    EEmptyDatabaseMode EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden;
 };
 
 class TGRpcRequestProxySimple;
@@ -469,6 +517,10 @@ public:
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
 
+    virtual EEmptyDatabaseMode GetEmptyDatabaseMode() const {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
+    }
+
     virtual TString GetRpcMethodName() const = 0;
 };
 
@@ -490,6 +542,9 @@ public:
     virtual void FinishStream(ui32 status) = 0;
 
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) = 0;
+    virtual void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag = EStreamCtrl::CONT) {
+        SendSerializedResult(in.ExtractUnderlyingContainerOrCopy<TString>(), status, flag);
+    }
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
@@ -723,6 +778,10 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
     }
 
     TString GetRpcMethodName() const override {
@@ -994,6 +1053,10 @@ public:
 
     bool* IsTracingDecided() override {
         return &IsTracingDecided_;
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
     }
 
     // IRequestCtxBase
@@ -1334,20 +1397,15 @@ public:
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        // res->data() pointer is used inside grpc code.
-        // So this object should be destroyed during grpc_slice destroying routine
-        auto res = new TString;
-        res->swap(in);
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
+        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+            AuditLogRequestEnd(status);
+        }
+        Ctx_->Reply(&data, status, flag);
+    }
 
-        static auto freeResult = [](void* p) -> void {
-            TString* toDelete = reinterpret_cast<TString*>(p);
-            delete toDelete;
-        };
-
-        grpc_slice slice = grpc_slice_new_with_user_data(
-                    (void*)(res->data()), res->size(), freeResult, res);
-        grpc::Slice sl = grpc::Slice(slice, grpc::Slice::STEAL_REF);
-        auto data = grpc::ByteBuffer(&sl, 1);
+    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
+        auto data = MakeByteBufferFromSerializedResult(std::move(in));
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
         }
@@ -1626,6 +1684,10 @@ public:
         return AuxSettings.AuditMode.IsModifying && AuxSettings.AuditMode.LogClass == TAuditMode::TLogClassConfig::Dml && !this->IsInternalCall();
     }
 
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
+    }
+
 private:
     std::function<void(std::unique_ptr<TRequestIface>, const IFacilityProvider&)> PassMethod;
     const TRequestAuxSettings AuxSettings;
@@ -1780,7 +1842,7 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1967,6 +2029,10 @@ public:
 
     TAuditMode GetAuditMode() const override {
         return AuditMode;
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseAllowed;
     }
 
     TString GetRpcMethodName() const override {

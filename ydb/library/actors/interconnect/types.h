@@ -59,6 +59,7 @@ namespace NActors {
         bool UseExternalDataChannel = {};
         bool UseXxhash = {};
         bool UseXdcShuffle = {};
+        bool UseKernelLiveness = {};
         bool UseRdma = {};
         bool ChecksumRdmaEvent = {};
         TString AuthCN;

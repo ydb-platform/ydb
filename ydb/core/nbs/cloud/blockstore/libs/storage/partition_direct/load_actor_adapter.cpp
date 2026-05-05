@@ -1,0 +1,197 @@
+#include "load_actor_adapter.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/sglist.h>
+
+#include <ydb/core/base/appdata_fwd.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
+using namespace NThreading;
+using namespace NActors;
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLoadActorAdapter::TLoadActorAdapter(
+    std::shared_ptr<TFastPathService> fastPathService)
+    : FastPathService(std::move(fastPathService))
+{}
+
+void TLoadActorAdapter::Bootstrap(const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    Become(&TThis::StateWork);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// !! LOAD ACTOR SHOULD GUARANTEE THAT THERE WILL BE NO MORE THAN ONE WRITE
+// REQUEST TO THE SAME BLOCK AT A TIME !!
+///////////////////////////////////////////////////////////////////////////////
+
+void TLoadActorAdapter::HandleWriteBlocksRequest(
+    const TEvService::TEvWriteBlocksRequest::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    const ui64 startIndex = msg->Record.GetStartIndex();
+    const auto& blocks = msg->Record.GetBlocks();
+
+    ui32 totalSize = 0;
+    for (const auto& buffer: blocks.GetBuffers()) {
+        totalSize += buffer.size();
+    }
+
+    totalSize = AlignUp(totalSize, DefaultBlockSize);
+
+    Y_ABORT_UNLESS(totalSize > 0);
+    Y_ABORT_UNLESS(totalSize % DefaultBlockSize == 0);
+
+    auto data = std::make_shared<TString>(TString::Uninitialized(totalSize));
+    char* ptr = data->Detach();
+    for (const auto& buffer: blocks.GetBuffers()) {
+        memcpy(ptr, buffer.data(), buffer.size());
+        ptr += buffer.size();
+    }
+    memset(ptr, 0, data->end() - ptr);
+
+    TSgList sglist = {TBlockDataRef(data->data(), data->size())};
+
+    auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
+        .Range = TBlockRange64::WithLength(
+            startIndex,
+            totalSize / DefaultBlockSize)});
+    request->Sglist = TGuardedSgList(std::move(sglist));
+
+    auto future = FastPathService->WriteBlocksLocal(
+        MakeIntrusive<TCallContext>(),
+        std::move(request));
+
+    future.Subscribe(
+        [actorSystem = TActivationContext::ActorSystem(),
+         sender = ev->Sender,
+         selfId = ctx.SelfID,
+         cookie = ev->Cookie,
+         data](const NThreading::TFuture<TWriteBlocksLocalResponse>& f)
+        {
+            auto response =
+                std::make_unique<TEvService::TEvWriteBlocksResponse>(
+                    f.GetValue().Error);
+
+            actorSystem->Send(new IEventHandle(
+                sender,
+                selfId,
+                response.release(),
+                0,
+                cookie));
+        });
+}
+
+void TLoadActorAdapter::HandleReadBlocksRequest(
+    const TEvService::TEvReadBlocksRequest::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    const ui32 blocksCount = msg->Record.GetBlocksCount();
+    Y_ABORT_UNLESS(blocksCount > 0);
+
+    auto buffer = std::make_shared<TString>(
+        TString::Uninitialized(blocksCount * DefaultBlockSize));
+    TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
+
+    auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
+        .Range = TBlockRange64::WithLength(
+            msg->Record.GetStartIndex(),
+            blocksCount)});
+    request->Sglist = TGuardedSgList(std::move(sglist));
+
+    auto future = FastPathService->ReadBlocksLocal(
+        MakeIntrusive<TCallContext>(),
+        request);
+
+    future.Subscribe(
+        [actorSystem = TActivationContext::ActorSystem(),
+         sender = ev->Sender,
+         selfId = ctx.SelfID,
+         cookie = ev->Cookie,
+         request,
+         buffer](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
+        {
+            auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
+                f.GetValue().Error);
+
+            if (auto guard = request->Sglist.Acquire()) {
+                const auto& sglist = guard.Get();
+                for (const auto& data: sglist) {
+                    response->Record.MutableBlocks()->AddBuffers(
+                        data.Data(),
+                        data.Size());
+                }
+            } else {
+                Y_ABORT_UNLESS(false);
+            }
+
+            actorSystem->Send(new IEventHandle(
+                sender,
+                selfId,
+                response.release(),
+                0,
+                cookie));
+        });
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+STFUNC(TLoadActorAdapter::StateWork)
+{
+    LOG_DEBUG(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "Processing event: %s from sender: %lu",
+        ev->GetTypeName().data(),
+        ev->Sender.LocalId());
+
+    switch (ev->GetTypeRewrite()) {
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+
+        HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
+        HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
+
+        default:
+            LOG_DEBUG_S(
+                TActivationContext::AsActorContext(),
+                NKikimrServices::NBS_PARTITION,
+                "Unhandled event type: " << ev->GetTypeRewrite()
+                                         << " event: " << ev->ToString());
+            break;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+TActorId CreateLoadActorAdapter(
+    const TActorId& owner,
+    std::shared_ptr<TFastPathService> fastPathService)
+{
+    auto actor =
+        std::make_unique<TLoadActorAdapter>(std::move(fastPathService));
+
+    return TActivationContext::Register(
+        actor.release(),
+        owner,
+        TMailboxType::ReadAsFilled,
+        NKikimr::AppData()->SystemPoolId);
+}
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

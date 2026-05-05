@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -1831,23 +1832,29 @@ public:
             }
             case TKikimrKey::Type::Secret: {
                 TWriteSecretSettings settings = ParseSecretSettings(TExprList(node->Child(4)), ctx);
-                YQL_ENSURE(settings.Mode);
+                if (settings.HasError) {
+                    return nullptr; // Error has been already reported in parsing
+                }
                 auto mode = settings.Mode.Cast();
                 if (mode == "create") {
+                    const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
+                    const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
+                        .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();
                 } else if (mode == "drop") {
@@ -1964,9 +1971,9 @@ TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node
 }
 
 TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> valueParamName;
     TMaybeNode<TCoAtom> inheritPermissions;
 
     for (auto child : node) {
@@ -1977,9 +1984,24 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "value") {
-                // TODO(yurikiselev): support parsing from declare
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                value = tuple.Value().Cast<TCoAtom>();
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    value = tuple.Value().Cast<TCoAtom>();
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(tuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only literal string is supported for 'value' option in secret"));
+                    return TWriteSecretSettings::CreateWithError();
+                }
+            } else if (name == "value_expr") {
+                auto expr = tuple.Value();
+                if (expr.Maybe<TCoParameter>()) {
+                    valueParamName = Build<TCoAtom>(ctx, tuple.Pos()).Value(expr.Cast<TCoParameter>().Name().StringValue()).Done();
+                } else if (expr.Maybe<TCoDataCtor>()) {
+                    value = expr.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(tuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only string or single string parameter is supported as secret value"));
+                    return TWriteSecretSettings::CreateWithError();
+                }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 inheritPermissions = tuple.Value().Cast<TCoAtom>();
@@ -1987,7 +2009,22 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
         }
     }
 
-    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
+    YQL_ENSURE(mode);
+    auto modeStr = mode.Cast().Value();
+    if (modeStr == "create" || modeStr == "alter") {
+        if (!value && !valueParamName) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                "Secret value is required: provide a literal or a single string parameter"));
+            return TWriteSecretSettings::CreateWithError();
+        }
+        if (value && valueParamName) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::UNEXPECTED,
+                "Both literal value and parameter name are set for secret"));
+            return TWriteSecretSettings::CreateWithError();
+        }
+    }
+
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(valueParamName), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,

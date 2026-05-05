@@ -6,6 +6,10 @@
 
 {% list tabs group=lang %}
 
+- Go
+
+  Функциональность на данный момент не поддерживается
+
 - C++
 
   Пример кода приложения для создания клиента:
@@ -21,6 +25,37 @@
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+  Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 
@@ -54,6 +89,10 @@
 
 {% list tabs group=lang %}
 
+- Go
+
+  Функциональность на данный момент не поддерживается
+
 - C++
 
   ```c++
@@ -63,6 +102,30 @@
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Java
+
+  Функциональность на данный момент не поддерживается
+
+- Python
+
+  Функциональность на данный момент не поддерживается
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  Функциональность на данный момент не поддерживается
+
+- Rust
+
+  Функциональность на данный момент не поддерживается
+
+- PHP
+
+  Функциональность на данный момент не поддерживается
 
 {% endlist %}
 

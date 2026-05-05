@@ -8,8 +8,7 @@
 
 #include <functional>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #define UDF_LOG(logger, component, level, msg)                  \
     do {                                                        \
@@ -75,8 +74,7 @@ TLoggerPtr MakeSynchronizedLogger(const TLoggerPtr& inner);
 using TLogProviderFunc = std::function<void(const TStringRef&, ELogLevel, const TStringRef&)>;
 TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter = Nothing());
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::ELogLevel>(IOutputStream& o, NYql::NUdf::ELogLevel value) {

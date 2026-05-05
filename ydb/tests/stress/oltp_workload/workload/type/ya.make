@@ -1,11 +1,13 @@
 PY3_LIBRARY()
 
 PY_SRCS(
+    bloom_filter_index.py
     fulltext_index.py
     vector_index.py
     insert_delete_all_types.py
     select_partition.py
     secondary_index.py
+    tli.py
 )
 
 PEERDIR(

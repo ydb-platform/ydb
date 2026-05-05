@@ -58,4 +58,12 @@ int TBinaryYsonComparator::CompareRows(
     return 0;
 }
 
+TFmrTableKeysBoundary MakeKeyBound(const NYT::TNode& keyRow, const TSortingColumns& keyColumns) {
+    return TFmrTableKeysBoundary(
+        NYT::NodeToYsonString(keyRow, NYT::NYson::EYsonFormat::Binary),
+        keyColumns.Columns,
+        keyColumns.SortOrders
+    );
+}
+
 } // namespace NYql::NFmr

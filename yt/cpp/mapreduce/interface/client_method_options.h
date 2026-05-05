@@ -87,6 +87,12 @@ struct TCreateOptions
     FLUENT_FIELD_DEFAULT(bool, IgnoreExisting, false);
 
     ///
+    /// @brief Ignore type mismatch with existing node.
+    ///
+    /// Only valid when IgnoreExisting=true.
+    FLUENT_FIELD_DEFAULT(bool, IgnoreTypeMismatch, false);
+
+    ///
     /// @brief Recreate node if it exists.
     ///
     /// Force and IgnoreExisting MUST NOT be used simultaneously.
@@ -1541,6 +1547,12 @@ struct TGetTablePartitionsOptions
     ///
     /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
     FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
+
+    ///
+    /// @brief Enable partition node descriptors serialization in cookie.
+    ///
+    /// Increases cookie size but likely reduces read latency in @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, FetchCookieNodeDescriptors, false);
 };
 
 ///

@@ -25,7 +25,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         NKikimr::NUdf::ICountersProvider* counters,
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
         const NKikimr::NUdf::ILogProvider* logProvider,
-        TLangVersion langVer)
+        TLangVersion langVer,
+        const TRuntimeSettings::TConstPtr runtimeSettings)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -35,6 +36,7 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , SecureParamsProvider(secureParamsProvider)
     , LogProvider(logProvider)
     , LangVer(langVer)
+    , RuntimeSettings(runtimeSettings)
     , Env(env)
 {
 }
@@ -190,7 +192,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
     patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
         optLLVM, graphPerProcess, JobStats, Counters,
-        SecureParamsProvider, LogProvider, LangVer);
+        SecureParamsProvider, LogProvider, LangVer, RuntimeSettings);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -212,7 +214,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer);
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer, *RuntimeSettings);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }
@@ -251,8 +253,9 @@ TGatewayLambdaBuilder::TGatewayLambdaBuilder(
     NKikimr::NUdf::ICountersProvider* counters,
     const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
     const NKikimr::NUdf::ILogProvider* logProvider,
-    TLangVersion langVer)
-    : TLambdaBuilder(functionRegistry, alloc, env, randomProvider, timeProvider, jobStats, counters, secureParamsProvider, logProvider, langVer)
+    TLangVersion langVer,
+    TRuntimeSettings::TConstPtr runtimeSettings)
+    : TLambdaBuilder(functionRegistry, alloc, env, randomProvider, timeProvider, jobStats, counters, secureParamsProvider, logProvider, langVer, runtimeSettings)
 {
 }
 

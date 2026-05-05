@@ -40,6 +40,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 #include <util/system/compiler.h>
 
 #define SOURCE_LOG_T(s) \
@@ -68,6 +69,21 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 class TDqSolomonReadActor : public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
+private:
+    struct TSizedTimeseries {
+        NSo::TTimeseries Timeseries;
+        ui64 TotalSize;
+
+        explicit TSizedTimeseries(NSo::TTimeseries&& ts)
+            : Timeseries(std::move(ts)) {
+            TotalSize = Timeseries.Timestamps.size() * 8 + Timeseries.Values.size() * 8;
+            TotalSize += Timeseries.Metric.Type.size();
+            for (const auto& [key, value]: Timeseries.Metric.Selectors) {
+                TotalSize += key.size() + value.Value.size();
+            }
+        }
+    };
+
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_READ_ACTOR";
 
@@ -82,8 +98,10 @@ public:
         ui64 computeActorBatchSize,
         TDuration truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
-        ui64 maxInflight,
+        ui64 maxApiInflight,
+        ui64 maxDataInflightBytes,
         NActors::TActorId metricsQueueActor,
+        IMemoryQuotaManager::TPtr memoryQuotaManager,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
         )
@@ -98,8 +116,10 @@ public:
         , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
         , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
-        , MaxInflight(maxInflight)
+        , MaxApiInflight(maxApiInflight)
+        , MaxDataInflightBytes(maxDataInflightBytes)
         , MetricsQueueActor(metricsQueueActor)
+        , MemoryQuotaManager(memoryQuotaManager)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {
@@ -146,6 +166,13 @@ public:
     }
 
     void Bootstrap() {
+        if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes)) {
+            TIssues issues;
+            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflightBytes << "b read buffer"});
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
+            return;
+        }
+
         if (UseMetricsQueue) {
             Become(&TDqSolomonReadActor::LimitlessModeState);
             MetricsQueueEvents.Init(TxId, SelfId(), SelfId());
@@ -169,6 +196,8 @@ public:
             MetricsWithTimeRange.push_back(metric);
             RequestData();
         }
+
+        Bootstrapped = true;
     }
     
     STRICT_STFUNC(LimitlessModeState,
@@ -194,7 +223,12 @@ public:
             return;
         }
 
-        YQL_ENSURE(IsWaitingMetricsQueueResponse);
+        // Guard against duplicate/stale deliveries: if we already cleared the
+        // waiting flag, silently drop the extra message instead of crashing.
+        if (!IsWaitingMetricsQueueResponse) {
+            SOURCE_LOG_W("HandleMetricsBatch: unexpected metrics batch received while not waiting, dropping");
+            return;
+        }
         IsWaitingMetricsQueueResponse = false;
         auto& batch = metricsBatch->Get()->Record;
         IsMetricsQueueEmpty = batch.GetNoMoreMetrics();
@@ -338,6 +372,7 @@ public:
     }
 
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64) final {
+        i64 total = 0;
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
         SOURCE_LOG_D("GetAsyncInputData sending " << MetricsData.size() << " metrics, finished = " << LastMetricProcessed());
 
@@ -345,7 +380,9 @@ public:
         TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
 
         for (const auto& data : MetricsData) {
-            auto& labels = data.Metric.Selectors;
+            total += data.TotalSize;
+
+            auto& labels = data.Timeseries.Metric.Selectors;
 
             auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);
             for (auto& [key, value] : labels) {
@@ -353,9 +390,9 @@ public:
             }
             auto dictValue = dictValueBuilder->Build();
 
-            auto& timestamps = data.Timestamps;
-            auto& values = data.Values;
-            auto& type = data.Metric.Type;
+            auto& timestamps = data.Timeseries.Timestamps;
+            auto& values = data.Timeseries.Values;
+            auto& type = data.Timeseries.Metric.Type;
 
             for (size_t i = 0; i < timestamps.size(); ++i){
                 TInstant timestamp = TInstant::MilliSeconds(timestamps[i]);
@@ -396,6 +433,9 @@ public:
 
                 buffer.push_back(value);
             }
+
+            CurrentDataBytesStored -= data.TotalSize;
+            TryRequestData();
         }
 
         finished = LastMetricProcessed();
@@ -404,12 +444,14 @@ public:
         }
 
         MetricsData.clear();
-        return 0;
+        return total;
     }
 
+    // Checkpointing is not supported for the Solomon source: it performs a
+    // bounded, non-restartable scan of a fixed time range.
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
-    void LoadState(const TSourceState&) override { }
-    void CommitState(const NDqProto::TCheckpoint&) override { }
+    void LoadState(const TSourceState&) override {}
+    void CommitState(const NDqProto::TCheckpoint&) override {}
 
     ui64 GetInputIndex() const override {
         return InputIndex;
@@ -423,9 +465,22 @@ private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics, " << CompletedTimeRanges << " time ranges.");
-        if (UseMetricsQueue) {
-            MetricsQueueEvents.Unsubscribe();
+        if (Bootstrapped) {
+            if (UseMetricsQueue) {
+                MetricsQueueEvents.Unsubscribe();
+            }
+
+            if (MemoryQuotaManager) {
+                MemoryQuotaManager->FreeQuota(MaxDataInflightBytes);
+            }
         }
+        // Explicitly destroy the client before the actor dies.
+        // This calls ~TSolomonAccessorClient() → GrpcClient->Stop(), which cancels
+        // all in-flight gRPC contexts synchronously. Without this, the contexts would
+        // only be cancelled when the shared_ptr ref-count drops to zero after actor
+        // destruction, which may race with the actor system freeing actor memory.
+        SolomonClient.reset();
+        MemoryQuotaManager.reset();
         TActor<TDqSolomonReadActor>::PassAway();
     }
 
@@ -483,6 +538,20 @@ private:
         });
     }
 
+    // Estimate the memory footprint of a single in-flight data request.
+    // We use MaxPointsPerOneRequest as the worst-case point count (each range
+    // is split so that it contains at most that many points).  Each point
+    // occupies 8 bytes for the timestamp and 8 bytes for the double value.
+    // We add the selector label sizes because they are copied into every
+    // TSizedTimeseries that comes back.
+    static ui64 EstimateRequestBytes(const NSo::TMetricTimeRange& request, ui64 maxPointsPerRequest) {
+        ui64 labelBytes = 0;
+        for (const auto& [key, selector] : request.Selectors) {
+            labelBytes += key.size() + selector.Value.size();
+        }
+        return maxPointsPerRequest * (sizeof(int64_t) + sizeof(double)) + labelBytes;
+    }
+
     bool TryRequestData() {
         TryRequestPointsCount();
 
@@ -490,7 +559,13 @@ private:
             return false;
         }
 
-        if (CurrentInflight >= MaxInflight) {
+        if (CurrentInflight >= MaxApiInflight) {
+            return false;
+        }
+
+        // CurrentDataBytesStored tracks data already received and buffered in MetricsData
+        // CurrentDataBytesInflight tracks the estimated footprint of requests that are still in flight.
+        if (CurrentDataBytesStored + CurrentDataBytesInflight >= MaxDataInflightBytes) {
             return false;
         }
 
@@ -502,9 +577,10 @@ private:
         YQL_ENSURE(RetryPolicy);
         NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
 
-        auto request = MetricsWithTimeRange.back();
+        auto request = std::move(MetricsWithTimeRange.back());
         MetricsWithTimeRange.pop_back();
         CurrentInflight++;
+        CurrentDataBytesInflight += EstimateRequestBytes(request, MaxPointsPerOneRequest);
 
         try {
             if (UseMetricsQueue) {
@@ -561,15 +637,21 @@ private:
 
     bool SaveDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
         auto& batch = *newDataBatch->Get();
-        auto request = batch.Request;
+        auto request = std::move(batch.Request);
 
         if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-            if (auto delay = PendingDataRequests_[request]->GetNextRetryDelay(batch.Response)) {
-                SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
-                Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
-                return false;
+            if (auto retryIt = PendingDataRequests_.find(request); retryIt != PendingDataRequests_.end() && retryIt->second) {
+                if (auto delay = retryIt->second->GetNextRetryDelay(batch.Response)) {
+                    SOURCE_LOG_D("HandleNewDataBatch: retrying data request, delay: " << delay->MilliSeconds());
+                    Schedule(*delay, new TEvSolomonProvider::TEvRetryDataRequest(std::move(request)));
+                    return false;
+                }
             }
         }
+
+        const ui64 estimatedBytes = EstimateRequestBytes(request, MaxPointsPerOneRequest);
+        CurrentDataBytesInflight -= (estimatedBytes <= CurrentDataBytesInflight)
+            ? estimatedBytes : CurrentDataBytesInflight;
 
         IngressStats.Bytes += batch.Response.DownloadedBytes;
         IngressStats.Rows += batch.Response.Result.Timeseries.size();
@@ -585,11 +667,10 @@ private:
             return false;
         }
 
-        MetricsData.insert(
-            MetricsData.end(),
-            std::make_move_iterator(batch.Response.Result.Timeseries.begin()),
-            std::make_move_iterator(batch.Response.Result.Timeseries.end())
-        );
+        for (auto& metric : batch.Response.Result.Timeseries) {
+            MetricsData.emplace_back(std::move(metric));
+            CurrentDataBytesStored += MetricsData.back().TotalSize;
+        }
         CompletedTimeRanges++;
 
         return true;
@@ -608,12 +689,15 @@ private:
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const ui64 MetricsQueueConsumersCountDelta;
-    const ui64 MaxInflight;
+    const ui64 MaxApiInflight;
+    const ui64 MaxDataInflightBytes;
     IRetryPolicy<NSo::TGetDataResponse>::TPtr RetryPolicy;
 
+    bool Bootstrapped = false;
     bool UseMetricsQueue;
     TRetryEventsQueue MetricsQueueEvents;
     NActors::TActorId MetricsQueueActor;
+    IMemoryQuotaManager::TPtr MemoryQuotaManager;
     bool IsWaitingMetricsQueueResponse = false;
     bool IsMetricsQueueEmpty = false;
     bool IsConfirmedMetricsQueueFinish = false;
@@ -621,19 +705,20 @@ private:
     std::map<NSo::TMetricTimeRange, IRetryPolicy<NSo::TGetDataResponse>::IRetryState::TPtr> PendingDataRequests_;
     std::deque<NSo::TMetric> ListedMetrics;
     std::deque<NSo::TMetricTimeRange> MetricsWithTimeRange;
-    std::deque<NSo::TTimeseries> MetricsData;
+    std::deque<TSizedTimeseries> MetricsData;
     ui64 ListedMetricsCount = 0;
     ui64 CompletedMetricsCount = 0;
     ui64 ListedTimeRanges = 0;
     ui64 CompletedTimeRanges = 0;
     ui64 CurrentInflight = 0;
+    ui64 CurrentDataBytesStored = 0;
+    ui64 CurrentDataBytesInflight = 0;
     const ui64 MaxPointsPerOneRequest = 10000;
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     NSo::ISolomonAccessorClient::TPtr SolomonClient;
     TType* DictType = nullptr;
-    std::vector<size_t> SystemColumnPositionIndex;
     THashMap<TString, size_t> Index;
     THashMap<TString, TString> AliasIndex;
 };
@@ -651,6 +736,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     const THolderFactory& holderFactory,
     NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
     const THashMap<TString, TString>& secureParams,
+    IMemoryQuotaManager::TPtr memoryQuotaManager,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
@@ -671,7 +757,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         metricsQueueActor = ActorIdFromProto(protoId);
     }
 
-    ui64 computeActorBatchSize = 1;
+    ui64 computeActorBatchSize = 100;
     if (auto it = settings.find("computeActorBatchSize"); it != settings.end()) {
         computeActorBatchSize = FromString<ui64>(it->second);
     }
@@ -681,9 +767,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         truePointsFindRange = FromString<ui64>(it->second);
     }
 
-    ui64 maxInflight = 40;
+    ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxInflight = FromString<ui64>(it->second);
+        maxApiInflight = FromString<ui64>(it->second);
+    }
+
+    ui64 maxDataInflightBytes = 50_MB;
+    if (auto it = settings.find("maxDataInflightBytes"); it != settings.end()) {
+        maxDataInflightBytes = FromString<ui64>(it->second);
     }
 
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
@@ -700,8 +791,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         computeActorBatchSize,
         TDuration::Seconds(truePointsFindRange),
         metricsQueueConsumersCountDelta,
-        maxInflight,
+        maxApiInflight,
+        maxDataInflightBytes,
         metricsQueueActor,
+        memoryQuotaManager,
         counters,
         credentialsProvider);
     return {actor, actor};
@@ -730,6 +823,7 @@ void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServi
                 args.HolderFactory,
                 args.ProgramBuilder,
                 args.SecureParams,
+                args.MemoryQuotaManager,
                 counters,
                 credentialsFactory);
         });

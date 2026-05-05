@@ -35,7 +35,7 @@ public:
   // Creates a context object from a key and value, this will
   // hold a shared_ptr to the head of the DataList linked list
   Context(nostd::string_view key, ContextValue value) noexcept
-      : head_{nostd::shared_ptr<DataList>{new DataList(key, value)}}
+      : head_{nostd::shared_ptr<DataList>{new DataList(key, std::move(value))}}
   {}
 
   // Accepts a new iterable and then returns a new context that
@@ -59,7 +59,7 @@ public:
   // exisiting list to the end of the new list.
   Context SetValue(nostd::string_view key, ContextValue value) noexcept
   {
-    Context context      = Context(key, value);
+    Context context      = Context(key, std::move(value));
     context.head_->next_ = head_;
     return context;
   }
@@ -125,13 +125,13 @@ private:
 
     // Builds a data list with just a key and value, so it will just be the head
     // and returns that head.
-    DataList(nostd::string_view key, const ContextValue &value)
+    DataList(nostd::string_view key, ContextValue value)
     {
       key_        = new char[key.size()];
       key_length_ = key.size();
       std::memcpy(key_, key.data(), key.size() * sizeof(char));
       next_  = nostd::shared_ptr<DataList>{nullptr};
-      value_ = value;
+      value_ = std::move(value);
     }
 
     DataList(const DataList &other)

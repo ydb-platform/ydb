@@ -37,6 +37,9 @@ void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStat
     const TString& userSID, ui64 parametersSize, const TString& database,
     const NKikimrKqp::EQueryType type, ui64 requestUnits);
 
+void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
+    const TString& victimQueryText, const TString& database);
+
 ui64 CalcRequestUnit(const NKqpProto::TKqpStatsQuery& stats);
 ui64 CalcRequestUnit(const TKqpQueryStats& stats);
 

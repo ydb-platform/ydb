@@ -9,17 +9,19 @@
 
 #include <util/digest/fnv.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
 class TUniqueTableKey: public ITableKeys {
 public:
-    TUniqueTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view)
+    TUniqueTableKey(TPosition pos, TString cluster, const TDeferredAtom& name, TString view)
         : ITableKeys(pos)
-        , Cluster_(cluster)
+        , Cluster_(std::move(cluster))
         , Name_(name)
-        , View_(view)
+        , View_(std::move(view))
         , Full_(name.GetRepr())
     {
         if (!View_.empty()) {
@@ -73,10 +75,10 @@ TNodePtr BuildTableKey(TPosition pos, const TString& cluster, const TDeferredAto
 
 class TPrepTableKeys: public ITableKeys {
 public:
-    TPrepTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args)
+    TPrepTableKeys(TPosition pos, TString cluster, TString func, const TVector<TTableArg>& args)
         : ITableKeys(pos)
-        , Cluster_(cluster)
-        , Func_(func)
+        , Cluster_(std::move(cluster))
+        , Func_(std::move(func))
         , Args_(args)
     {
     }
@@ -279,8 +281,7 @@ public:
                 return nullptr;
             }
 
-            for (ui32 index = 0; index < Args_.size(); ++index) {
-                auto& arg = Args_[index];
+            for (auto& arg : Args_) {
                 if (arg.HasAt) {
                     ctx.Error(Pos_) << "Temporary tables are not supported here";
                     return nullptr;
@@ -361,9 +362,9 @@ TNodePtr BuildInputOptions(TPosition pos, const TVector<TString>& hints) {
 
 class TInputTablesNode final: public TAstListNode {
 public:
-    TInputTablesNode(TPosition pos, const TTableList& tables, bool inSubquery)
+    TInputTablesNode(TPosition pos, TTableList tables, bool inSubquery)
         : TAstListNode(pos)
-        , Tables_(tables)
+        , Tables_(std::move(tables))
         , InSubquery_(inSubquery)
     {}
 
@@ -731,13 +732,13 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
 
 class TWriteTableNode final: public TAstListNode {
 public:
-    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
+    TWriteTableNode(TPosition pos, TString label, const TTableRef& table, EWriteColumnMode mode,
         TNodePtr options)
         : TAstListNode(pos)
-        , Label_(label)
+        , Label_(std::move(label))
         , Table_(table)
         , Mode_(mode)
-        , Options_(options)
+        , Options_(std::move(options))
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -890,10 +891,10 @@ TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters) {
 
 class TWriteResultNode final: public TAstListNode {
 public:
-    TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters)
+    TWriteResultNode(TPosition pos, TString label, TNodePtr settings, const TSet<TString>& clusters)
         : TAstListNode(pos)
-        , Label_(label)
-        , Settings_(settings)
+        , Label_(std::move(label))
+        , Settings_(std::move(settings))
         , CommitClusters_(BuildCommitClusters(Pos_, clusters))
     {}
 
@@ -1064,10 +1065,10 @@ TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLeve
 
 class TPragmaNode final: public INode {
 public:
-    TPragmaNode(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault)
+    TPragmaNode(TPosition pos, TString prefix, TString name, const TVector<TDeferredAtom>& values, bool valueDefault)
         : INode(pos)
-        , Prefix_(prefix)
-        , Name_(name)
+        , Prefix_(std::move(prefix))
+        , Name_(std::move(name))
         , Values_(values)
         , ValueDefault_(valueDefault)
     {
@@ -1096,14 +1097,14 @@ public:
         Node_ = L(Node_, datasource);
 
         if (Name_ == TStringBuf("flags")) {
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         }
         else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Name_));
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         }
         else if (Name_ == TStringBuf("auth")) {
@@ -1209,9 +1210,9 @@ class TEvaluateIf final : public TAstListNode {
 public:
     TEvaluateIf(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode)
         : TAstListNode(pos)
-        , Predicate_(predicate)
-        , ThenNode_(thenNode)
-        , ElseNode_(elseNode)
+        , Predicate_(std::move(predicate))
+        , ThenNode_(std::move(thenNode))
+        , ElseNode_(std::move(elseNode))
     {
         FakeSource_ = BuildFakeSource(pos);
     }
@@ -1265,9 +1266,9 @@ class TEvaluateFor final : public TAstListNode {
 public:
     TEvaluateFor(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode)
         : TAstListNode(pos)
-        , List_(list)
-        , BodyNode_(bodyNode)
-        , ElseNode_(elseNode)
+        , List_(std::move(list))
+        , BodyNode_(std::move(bodyNode))
+        , ElseNode_(std::move(elseNode))
     {
         FakeSource_ = BuildFakeSource(pos);
     }

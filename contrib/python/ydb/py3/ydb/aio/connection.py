@@ -69,7 +69,7 @@ async def _construct_metadata(
         if settings.request_type is not None:
             metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
 
-    metadata.append(_utilities.x_ydb_sdk_build_info_header())
+    metadata.append(_utilities.x_ydb_sdk_build_info_header(getattr(driver_config, "_additional_sdk_headers", ())))
     return metadata
 
 

@@ -29,19 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     OLDAP-2.8            00cfec0bf94e0e903a1c9b955d199b08
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/dds.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/dds.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 83.61
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/dds.c [4:14]
-
 KEEP     OLDAP-2.8            0147d1dac03e3accb7f28fb2226370e4
 BELONGS ya.make
 FILE_INCLUDE LICENSE found in files: COPYRIGHT at line 8
@@ -55,19 +42,18 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: COPYRIGHT at line 8
     Files with this license:
         COPYRIGHT [4:24]
 
-KEEP     OLDAP-2.8            0bd7240ad1666427081cc2beaeeeb7e4
+KEEP     OLDAP-2.8            08a7e67e2f888085a3fcb871c3ea6de7
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap_thr_debug.h at line 12, libraries/libldap/turn.c at line 11
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap_thr_debug.h at line 12, libraries/libldap/turn.c at line 11
+FILE_INCLUDE LICENSE found in files: libraries/libldap/stctrl.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/stctrl.c at line 12
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 92.73
+        Score           : 87.93
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/ldap_thr_debug.h [5:14]
-        libraries/libldap/turn.c [4:13]
+        libraries/libldap/stctrl.c [4:14]
 
 KEEP     OLDAP-2.8            0ca8f953b368ea14e8607d304fc73b6c
 BELONGS ya.make
@@ -82,19 +68,18 @@ BELONGS ya.make
         include/ldap_utf8.h [29:29]
         libraries/libldap/sortctrl.c [26:26]
 
-KEEP     OLDAP-2.8            197661ae380ea9441790a9976072b4e2
+KEEP     OLDAP-2.8            11902ec98ddf9b5805b8a3f315d8245a
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/account_usability.c at line 13, libraries/libldap/ppolicy.c at line 13
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/account_usability.c at line 13, libraries/libldap/ppolicy.c at line 13
+FILE_INCLUDE LICENSE found in files: include/portable-linux.h at line 15
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/portable-linux.h at line 15
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 77.27
+        Score           : 92.73
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/account_usability.c [4:15]
-        libraries/libldap/ppolicy.c [4:15]
+        include/portable-linux.h [8:17]
 
 KEEP     Bsd-Original-Uc-1986 1c425a9563f426172d2347dff206cd0d
 BELONGS ya.make
@@ -106,110 +91,6 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-original-uc-1986.LICENSE
     Files with this license:
         COPYRIGHT [58:63]
-
-KEEP     OLDAP-2.8            1f0f48476bffa93e3ef34e2dfd990b79
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/util-int.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/util-int.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 87.93
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/util-int.c [4:14]
-
-KEEP     OLDAP-2.8            1fd3d2094491e347418520c68565b140
-BELONGS libraries/liblber/ya.make ya.make
-FILE_INCLUDE LICENSE found in files: libraries/liblber/assert.c at line 11, libraries/liblber/bprint.c at line 11, libraries/liblber/debug.c at line 11, libraries/liblber/decode.c at line 12, libraries/liblber/encode.c at line 12, libraries/liblber/io.c at line 12, libraries/liblber/lber-int.h at line 11, libraries/liblber/memory.c at line 11, libraries/liblber/options.c at line 11, libraries/liblber/sockbuf.c at line 12, libraries/liblber/stdio.c at line 11, libraries/liblber/version.c at line 10, libraries/libldap/abandon.c at line 12, libraries/libldap/add.c at line 12, libraries/libldap/addentry.c at line 12, libraries/libldap/assertion.c at line 11, libraries/libldap/avl.c at line 12, libraries/libldap/bind.c at line 12, libraries/libldap/cancel.c at line 11, libraries/libldap/charray.c at line 12, libraries/libldap/compare.c at line 11, libraries/libldap/controls.c at line 11, libraries/libldap/cyrus.c at line 11, libraries/libldap/delete.c at line 11, libraries/libldap/dnssrv.c at line 11, libraries/libldap/error.c at line 11, libraries/libldap/extended.c at line 11, libraries/libldap/filter.c at line 12, libraries/libldap/free.c at line 12, libraries/libldap/getattr.c at line 11, libraries/libldap/getdn.c at line 11, libraries/libldap/getentry.c at line 11, libraries/libldap/getvalues.c at line 11, libraries/libldap/init.c at line 11, libraries/libldap/lbase64.c at line 12, libraries/libldap/ldap-int.h at line 12, libraries/libldap/ldif.c at line 12, libraries/libldap/ldifutil.c at line 11, libraries/libldap/messages.c at line 12, libraries/libldap/modify.c at line 11, libraries/libldap/modrdn.c at line 11, libraries/libldap/open.c at line 11, libraries/libldap/options.c at line 11, libraries/libldap/os-local.c at line 12, libraries/libldap/passwd.c at line 11, libraries/libldap/print.c at line 11, libraries/libldap/psearchctrl.c at line 11, libraries/libldap/references.c at line 12, libraries/libldap/request.c at line 11, libraries/libldap/result.c at line 12, libraries/libldap/sasl.c at line 11, libraries/libldap/sbind.c at line 11, libraries/libldap/schema.c at line 11, libraries/libldap/search.c at line 11, libraries/libldap/sort.c at line 12, libraries/libldap/sortctrl.c at line 11, libraries/libldap/string.c at line 11, libraries/libldap/tls2.c at line 12, libraries/libldap/unbind.c at line 11, libraries/libldap/url.c at line 12, libraries/libldap/utf-8-conv.c at line 11, libraries/libldap/utf-8.c at line 12, libraries/libldap/vc.c at line 11, libraries/libldap/version.c at line 10, libraries/libldap/vlvctrl.c at line 11, libraries/libldap/whoami.c at line 11
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/liblber/assert.c at line 11, libraries/liblber/bprint.c at line 11, libraries/liblber/debug.c at line 11, libraries/liblber/decode.c at line 12, libraries/liblber/encode.c at line 12, libraries/liblber/io.c at line 12, libraries/liblber/lber-int.h at line 11, libraries/liblber/memory.c at line 11, libraries/liblber/options.c at line 11, libraries/liblber/sockbuf.c at line 12, libraries/liblber/stdio.c at line 11, libraries/liblber/version.c at line 10, libraries/libldap/abandon.c at line 12, libraries/libldap/add.c at line 12, libraries/libldap/addentry.c at line 12, libraries/libldap/assertion.c at line 11, libraries/libldap/avl.c at line 12, libraries/libldap/bind.c at line 12, libraries/libldap/cancel.c at line 11, libraries/libldap/charray.c at line 12, libraries/libldap/compare.c at line 11, libraries/libldap/controls.c at line 11, libraries/libldap/cyrus.c at line 11, libraries/libldap/delete.c at line 11, libraries/libldap/dnssrv.c at line 11, libraries/libldap/error.c at line 11, libraries/libldap/extended.c at line 11, libraries/libldap/filter.c at line 12, libraries/libldap/free.c at line 12, libraries/libldap/getattr.c at line 11, libraries/libldap/getdn.c at line 11, libraries/libldap/getentry.c at line 11, libraries/libldap/getvalues.c at line 11, libraries/libldap/init.c at line 11, libraries/libldap/lbase64.c at line 12, libraries/libldap/ldap-int.h at line 12, libraries/libldap/ldif.c at line 12, libraries/libldap/ldifutil.c at line 11, libraries/libldap/messages.c at line 12, libraries/libldap/modify.c at line 11, libraries/libldap/modrdn.c at line 11, libraries/libldap/open.c at line 11, libraries/libldap/options.c at line 11, libraries/libldap/os-local.c at line 12, libraries/libldap/passwd.c at line 11, libraries/libldap/print.c at line 11, libraries/libldap/psearchctrl.c at line 11, libraries/libldap/references.c at line 12, libraries/libldap/request.c at line 11, libraries/libldap/result.c at line 12, libraries/libldap/sasl.c at line 11, libraries/libldap/sbind.c at line 11, libraries/libldap/schema.c at line 11, libraries/libldap/search.c at line 11, libraries/libldap/sort.c at line 12, libraries/libldap/sortctrl.c at line 11, libraries/libldap/string.c at line 11, libraries/libldap/tls2.c at line 12, libraries/libldap/unbind.c at line 11, libraries/libldap/url.c at line 12, libraries/libldap/utf-8-conv.c at line 11, libraries/libldap/utf-8.c at line 12, libraries/libldap/vc.c at line 11, libraries/libldap/version.c at line 10, libraries/libldap/vlvctrl.c at line 11, libraries/libldap/whoami.c at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 92.73
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/liblber/assert.c [4:13]
-        libraries/liblber/bprint.c [4:13]
-        libraries/liblber/debug.c [4:13]
-        libraries/liblber/decode.c [5:14]
-        libraries/liblber/encode.c [5:14]
-        libraries/liblber/io.c [5:14]
-        libraries/liblber/lber-int.h [4:13]
-        libraries/liblber/memory.c [4:13]
-        libraries/liblber/options.c [4:13]
-        libraries/liblber/sockbuf.c [5:14]
-        libraries/liblber/stdio.c [4:13]
-        libraries/liblber/version.c [3:12]
-        libraries/libldap/abandon.c [5:14]
-        libraries/libldap/add.c [5:14]
-        libraries/libldap/addentry.c [5:14]
-        libraries/libldap/assertion.c [4:13]
-        libraries/libldap/avl.c [5:14]
-        libraries/libldap/bind.c [5:14]
-        libraries/libldap/cancel.c [4:13]
-        libraries/libldap/charray.c [5:14]
-        libraries/libldap/compare.c [4:13]
-        libraries/libldap/controls.c [4:13]
-        libraries/libldap/cyrus.c [4:13]
-        libraries/libldap/delete.c [4:13]
-        libraries/libldap/dnssrv.c [4:13]
-        libraries/libldap/error.c [4:13]
-        libraries/libldap/extended.c [4:13]
-        libraries/libldap/filter.c [5:14]
-        libraries/libldap/free.c [5:14]
-        libraries/libldap/getattr.c [4:13]
-        libraries/libldap/getdn.c [4:13]
-        libraries/libldap/getentry.c [4:13]
-        libraries/libldap/getvalues.c [4:13]
-        libraries/libldap/init.c [4:13]
-        libraries/libldap/lbase64.c [5:14]
-        libraries/libldap/ldap-int.h [5:14]
-        libraries/libldap/ldif.c [5:14]
-        libraries/libldap/ldifutil.c [4:13]
-        libraries/libldap/messages.c [5:14]
-        libraries/libldap/modify.c [4:13]
-        libraries/libldap/modrdn.c [4:13]
-        libraries/libldap/open.c [4:13]
-        libraries/libldap/options.c [4:13]
-        libraries/libldap/os-local.c [5:14]
-        libraries/libldap/passwd.c [4:13]
-        libraries/libldap/print.c [4:13]
-        libraries/libldap/psearchctrl.c [4:13]
-        libraries/libldap/references.c [5:14]
-        libraries/libldap/request.c [4:13]
-        libraries/libldap/result.c [5:14]
-        libraries/libldap/sasl.c [4:13]
-        libraries/libldap/sbind.c [4:13]
-        libraries/libldap/schema.c [4:13]
-        libraries/libldap/search.c [4:13]
-        libraries/libldap/sort.c [5:14]
-        libraries/libldap/sortctrl.c [4:13]
-        libraries/libldap/string.c [4:13]
-        libraries/libldap/tls2.c [5:14]
-        libraries/libldap/unbind.c [4:13]
-        libraries/libldap/url.c [5:14]
-        libraries/libldap/utf-8-conv.c [4:13]
-        libraries/libldap/utf-8.c [5:14]
-        libraries/libldap/vc.c [4:13]
-        libraries/libldap/version.c [3:12]
-        libraries/libldap/vlvctrl.c [4:13]
-        libraries/libldap/whoami.c [4:13]
-
-KEEP     OLDAP-2.8            20df8ad8b5d9bb5e7d80ec08cf40ad94
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/stctrl.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/stctrl.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 87.93
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/stctrl.c [4:14]
 
 KEEP     OLDAP-2.8            28ca9573ac8d21996883fccb66370500
 BELONGS libraries/liblber/ya.make libraries/liblmdb/ya.make ya.make
@@ -357,6 +238,19 @@ BELONGS libraries/liblber/ya.make libraries/liblmdb/ya.make ya.make
         libraries/liblmdb/midl.h [12:12]
         libraries/liblunicode/ucdata/ucdata.h [2:2]
 
+KEEP     OLDAP-2.8            2b9b35b076dd83e15b4a6b0ae4c7d810
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/deref.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/deref.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 87.93
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/deref.c [4:14]
+
 KEEP     BSD-4-Clause-UC      2f95ed2f4ed20728c9cb9609c4a1d6ef
 BELONGS ya.make
     License text:
@@ -413,6 +307,62 @@ BELONGS ya.make
         libraries/libldap/utf-8-conv.c [26:26]
         libraries/libldap/vlvctrl.c [26:26]
 
+KEEP     OLDAP-2.8            38049ea990f7a3f70decc4f4c732d83b
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/ac/assert.h at line 12, include/ac/bytes.h at line 12, include/ac/ctype.h at line 12, include/ac/dirent.h at line 12, include/ac/errno.h at line 12, include/ac/fdset.h at line 12, include/ac/localize.h at line 12, include/ac/param.h at line 12, include/ac/signal.h at line 12, include/ac/socket.h at line 12, include/ac/stdarg.h at line 12, include/ac/stdlib.h at line 12, include/ac/string.h at line 12, include/ac/syslog.h at line 12, include/ac/time.h at line 12, include/ac/unistd.h at line 12, include/lber.h at line 11, include/lber_pvt.h at line 11, include/lber_types.h at line 12, include/ldap.h at line 11, include/ldap_avl.h at line 12, include/ldap_cdefs.h at line 11, include/ldap_config.h at line 12, include/ldap_defaults.h at line 11, include/ldap_features.h at line 12, include/ldap_int_thread.h at line 12, include/ldap_log.h at line 11, include/ldap_pvt.h at line 11, include/ldap_pvt_thread.h at line 12, include/ldap_pvt_uc.h at line 11, include/ldap_rq.h at line 11, include/ldap_schema.h at line 11, include/ldap_utf8.h at line 11, include/ldif.h at line 11, include/lutil.h at line 11, include/lutil_lockf.h at line 11, libraries/libldap/rdwr.c at line 11, libraries/libldap/thr_nt.c at line 12, libraries/libldap/thr_posix.c at line 12, libraries/libldap/thr_pth.c at line 12, libraries/libldap/thr_thr.c at line 12, libraries/libldap/threads.c at line 11, libraries/libldap/tpool.c at line 11, libraries/liblunicode/ucdata/ucdata.h at line 11
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ac/assert.h at line 12, include/ac/bytes.h at line 12, include/ac/ctype.h at line 12, include/ac/dirent.h at line 12, include/ac/errno.h at line 12, include/ac/fdset.h at line 12, include/ac/localize.h at line 12, include/ac/param.h at line 12, include/ac/signal.h at line 12, include/ac/socket.h at line 12, include/ac/stdarg.h at line 12, include/ac/stdlib.h at line 12, include/ac/string.h at line 12, include/ac/syslog.h at line 12, include/ac/time.h at line 12, include/ac/unistd.h at line 12, include/lber.h at line 11, include/lber_pvt.h at line 11, include/lber_types.h at line 12, include/ldap.h at line 11, include/ldap_avl.h at line 12, include/ldap_cdefs.h at line 11, include/ldap_config.h at line 12, include/ldap_defaults.h at line 11, include/ldap_features.h at line 12, include/ldap_int_thread.h at line 12, include/ldap_log.h at line 11, include/ldap_pvt.h at line 11, include/ldap_pvt_thread.h at line 12, include/ldap_pvt_uc.h at line 11, include/ldap_rq.h at line 11, include/ldap_schema.h at line 11, include/ldap_utf8.h at line 11, include/ldif.h at line 11, include/lutil.h at line 11, include/lutil_lockf.h at line 11, libraries/libldap/rdwr.c at line 11, libraries/libldap/thr_nt.c at line 12, libraries/libldap/thr_posix.c at line 12, libraries/libldap/thr_pth.c at line 12, libraries/libldap/thr_thr.c at line 12, libraries/libldap/threads.c at line 11, libraries/libldap/tpool.c at line 11, libraries/liblunicode/ucdata/ucdata.h at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        include/ac/assert.h [5:14]
+        include/ac/bytes.h [5:14]
+        include/ac/ctype.h [5:14]
+        include/ac/dirent.h [5:14]
+        include/ac/errno.h [5:14]
+        include/ac/fdset.h [5:14]
+        include/ac/localize.h [5:14]
+        include/ac/param.h [5:14]
+        include/ac/signal.h [5:14]
+        include/ac/socket.h [5:14]
+        include/ac/stdarg.h [5:14]
+        include/ac/stdlib.h [5:14]
+        include/ac/string.h [5:14]
+        include/ac/syslog.h [5:14]
+        include/ac/time.h [5:14]
+        include/ac/unistd.h [5:14]
+        include/lber.h [4:13]
+        include/lber_pvt.h [4:13]
+        include/lber_types.h [5:14]
+        include/ldap.h [4:13]
+        include/ldap_avl.h [5:14]
+        include/ldap_cdefs.h [4:13]
+        include/ldap_config.h [5:14]
+        include/ldap_defaults.h [4:13]
+        include/ldap_features.h [5:14]
+        include/ldap_int_thread.h [5:14]
+        include/ldap_log.h [4:13]
+        include/ldap_pvt.h [4:13]
+        include/ldap_pvt_thread.h [5:14]
+        include/ldap_pvt_uc.h [4:13]
+        include/ldap_rq.h [4:13]
+        include/ldap_schema.h [4:13]
+        include/ldap_utf8.h [4:13]
+        include/ldif.h [4:13]
+        include/lutil.h [4:13]
+        include/lutil_lockf.h [4:13]
+        libraries/libldap/rdwr.c [4:13]
+        libraries/libldap/thr_nt.c [5:14]
+        libraries/libldap/thr_posix.c [5:14]
+        libraries/libldap/thr_pth.c [5:14]
+        libraries/libldap/thr_thr.c [5:14]
+        libraries/libldap/threads.c [4:13]
+        libraries/libldap/tpool.c [4:13]
+        libraries/liblunicode/ucdata/ucdata.h [4:13]
+
 KEEP     OLDAP-2.8            39eee04dd0ac37a8026b1e6c1e1184b8
 BELONGS libraries/liblmdb/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -425,10 +375,10 @@ BELONGS libraries/liblmdb/ya.make ya.make
         LICENSE [1:47]
         libraries/liblmdb/LICENSE [1:47]
 
-KEEP     OLDAP-2.8            3b09169db4107cb3f2016e1438ee8da2
+KEEP     OLDAP-2.8            3ae950cc827a9b9c20de3fdabf9f4f69
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/os-ip.c at line 13
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/os-ip.c at line 13
+FILE_INCLUDE LICENSE found in files: libraries/libldap/util-int.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/util-int.c at line 12
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
@@ -436,7 +386,7 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/os-ip.c
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/os-ip.c [5:15]
+        libraries/libldap/util-int.c [4:14]
 
 KEEP     ISC                  3cb783f9e43abfaf9896117acf245d61
 BELONGS libraries/liblmdb/ya.make
@@ -447,47 +397,7 @@ BELONGS libraries/liblmdb/ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
     Files with this license:
-        libraries/liblmdb/mdb.c [4734:4740]
-
-KEEP     OLDAP-2.8            3ce320193309237e594a8c53a57d6187
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/rq.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/rq.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 86.44
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/rq.c [4:14]
-
-KEEP     OLDAP-2.8            49c8c38055e4763c9c0874f273f30cfa
-BELONGS libraries/liblmdb/ya.make
-FILE_INCLUDE LICENSE found in files: libraries/liblmdb/midl.c at line 14, libraries/liblmdb/midl.h at line 22
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/liblmdb/midl.c at line 14, libraries/liblmdb/midl.h at line 22
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 83.61
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/liblmdb/midl.c [6:16]
-        libraries/liblmdb/midl.h [14:24]
-
-KEEP     OLDAP-2.8            4bcb81168f6ba83a9ca0c13f25fb9d45
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/thr_debug.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/thr_debug.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 94.44
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/thr_debug.c [5:14]
+        libraries/liblmdb/mdb.c [4748:4754]
 
 KEEP     MIT                  4e30ec0d253f2494c9f8e45c79a9526f
 BELONGS ya.make
@@ -521,18 +431,19 @@ BELONGS ya.make
     Files with this license:
         ANNOUNCEMENT [98:99]
 
-KEEP     OLDAP-2.8            562a17d7aeb99a80ea7e47dcad016d72
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/msctrl.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/msctrl.c at line 12
+KEEP     OLDAP-2.8            54a25b60219ddd2435a322b4696456d9
+BELONGS libraries/liblmdb/ya.make
+FILE_INCLUDE LICENSE found in files: libraries/liblmdb/midl.c at line 14, libraries/liblmdb/midl.h at line 22
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/liblmdb/midl.c at line 14, libraries/liblmdb/midl.h at line 22
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 86.44
+        Score           : 83.61
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/msctrl.c [4:14]
+        libraries/liblmdb/midl.c [6:16]
+        libraries/liblmdb/midl.h [14:24]
 
 KEEP     Bsd-Original-Uc-1986 5862dcb9c5db1c2cb9ecdd27761ae954
 BELONGS libraries/liblber/ya.make ya.make
@@ -557,6 +468,21 @@ BELONGS libraries/liblber/ya.make ya.make
         libraries/libldap/avl.c [19:24]
         libraries/libldap/sort.c [19:24]
 
+KEEP     OLDAP-2.8            59bdbb7724725bafcd46e35c550fdfa0
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap-tls.h at line 12, libraries/libldap/tls_g.c at line 12, libraries/libldap/tls_o.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap-tls.h at line 12, libraries/libldap/tls_g.c at line 12, libraries/libldap/tls_o.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 92.73
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/ldap-tls.h [5:14]
+        libraries/libldap/tls_g.c [5:14]
+        libraries/libldap/tls_o.c [5:14]
+
 KEEP     OLDAP-2.8            5b5a10eb0f09d3ee00468f9e755a1817
 BELONGS ya.make
 FILE_INCLUDE LICENSE found in files: include/ldap_utf8.h at line 26, libraries/libldap/controls.c at line 26, libraries/libldap/request.c at line 29, libraries/libldap/result.c at line 30
@@ -574,6 +500,19 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ldap_utf8.h at li
         libraries/libldap/controls.c [25:26]
         libraries/libldap/request.c [28:29]
         libraries/libldap/result.c [29:30]
+
+KEEP     OLDAP-2.8            5d41fc5e457c69b145c70921152841e2
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/msctrl.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/msctrl.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/msctrl.c [4:14]
 
 KEEP     OLDAP-2.8            6b1a5a386f3b6620aa54bbeac4ee990e
 BELONGS ya.make
@@ -610,6 +549,20 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-mappings.LICENSE
     Files with this license:
         libraries/liblunicode/UCD-Terms [3:28]
+
+KEEP     OLDAP-2.8            74bc18d8375ff957f79356ad85bdf8b6
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap_thr_debug.h at line 12, libraries/libldap/turn.c at line 11
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap_thr_debug.h at line 12, libraries/libldap/turn.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 92.73
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/ldap_thr_debug.h [5:14]
+        libraries/libldap/turn.c [4:13]
 
 KEEP     BSD-3-Clause         74f06c2629dc1eafe79013792f8bdaaa
 BELONGS ya.make
@@ -667,19 +620,6 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ldap_utf8.h at li
         libraries/libldap/request.c [25:27]
         libraries/libldap/result.c [26:28]
 
-KEEP     OLDAP-2.8            84d8808814b3c96850a45fa5a7f6ba58
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/tavl.c at line 13
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/tavl.c at line 13
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 82.26
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/tavl.c [5:15]
-
 KEEP     BSD-4-Clause-UC      8a6ce85cef04d97fc820cd2d8f7a07d6
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -691,18 +631,19 @@ BELONGS ya.make
     Files with this license:
         include/ldap_queue.h [19:45]
 
-KEEP     OLDAP-2.8            8b5c7970f78ec27a5ab118f2f940ca8a
+KEEP     OLDAP-2.8            8d3fa69ce9f2d1ab35c1503db49a0133
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/pagectrl.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/pagectrl.c at line 12
+FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap_sync.c at line 11, libraries/libldap/txn.c at line 11
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap_sync.c at line 11, libraries/libldap/txn.c at line 11
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 87.93
+        Score           : 92.73
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/pagectrl.c [4:14]
+        libraries/libldap/ldap_sync.c [4:13]
+        libraries/libldap/txn.c [4:13]
 
 KEEP     OLDAP-2.8            8f240608afc36cf2565460bf156fe16d
 BELONGS ya.make
@@ -720,6 +661,19 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/sortctr
         libraries/libldap/utf-8-conv.c [19:19]
         libraries/libldap/vlvctrl.c [19:19]
 
+KEEP     OLDAP-2.8            8f99778e3662353eb93401f27a4db3e3
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/thr_debug.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/thr_debug.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/thr_debug.c [5:14]
+
 KEEP     Public-Domain        998232b3723152b1ca1664d8dc30c442
 BELONGS libraries/liblmdb/ya.make
     License text:
@@ -730,7 +684,7 @@ BELONGS libraries/liblmdb/ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        libraries/liblmdb/mdb.c [4732:4732]
+        libraries/liblmdb/mdb.c [4746:4746]
 
 KEEP     Bsd-Original-Uc-1986 9a899954490c2d49b45f904dad691200
 BELONGS ya.make
@@ -743,31 +697,18 @@ BELONGS ya.make
     Files with this license:
         COPYRIGHT [48:51]
 
-KEEP     OLDAP-2.8            9c161a98e656eda16a6881ddbde50fcc
+KEEP     OLDAP-2.8            9b714ea41bbe512bb33a4b902afe5b6f
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: include/portable-linux.h at line 15
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/portable-linux.h at line 15
+FILE_INCLUDE LICENSE found in files: libraries/libldap/os-ip.c at line 13
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/os-ip.c at line 13
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 92.73
+        Score           : 87.93
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        include/portable-linux.h [8:17]
-
-KEEP     OLDAP-2.8            9caae5a8f6bd71bb38be94d07337fd87
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/fetch.c at line 13
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/fetch.c at line 13
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 85.00
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/fetch.c [5:15]
+        libraries/libldap/os-ip.c [5:15]
 
 KEEP     Bsd-Original-Uc-1986 a5fe108d281125a03c0ace5881107b07
 BELONGS ya.make
@@ -794,32 +735,6 @@ BELONGS ya.make
     Files with this license:
         libraries/libldap/modrdn.c [19:24]
 
-KEEP     OLDAP-2.8            a73c0564c145ecbebb10262a395f5afb
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: include/openldap.h at line 11
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/openldap.h at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 94.44
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        include/openldap.h [4:13]
-
-KEEP     OLDAP-2.8            b100b89b89b44bf737f93b2c203c7a5a
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/deref.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/deref.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 87.93
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        libraries/libldap/deref.c [4:14]
-
 SKIP     LicenseRef-scancode-free-unknown b31b218c648b4f0d0de21f8585b1ae32
 BELONGS ya.make
     # part of OLDAP
@@ -832,6 +747,45 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
     Files with this license:
         ANNOUNCEMENT [53:53]
+
+KEEP     OLDAP-2.8            ba626e489ba82cdd3a0f508215d88da0
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/dds.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/dds.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 83.61
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/dds.c [4:14]
+
+KEEP     OLDAP-2.8            ba99131981cae74b584dee2666d9036c
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/pagectrl.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/pagectrl.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 87.93
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/pagectrl.c [4:14]
+
+KEEP     OLDAP-2.8            bd095d1f08c7afe8f3381be18000135b
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/ldap_queue.h at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ldap_queue.h at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        include/ldap_queue.h [5:14]
 
 SKIP     LicenseRef-scancode-warranty-disclaimer be5b8cdff8e89a72e8b99fd570bc101f
 BELONGS ya.make
@@ -846,6 +800,32 @@ BELONGS ya.make
     Files with this license:
         libraries/libldap/os-local.c [23:23]
 
+KEEP     OLDAP-2.8            befbe047a2d77394f7275ea7152e1bec
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/fetch.c at line 13
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/fetch.c at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 85.00
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/fetch.c [5:15]
+
+KEEP     OLDAP-2.8            c432aa07aa0489e841d0ff73ae952bc4
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/rq.c at line 12
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/rq.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 86.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/rq.c [4:14]
+
 KEEP     OLDAP-2.8            ca5b285008cfaa34aa652a04594bb3b1
 BELONGS ya.make
     License text:
@@ -858,33 +838,18 @@ BELONGS ya.make
     Files with this license:
         ANNOUNCEMENT [52:52]
 
-KEEP     OLDAP-2.8            cdec8102e27d9f46e6e04866e2c03689
+KEEP     OLDAP-2.8            cb06023266c1bc4d8476b18b5ee54442
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap-tls.h at line 12, libraries/libldap/tls_g.c at line 12, libraries/libldap/tls_o.c at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap-tls.h at line 12, libraries/libldap/tls_g.c at line 12, libraries/libldap/tls_o.c at line 12
+FILE_INCLUDE LICENSE found in files: libraries/libldap/tavl.c at line 13
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/tavl.c at line 13
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
-        Score           : 92.73
+        Score           : 82.26
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/ldap-tls.h [5:14]
-        libraries/libldap/tls_g.c [5:14]
-        libraries/libldap/tls_o.c [5:14]
-
-KEEP     OLDAP-2.8            d222ba7a8f001e343192f594d27fad68
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: include/ldap_queue.h at line 12
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ldap_queue.h at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 94.44
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        include/ldap_queue.h [5:14]
+        libraries/libldap/tavl.c [5:15]
 
 KEEP     OLDAP-2.8            d5eaab9197effbe2674a96f5684cbd12
 BELONGS libraries/liblmdb/ya.make
@@ -957,10 +922,23 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ldap_utf8.h at li
         libraries/libldap/request.c [25:25]
         libraries/libldap/result.c [26:26]
 
-KEEP     OLDAP-2.8            f4914fcc83908bd6abcd757c96435ca6
+KEEP     OLDAP-2.8            f8d96fc8f748c9041c0d354c8188b7d4
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: libraries/libldap/ldap_sync.c at line 11, libraries/libldap/txn.c at line 11
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap_sync.c at line 11, libraries/libldap/txn.c at line 11
+FILE_INCLUDE LICENSE found in files: include/openldap.h at line 11
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/openldap.h at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 94.44
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        include/openldap.h [4:13]
+
+KEEP     OLDAP-2.8            fba6fc259c7f7ee5b7b7410876743d62
+BELONGS libraries/liblber/ya.make ya.make
+FILE_INCLUDE LICENSE found in files: libraries/liblber/assert.c at line 11, libraries/liblber/bprint.c at line 11, libraries/liblber/debug.c at line 11, libraries/liblber/decode.c at line 12, libraries/liblber/encode.c at line 12, libraries/liblber/io.c at line 12, libraries/liblber/lber-int.h at line 11, libraries/liblber/memory.c at line 11, libraries/liblber/options.c at line 11, libraries/liblber/sockbuf.c at line 12, libraries/liblber/stdio.c at line 11, libraries/liblber/version.c at line 10, libraries/libldap/abandon.c at line 12, libraries/libldap/add.c at line 12, libraries/libldap/addentry.c at line 12, libraries/libldap/assertion.c at line 11, libraries/libldap/avl.c at line 12, libraries/libldap/bind.c at line 12, libraries/libldap/cancel.c at line 11, libraries/libldap/charray.c at line 12, libraries/libldap/compare.c at line 11, libraries/libldap/controls.c at line 11, libraries/libldap/cyrus.c at line 11, libraries/libldap/delete.c at line 11, libraries/libldap/dnssrv.c at line 11, libraries/libldap/error.c at line 11, libraries/libldap/extended.c at line 11, libraries/libldap/filter.c at line 12, libraries/libldap/free.c at line 12, libraries/libldap/getattr.c at line 11, libraries/libldap/getdn.c at line 11, libraries/libldap/getentry.c at line 11, libraries/libldap/getvalues.c at line 11, libraries/libldap/init.c at line 11, libraries/libldap/lbase64.c at line 12, libraries/libldap/ldap-int.h at line 12, libraries/libldap/ldif.c at line 12, libraries/libldap/ldifutil.c at line 11, libraries/libldap/messages.c at line 12, libraries/libldap/modify.c at line 11, libraries/libldap/modrdn.c at line 11, libraries/libldap/open.c at line 11, libraries/libldap/options.c at line 11, libraries/libldap/os-local.c at line 12, libraries/libldap/passwd.c at line 11, libraries/libldap/print.c at line 11, libraries/libldap/psearchctrl.c at line 11, libraries/libldap/references.c at line 12, libraries/libldap/request.c at line 11, libraries/libldap/result.c at line 12, libraries/libldap/sasl.c at line 11, libraries/libldap/sbind.c at line 11, libraries/libldap/schema.c at line 11, libraries/libldap/search.c at line 11, libraries/libldap/sort.c at line 12, libraries/libldap/sortctrl.c at line 11, libraries/libldap/string.c at line 11, libraries/libldap/tls2.c at line 12, libraries/libldap/unbind.c at line 11, libraries/libldap/url.c at line 12, libraries/libldap/utf-8-conv.c at line 11, libraries/libldap/utf-8.c at line 12, libraries/libldap/vc.c at line 11, libraries/libldap/version.c at line 10, libraries/libldap/vlvctrl.c at line 11, libraries/libldap/whoami.c at line 11
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/liblber/assert.c at line 11, libraries/liblber/bprint.c at line 11, libraries/liblber/debug.c at line 11, libraries/liblber/decode.c at line 12, libraries/liblber/encode.c at line 12, libraries/liblber/io.c at line 12, libraries/liblber/lber-int.h at line 11, libraries/liblber/memory.c at line 11, libraries/liblber/options.c at line 11, libraries/liblber/sockbuf.c at line 12, libraries/liblber/stdio.c at line 11, libraries/liblber/version.c at line 10, libraries/libldap/abandon.c at line 12, libraries/libldap/add.c at line 12, libraries/libldap/addentry.c at line 12, libraries/libldap/assertion.c at line 11, libraries/libldap/avl.c at line 12, libraries/libldap/bind.c at line 12, libraries/libldap/cancel.c at line 11, libraries/libldap/charray.c at line 12, libraries/libldap/compare.c at line 11, libraries/libldap/controls.c at line 11, libraries/libldap/cyrus.c at line 11, libraries/libldap/delete.c at line 11, libraries/libldap/dnssrv.c at line 11, libraries/libldap/error.c at line 11, libraries/libldap/extended.c at line 11, libraries/libldap/filter.c at line 12, libraries/libldap/free.c at line 12, libraries/libldap/getattr.c at line 11, libraries/libldap/getdn.c at line 11, libraries/libldap/getentry.c at line 11, libraries/libldap/getvalues.c at line 11, libraries/libldap/init.c at line 11, libraries/libldap/lbase64.c at line 12, libraries/libldap/ldap-int.h at line 12, libraries/libldap/ldif.c at line 12, libraries/libldap/ldifutil.c at line 11, libraries/libldap/messages.c at line 12, libraries/libldap/modify.c at line 11, libraries/libldap/modrdn.c at line 11, libraries/libldap/open.c at line 11, libraries/libldap/options.c at line 11, libraries/libldap/os-local.c at line 12, libraries/libldap/passwd.c at line 11, libraries/libldap/print.c at line 11, libraries/libldap/psearchctrl.c at line 11, libraries/libldap/references.c at line 12, libraries/libldap/request.c at line 11, libraries/libldap/result.c at line 12, libraries/libldap/sasl.c at line 11, libraries/libldap/sbind.c at line 11, libraries/libldap/schema.c at line 11, libraries/libldap/search.c at line 11, libraries/libldap/sort.c at line 12, libraries/libldap/sortctrl.c at line 11, libraries/libldap/string.c at line 11, libraries/libldap/tls2.c at line 12, libraries/libldap/unbind.c at line 11, libraries/libldap/url.c at line 12, libraries/libldap/utf-8-conv.c at line 11, libraries/libldap/utf-8.c at line 12, libraries/libldap/vc.c at line 11, libraries/libldap/version.c at line 10, libraries/libldap/vlvctrl.c at line 11, libraries/libldap/whoami.c at line 11
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: OLDAP-2.8
@@ -968,8 +946,86 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/ldap_sy
         Match type      : NOTICE
         Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
     Files with this license:
-        libraries/libldap/ldap_sync.c [4:13]
-        libraries/libldap/txn.c [4:13]
+        libraries/liblber/assert.c [4:13]
+        libraries/liblber/bprint.c [4:13]
+        libraries/liblber/debug.c [4:13]
+        libraries/liblber/decode.c [5:14]
+        libraries/liblber/encode.c [5:14]
+        libraries/liblber/io.c [5:14]
+        libraries/liblber/lber-int.h [4:13]
+        libraries/liblber/memory.c [4:13]
+        libraries/liblber/options.c [4:13]
+        libraries/liblber/sockbuf.c [5:14]
+        libraries/liblber/stdio.c [4:13]
+        libraries/liblber/version.c [3:12]
+        libraries/libldap/abandon.c [5:14]
+        libraries/libldap/add.c [5:14]
+        libraries/libldap/addentry.c [5:14]
+        libraries/libldap/assertion.c [4:13]
+        libraries/libldap/avl.c [5:14]
+        libraries/libldap/bind.c [5:14]
+        libraries/libldap/cancel.c [4:13]
+        libraries/libldap/charray.c [5:14]
+        libraries/libldap/compare.c [4:13]
+        libraries/libldap/controls.c [4:13]
+        libraries/libldap/cyrus.c [4:13]
+        libraries/libldap/delete.c [4:13]
+        libraries/libldap/dnssrv.c [4:13]
+        libraries/libldap/error.c [4:13]
+        libraries/libldap/extended.c [4:13]
+        libraries/libldap/filter.c [5:14]
+        libraries/libldap/free.c [5:14]
+        libraries/libldap/getattr.c [4:13]
+        libraries/libldap/getdn.c [4:13]
+        libraries/libldap/getentry.c [4:13]
+        libraries/libldap/getvalues.c [4:13]
+        libraries/libldap/init.c [4:13]
+        libraries/libldap/lbase64.c [5:14]
+        libraries/libldap/ldap-int.h [5:14]
+        libraries/libldap/ldif.c [5:14]
+        libraries/libldap/ldifutil.c [4:13]
+        libraries/libldap/messages.c [5:14]
+        libraries/libldap/modify.c [4:13]
+        libraries/libldap/modrdn.c [4:13]
+        libraries/libldap/open.c [4:13]
+        libraries/libldap/options.c [4:13]
+        libraries/libldap/os-local.c [5:14]
+        libraries/libldap/passwd.c [4:13]
+        libraries/libldap/print.c [4:13]
+        libraries/libldap/psearchctrl.c [4:13]
+        libraries/libldap/references.c [5:14]
+        libraries/libldap/request.c [4:13]
+        libraries/libldap/result.c [5:14]
+        libraries/libldap/sasl.c [4:13]
+        libraries/libldap/sbind.c [4:13]
+        libraries/libldap/schema.c [4:13]
+        libraries/libldap/search.c [4:13]
+        libraries/libldap/sort.c [5:14]
+        libraries/libldap/sortctrl.c [4:13]
+        libraries/libldap/string.c [4:13]
+        libraries/libldap/tls2.c [5:14]
+        libraries/libldap/unbind.c [4:13]
+        libraries/libldap/url.c [5:14]
+        libraries/libldap/utf-8-conv.c [4:13]
+        libraries/libldap/utf-8.c [5:14]
+        libraries/libldap/vc.c [4:13]
+        libraries/libldap/version.c [3:12]
+        libraries/libldap/vlvctrl.c [4:13]
+        libraries/libldap/whoami.c [4:13]
+
+KEEP     OLDAP-2.8            fc35855e98d2fe327092e012a25afb9e
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: libraries/libldap/account_usability.c at line 13, libraries/libldap/ppolicy.c at line 13
+FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/account_usability.c at line 13, libraries/libldap/ppolicy.c at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OLDAP-2.8
+        Score           : 77.27
+        Match type      : NOTICE
+        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
+    Files with this license:
+        libraries/libldap/account_usability.c [4:15]
+        libraries/libldap/ppolicy.c [4:15]
 
 KEEP     OLDAP-2.8            fea4173406c7d41894659857b1cc001a
 BELONGS ya.make
@@ -987,59 +1043,3 @@ FILE_INCLUDE libraries/liblmdb/LICENSE found in files: libraries/libldap/sortctr
         libraries/libldap/sortctrl.c [22:23]
         libraries/libldap/utf-8-conv.c [22:23]
         libraries/libldap/vlvctrl.c [22:23]
-
-KEEP     OLDAP-2.8            ff37bbe729c38b7d2a7292961d94893b
-BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: include/ac/assert.h at line 12, include/ac/bytes.h at line 12, include/ac/ctype.h at line 12, include/ac/dirent.h at line 12, include/ac/errno.h at line 12, include/ac/fdset.h at line 12, include/ac/localize.h at line 12, include/ac/param.h at line 12, include/ac/signal.h at line 12, include/ac/socket.h at line 12, include/ac/stdarg.h at line 12, include/ac/stdlib.h at line 12, include/ac/string.h at line 12, include/ac/syslog.h at line 12, include/ac/time.h at line 12, include/ac/unistd.h at line 12, include/lber.h at line 11, include/lber_pvt.h at line 11, include/lber_types.h at line 12, include/ldap.h at line 11, include/ldap_avl.h at line 12, include/ldap_cdefs.h at line 11, include/ldap_config.h at line 12, include/ldap_defaults.h at line 11, include/ldap_features.h at line 12, include/ldap_int_thread.h at line 12, include/ldap_log.h at line 11, include/ldap_pvt.h at line 11, include/ldap_pvt_thread.h at line 12, include/ldap_pvt_uc.h at line 11, include/ldap_rq.h at line 11, include/ldap_schema.h at line 11, include/ldap_utf8.h at line 11, include/ldif.h at line 11, include/lutil.h at line 11, include/lutil_lockf.h at line 11, libraries/libldap/rdwr.c at line 11, libraries/libldap/thr_nt.c at line 12, libraries/libldap/thr_posix.c at line 12, libraries/libldap/thr_pth.c at line 12, libraries/libldap/thr_thr.c at line 12, libraries/libldap/threads.c at line 11, libraries/libldap/tpool.c at line 11, libraries/liblunicode/ucdata/ucdata.h at line 11
-FILE_INCLUDE libraries/liblmdb/LICENSE found in files: include/ac/assert.h at line 12, include/ac/bytes.h at line 12, include/ac/ctype.h at line 12, include/ac/dirent.h at line 12, include/ac/errno.h at line 12, include/ac/fdset.h at line 12, include/ac/localize.h at line 12, include/ac/param.h at line 12, include/ac/signal.h at line 12, include/ac/socket.h at line 12, include/ac/stdarg.h at line 12, include/ac/stdlib.h at line 12, include/ac/string.h at line 12, include/ac/syslog.h at line 12, include/ac/time.h at line 12, include/ac/unistd.h at line 12, include/lber.h at line 11, include/lber_pvt.h at line 11, include/lber_types.h at line 12, include/ldap.h at line 11, include/ldap_avl.h at line 12, include/ldap_cdefs.h at line 11, include/ldap_config.h at line 12, include/ldap_defaults.h at line 11, include/ldap_features.h at line 12, include/ldap_int_thread.h at line 12, include/ldap_log.h at line 11, include/ldap_pvt.h at line 11, include/ldap_pvt_thread.h at line 12, include/ldap_pvt_uc.h at line 11, include/ldap_rq.h at line 11, include/ldap_schema.h at line 11, include/ldap_utf8.h at line 11, include/ldif.h at line 11, include/lutil.h at line 11, include/lutil_lockf.h at line 11, libraries/libldap/rdwr.c at line 11, libraries/libldap/thr_nt.c at line 12, libraries/libldap/thr_posix.c at line 12, libraries/libldap/thr_pth.c at line 12, libraries/libldap/thr_thr.c at line 12, libraries/libldap/threads.c at line 11, libraries/libldap/tpool.c at line 11, libraries/liblunicode/ucdata/ucdata.h at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: OLDAP-2.8
-        Score           : 94.44
-        Match type      : NOTICE
-        Links           : http://www.openldap.org/software/release/license.html, https://spdx.org/licenses/OLDAP-2.8
-    Files with this license:
-        include/ac/assert.h [5:14]
-        include/ac/bytes.h [5:14]
-        include/ac/ctype.h [5:14]
-        include/ac/dirent.h [5:14]
-        include/ac/errno.h [5:14]
-        include/ac/fdset.h [5:14]
-        include/ac/localize.h [5:14]
-        include/ac/param.h [5:14]
-        include/ac/signal.h [5:14]
-        include/ac/socket.h [5:14]
-        include/ac/stdarg.h [5:14]
-        include/ac/stdlib.h [5:14]
-        include/ac/string.h [5:14]
-        include/ac/syslog.h [5:14]
-        include/ac/time.h [5:14]
-        include/ac/unistd.h [5:14]
-        include/lber.h [4:13]
-        include/lber_pvt.h [4:13]
-        include/lber_types.h [5:14]
-        include/ldap.h [4:13]
-        include/ldap_avl.h [5:14]
-        include/ldap_cdefs.h [4:13]
-        include/ldap_config.h [5:14]
-        include/ldap_defaults.h [4:13]
-        include/ldap_features.h [5:14]
-        include/ldap_int_thread.h [5:14]
-        include/ldap_log.h [4:13]
-        include/ldap_pvt.h [4:13]
-        include/ldap_pvt_thread.h [5:14]
-        include/ldap_pvt_uc.h [4:13]
-        include/ldap_rq.h [4:13]
-        include/ldap_schema.h [4:13]
-        include/ldap_utf8.h [4:13]
-        include/ldif.h [4:13]
-        include/lutil.h [4:13]
-        include/lutil_lockf.h [4:13]
-        libraries/libldap/rdwr.c [4:13]
-        libraries/libldap/thr_nt.c [5:14]
-        libraries/libldap/thr_posix.c [5:14]
-        libraries/libldap/thr_pth.c [5:14]
-        libraries/libldap/thr_thr.c [5:14]
-        libraries/libldap/threads.c [4:13]
-        libraries/libldap/tpool.c [4:13]
-        libraries/liblunicode/ucdata/ucdata.h [4:13]

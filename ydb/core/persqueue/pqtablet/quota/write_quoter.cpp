@@ -60,6 +60,7 @@ bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig
 }
 
 void TWriteQuoter::HandleWakeUpImpl() {
+    PartitionDeduplicationIdQuotaTracker.Update(ActorContext().Now());
 }
 
 void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {

@@ -136,6 +136,7 @@ class TLocalTopicReadSessionActor final
         std::optional<TInstant> ReadFrom;
         std::optional<TDuration> MaxLag;
         std::vector<i64> PartitionIds;
+        bool AutoPartitioningSupport = false;
     };
 
 public:
@@ -187,6 +188,7 @@ protected:
         if (ReadSettings.MaxLag) {
             *topic.mutable_max_lag() = NProtoInterop::CastToProto(*ReadSettings.MaxLag);
         }
+        initRequest.set_auto_partitioning_support(ReadSettings.AutoPartitioningSupport);
 
         AddSessionEvent(std::move(message));
     }
@@ -246,6 +248,7 @@ private:
             Y_VALIDATE(partitionId <= std::numeric_limits<i64>::max(), "PartitionId is too large");
             settings.PartitionIds.emplace_back(partitionId);
         }
+        settings.AutoPartitioningSupport = sessionSettings.AutoPartitioningSupport_;
 
         return settings;
     }
@@ -468,7 +471,12 @@ private:
             .TopicPath = info.path(),
             .ReadSessionId = SessionId,
         });
-        Y_VALIDATE(PartitionSessions.emplace(partitionSessionId, partitionSession).second, "Partition session #" << partitionSessionId << " already exists");
+        if (const auto [it, inserted] = PartitionSessions.emplace(partitionSessionId, partitionSession); !inserted) {
+            // After internal server retry session may be reconnected
+            LOG_N("Partition session #" << partitionSessionId << " reconnected");
+            AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost);
+            it->second = partitionSession;
+        }
 
         AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
             std::move(partitionSession),
@@ -645,7 +653,7 @@ public:
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
-        Y_VALIDATE(!settings.MaxEventsCount_, "MaxEventsCount is not allowed for GetEvent");
+        Y_VALIDATE(settings.MaxEventsCount_.value_or(1) == 1, "MaxEventsCount should be one for GetEvent");
         Y_VALIDATE(!settings.Tx_, "Transaction is not supported for local topic read session");
         return GetEvent(settings.Block_, settings.MaxByteSize_);
     }
@@ -688,7 +696,6 @@ private:
     static void ValidateSettings(const TReadSessionSettings& settings) {
         TBase::ValidateSettings(settings);
 
-        Y_VALIDATE(!settings.AutoPartitioningSupport_, "AutoPartitioningSupport is not supported for local topic read session");
         Y_VALIDATE(settings.Decompress_, "Read session without decompression is not supported");
 
         const auto& eventHandlers = settings.EventHandlers_;

@@ -192,10 +192,8 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(AggHashShuffle, UseSink) {
+    Y_UNIT_TEST(AggHashShuffle) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
         TKikimrRunner kikimr(settings);
         {
             const TString query = R"(

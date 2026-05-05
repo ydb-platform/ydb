@@ -3,8 +3,7 @@
 
 #include <util/generic/algorithm.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -675,5 +674,4 @@ TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& 
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

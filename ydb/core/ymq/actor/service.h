@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_multi_map.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <library/cpp/logger/log.h>
 
@@ -45,6 +46,8 @@ private:
     void InitSchemeCache();
 
     void HandleWakeup(TEvWakeup::TPtr& ev);
+    void HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::TPtr& ev);
+    void HandleDeferredTopicCreationResult(TSqsEvents::TEvDeferredTopicCreationResult::TPtr& ev);
     void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev);
@@ -69,9 +72,13 @@ private:
     void ScheduleRequestSqsUsersList();
     void RequestSqsUsersList();
 
+    TString MakeDeferredTopicCreationKey(const TString& userName, const TString& queueName) const;
+
     void ScheduleRequestSqsQueuesList();
     void RequestSqsQueuesList();
-    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId) Y_WARN_UNUSED_RESULT;
+
+    void SchedulePeriodicCreateTopic();
+    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled = true) Y_WARN_UNUSED_RESULT;
 
     void RemoveQueue(const TString& userName, const TString& queue);
     TUsersMap::iterator MutableUserIter(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
@@ -79,7 +86,7 @@ private:
     void RemoveUser(const TString& userName);
     std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
                                                         const TString& customName, const TString& folderId, const ui32 tablesFormat, const ui64 version,
-                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo);
+                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo, bool topicCreated);
 
     void AnswerNoUserToRequests();
     void AnswerNoQueueToRequests(const TUserInfoPtr& user);
@@ -198,6 +205,9 @@ private:
     TCloudEventsConfig CloudEventsConfig;
 
     THolder<TLocalLeaderManager> LocalLeaderManager;
+
+    /// Queues for which a deferred topic creation actor is already running (user\\0queue).
+    THashSet<TString> PendingDeferredTopicCreations_;
 };
 
 } // namespace NKikimr::NSQS

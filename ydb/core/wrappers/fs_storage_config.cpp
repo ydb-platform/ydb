@@ -1,6 +1,10 @@
 #include "fs_storage.h"
 #include "fs_storage_config.h"
 
+#include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 namespace NKikimr::NWrappers::NExternalStorage {
 
 TString TFsExternalStorageConfig::DoGetStorageId() const {
@@ -13,6 +17,16 @@ IExternalStorageOperator::TPtr TFsExternalStorageConfig::DoConstructStorageOpera
 
 TFsExternalStorageConfig::TFsExternalStorageConfig(const NKikimrSchemeOp::TFSSettings& settings)
     : BasePath(settings.GetBasePath())
+{
+}
+
+TFsExternalStorageConfig::TFsExternalStorageConfig(const Ydb::Export::ExportToFsSettings& settings)
+    : BasePath(settings.base_path())
+{
+}
+
+TFsExternalStorageConfig::TFsExternalStorageConfig(const Ydb::Import::ImportFromFsSettings& settings)
+    : BasePath(settings.base_path())
 {
 }
 

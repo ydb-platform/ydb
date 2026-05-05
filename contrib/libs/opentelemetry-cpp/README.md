@@ -7,6 +7,7 @@ Status](https://github.com/open-telemetry/opentelemetry-cpp/actions/workflows/ci
 [![Release](https://img.shields.io/github/v/release/open-telemetry/opentelemetry-cpp?include_prereleases&style=)](https://github.com/open-telemetry/opentelemetry-cpp/releases/)
 [![FOSSA License Status](https://app.fossa.com/api/projects/custom%2B162%2Fgithub.com%2Fopen-telemetry%2Fopentelemetry-cpp.svg?type=shield&issueType=license)](https://app.fossa.com/projects/custom%2B162%2Fgithub.com%2Fopen-telemetry%2Fopentelemetry-cpp?ref=badge_shield&issueType=license)
 [![FOSSA Security Status](https://app.fossa.com/api/projects/custom%2B162%2Fgithub.com%2Fopen-telemetry%2Fopentelemetry-cpp.svg?type=shield&issueType=security)](https://app.fossa.com/projects/custom%2B162%2Fgithub.com%2Fopen-telemetry%2Fopentelemetry-cpp?ref=badge_shield&issueType=security)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/open-telemetry/opentelemetry-cpp/badge)](https://scorecard.dev/viewer/?uri=github.com/open-telemetry/opentelemetry-cpp)
 
 The C++ [OpenTelemetry](https://opentelemetry.io/) client.
 
@@ -59,6 +60,17 @@ license requirements.
 
 Please refer to [INSTALL.md](./INSTALL.md).
 
+### Bazel Central Registry
+
+This project is available in the [Bazel Central Registry (BCR)](https://github.com/bazelbuild/bazel-central-registry/tree/main/modules/opentelemetry-cpp).
+To use it with Bazel, add the following to your `MODULE.bazel` file:
+
+```python
+bazel_dep(name = "opentelemetry-cpp", version = "x.y.z")
+```
+
+For the latest version, see [BCR: opentelemetry-cpp](https://github.com/bazelbuild/bazel-central-registry/tree/main/modules/opentelemetry-cpp).
+
 ## Getting Started
 
 As an application owner or the library author, you can find the getting started
@@ -79,8 +91,9 @@ contributors' availability. Check the [OpenTelemetry community
 calendar](https://github.com/open-telemetry/community#calendar)
 for specific dates and Zoom meeting links.
 
-Meeting notes are available as a public [Google
-doc](https://docs.google.com/document/d/1i1E4-_y4uJ083lCutKGDhkpi3n4_e774SBLi9hPLocw/edit?usp=sharing).
+Meeting notes are available as a public
+[Google doc](https://docs.google.com/document/d/1rdF6GZcCqH9huo3oqur5x_McsPS_qQ9OPSRFjIqndm8/edit?usp=sharing).
+
 For edit access, get in touch on
 [Slack](https://cloud-native.slack.com/archives/C01N3AT62SJ).
 

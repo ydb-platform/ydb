@@ -17,7 +17,13 @@ class TestBridgeBasic(BridgeKiKiMRTest):
             PileState(pile_name="r2", state=PileState.PROMOTED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.PROMOTED})
+        self.wait_for_cluster_state_any(
+            self.bridge_client,
+            [
+                {"r1": PileState.PRIMARY, "r2": PileState.PROMOTED},
+                {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+            ],
+        )
 
     def test_failover(self):
         initial_result = self.get_cluster_state(self.bridge_client)

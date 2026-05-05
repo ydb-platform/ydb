@@ -17,6 +17,11 @@ SRCS(
     http_static.h
     http.cpp
     http.h
+    http2_frames.h
+    http2_hpack.h
+    http2_hpack.cpp
+    http2.h
+    http2.cpp
 )
 
 PEERDIR(

@@ -16,15 +16,17 @@
 #include <util/string/escape.h>
 #include <util/string/subst.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-TTableRef::TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys)
-    : RefName(refName)
+TTableRef::TTableRef(TString refName, const TString& service, TDeferredAtom cluster, TNodePtr keys)
+    : RefName(std::move(refName))
     , Service(to_lower(service))
-    , Cluster(cluster)
-    , Keys(keys)
+    , Cluster(std::move(cluster))
+    , Keys(std::move(keys))
 {
 }
 
@@ -116,14 +118,14 @@ void ISource::SetGroupBySuffix(const TString& suffix) {
     GroupBySuffix_ = suffix;
 }
 
-bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions, EExprSeat exprSeat) {
+bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& columns, EExprSeat exprSeat) {
     YQL_ENSURE(exprSeat < EExprSeat::Max);
     THashSet<TString> names;
     THashSet<TString> aliasSet;
     // TODO: merge FlattenBy with FlattenByExpr
     const bool isFlatten = (exprSeat == EExprSeat::FlattenBy || exprSeat == EExprSeat::FlattenByExpr);
     THashSet<TString>& aliases = isFlatten ? FlattenByAliases_ : aliasSet;
-    for (const auto& expr : expressions) {
+    for (const auto& expr : columns) {
         const auto& alias = expr->GetLabel();
         const auto& columnNamePtr = expr->GetColumnName();
         if (alias) {
@@ -332,21 +334,21 @@ bool ISource::IsFlattenByExprs() const {
     return !Expressions(EExprSeat::FlattenByExpr).empty();
 }
 
-bool ISource::IsAlias(EExprSeat exprSeat, const TString& column) const {
+bool ISource::IsAlias(EExprSeat exprSeat, const TString& label) const {
     for (const auto& exprNode : Expressions(exprSeat)) {
         const auto& labelName = exprNode->GetLabel();
-        if (labelName && labelName == column) {
+        if (labelName && labelName == label) {
             return true;
         }
     }
     return false;
 }
 
-bool ISource::IsExprAlias(const TString& column) const {
+bool ISource::IsExprAlias(const TString& label) const {
     std::array<EExprSeat, 5> exprSeats = {{EExprSeat::FlattenBy, EExprSeat::FlattenByExpr, EExprSeat::GroupBy,
                                            EExprSeat::WindowPartitionBy, EExprSeat::DistinctAggr}};
     for (auto seat : exprSeats) {
-        if (IsAlias(seat, column)) {
+        if (IsAlias(seat, label)) {
             return true;
         }
     }
@@ -438,9 +440,9 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
     return true;
 }
 
-bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& grouingColumn) {
+bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& groupingColumn) {
     Y_UNUSED(columns);
-    Y_UNUSED(grouingColumn);
+    Y_UNUSED(groupingColumn);
     ctx.Error() << "Source not support grouping hint";
     return false;
 }
@@ -487,9 +489,14 @@ TNodePtr ISource::BuildFlattenColumns(const TString& label) {
 
 namespace {
 
-TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override, bool persistable) {
+TNodePtr BuildLambdaBodyForExprAliases(
+    TPosition pos,
+    const TVector<TNodePtr>& exprs,
+    bool override,
+    EFlattenAndAggrExprsPersistence persistence)
+{
     auto structObj = BuildAtom(pos, "row", TNodeFlags::Default);
-    for (const auto& exprNode : exprs) {
+    for (auto exprNode : exprs) {
         const auto name = exprNode->GetLabel();
         YQL_ENSURE(name);
         if (override) {
@@ -502,7 +509,25 @@ TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& e
         if (dynamic_cast<const THoppingWindow*>(exprNode.Get())) {
             continue;
         }
-        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), persistable ? structObj->Y("PersistableRepr", exprNode) : exprNode);
+
+        TString tranformer;
+        switch (persistence) {
+            case EFlattenAndAggrExprsPersistence::Disable:
+                tranformer = "";
+                break;
+            case EFlattenAndAggrExprsPersistence::Auto:
+                tranformer = "PersistableRepr";
+                break;
+            case EFlattenAndAggrExprsPersistence::Force:
+                tranformer = "EnsurePersistable";
+                break;
+        }
+
+        if (!tranformer.empty()) {
+            exprNode = structObj->Y(tranformer, exprNode);
+        }
+
+        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), std::move(exprNode));
     }
     return structObj->Y("AsList", structObj);
 }
@@ -521,7 +546,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
             Pos_,
             groupByExprs,
             ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
-            ctx.PersistableFlattenAndAggrExprs);
+            ctx.FlattenAndAggrExprsPersistence);
         res = Y("FlatMap", "core", BuildLambda(Pos_, Y("row"), body));
     }
 
@@ -530,7 +555,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
             Pos_,
             distinctAggrExprs,
             ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
-            ctx.PersistableFlattenAndAggrExprs);
+            ctx.FlattenAndAggrExprsPersistence);
         auto lambda = BuildLambda(Pos_, Y("row"), body);
         res = res ? Y("FlatMap", res, lambda) : Y("FlatMap", "core", lambda);
     }
@@ -540,7 +565,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.PersistableFlattenAndAggrExprs);
+    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.FlattenAndAggrExprsPersistence);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {

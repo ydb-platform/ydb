@@ -52,6 +52,8 @@ struct TKqpEvents {
         EvProxyPingResponse,
         EvListCompileCacheQueriesRequest,
         EvListCompileCacheQueriesResponse,
+        EvWarmupComplete,
+        EvStartWarmup,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -177,6 +179,7 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptProgressResponse,
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
+        EvDescribeResourceIdResponse,
     };
 };
 
@@ -208,6 +211,13 @@ struct TKqpBufferWriterEvents {
         EvResult,
         EvError,
         EvTerminate,
+    };
+};
+
+struct TKqpQueryTextCacheEvents {
+    enum EKqpQueryTextCacheEvents {
+        EvLookupQueryText = EventSpaceBegin(TKikimrEvents::ES_KQP) + 900,
+        EvLookupQueryTextResponse,
     };
 };
 

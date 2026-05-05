@@ -20,8 +20,8 @@ enum class EExportProgress {
 };
 
 struct TExportItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
+    uint32_t PartsTotal = 0;
+    uint32_t PartsCompleted = 0;
     TInstant StartTime;
     TInstant EndTime;
 };
@@ -53,7 +53,7 @@ class TExportToYtResponse : public TOperation {
 public:
     struct TMetadata {
         TExportToYtSettings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
@@ -118,7 +118,7 @@ class TExportToS3Response : public TOperation {
 public:
     struct TMetadata {
         TExportToS3Settings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
@@ -147,6 +147,7 @@ struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSetting
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
@@ -163,7 +164,7 @@ class TExportToFsResponse : public TOperation {
 public:
     struct TMetadata {
         TExportToFsSettings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 

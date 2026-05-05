@@ -9,11 +9,24 @@
 namespace NYql::NDq::NInternal {
 
 class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
-public:
+protected:
     using TPartitionKey = ::NPq::TPartitionKey;
 
-    const ui64 InputIndex;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
+    struct TPartitionInfo {
+        std::optional<ui64> Offset;             // offset of next event.
+        std::optional<ui64> EndOffset;          // end offset in topic on start.
+
+        bool IsFinishedInTableMode() {
+            if (!EndOffset) {                   // Not connected yet.
+                return false;
+            }
+            return *EndOffset == 0              // No data in partition on start.
+                || (Offset && *EndOffset <= *Offset);
+        }
+    };
+
+    const ui64 InputIndex = 0;
+    THashMap<TPartitionKey, TPartitionInfo> Partitions;
     const TTxId TxId;
     NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;
@@ -21,10 +34,11 @@ public:
     TString LogPrefix;
     TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
-    ui64 TaskId;
+    const ui64 TaskId = 0;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     // << Initialized when watermark tracking is enabled
 
+public:
     TDqPqReadActorBase(
         ui64 inputIndex,
         ui64 taskId,
@@ -34,22 +48,27 @@ public:
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         const NActors::TActorId& computeActorId);
 
-public:
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
+
     void LoadState(const TSourceState& state) override;
 
     ui64 GetInputIndex() const override;
+
     const TDqAsyncStats& GetIngressStats() const override;
 
+protected:
     virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
 
     virtual void InitWatermarkTracker() = 0;
+
+    virtual TString GetSessionId() const;
+
     void InitWatermarkTracker(TDuration, TDuration, const ::NMonitoring::TDynamicCounterPtr& counters = {});
+
     void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
 
-    virtual TString GetSessionId() const {
-        return TString{"empty"};
-    }
+private:
+    TString LogPartitionToOffset() const;
 };
 
 } // namespace NYql::NDq

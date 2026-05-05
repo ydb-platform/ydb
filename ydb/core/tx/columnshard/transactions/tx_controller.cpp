@@ -9,7 +9,8 @@ namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
     : Owner(owner)
-    , Counters(owner.Counters.GetCSCounters().TxProgress) {
+    , Counters(owner.Counters.GetCSCounters().TxProgress)
+{
 }
 
 bool TTxController::HaveOutdatedTxs() const {
@@ -69,6 +70,9 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
             ++countOverrideDeadline;
         } else {
+            // For transactions without deadline (e.g., schema transactions),
+            // use GetAllowedStep() to ensure MinStep is not zero after restart
+            txInfo.MinStep = GetAllowedStep();
             ++countNoDeadline;
         }
         txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
@@ -186,9 +190,10 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
+        auto txId = item.TxId;
         TPlanQueueItem tx(item.Step, item.TxId);
         RunningQueue.emplace(std::move(item));
-        return GetTxInfoVerified(item.TxId);
+        return GetTxInfoVerified(txId);
     }
     return std::nullopt;
 }
@@ -214,7 +219,7 @@ void TTxController::OnTxCompleted(const ui64 txId) {
 
 THashSet<ui64> TTxController::GetTxs() const {
     THashSet<ui64> result;
-    for (const auto& [txId, _]: Operators) {
+    for (const auto& [txId, _] : Operators) {
         result.emplace(txId);
     }
     return result;
@@ -299,7 +304,8 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         }
         return EPlanResult::Planned;
     } else {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)("schemeshard_plan_step", planStep);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)(
+            "schemeshard_plan_step", planStep);
     }
     return EPlanResult::AlreadyPlanned;
 }
@@ -394,8 +400,7 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
-    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)(
-                             "details", DebugString());
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
     Status = to;
 }
 

@@ -15,11 +15,24 @@ void ParseRecords(
     std::shared_ptr<std::atomic<bool>> cancelFlag,
     const TMaybe<TMutex>& writeMutex = Nothing());
 
-void ParseRecordsToYtDistributed(
+void StreamBulkToYtDistributed(
     NYT::TRawTableReaderPtr reader,
     IOutputStream& writer,
+    ui64 bufferSize,
+    std::shared_ptr<std::atomic<bool>> cancelFlag);
+
+void StreamBulkToRawTableWriter(
+    NYT::TRawTableReaderPtr reader,
+    NYT::TRawTableWriterPtr writer,
+    ui64 bufferSize,
+    std::shared_ptr<std::atomic<bool>> cancelFlag);
+
+void ParseRecordsPipelined(
+    NYT::TRawTableReaderPtr reader,
+    NYT::TRawTableWriterPtr writer,
     ui64 blockCount,
     ui64 blockSize,
+    const TFmrRawTableQueueSettings& queueSettings,
     std::shared_ptr<std::atomic<bool>> cancelFlag);
 
 } // namespace NYql::NFmr

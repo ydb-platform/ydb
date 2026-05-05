@@ -267,7 +267,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return {};
             }
 
-            TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *State_->Configuration));
             auto content = child;
             if (auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>()) {
                 TKeySelectorBuilder builder(child.Pos(), ctx, useNativeDescSort, outItemType);
@@ -332,6 +332,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
     auto cluster = DeriveClusterFromInput(input, selectionMode);
     if (!cluster || !IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
+    }
+
+    TVector<TYtTableBaseInfo::TPtr> tableInfos = GetInputTableInfos(input);
+    if (AnyOf(tableInfos, [](const TYtTableBaseInfo::TPtr& info) { return info->Meta->HasRLS; })) {
+        auto converted = ConvertRLSTablesToStatic(input.Maybe<TCoRight>().Input().Cast(), ctx);
+        if (!converted) {
+            return {};
+        }
+
+        return ctx.ChangeChild(
+            *node.Ptr(),
+            TCoCountBase::idx_Input,
+            Build<TCoRight>(ctx, node.Pos()).Input(converted.Cast()).Done().Ptr());
     }
 
     auto count = State_->PassiveExecution ? countBase.Count() : CleanupWorld(countBase.Count(), ctx);
@@ -602,7 +615,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
                 return {};
             }
 
-            TYtOutTableInfo outTable(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *State_->Configuration));
             auto content = child;
             auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>();
             if (keepSort && sorted) {
@@ -675,7 +688,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Length(TExprBase node, 
         YQL_ENSURE(read.Input().Size() == 1);
         TYtSection section = read.Input().Item(0);
         bool needMaterialize = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)
-            || AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; });
+            || AnyOf(section.Paths(), [](const TYtPath& path) {
+                auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || meta->IsDynamic || meta->HasRLS;
+            });
         for (auto s: section.Settings()) {
             switch (FromString<EYtSettingType>(s.Name().Value())) {
             case EYtSettingType::Take:
@@ -802,9 +818,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ResPull(TExprBase node,
     const bool hasSettings = NYql::HasAnySetting(section.Settings().Ref(),
         EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
 
-    const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
-         ? GetNativeYtTypeFlags(*scheme->Cast<TStructExprType>())
-         : 0ul;
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(read.DataSource().Cluster().StringValue(), *State_->Configuration);
+    const ui64 nativeTypeFlags = GetNativeYtTypeFlags(*scheme->Cast<TStructExprType>()) & nativeTypeCompatibility;
 
     bool requiresMapOrMerge = false;
     bool hasRanges = false;
@@ -820,8 +835,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ResPull(TExprBase node,
         }
         requiresMapOrMerge = requiresMapOrMerge || pathInfo.Table->RequiresRemap()
             || !IsSameAnnotation(*scheme, *pathInfo.Table->RowSpec->GetType())
-            || nativeTypeFlags != pathInfo.GetNativeYtTypeFlags()
-            || firstNativeType != pathInfo.GetNativeYtType();
+            || firstNativeType != pathInfo.GetNativeYtType()
+            || nativeTypeFlags != pathInfo.GetNativeYtTypeFlags();
         hasRanges = hasRanges || pathInfo.Ranges;
         hasNonTemp = hasNonTemp || !pathInfo.Table->IsTemp;
         hasDynamic = hasDynamic || pathInfo.Table->Meta->IsDynamic;

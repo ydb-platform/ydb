@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-VERSION(v1.9.1)
+VERSION(v1.10.2)
 
 SRCS(
     active_help.go
@@ -52,6 +52,12 @@ IF (OS_WINDOWS)
 ENDIF()
 
 IF (OS_ANDROID)
+    SRCS(
+        command_notwin.go
+    )
+ENDIF()
+
+IF (OS_EMSCRIPTEN)
     SRCS(
         command_notwin.go
     )

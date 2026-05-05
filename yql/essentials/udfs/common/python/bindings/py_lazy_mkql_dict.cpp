@@ -11,6 +11,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -22,8 +24,8 @@ class TLazyDictBase: public NUdf::TBoxedValue {
 protected:
     class TIterator: public NUdf::TBoxedValue {
     public:
-        TIterator(const TPyCastContext::TPtr& ctx, const NUdf::TType* type, TPyObjectPtr&& pyIter)
-            : CastCtx_(ctx)
+        TIterator(TPyCastContext::TPtr ctx, const NUdf::TType* type, TPyObjectPtr&& pyIter)
+            : CastCtx_(std::move(ctx))
             , ItemType_(type)
             , PyIter_(std::move(pyIter))
         {
@@ -81,8 +83,8 @@ protected:
 
     class TPairIterator: public NUdf::TBoxedValue {
     public:
-        TPairIterator(const TPyCastContext::TPtr& ctx, const NUdf::TType* keyType, const NUdf::TType* payType, TPyObjectPtr&& pyIter)
-            : CastCtx_(ctx)
+        TPairIterator(TPyCastContext::TPtr ctx, const NUdf::TType* keyType, const NUdf::TType* payType, TPyObjectPtr&& pyIter)
+            : CastCtx_(std::move(ctx))
             , KeyType_(keyType)
             , PayType_(payType)
             , PyIter_(std::move(pyIter))
@@ -136,8 +138,8 @@ protected:
         TPyObjectPtr PyIter_;
     };
 
-    TLazyDictBase(const TPyCastContext::TPtr& castCtx, const NUdf::TType* itemType, PyObject* pyObject)
-        : CastCtx_(castCtx)
+    TLazyDictBase(TPyCastContext::TPtr castCtx, const NUdf::TType* itemType, PyObject* pyObject)
+        : CastCtx_(std::move(castCtx))
         , ItemType_(itemType)
         , PyObject_(pyObject, TPyObjectPtr::EAddRef())
     {
@@ -554,10 +556,10 @@ private:
 
     class TIterator: public NUdf::TBoxedValue {
     public:
-        TIterator(const TPyCastContext::TPtr& ctx, const NUdf::TType* itemType, Py_ssize_t size, const TPyObjectPtr& pySeq)
-            : CastCtx_(ctx)
+        TIterator(TPyCastContext::TPtr ctx, const NUdf::TType* itemType, Py_ssize_t size, TPyObjectPtr pySeq)
+            : CastCtx_(std::move(ctx))
             , ItemType_(itemType)
-            , PySeq_(pySeq)
+            , PySeq_(std::move(pySeq))
             , Size_(size)
             , Index_(0)
         {
@@ -612,8 +614,8 @@ private:
     };
 
 public:
-    TLazySequenceAsDict(const TPyCastContext::TPtr& ctx, const NUdf::TType* itemType, TPyObjectPtr&& sequence, Py_ssize_t size)
-        : CastCtx_(ctx)
+    TLazySequenceAsDict(TPyCastContext::TPtr ctx, const NUdf::TType* itemType, TPyObjectPtr&& sequence, Py_ssize_t size)
+        : CastCtx_(std::move(ctx))
         , ItemType_(itemType)
         , Size_(size)
         , PySeq_(std::move(sequence))

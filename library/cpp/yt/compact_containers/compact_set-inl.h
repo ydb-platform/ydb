@@ -35,7 +35,7 @@ private:
     { }
 
     template <typename TOther>
-    void ConstructFrom(TOther&& rhs)
+    void ConstructFrom(TOther&& rhs) noexcept
     {
         YT_ASSERT(Small == rhs.Small);
 
@@ -47,7 +47,7 @@ private:
     }
 
     template <typename TOther>
-    const_iterator& AssignFrom(TOther&& rhs)
+    const_iterator& AssignFrom(TOther&& rhs) noexcept
     {
         if (this == &rhs) {
             return *this;
@@ -102,7 +102,7 @@ public:
         ConstructFrom(rhs);
     }
 
-    const_iterator(const_iterator&& rhs)
+    const_iterator(const_iterator&& rhs) noexcept
         : Small(rhs.Small)
     {
         ConstructFrom(std::move(rhs));
@@ -122,7 +122,7 @@ public:
         return AssignFrom(rhs);
     }
 
-    const_iterator& operator=(const_iterator&& rhs)
+    const_iterator& operator=(const_iterator&& rhs) noexcept
     {
         return AssignFrom(std::move(rhs));
     }

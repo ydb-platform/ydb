@@ -1,6 +1,8 @@
 #include "library/cpp/testing/unittest/registar.h"
 #include <library/cpp/yson/node/node_io.h>
+#include <yt/yql/providers/yt/lib/access_provider/dummy/yt_dummy_access_provider.h>
 #include <yt/yql/providers/yt/lib/secret_masker/dummy/dummy_secret_masker.h>
+#include <yt/yql/providers/yt/lib/tvm_client/dummy/dummy_tvm_client.h>
 #include <yt/yql/providers/yt/lib/ut_common/yql_ut_common.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/mock_server/server.h>
@@ -201,6 +203,8 @@ std::pair<std::shared_ptr<TYtState>, IYtGateway::TPtr> InitTest(const NTesting::
     nativeServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
     nativeServices.FileStorage = CreateFileStorage(TFileStorageConfig{});
     nativeServices.SecretMasker = CreateDummySecretMasker();
+    nativeServices.TvmClient = CreateDummyTvmClient();
+    nativeServices.YtAccessProvider = CreateYtDummyAccessProvider();
 
     auto ytGateway = CreateYtNativeGateway(nativeServices);
     auto ytState = std::make_shared<TYtState>(types);

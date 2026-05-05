@@ -23,7 +23,6 @@
 #include "src/core/lib/surface/call_trace.h"
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
-#include "src/core/lib/transport/transport_impl.h"
 
 namespace grpc_core {
 
@@ -35,11 +34,9 @@ void BatchBuilder::PendingCompletion::CompletionCallback(
   auto* pc = static_cast<PendingCompletion*>(self);
   auto* party = pc->batch->party.get();
   if (grpc_call_trace.enabled()) {
-    gpr_log(
-        GPR_DEBUG, "%s[connected] Finish batch-component %s for %s: status=%s",
-        party->DebugTag().c_str(), TString(pc->name()).c_str(),
-        grpc_transport_stream_op_batch_string(&pc->batch->batch, false).c_str(),
-        error.ToString().c_str());
+    gpr_log(GPR_DEBUG, "%sFinish batch-component %s: status=%s",
+            pc->batch->DebugPrefix(party).c_str(),
+            TString(pc->name()).c_str(), error.ToString().c_str());
   }
   party->Spawn(
       "batch-completion",
@@ -71,6 +68,10 @@ BatchBuilder::Batch::Batch(grpc_transport_stream_op_batch_payload* payload,
 
 BatchBuilder::Batch::~Batch() {
   auto* arena = party->arena();
+  if (grpc_call_trace.enabled()) {
+    gpr_log(GPR_DEBUG, "%s[connected] [batch %p] Destroy",
+            Activity::current()->DebugTag().c_str(), this);
+  }
   if (pending_receive_message != nullptr) {
     arena->DeletePooled(pending_receive_message);
   }
@@ -96,8 +97,8 @@ BatchBuilder::Batch::~Batch() {
 BatchBuilder::Batch* BatchBuilder::GetBatch(Target target) {
   if (target_.has_value() &&
       (target_->stream != target.stream ||
-       target.transport->vtable
-           ->hacky_disable_stream_op_batch_coalescing_in_connected_channel)) {
+       target.transport->filter_stack_transport()
+           ->HackyDisableStreamOpBatchCoalescingInConnectedChannel())) {
     FlushBatch();
   }
   if (!target_.has_value()) {
@@ -114,8 +115,8 @@ void BatchBuilder::FlushBatch() {
   GPR_ASSERT(target_.has_value());
   if (grpc_call_trace.enabled()) {
     gpr_log(
-        GPR_DEBUG, "%s[connected] Perform transport stream op batch: %p %s",
-        batch_->party->DebugTag().c_str(), &batch_->batch,
+        GPR_DEBUG, "%sPerform transport stream op batch: %p %s",
+        batch_->DebugPrefix().c_str(), &batch_->batch,
         grpc_transport_stream_op_batch_string(&batch_->batch, false).c_str());
   }
   std::exchange(batch_, nullptr)->PerformWith(*target_);
@@ -123,19 +124,19 @@ void BatchBuilder::FlushBatch() {
 }
 
 void BatchBuilder::Batch::PerformWith(Target target) {
-  grpc_transport_perform_stream_op(target.transport, target.stream, &batch);
+  target.transport->filter_stack_transport()->PerformStreamOp(target.stream,
+                                                              &batch);
 }
 
 ServerMetadataHandle BatchBuilder::CompleteSendServerTrailingMetadata(
-    ServerMetadataHandle sent_metadata, y_absl::Status send_result,
+    Batch* batch, ServerMetadataHandle sent_metadata, y_absl::Status send_result,
     bool actually_sent) {
   if (!send_result.ok()) {
     if (grpc_call_trace.enabled()) {
       gpr_log(GPR_DEBUG,
-              "%s[connected] Send metadata failed with error: %s, "
-              "fabricating trailing metadata",
-              Activity::current()->DebugTag().c_str(),
-              send_result.ToString().c_str());
+              "%sSend metadata failed with error: %s, fabricating trailing "
+              "metadata",
+              batch->DebugPrefix().c_str(), send_result.ToString().c_str());
     }
     sent_metadata->Clear();
     sent_metadata->Set(GrpcStatusMetadata(),
@@ -148,9 +149,9 @@ ServerMetadataHandle BatchBuilder::CompleteSendServerTrailingMetadata(
     if (grpc_call_trace.enabled()) {
       gpr_log(
           GPR_DEBUG,
-          "%s[connected] Tagging trailing metadata with "
-          "cancellation status from transport: %s",
-          Activity::current()->DebugTag().c_str(),
+          "%sTagging trailing metadata with cancellation status from "
+          "transport: %s",
+          batch->DebugPrefix().c_str(),
           actually_sent ? "sent => not-cancelled" : "not-sent => cancelled");
     }
     sent_metadata->Set(GrpcCallWasCancelled(), !actually_sent);

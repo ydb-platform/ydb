@@ -10,12 +10,13 @@
 
 namespace NKikimr::NKqp {
 
-TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& text,
-    const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId, const TString& userSid,
+    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
     const TGUCSettings& gUCSettings)
     : Cluster(cluster)
     , Database(database)
     , DatabaseId(databaseId)
+    , UserSid(userSid)
     , Text(text)
     , Settings(settings)
     , QueryParameterTypes(queryParameterTypes)
@@ -35,6 +36,12 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
             Y_ENSURE(false, "Unsupported request type");
     }
 }
+
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
+    const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
+    const TGUCSettings& gUCSettings)
+    : TKqpQueryId(cluster, database, databaseId, "", text, settings, queryParameterTypes, gUCSettings)
+{}
 
 bool TKqpQueryId::IsSql() const {
     return IsSqlQuery(Settings.QueryType);

@@ -8,8 +8,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Make transformation which builds sets of input columns from the given expression.
  *
@@ -24,5 +23,4 @@ TAutoPtr<IGraphTransformer> MakeUsedColumnsExtractor(
     TVector<THashSet<TString>>* destination,
     const TVector<THashSet<TString>>& allColumns,
     const TString& nodeName = TString{PurecalcInputCallableName});
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

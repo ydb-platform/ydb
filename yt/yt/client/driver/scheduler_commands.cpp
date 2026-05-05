@@ -537,7 +537,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<TGuid>(
+    registrar.ParameterWithUniversalAccessor<TCollectiveId>(
         "collective_id",
         [] (TThis* command) -> auto& { return command->Options.CollectiveId; })
         .Optional(/*init*/ false);

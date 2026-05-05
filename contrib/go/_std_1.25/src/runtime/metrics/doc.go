@@ -274,6 +274,11 @@ Below is the full list of supported metrics, ordered lexicographically.
 		The number of non-default behaviors executed by the go/types
 		package due to a non-default GODEBUG=gotypesalias=... setting.
 
+	/godebug/non-default-behavior/htmlmetacontenturlescape:events
+		The number of non-default behaviors executed by
+		the html/template package due to a non-default
+		GODEBUG=htmlmetacontenturlescape=... setting.
+
 	/godebug/non-default-behavior/http2client:events
 		The number of non-default behaviors executed by the net/http
 		package due to a non-default GODEBUG=http2client=... setting.
@@ -371,6 +376,11 @@ Below is the full list of supported metrics, ordered lexicographically.
 	/godebug/non-default-behavior/updatemaxprocs:events
 		The number of non-default behaviors executed by the runtime
 		package due to a non-default GODEBUG=updatemaxprocs=... setting.
+
+	/godebug/non-default-behavior/urlmaxqueryparams:events
+		The number of non-default behaviors executed by the net/url
+		package due to a non-default GODEBUG=urlmaxqueryparams=...
+		setting.
 
 	/godebug/non-default-behavior/winreadlinkvolume:events
 		The number of non-default behaviors executed by the os package

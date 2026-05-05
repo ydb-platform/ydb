@@ -4,8 +4,7 @@ items:
   include:
     mode: link
     path: ../yql/toc_p.yaml
-- name: Compatibility with PostgreSQL
-  href: ../postgresql/intro.md
+- name: PostgreSQL compatibility
   include:
     mode: link
     path: ../postgresql/toc_p.yaml

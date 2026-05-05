@@ -32,7 +32,13 @@ class CollectorHandle;
 class MetricStorage
 {
 public:
-  MetricStorage()          = default;
+  MetricStorage() = default;
+
+  MetricStorage(const MetricStorage &)            = delete;
+  MetricStorage(MetricStorage &&)                 = delete;
+  MetricStorage &operator=(const MetricStorage &) = delete;
+  MetricStorage &operator=(MetricStorage &&)      = delete;
+
   virtual ~MetricStorage() = default;
 
   /* collect the metrics from this storage */
@@ -47,6 +53,15 @@ public:
 class SyncWritableMetricStorage
 {
 public:
+  SyncWritableMetricStorage() = default;
+
+  SyncWritableMetricStorage(const SyncWritableMetricStorage &)            = delete;
+  SyncWritableMetricStorage(SyncWritableMetricStorage &&)                 = delete;
+  SyncWritableMetricStorage &operator=(const SyncWritableMetricStorage &) = delete;
+  SyncWritableMetricStorage &operator=(SyncWritableMetricStorage &&)      = delete;
+
+  virtual ~SyncWritableMetricStorage() = default;
+
   virtual void RecordLong(int64_t value,
                           const opentelemetry::context::Context &context) noexcept = 0;
 
@@ -60,15 +75,19 @@ public:
   virtual void RecordDouble(double value,
                             const opentelemetry::common::KeyValueIterable &attributes,
                             const opentelemetry::context::Context &context) noexcept = 0;
-
-  virtual ~SyncWritableMetricStorage() = default;
 };
 
 /* Represents the async metric stroage */
 class AsyncWritableMetricStorage
 {
 public:
-  AsyncWritableMetricStorage()          = default;
+  AsyncWritableMetricStorage() = default;
+
+  AsyncWritableMetricStorage(const AsyncWritableMetricStorage &)            = delete;
+  AsyncWritableMetricStorage(AsyncWritableMetricStorage &&)                 = delete;
+  AsyncWritableMetricStorage &operator=(const AsyncWritableMetricStorage &) = delete;
+  AsyncWritableMetricStorage &operator=(AsyncWritableMetricStorage &&)      = delete;
+
   virtual ~AsyncWritableMetricStorage() = default;
 
   /* Records a batch of measurements */

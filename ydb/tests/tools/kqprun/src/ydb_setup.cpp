@@ -4,10 +4,12 @@
 
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/util/aws.h>
 
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
@@ -23,6 +25,27 @@ using namespace NKikimrRun;
 namespace NKqpRun {
 
 namespace {
+
+class TAwsApiGuard {
+public:
+    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
+        : Config_{
+            .LogConfig{
+                .LogLevel = config.GetLogConfig().GetLogLevel(),
+                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
+            },
+        }
+    {
+        NKikimr::InitAwsAPI(Config_);
+    }
+
+    ~TAwsApiGuard() {
+        NKikimr::ShutdownAwsAPI(Config_);
+    }
+
+private:
+    const NKikimr::TAwsClientConfig Config_;
+};
 
 class TKqprunServer : public NKikimr::Tests::TServer {
     using TBase = NKikimr::Tests::TServer;
@@ -233,8 +256,8 @@ private:
 
         SignalHandlerPool_ = MakeHolder<TThreadPool>();
         SignalHandlerPool_->Start(1);
-        Y_ENSURE(SignalHandlerPool_->AddFunc([]() {
-            while (true) {
+        Y_ENSURE(SignalHandlerPool_->AddFunc([finished = Finished_]() {
+            while (!finished->load()) {
                 const auto signal = CurrentSignal_.load();
                 if (!signal) {
                     Sleep(TDuration::MilliSeconds(100));
@@ -524,8 +547,11 @@ private:
                     Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
             } else {
-                NKikimr::NGRpcProxy::V1::IClustersCfgProvider* clustersCfgProvider = nullptr;
-                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>(), &clustersCfgProvider).Execute();
+                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>()).Execute();
+
+                auto grpcRequestProxy = NKikimr::NGRpcService::CreateGRpcRequestProxy(Settings_.AppConfig);
+                auto grpcRequestProxyId = GetRuntime()->Register(grpcRequestProxy, node, GetRuntime()->GetAppData(node).UserPoolId);
+                GetRuntime()->GetActorSystem(node)->RegisterLocalService(NKikimr::NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
 
                 if (Settings_.MonitoringEnabled) {
                     NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
@@ -566,6 +592,8 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
+        , AwsApiGuard_(Settings_.AppConfig.GetAwsClientConfig())
+        , Finished_(std::make_shared<std::atomic_bool>(false))
     {
         TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         InitializeYqlLogger();
@@ -578,16 +606,21 @@ public:
                 Cout << CoutColors_.Cyan() << "Monitoring port"
                     << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString())
                     << ": " << CoutColors_.Default()
-                    << (nodeIndex == 0 ? FormatMonitoringLink(port, "monitoring/cluster/tenants") : ToString(port)) << Endl;
+                    << (nodeIndex == 0 ? FormatMonitoringLink(port, TStringBuilder() << "monitoring/tenant?database=" << NKikimr::CanonizePath(Settings_.DomainName)) : ToString(port)) << Endl;
             }
 
             const auto printTenantNodes = [this](const std::pair<TString, TStorageMeta::TTenant>& tenantInfo) {
                 if (tenantInfo.second.GetType() == TStorageMeta::TTenant::SERVERLESS) {
                     return;
                 }
-                const auto& nodes = Tenants_->List(GetTenantPath(tenantInfo.first));
+
+                const auto& tenantPath = GetTenantPath(tenantInfo.first);
+                const auto& nodes = Tenants_->List(tenantPath);
                 for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
-                    Cout << CoutColors_.Cyan() << "Monitoring port for dynamic node " << *it + 1 << " [" << tenantInfo.first << "]: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(*it) << Endl;
+                    const auto port = Server_->GetRuntime()->GetMonPort(*it);
+                    Cout << CoutColors_.Cyan() << "Monitoring port for dynamic node "
+                        << *it + 1 << " [" << tenantInfo.first << "]: " << CoutColors_.Default()
+                        << (it == nodes.rbegin() ? FormatMonitoringLink(port, TStringBuilder() << "monitoring/tenant?database=" << tenantPath) : ToString(port)) << Endl;
                 }
             };
             std::for_each(Settings_.Tenants.rbegin(), Settings_.Tenants.rend(), std::bind(printTenantNodes, std::placeholders::_1));
@@ -600,6 +633,16 @@ public:
                     Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
                 }
             }
+        }
+    }
+
+    ~TImpl() {
+        if (Finished_) {
+            Finished_->store(true);
+        }
+
+        if (SignalHandlerPool_) {
+            SignalHandlerPool_->Stop();
         }
     }
 
@@ -848,6 +891,7 @@ private:
 
 private:
     TYdbSetupSettings Settings_;
+    TAwsApiGuard AwsApiGuard_;
 
     TKqprunServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
@@ -859,6 +903,7 @@ private:
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
     THolder<TThreadPool> SignalHandlerPool_;
+    std::shared_ptr<std::atomic_bool> Finished_;
 };
 
 

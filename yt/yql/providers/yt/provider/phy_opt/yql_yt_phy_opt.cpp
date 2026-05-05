@@ -72,7 +72,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
-        if (State_->Configuration->EnableFuseMapToMapReduce.Get().GetOrElse(DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE)) {
+        if (State_->Configuration->FuseMapToMapReduce.Get().GetOrElse(DEFAULT_FUSE_MAP_TO_MAPREDUCE) == EFuseMapToMapReduceMode::Normal) {
             AddHandler(1, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
         }
     }

@@ -263,6 +263,70 @@ Y_UNIT_TEST_SUITE(TParserFragmentListIndexTests) {
         UNIT_ASSERT(extractedData.contains("name"));
         UNIT_ASSERT(extractedData.contains("city"));
     }
-}
 
+
+    Y_UNIT_TEST(AllColumnsMode_Basic) {
+        TString textYson = "{name=\"Alice\";age=30;city=\"NYC\"}";
+        TString binaryYson = GetBinaryYson(textYson);
+
+        TParserFragmentListIndex parser(binaryYson);
+        parser.Parse();
+        const auto& rows = parser.GetAllColumnsRows();
+
+        UNIT_ASSERT_EQUAL(rows.size(), 1);
+        const auto& row = rows[0];
+        UNIT_ASSERT_EQUAL(row.Columns.size(), 3);
+
+        // Verify column names are captured
+        TSet<TString> columnNames;
+        for (const auto& col : row.Columns) {
+            columnNames.insert(TString(col.Name));
+        }
+        UNIT_ASSERT(columnNames.contains("name"));
+        UNIT_ASSERT(columnNames.contains("age"));
+        UNIT_ASSERT(columnNames.contains("city"));
+
+        // Verify value offsets produce valid binary YSON
+        for (const auto& col : row.Columns) {
+            UNIT_ASSERT(col.ValueRange.IsValid());
+            UNIT_ASSERT(col.KeyValueRange.IsValid());
+            UNIT_ASSERT(col.KeyValueRange.StartOffset <= col.ValueRange.StartOffset);
+            UNIT_ASSERT(col.KeyValueRange.EndOffset == col.ValueRange.EndOffset);
+        }
+    }
+
+    Y_UNIT_TEST(AllColumnsMode_MultipleRows) {
+        TString textYson = "{name=\"Alice\";age=30};{name=\"Bob\";age=25}";
+        TString binaryYson = GetBinaryYson(textYson);
+
+        TParserFragmentListIndex parser(binaryYson);
+        parser.Parse();
+        const auto& rows = parser.GetAllColumnsRows();
+
+        UNIT_ASSERT_EQUAL(rows.size(), 2);
+        UNIT_ASSERT_EQUAL(rows[0].Columns.size(), 2);
+        UNIT_ASSERT_EQUAL(rows[1].Columns.size(), 2);
+    }
+
+    Y_UNIT_TEST(AllColumnsMode_NestedValues) {
+        TString textYson = "{data={nested=123};list=[1;2;3]}";
+        TString binaryYson = GetBinaryYson(textYson);
+
+        TParserFragmentListIndex parser(binaryYson);
+        parser.Parse();
+        const auto& rows = parser.GetAllColumnsRows();
+
+        UNIT_ASSERT_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_EQUAL(rows[0].Columns.size(), 2);
+
+        // Verify that raw bytes for nested values are correctly bounded
+        for (const auto& col : rows[0].Columns) {
+            TString valueBinary = binaryYson.substr(
+                col.ValueRange.StartOffset,
+                col.ValueRange.EndOffset - col.ValueRange.StartOffset
+            );
+            UNIT_ASSERT(!valueBinary.empty());
+        }
+    }
+}
 } // namespace NYql::NFmr

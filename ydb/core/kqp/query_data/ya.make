@@ -4,6 +4,7 @@ SRCS(
     kqp_query_data.cpp
     kqp_prepared_query.cpp
     kqp_predictor.cpp
+    kqp_type_mismatch.cpp
 )
 
 PEERDIR(

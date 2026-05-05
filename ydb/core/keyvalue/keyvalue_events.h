@@ -205,6 +205,8 @@ namespace TEvKeyValue {
                 return NMsgBusProxy::MSTATUS_TIMEOUT;
             case NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR:
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
+            case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
+                return NMsgBusProxy::MSTATUS_ERROR;
             default:
                 return NMsgBusProxy::MSTATUS_INTERNALERROR;
             }

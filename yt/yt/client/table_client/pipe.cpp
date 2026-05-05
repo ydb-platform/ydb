@@ -7,18 +7,31 @@
 
 #include <yt/yt/core/misc/ring_queue.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 namespace NYT::NTableClient {
 
+using namespace NThreading;
 using NChunkClient::NProto::TDataStatistics;
-using NCrypto::TMD5Hash;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TSchemafulPipeBufferTag
 { };
 
-struct TSchemafulPipe::TData
-    : public TRefCounted
+struct TSchemafulPipeData;
+using TSchemafulPipeDataPtr = TIntrusivePtr<TSchemafulPipeData>;
+
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipeReader);
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipeWriter);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSchemafulPipeData final
 {
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
 
@@ -33,7 +46,7 @@ struct TSchemafulPipe::TData
     bool WriterClosed = false;
     bool Failed = false;
 
-    explicit TData(IMemoryChunkProviderPtr chunkProvider)
+    explicit TSchemafulPipeData(IMemoryChunkProviderPtr chunkProvider)
         : RowBuffer(New<TRowBuffer>(TSchemafulPipeBufferTag(), std::move(chunkProvider)))
     {
         ResetReaderReadyEvent();
@@ -42,7 +55,7 @@ struct TSchemafulPipe::TData
     void ResetReaderReadyEvent()
     {
         ReaderReadyEvent = NewPromise<void>();
-        ReaderReadyEvent.OnCanceled(BIND(&TSchemafulPipe::TData::HandleCancel, MakeWeak(this)));
+        ReaderReadyEvent.OnCanceled(BIND(&TSchemafulPipeData::HandleCancel, MakeWeak(this)));
     }
 
     void HandleCancel(const TError& error)
@@ -75,11 +88,11 @@ struct TSchemafulPipe::TData
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TReader
+class TSchemafulPipeReader
     : public ISchemafulUnversionedReader
 {
 public:
-    explicit TReader(TDataPtr data)
+    explicit TSchemafulPipeReader(TSchemafulPipeDataPtr data)
         : Data_(std::move(data))
     { }
 
@@ -125,12 +138,12 @@ public:
 
     TDataStatistics GetDataStatistics() const override
     {
-        return DataStatistics_;
+        return DataStatistics_.Load();
     }
 
     void SetDataStatistics(TDataStatistics dataStatistics)
     {
-        DataStatistics_ = std::move(dataStatistics);
+        DataStatistics_.Store(std::move(dataStatistics));
     }
 
     NChunkClient::TCodecStatistics GetDecompressionStatistics() const override
@@ -149,19 +162,22 @@ public:
     }
 
 private:
-    const TDataPtr Data_;
-    TDataStatistics DataStatistics_;
+    const TSchemafulPipeDataPtr Data_;
+
+    TAtomicObject<TDataStatistics> DataStatistics_;
 
     TFuture<void> ReadyEvent_ = OKFuture;
 };
 
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipeReader);
+
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TWriter
+class TSchemafulPipeWriter
     : public IUnversionedRowsetWriter
 {
 public:
-    explicit TWriter(TDataPtr data)
+    explicit TSchemafulPipeWriter(TSchemafulPipeDataPtr data)
         : Data_(std::move(data))
     { }
 
@@ -240,73 +256,60 @@ public:
     }
 
 private:
-    const TDataPtr Data_;
+    const TSchemafulPipeDataPtr Data_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipeWriter);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TImpl
-    : public TRefCounted
+class TSchemafulPipe
+    : public ISchemafulPipe
 {
 public:
-    explicit TImpl(IMemoryChunkProviderPtr chunkProvider)
-        : Data_(New<TData>(std::move(chunkProvider)))
-        , Reader_(New<TReader>(Data_))
-        , Writer_(New<TWriter>(Data_))
+    explicit TSchemafulPipe(IMemoryChunkProviderPtr chunkProvider)
+        : Data_(New<TSchemafulPipeData>(std::move(chunkProvider)))
+        , Reader_(New<TSchemafulPipeReader>(Data_))
+        , Writer_(New<TSchemafulPipeWriter>(Data_))
     { }
 
-    ISchemafulUnversionedReaderPtr GetReader() const
+    ISchemafulUnversionedReaderPtr GetReader() const final
     {
         return Reader_;
     }
 
-    IUnversionedRowsetWriterPtr GetWriter() const
+    IUnversionedRowsetWriterPtr GetWriter() const final
     {
         return Writer_;
     }
 
-    void Fail(const TError& error)
+    void Fail(const TError& error) final
     {
         Data_->Fail(error);
     }
 
-    void SetDataStatistics(TDataStatistics dataStatistics)
+    void SetReaderDataStatistics(TDataStatistics dataStatistics) final
     {
         Reader_->SetDataStatistics(std::move(dataStatistics));
     }
 
 private:
-    TDataPtr Data_;
-    TReaderPtr Reader_;
-    TWriterPtr Writer_;
+    const TSchemafulPipeDataPtr Data_;
+    const TSchemafulPipeReaderPtr Reader_;
+    const TSchemafulPipeWriterPtr Writer_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipe);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSchemafulPipe::TSchemafulPipe(IMemoryChunkProviderPtr chunkProvider)
-    : Impl_(New<TImpl>(std::move(chunkProvider)))
-{ }
+} // namespace
 
-TSchemafulPipe::~TSchemafulPipe() = default;
+////////////////////////////////////////////////////////////////////////////////
 
-ISchemafulUnversionedReaderPtr TSchemafulPipe::GetReader() const
+ISchemafulPipePtr CreateSchemafulPipe(IMemoryChunkProviderPtr chunkProvider)
 {
-    return Impl_->GetReader();
-}
-
-IUnversionedRowsetWriterPtr TSchemafulPipe::GetWriter() const
-{
-    return Impl_->GetWriter();
-}
-
-void TSchemafulPipe::Fail(const TError& error)
-{
-    Impl_->Fail(error);
-}
-
-void TSchemafulPipe::SetDataStatistics(TDataStatistics dataStatistics)
-{
-    return Impl_->SetDataStatistics(std::move(dataStatistics));
+    return New<TSchemafulPipe>(std::move(chunkProvider));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

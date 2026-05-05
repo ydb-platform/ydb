@@ -32,17 +32,6 @@ grpc_config:
    ca: "/opt/ydb/certs/ca.crt"
 ```
 
-### Протокол PostgreSQL
-
-{{ ydb-short-name }} открывает отдельный сетевой порт для [протокола PostgreSQL](../../postgresql/intro.md). Этот протокол используется для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [PostgreSQL](https://www.postgresql.org/).
-
-Пример включения TLS для протокола PostgreSQL:
-
-```yaml
-local_pg_wire_config:
-    ssl_certificate: "/opt/ydb/certs/node.crt"
-```
-
 ### Протокол Kafka
 
 {{ ydb-short-name }} открывает отдельный сетевой порт для [протокола Kafka](../../reference/kafka-api/index.md). Этот протокол используется для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [Apache Kafka](https://kafka.apache.org/).
@@ -107,7 +96,7 @@ auth_config:
 
 ### Федеративные запросы
 
-[Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
+[Федеративные запросы](../../concepts/query_execution/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
 
 ### Трассировка
 

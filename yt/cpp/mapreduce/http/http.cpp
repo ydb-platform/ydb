@@ -4,6 +4,7 @@
 #include "core.h"
 #include "helpers.h"
 
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
@@ -41,7 +42,7 @@ std::exception_ptr WrapSystemError(
     const std::exception& ex)
 {
     if (auto errorResponse = dynamic_cast<const TErrorResponse*>(&ex); errorResponse != nullptr) {
-        return std::make_exception_ptr(errorResponse);
+        return std::make_exception_ptr(*errorResponse);
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
@@ -50,7 +51,7 @@ std::exception_ptr WrapSystemError(
         {"host", context.HostName},
         {"method", context.Method},
     });
-    TTransportError errorResponse(std::move(outer));
+    TErrorResponse errorResponse(std::move(outer), context.RequestId);
 
     return std::make_exception_ptr(errorResponse);
 }
@@ -124,8 +125,12 @@ private:
         Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
-        } catch (const TErrorResponse &) {
-            throw;
+        } catch (const TErrorResponse& e) {
+            // If we can read more meaningful error, we'll throw that error.
+            // If we can't read such error, we'll rethrow original WriteError_ below.
+            if (!e.IsTransportError()) {
+                throw;
+            }
         } catch (...) {
         }
         std::rethrow_exception(WriteError_);
@@ -205,18 +210,8 @@ void THttpHeader::AddOperationId(const TOperationId& operationId, bool overwrite
 
 TMutationId THttpHeader::AddMutationId()
 {
-    TGUID guid;
-
-    // Some users use `fork()' with yt wrapper
-    // (actually they use python + multiprocessing)
-    // and CreateGuid is not resistant to `fork()', so spice it a little bit.
-    //
-    // Check IGNIETFERRO-610
-    CreateGuid(&guid);
-    guid.dw[2] = GetPID() ^ MicroSeconds();
-
+    TMutationId guid = NDetail::GenerateMutationId();
     AddParameter("mutation_id", GetGuidAsString(guid), true);
-
     return guid;
 }
 
@@ -253,6 +248,16 @@ void THttpHeader::SetImpersonationUser(const TString& impersonationUser)
 void THttpHeader::SetServiceTicket(const TString& ticket)
 {
     ServiceTicket_ = ticket;
+}
+
+void THttpHeader::SetTraceparent(const TString& traceparent)
+{
+    Traceparent_ = traceparent;
+}
+
+const TString& THttpHeader::GetTraceparent() const
+{
+    return Traceparent_;
 }
 
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
@@ -352,10 +357,15 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
+
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
     headers->Add("Content-Encoding", RequestCompression_);
     headers->Add("Accept-Encoding", ResponseCompression_);
+
+    if (Traceparent_) {
+        headers->Add("traceparent", Traceparent_);
+    }
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;
@@ -803,13 +813,18 @@ THttpResponse::THttpResponse(
                 HttpCode_,
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
                 ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
+            }
+
+            if (ErrorResponse_ && TExpectedErrorGuard::IsErrorExpected(*ErrorResponse_)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
             }
             break;
         }

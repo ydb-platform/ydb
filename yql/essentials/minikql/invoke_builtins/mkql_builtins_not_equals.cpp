@@ -262,7 +262,7 @@ struct TCustomNotEquals: public TAggrNotEquals {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto res = CallBinaryUnboxedValueFunction<&CompareCustoms<Slot>>(Type::getInt32Ty(context), left, right, ctx.Codegen, block);
+        const auto res = EmitFunctionCall<&CompareCustoms<Slot>>(Type::getInt32Ty(context), {left, right}, ctx, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, res, ConstantInt::get(res->getType(), 0), "not_equals", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
         ValueCleanup(EValueRepresentation::String, right, ctx, block);
@@ -273,9 +273,7 @@ struct TCustomNotEquals: public TAggrNotEquals {
 
 struct TDecimalNotEquals {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(!NYql::NDecimal::IsComparable(r) || l != r);
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsNotEqual(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

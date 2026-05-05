@@ -37,7 +37,6 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::LazyList>());
 
         const auto list = GetNodeValue(List, ctx, block);
 
@@ -62,9 +61,7 @@ public:
 
         block = wrap;
 
-        const auto funType = FunctionType::get(list->getType(), {factory->getType(), list->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto res = CallInst::Create(funType, funcPtr, {factory, list}, "res", block);
+        const auto res = EmitFunctionCall<&THolderFactory::LazyList>(list->getType(), {factory, list}, ctx, block);
         lazy->addIncoming(res, block);
 
         BranchInst::Create(done, block);

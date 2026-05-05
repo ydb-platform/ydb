@@ -14,6 +14,10 @@ namespace NMonitoring {
     class TMetricRegistry;
 }
 
+namespace NYdb::inline Dev::NMetrics {
+    class IMetricRegistry;
+}
+
 namespace NYdb::inline Dev {
 
 class TDbDriverState;
@@ -29,6 +33,7 @@ public:
     virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
     virtual ::NMonitoring::TMetricRegistry* GetMetricRegistry() = 0;
+    virtual std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const = 0;
     virtual const TLog& GetLog() const = 0;
 };
 

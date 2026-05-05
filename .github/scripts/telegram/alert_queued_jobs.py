@@ -5,35 +5,49 @@ Sends notifications to Telegram when stuck jobs are detected.
 """
 
 import requests
-import json
 import os
 import sys
 import argparse
 import subprocess
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import Dict, List, Any
 from datetime import datetime, timezone
 import time
 
-def get_alert_logins() -> str:
-    """
-    Gets the list of logins for notifications from GH_ALERTS_TG_LOGINS environment variable.
-    
-    Returns:
-        String with logins separated by spaces, or default login
-    """
-    logins = os.getenv('GH_ALERTS_TG_LOGINS')
-    return logins.strip() if logins else "@KirLynx"
+# -----------------------------------------------------------------------------
+# Config & constants
+# -----------------------------------------------------------------------------
+GITHUB_API_RUNS_URL = "https://api.github.com/repos/ydb-platform/ydb/actions/runs"
+GITHUB_API_TIMEOUT_SEC = 30
+GITHUB_API_PER_PAGE = 1000
+TELEGRAM_REQUEST_TIMEOUT_SEC = 10
+TELEGRAM_SEND_TIMEOUT_SEC = 60
+MAX_STUCK_JOBS_IN_MESSAGE = 15
+DEFAULT_GITHUB_REPO = "ydb-platform/ydb"
 
-def get_tail_message() -> str:
+DASHBOARD_LINK = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)"
+
+# (pattern, display_name, threshold_spec). threshold_spec: float or [(start_utc, end_utc, hours), ...] (overnight: start > end).
+WORKFLOW_THRESHOLDS = [
+    ("PR-check", "PR-check", [(8, 20, 1), (20, 8, 3.0)]),   # 8–20 UTC: 1 h, 20–8 UTC: 3 h
+    ("Postcommit", "Postcommit", 6),
+]
+
+EMPTY_QUEUE_MESSAGE = (
+    "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
+)
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def get_alert_call() -> str:
     """
-    Generates TAIL_MESSAGE with dynamic logins.
-    
-    Returns:
-        String with tail message
+    Value for alert messages from GH_ALERTS_TG_LOGINS (repo variable).
+    Can be: Telegram usernames or a bot command (e.g. /duty ydb-ci). Message must start with this for the bot to react.
     """
-    logins = get_alert_logins()
-    return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
+    value = os.getenv('GH_ALERTS_TG_LOGINS')
+    return value.strip() if value else ""
+
 
 def get_blacklisted_run_ids(blacklist_param: str = None) -> set:
     """
@@ -52,22 +66,21 @@ def get_blacklisted_run_ids(blacklist_param: str = None) -> set:
     run_ids = blacklist_param.split()
     return set(run_ids)
 
-# Constants
-TAIL_MESSAGE = get_tail_message()
+def threshold_for_time(utc_dt: datetime, spec) -> float:
+    """Resolve threshold in hours: spec is float or list of (start_hour, end_hour, hours)."""
+    if isinstance(spec, (int, float)):
+        return float(spec)
+    hour = utc_dt.hour
+    for start, end, h in spec:
+        if start <= end:
+            if start <= hour < end:
+                return h
+        else:
+            if hour >= start or hour < end:
+                return h
+    raise ValueError(f"No interval matches hour={hour} in spec={spec}")
 
-# Message sending settings
-SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
-
-# Criteria for determining stuck jobs
-# Each element: [pattern, threshold_hours, display_name]
-WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0.5, "PR-check"],
-    ["Postcommit", 6, "Postcommit"],
-    # Example of adding a new type:
-    # ["Nightly", 12, "Nightly-Build"]
-]
-
-def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> tuple[Dict[str, Any], str]:
+def fetch_workflow_runs(status: str = "queued", per_page: int = GITHUB_API_PER_PAGE, page: int = 1) -> tuple[Dict[str, Any], str]:
     """
     Fetches workflow runs data from GitHub API.
     
@@ -79,7 +92,7 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
     Returns:
         Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
     """
-    url = "https://api.github.com/repos/ydb-platform/ydb/actions/runs"
+    url = GITHUB_API_RUNS_URL
     params = {
         "per_page": per_page,
         "page": page,
@@ -87,7 +100,7 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
     }
     
     try:
-        response = requests.get(url, params=params, timeout=30)
+        response = requests.get(url, params=params, timeout=GITHUB_API_TIMEOUT_SEC)
         
         if response.status_code == 200:
             return response.json(), ""
@@ -96,13 +109,13 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
             try:
                 error_data = response.json()
                 error_message = error_data.get("message", f"HTTP {response.status_code}")
-            except:
+            except Exception:
                 error_message = f"HTTP {response.status_code}: {response.text}"
             
             return {}, error_message
             
     except requests.exceptions.Timeout:
-        return {}, "Timeout: Request exceeded timeout (30 sec)"
+        return {}, f"Timeout: Request exceeded timeout ({GITHUB_API_TIMEOUT_SEC} sec)"
     except requests.exceptions.ConnectionError:
         return {}, "Connection error: Failed to connect to API"
     except requests.exceptions.RequestException as e:
@@ -121,7 +134,6 @@ def get_effective_start_time(run: Dict[str, Any]) -> datetime:
         datetime: Effective start time
     """
     run_attempt = run.get('run_attempt', 1)
-    run_started_at_str = run.get('run_started_at')
     updated_at_str = run.get('updated_at')
     created_at_str = run.get('created_at')
     
@@ -143,17 +155,15 @@ def get_effective_start_time(run: Dict[str, Any]) -> datetime:
     # Fallback - current time
     return datetime.now(timezone.utc)
 
+
 def is_retry_job(run: Dict[str, Any]) -> bool:
     """
-    Determines if the job is a retry.
-    
-    Args:
-        run: Workflow run object
-    
-    Returns:
-        bool: True if this is a retry job
+    True if this run is a retry (user clicked "Re-run" in GitHub Actions).
+    Retries re-enter the queue and can trigger false alerts; use this when we
+    want to exclude or treat retries differently (e.g. skip from stuck count).
     """
     return run.get('run_attempt', 1) > 1
+
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -171,8 +181,6 @@ def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, D
         'oldest_run_id': None,
         'runs': []
     })
-    
-    current_time = datetime.now(timezone.utc)
     
     for run in workflow_runs:
         workflow_name = run.get('name', 'Unknown')
@@ -261,12 +269,10 @@ def is_job_stuck_by_criteria(run, waiting_hours):
         bool: True if job is considered stuck
     """
     workflow_name = run.get('name', '')
-    
-    # Check each workflow type from configuration
-    for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
-        if pattern in workflow_name and waiting_hours > threshold_hours:
+    current_time = datetime.now(timezone.utc)
+    for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
+        if pattern in workflow_name and waiting_hours > threshold_for_time(current_time, spec):
             return True
-    
     return False
 
 def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
@@ -283,13 +289,13 @@ def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
         return []
     
     stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
-    
-    # Collect descriptions by types
+    current_time = datetime.now(timezone.utc)
     descriptions = []
-    for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
+    for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
         count = stuck_counts.get(display_name, 0)
         if count > 0:
-            descriptions.append(f"⚠️ {display_name} job(s) have been in the queue for more than {threshold_hours} hour(s)! Total: {count} job(s).")
+            th = threshold_for_time(current_time, spec)
+            descriptions.append(f"⚠️ {display_name} job(s) have been in the queue for more than {th} hour(s)! Total: {count} job(s).")
     
     # Add Other if any
     other_count = stuck_counts.get('Other', 0)
@@ -308,18 +314,15 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
     Returns:
         Dictionary with count of stuck jobs by types
     """
-    # Initialize counters for all types from configuration
     counts = {}
-    for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
+    for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
         counts[display_name] = 0
     counts['Other'] = 0
     
     for stuck_job in stuck_jobs:
         workflow_name = stuck_job['run'].get('name', '')
         found_type = False
-        
-        # Check each type from configuration
-        for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
+        for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
             if pattern in workflow_name:
                 counts[display_name] += 1
                 found_type = True
@@ -331,14 +334,10 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
     
     return counts
 
-def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: int = 1) -> List[Dict[str, Any]]:
+def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Finds "stuck" jobs by our criteria from WORKFLOW_THRESHOLDS.
-    
-    Args:
-        workflow_runs: List of workflow runs in queue
-        threshold_hours: Not used, kept for compatibility
-    
+
     Returns:
         List of stuck jobs
     """
@@ -417,7 +416,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         
         for workflow_name, info in workflow_info.items():
             is_threshold_type = False
-            for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
+            for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
                 if pattern in workflow_name:
                     threshold_workflows.append((workflow_name, info))
                     is_threshold_type = True
@@ -443,7 +442,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     
     messages.append("\n".join(message1_parts))
     
-    # Second message - details about stuck jobs (only if any)
+    # Second message - details about stuck jobs (only if any). Must start with the call (e.g. /duty ydb-ci) so the bot reacts.
     if stuck_jobs:
         message2_parts = []
         message2_parts.append("🚨 *Stuck jobs:*")
@@ -452,7 +451,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         # Sort by waiting time (oldest first)
         stuck_jobs_sorted = sorted(stuck_jobs, key=lambda x: x['waiting_hours'], reverse=True)
         
-        for i, stuck_job in enumerate(stuck_jobs_sorted[:15], 1):  # Show up to 15 jobs
+        for i, stuck_job in enumerate(stuck_jobs_sorted[:MAX_STUCK_JOBS_IN_MESSAGE], 1):
             run = stuck_job['run']
             waiting_hours = stuck_job['waiting_hours']
             workflow_name = run.get('name', 'Unknown')
@@ -469,20 +468,21 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             # Add retry information
             retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
             
-            github_url = f"https://github.com/ydb-platform/ydb/actions/runs/{run_id}" if run_id else "N/A"
+            github_url = f"https://github.com/{DEFAULT_GITHUB_REPO}/actions/runs/{run_id}" if run_id else "N/A"
             message2_parts.append(f"{i}. `{workflow_name}`{retry_info} - {waiting_str}")
             if run_id:
                 message2_parts.append(f"   [Run {run_id}]({github_url})")
             message2_parts.append("")
         
-        if len(stuck_jobs) > 15:
-            message2_parts.append(f"• ... and {len(stuck_jobs) - 15} more jobs")
+        if len(stuck_jobs) > MAX_STUCK_JOBS_IN_MESSAGE:
+            message2_parts.append(f"• ... and {len(stuck_jobs) - MAX_STUCK_JOBS_IN_MESSAGE} more jobs")
         
-        # Add dashboard link
         message2_parts.append("")
-        message2_parts.append(TAIL_MESSAGE)
+        message2_parts.append(DASHBOARD_LINK)
         
-        messages.append("\n".join(message2_parts))
+        call = get_alert_call()
+        body = "\n".join(message2_parts)
+        messages.append((call + "\n\n" + body) if call else body)
     
     return messages
 
@@ -514,7 +514,7 @@ def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None
         data['message_thread_id'] = thread_id
     
     try:
-        response = requests.post(url, data=data, timeout=10)
+        response = requests.post(url, data=data, timeout=TELEGRAM_REQUEST_TIMEOUT_SEC)
         response.raise_for_status()
         
         result = response.json()
@@ -536,7 +536,7 @@ def get_current_workflow_url() -> str:
     Returns:
         Current workflow run URL or empty string if variables are unavailable
     """
-    github_repository = os.getenv('GITHUB_REPOSITORY', 'ydb-platform/ydb')
+    github_repository = os.getenv('GITHUB_REPOSITORY', DEFAULT_GITHUB_REPO)
     github_run_id = os.getenv('GITHUB_RUN_ID')
     
     if github_run_id:
@@ -559,8 +559,10 @@ def send_api_error_notification(bot_token: str, chat_id: str, error_message: str
     # Get link to current workflow run
     workflow_url = get_current_workflow_url()
     workflow_link = f"\n\n🔗 [Workflow Run]({workflow_url})" if workflow_url else ""
-    
-    message = f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error_message}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{TAIL_MESSAGE}"
+
+    call = get_alert_call()
+    body = f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error_message}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{DASHBOARD_LINK}"
+    message = (call + "\n\n" + body) if call else body
     return send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2")
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2") -> bool:
@@ -595,7 +597,7 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id:
         if thread_id:
             cmd.extend(['--message-thread-id', str(thread_id)])
         
-        result = subprocess.run(cmd, text=True, timeout=60)
+        result = subprocess.run(cmd, text=True, timeout=TELEGRAM_SEND_TIMEOUT_SEC)
         
         if result.returncode == 0:
             print("✅ Message sent to Telegram")
@@ -610,6 +612,23 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id:
     except Exception as e:
         print(f"❌ Error when calling send script: {e}")
         return False
+
+def _send_or_skip_empty_queue_message(bot_token, chat_id, thread_id, dry_run, send_when_all_good):
+    """Send or skip the 'queue is empty' notification depending on flags."""
+    if dry_run:
+        print(f"\n📤 DRY-RUN: Message for Telegram:{chat_id}:{thread_id}")
+        print("-" * 50)
+        print(EMPTY_QUEUE_MESSAGE)
+        print("-" * 50)
+    elif send_when_all_good:
+        print("📤 Sending empty queue message to Telegram")
+        if send_telegram_message(bot_token, chat_id, EMPTY_QUEUE_MESSAGE, thread_id, "MarkdownV2"):
+            print("✅ Empty queue message sent successfully")
+        else:
+            print("❌ Error sending empty queue message")
+    else:
+        print("📤 Queue is empty - sending nothing")
+
 
 def main():
     """Main script function."""
@@ -691,7 +710,9 @@ def main():
                 
                 print(f"\n📤 DRY-RUN: API error notification for Telegram {chat_id}:{thread_id}")
                 print("-" * 50)
-                print(f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{TAIL_MESSAGE}")
+                call = get_alert_call()
+                body = f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{DASHBOARD_LINK}"
+                print((call + "\n\n" + body) if call else body)
                 print("-" * 50)
             else:
                 print("📤 Sending API error notification to Telegram...")
@@ -708,22 +729,7 @@ def main():
     # Check that we got data
     if not queued_runs:
         print("✅ No workflow runs in queue")
-        # Send message that queue is empty
-        message = "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
-        
-        if dry_run:
-            print(f"\n📤 DRY-RUN: Message for Telegram:{chat_id}:{thread_id}")
-            print("-" * 50)
-            print(message)
-            print("-" * 50)
-        elif send_when_all_good:
-            print(f"📤 Sending empty queue message to Telegram")
-            if send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2"):
-                print("✅ Empty queue message sent successfully")
-            else:
-                print("❌ Error sending empty queue message")
-        else:
-            print(f"📤 Queue is empty - sending nothing")
+        _send_or_skip_empty_queue_message(bot_token, chat_id, thread_id, dry_run, send_when_all_good)
         return
     
     # Get blacklisted run IDs from command line parameter
@@ -736,22 +742,7 @@ def main():
     
     if not filtered_runs:
         print("✅ No current workflow runs in queue after filtering")
-        # Send message that queue is empty
-        message = "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
-        
-        if dry_run:
-            print(f"\n📤 DRY-RUN: Message for Telegram:{chat_id}:{thread_id}")
-            print("-" * 50)
-            print(message)
-            print("-" * 50)
-        elif send_when_all_good:
-            print(f"📤 Sending empty queue message to Telegram")
-            if send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2"):
-                print("✅ Empty queue message sent successfully")
-            else:
-                print("❌ Error sending empty queue message")
-        else:
-            print(f"📤 Queue is empty - sending nothing")
+        _send_or_skip_empty_queue_message(bot_token, chat_id, thread_id, dry_run, send_when_all_good)
         return
     
     # Analyze data
@@ -759,7 +750,7 @@ def main():
     total_queued = sum(info['count'] for info in workflow_info.values())
     
     # Check for stuck jobs by our criteria
-    stuck_jobs = check_for_stuck_jobs(filtered_runs, threshold_hours=1)
+    stuck_jobs = check_for_stuck_jobs(filtered_runs)
     
     # Format messages for Telegram (even if not sending)
     telegram_messages = format_telegram_messages(workflow_info, stuck_jobs, total_queued, excluded_count)
@@ -771,10 +762,8 @@ def main():
         else:
             print(f"✅ No stuck jobs by our criteria - sending nothing")
         
-        # Format criteria string from configuration
-        criteria_parts = []
-        for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
-            criteria_parts.append(f"{display_name} >{threshold_hours}h")
+        current_time = datetime.now(timezone.utc)
+        criteria_parts = [f"{display_name} >{threshold_for_time(current_time, spec)}h" for _, display_name, spec in WORKFLOW_THRESHOLDS]
         criteria_str = ", ".join(criteria_parts)
         print(f"   ({criteria_str})")
         print("\n📊 CURRENT STATISTICS:")
@@ -790,7 +779,7 @@ def main():
     
     print(f"🚨 Found {len(stuck_jobs)} stuck jobs by our criteria")
     
-        # Send to Telegram or show in dry-run mode
+    # Send to Telegram or show in dry-run mode
     if dry_run:
         print(f"\n📤 DRY-RUN: {len(telegram_messages)} message(s) for Telegram:")
         for i, message in enumerate(telegram_messages, 1):

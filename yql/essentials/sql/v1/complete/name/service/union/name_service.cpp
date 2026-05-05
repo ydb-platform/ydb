@@ -23,6 +23,8 @@ public:
         }
 
         return NThreading::WaitAll(fs)
+            // TODO(YQL-20095): Explore real problem to fix this.
+            // NOLINTNEXTLINE(bugprone-exception-escape)
             .Apply([fs, ranking = Ranking_, request](auto) {
                 return Union(fs, ranking, request.Constraints, request.Limit);
             });

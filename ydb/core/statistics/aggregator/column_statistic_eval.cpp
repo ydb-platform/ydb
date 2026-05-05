@@ -1,7 +1,9 @@
 #include "column_statistic_eval.h"
 #include "select_builder.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/yql/udfs/statistics_internal/all_agg_funcs.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -10,13 +12,163 @@
 
 namespace NKikimr::NStat {
 
-class TCMSEval : public IColumnStatisticEval {
+struct TSimpleColumnStatisticEval::TIntermediateState {
+    using THLLState = NAggFuncs::THybridHyperLogLog<std::allocator>;
+
+    THLLState Hll;
+    std::optional<NYdb::TValue> Min;
+    std::optional<NYdb::TValue> Max;
+
+    TIntermediateState()
+        : Hll(THLLState::Create(NAggFuncs::THLLAggFunc::DEFAULT_PRECISION))
+    {}
+};
+
+TSimpleColumnStatisticEval::TSimpleColumnStatisticEval(NScheme::TTypeInfo type, TString pgTypeMod)
+    : Type(std::move(type))
+    , PgTypeMod(std::move(pgTypeMod))
+{}
+
+TSimpleColumnStatisticEval::~TSimpleColumnStatisticEval() = default;
+
+EStatType TSimpleColumnStatisticEval::GetType() const {
+    return EStatType::SIMPLE_COLUMN;
+}
+
+size_t TSimpleColumnStatisticEval::EstimateSize() const {
+    return 1u << NAggFuncs::THLLAggFunc::DEFAULT_PRECISION;
+}
+
+void TSimpleColumnStatisticEval::AddAggregations(
+        const TString& columnName, TSelectBuilder& builder) {
+    if (builder.IsIntermediateAggregation()) {
+        IntermediateState = std::make_unique<TIntermediateState>();
+        CountDistinctSeq = builder.AddUDAFAggregation(columnName, "HLL");
+    } else {
+        CountDistinctSeq = builder.AddBuiltinAggregation(columnName, "HLL");
+    }
+
+    if (IStage2ColumnStatisticEval::AreMinMaxNeeded(Type)) {
+        MinSeq = builder.AddBuiltinAggregation(columnName, "min");
+        MaxSeq = builder.AddBuiltinAggregation(columnName, "max");
+    }
+}
+
+template<template<typename> class TCmp>
+static void UpdateMinmax(std::optional<NYdb::TValue>& left, const NYdb::TValue& right) {
+    if (!left) {
+        left = right;
+        return;
+    }
+
+    TCmp cmp;
+    auto& leftProto = left->GetProto();
+    const auto& rightProto = right.GetProto();
+    switch (leftProto.value_case()) {
+    case Ydb::Value::kInt32Value:
+        if (cmp(rightProto.int32_value(), leftProto.int32_value())) {
+            leftProto.set_int32_value(rightProto.int32_value());
+        }
+        break;
+    case Ydb::Value::kUint32Value:
+        if (cmp(rightProto.uint32_value(), leftProto.uint32_value())) {
+            leftProto.set_uint32_value(rightProto.uint32_value());
+        }
+        break;
+    case Ydb::Value::kInt64Value:
+        if (cmp(rightProto.int64_value(), leftProto.int64_value())) {
+            leftProto.set_int64_value(rightProto.int64_value());
+        }
+        break;
+    case Ydb::Value::kUint64Value:
+        if (cmp(rightProto.uint64_value(), leftProto.uint64_value())) {
+            leftProto.set_uint64_value(rightProto.uint64_value());
+        }
+        break;
+    case Ydb::Value::kFloatValue:
+        if (cmp(rightProto.float_value(), leftProto.float_value())) {
+            leftProto.set_float_value(rightProto.float_value());
+        }
+        break;
+    case Ydb::Value::kDoubleValue:
+        if (cmp(rightProto.double_value(), leftProto.double_value())) {
+            leftProto.set_double_value(rightProto.double_value());
+        }
+        break;
+    default:
+        Y_ENSURE(false, "unexpected value type");
+    }
+};
+
+void TSimpleColumnStatisticEval::Merge(const TVector<NYdb::TValue>& aggColumns) {
+    Y_ENSURE(IntermediateState);
+
+    {
+        NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+        hllVal.OpenOptional();
+        if (hllVal.IsNull()) {
+            return;
+        }
+        TMemoryInput is(hllVal.GetBytes().data(), hllVal.GetBytes().size());
+        auto hll = TIntermediateState::THLLState::Load(is);
+        IntermediateState->Hll.Merge(hll);
+    }
+
+    if (MinSeq) {
+        UpdateMinmax<std::less>(IntermediateState->Min, aggColumns.at(*MinSeq));
+    }
+    if (MaxSeq) {
+        UpdateMinmax<std::greater>(IntermediateState->Max, aggColumns.at(*MaxSeq));
+    }
+}
+
+NKikimrStat::TSimpleColumnStatistics TSimpleColumnStatisticEval::Extract(
+        ui64 rowCount, const TVector<NYdb::TValue>& aggColumns) {
+    NKikimrStat::TSimpleColumnStatistics result;
+    result.SetCount(rowCount);
+
+    result.SetTypeId(Type.GetTypeId());
+    if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
+        NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
+    }
+
+    if (IntermediateState) {
+        Merge(aggColumns);
+        result.SetCountDistinct(IntermediateState->Hll.Estimate());
+        if (IntermediateState->Min) {
+            result.MutableMin()->CopyFrom(IntermediateState->Min->GetProto());
+        }
+        if (IntermediateState->Max) {
+            result.MutableMax()->CopyFrom(IntermediateState->Max->GetProto());
+        }
+    } else {
+        NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+        ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
+        result.SetCountDistinct(countDistinct);
+
+        if (MinSeq) {
+            result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
+        }
+        if (MaxSeq) {
+            result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+        }
+    }
+
+    return result;
+}
+
+class TCMSEval : public IStage2ColumnStatisticEval {
     ui64 Width;
     ui64 Depth = DEFAULT_DEPTH;
-    std::optional<ui32> Seq;
 
+    std::optional<ui32> Seq;
+    std::unique_ptr<TCountMinSketch> IntermediateState;
+
+    // current upper limit is 8_MB per columnar statistics
+    static constexpr ui64 MAX_WIDTH = 262144;
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
+    static constexpr double RELATIVE_ERROR = 10;
 
 public:
     TCMSEval(ui64 width) : Width(width) {}
@@ -33,24 +185,51 @@ public:
         const double ndv = simpleStats.GetCountDistinct();
 
         if (ndv >= 0.8 * n) {
+            // Too many distinct values i.e. domain is close to be PK
             return TPtr{};
         }
 
-        const double c = 10;
-        const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
-        const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        const double eps = (RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
+        ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        if (cmsWidth > MAX_WIDTH - 1) {
+            // to accommodate for the other class variables' memory consumption,
+            //  negative 1 from width at each depth.
+            cmsWidth = MAX_WIDTH - 1;
+        }
         return std::make_unique<TCMSEval>(cmsWidth);
     }
 
     EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
 
-    size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
+    size_t EstimateSize() const final { return TCountMinSketch::StaticSize(Width, Depth); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
+
+        if (builder.IsIntermediateAggregation()) {
+            IntermediateState = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create(Width, Depth));
+        }
     }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
+        Y_ENSURE(IntermediateState);
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (val.IsNull()) {
+            return;
+        }
+        auto cms = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(
+            val.GetBytes().data(), val.GetBytes().size()));
+        *IntermediateState += *cms;
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
+        if (IntermediateState) {
+            Merge(aggColumns);
+            auto bytes = IntermediateState->AsStringBuf();
+            return TString(bytes.data(), bytes.size());
+        }
+
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
         if (!val.IsNull()) {
@@ -67,21 +246,40 @@ public:
 
 struct TBorder {
     std::variant<ui64, i64, float, double> Val;
+    NYql::NUdf::TUnboxedValuePod YqlVal;
 
     template<typename T>
-    explicit TBorder(T val) : Val(val) {}
+    explicit TBorder(T val) : Val(val), YqlVal(val) {}
 };
 
-class TEWHEval : public IColumnStatisticEval {
+class TEWHEval : public IStage2ColumnStatisticEval {
+    NScheme::TTypeInfo ColumnType;
+
     ui32 NumBuckets;
     TBorder RangeStart;
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
+    std::unique_ptr<TEqWidthHistogram> IntermediateState;
+
+private:
+    TEqWidthHistogram CreateEmpty() const {
+        std::array<NYql::NUdf::TUnboxedValuePod, 3> params {
+            NYql::NUdf::TUnboxedValuePod(NumBuckets),
+            RangeStart.YqlVal,
+            RangeEnd.YqlVal,
+        };
+        return NAggFuncs::TEWHAggFunc::CreateState(ColumnType.GetTypeId(), params);
+    }
+
+    // current upper limit is 8_MB per columnar statistics
+    static constexpr ui32 MAX_BUCKETS = 1048576;
+    static constexpr ui32 MIN_BUCKETS = 1;
 
 public:
-    TEWHEval(ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
-        : NumBuckets(numBuckets)
+    TEWHEval(NScheme::TTypeInfo columnType, ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
+        : ColumnType(columnType)
+        , NumBuckets(numBuckets)
         , RangeStart(std::move(rangeStart))
         , RangeEnd(std::move(rangeEnd))
     {}
@@ -172,11 +370,6 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
-        if (ndv >= 0.8 * n) {
-            // Too many distinct values
-            return TPtr{};
-        }
-
         const double cbrtN = std::cbrt(n);
         const double numBucketsEstimate = std::ceil(
             std::min(std::sqrt(n), cbrtN * n / ndv));
@@ -184,7 +377,10 @@ public:
             ? numBucketsEstimate
             : std::numeric_limits<ui32>::max());
         if (numBuckets == 0) {
-            numBuckets = 1;
+            numBuckets = MIN_BUCKETS;
+        } else if (numBuckets > MAX_BUCKETS - 24) {
+            // to accommodate for the other class variables' memory consumption.
+            numBuckets = MAX_BUCKETS - 24;
         }
 
         auto domainRange = GetDomainRange(
@@ -193,34 +389,61 @@ public:
             return TPtr{};
         }
         return std::make_unique<TEWHEval>(
-            numBuckets, domainRange->first, domainRange->second);
+            type, numBuckets, domainRange->first, domainRange->second);
     }
 
     EStatType GetType() const final { return EStatType::EQ_WIDTH_HISTOGRAM; }
 
-    size_t EstimateSize() const final { return NumBuckets * sizeof(ui64); }
+    size_t EstimateSize() const final { return TEqWidthHistogram::GetBinarySize(NumBuckets); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);
+
+        if (builder.IsIntermediateAggregation()) {
+            IntermediateState = std::make_unique<TEqWidthHistogram>(CreateEmpty());
+        }
     }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
+        Y_ENSURE(IntermediateState);
+
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
-        Y_ENSURE(!val.IsNull()); // Makes no sense to calculate histograms for empty tables.
+        if (val.IsNull()) {
+            return;
+        }
+
         const auto& bytes = val.GetBytes();
-        return TString(bytes.data(), bytes.size());
+        TEqWidthHistogram merged(bytes.data(), bytes.size());
+        IntermediateState->Aggregate(merged);
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
+        if (IntermediateState) {
+            Merge(aggColumns);
+            return IntermediateState->Serialize();
+        }
+
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            return TString(bytes.data(), bytes.size());
+        } else {
+            auto empty = CreateEmpty();
+            return empty.Serialize();
+        }
     }
 };
 
-TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
+TVector<EStatType> IStage2ColumnStatisticEval::SupportedTypes() {
     return {
         EStatType::COUNT_MIN_SKETCH,
         EStatType::EQ_WIDTH_HISTOGRAM,
     };
 }
 
-IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
+IStage2ColumnStatisticEval::TPtr IStage2ColumnStatisticEval::MaybeCreate(
         EStatType statType,
         const NKikimrStat::TSimpleColumnStatistics& simpleStats,
         const NScheme::TTypeInfo& columnType) {
@@ -234,7 +457,7 @@ IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
     }
 }
 
-bool IColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
+bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
     return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
 }
 

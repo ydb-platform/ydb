@@ -1,6 +1,8 @@
 #pragma once
 
+#include <util/generic/size_literals.h>
 #include <util/generic/string.h>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NPQ {
 
@@ -16,5 +18,10 @@ constexpr ui32 METRICS_LEVEL_DISABLED = 0;
 constexpr ui32 METRICS_LEVEL_DATABASE = 1;
 constexpr ui32 METRICS_LEVEL_OBJECT = 2;
 constexpr ui32 METRICS_LEVEL_DETAILED = 3;
+
+constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS = TDuration::Days(16).MilliSeconds();
+constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
+constexpr i32 MAX_READ_RULES_COUNT = 3000;
+constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 
 }

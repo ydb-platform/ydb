@@ -25,6 +25,7 @@ from typing import (
 )
 
 import attrs
+import outcome
 from outcome import Error, Outcome, Value, capture
 from sniffio import thread_local as sniffio_library
 from sortedcontainers import SortedDict
@@ -1903,7 +1904,9 @@ class Runner:  # type: ignore[explicit-any]
     ################
 
     @_public
-    def reschedule(self, task: Task, next_send: Outcome[object] = _NO_SEND) -> None:
+    def reschedule(
+        self, task: Task, next_send: outcome.Outcome[object] = _NO_SEND
+    ) -> None:
         """Reschedule the given task with the given
         :class:`outcome.Outcome`.
 
@@ -3113,7 +3116,11 @@ if sys.platform == "win32":
         WindowsIOManager as TheIOManager,
         _WindowsStatistics as IOStatistics,
     )
-elif sys.platform == "linux" or (not TYPE_CHECKING and hasattr(select, "epoll")):
+elif (
+    sys.platform == "linux"
+    or sys.platform == "android"
+    or (not TYPE_CHECKING and hasattr(select, "epoll"))
+):
     from ._generated_io_epoll import *
     from ._io_epoll import (
         EpollIOManager as TheIOManager,

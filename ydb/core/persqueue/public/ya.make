@@ -11,7 +11,11 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/metering
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/cloud_events
     ydb/core/protos
+    ydb/core/tx/scheme_board
 )
 
 END()
@@ -26,5 +30,7 @@ RECURSE(
     mlp
     partition_index_generator
     partition_key_range
+    schema
     write_meta
+    cloud_events
 )

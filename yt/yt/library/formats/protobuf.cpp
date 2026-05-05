@@ -1416,7 +1416,7 @@ void TProtobufWriterFormatDescription::AddTable(TProtobufWriterTypePtr tableType
 const TProtobufWriterFormatDescription::TTableDescription&
 TProtobufWriterFormatDescription::GetTableDescription(int tableIndex) const
 {
-    if (Y_UNLIKELY(tableIndex >= std::ssize(Tables_))) {
+    if (tableIndex >= std::ssize(Tables_)) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Table with index %v is missing in format description",
             tableIndex);
     }
@@ -1561,13 +1561,13 @@ std::optional<int> TProtobufParserType::FieldNumberToChildIndex(int fieldNumber,
     int index;
     if (fieldNumber < std::ssize(store->FieldNumberToChildIndexVector)) {
         index = store->FieldNumberToChildIndexVector[fieldNumber];
-        if (Y_UNLIKELY(index == InvalidChildIndex)) {
+        if (index == InvalidChildIndex) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }
     } else {
         auto it = store->FieldNumberToChildIndexMap.find(fieldNumber);
-        if (Y_UNLIKELY(it == store->FieldNumberToChildIndexMap.end())) {
+        if (it == store->FieldNumberToChildIndexMap.end()) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }

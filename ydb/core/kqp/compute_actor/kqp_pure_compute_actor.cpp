@@ -110,7 +110,7 @@ void TKqpComputeActor::DoBootstrap() {
     if (Meta) {
         YQL_ENSURE(ComputeCtx.GetTableScans().empty());
 
-        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode());
+        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
         ScanData = &ComputeCtx.GetTableScan(0);
 
         columns.reserve(Meta->ColumnsSize());
@@ -130,7 +130,7 @@ void TKqpComputeActor::DoBootstrap() {
 
     if (ScanData) {
         ScanData->TaskId = GetTask().GetId();
-        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
+        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputsConsumed);
 
         TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
         if (Meta->GetTable().HasSysViewDescription()) {

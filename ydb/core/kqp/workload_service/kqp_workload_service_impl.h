@@ -27,6 +27,7 @@ struct TDatabaseState {
     bool HasDefaultPool = false;
     bool Serverless = false;
     bool DatabaseUnsupported = false;
+    ui32 WatchKey = 0;
 
     TInstant LastUpdateTime = TInstant::Zero();
 

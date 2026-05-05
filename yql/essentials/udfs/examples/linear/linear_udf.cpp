@@ -21,7 +21,7 @@ SIMPLE_UDF(TExchange, TExchangeRet(TLinear<i32>, i32)) {
 
 class TUnsafeConsumer: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         Y_UNUSED(valueBuilder);

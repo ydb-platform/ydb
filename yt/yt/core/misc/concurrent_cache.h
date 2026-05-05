@@ -41,9 +41,9 @@ public:
     public:
         TLookuper() = default;
 
-        TLookuper(TLookuper&& other) = default;
+        TLookuper(TLookuper&& other) noexcept = default;
 
-        TLookuper& operator=(TLookuper&& other);
+        TLookuper& operator=(TLookuper&& other) noexcept;
 
         TLookuper(
             TConcurrentCache* parent,
@@ -73,9 +73,9 @@ public:
     public:
         TInserter() = default;
 
-        TInserter(TInserter&& other) = default;
+        TInserter(TInserter&& other) noexcept = default;
 
-        TInserter& operator=(TInserter&& other);
+        TInserter& operator=(TInserter&& other) noexcept;
 
         TInserter(
             TConcurrentCache* parent,

@@ -13,7 +13,7 @@ from helpers.tiering_helper import (
     ObjectStorageParams,
     CreateExternalDataSource,
     DropExternalDataSource,
-    UpsertSecret,
+    CreateSecret,
     DropSecret,
 )
 import helpers.data_generators as dg
@@ -25,13 +25,14 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
 from ydb import PrimitiveType, StatusCode
-import yatest.common
+import library.python.port_manager
 from moto.server import ThreadedMotoServer
 
 import boto3
 import datetime
 import random
 import os
+import time
 from typing import Iterable
 from string import ascii_lowercase
 
@@ -54,10 +55,12 @@ class TestLoop:
 
 class S3:
     def __init__(self):
+        self.port_manager = library.python.port_manager.PortManager()
         self._server = None
 
     def start_server(self) -> str:
-        port = yatest.common.network.PortManager().get_port()
+        port = self.port_manager.get_port()
+
         self._server = ThreadedMotoServer(port=port)
         self._server.start()
         return f'http://localhost:{port}'
@@ -97,7 +100,7 @@ class S3:
 class TieringTestBase(BaseTestSet):
     @classmethod
     def _get_cluster_config(cls):
-        return KikimrConfigGenerator(
+        cfg = KikimrConfigGenerator(
             extra_feature_flags=[
                 'enable_external_data_sources',
                 'enable_tiering_in_column_shard',
@@ -120,6 +123,19 @@ class TieringTestBase(BaseTestSet):
                 available_external_data_sources=["ObjectStorage"]
             ),
         )
+        # aws_client_config lives at the top-level app config (not inside column_shard_config).
+        cfg.yaml_config['aws_client_config'] = {
+            # executor_threads_count controls TS3ThreadsPoolByEndpoint — a SHARED thread pool
+            # across ALL S3 clients for the same endpoint (moto). This is the effective global
+            # limit on concurrent S3 operations from ALL column-shard tablets combined.
+            # - Too low: eviction PUTs starve when scan GETs occupy all threads
+            #   → write buffer overflow → "Cannot write data (TIMEOUT)"
+            # - Too high: moto overwhelmed with concurrent connections
+            #   → "curlCode: 28, Timeout was reached"
+            # 6 threads allows enough eviction throughput while keeping moto load manageable.
+            'executor_threads_count': 8,
+        }
+        return cfg
 
     def _setup_tiering_test(self, ctx):
         random.seed(0)
@@ -142,15 +158,17 @@ class TieringTestBase(BaseTestSet):
 
         self.access_key_secret = self._get_test_prefix() + '_access_key'
         self.secret_key_secret = self._get_test_prefix() + '_secret_key'
-        sth.execute_scheme_query(UpsertSecret(self.access_key_secret, self.s3_access_key))
-        sth.execute_scheme_query(UpsertSecret(self.secret_key_secret, self.s3_secret_key))
+        self._drop_secret_if_exists(sth, self.access_key_secret)
+        self._drop_secret_if_exists(sth, self.secret_key_secret)
+        sth.execute_scheme_query(CreateSecret(self.access_key_secret, self.s3_access_key))
+        sth.execute_scheme_query(CreateSecret(self.secret_key_secret, self.s3_secret_key))
 
         self.s3_configs = [
             ObjectStorageParams(
                 endpoint=self.s3_endpoint,
                 bucket=bucket,
-                access_key_secret=self.access_key_secret,
-                secret_key_secret=self.secret_key_secret,
+                access_key_secret=sth.get_full_path(self.access_key_secret),
+                secret_key_secret=sth.get_full_path(self.secret_key_secret),
                 access_key=self.s3_access_key,
                 secret_key=self.s3_secret_key,
             )
@@ -181,6 +199,12 @@ class TieringTestBase(BaseTestSet):
 
     def _override_external_data_source(self, sth, path, config):
         sth.execute_scheme_query(CreateExternalDataSource(path, config, True))
+
+    def _drop_secret_if_exists(self, sth: ScenarioTestHelper, secret_name: str):
+        sth.execute_scheme_query(
+            DropSecret(secret_name),
+            expected_status={StatusCode.SUCCESS, StatusCode.SCHEME_ERROR},
+        )
 
     def _get_test_duration(self, test_class: str) -> datetime.timedelta:
         class_to_duration = {
@@ -216,6 +240,7 @@ class TestAlterTiering(TieringTestBase):
         sth = ScenarioTestHelper(ctx)
 
         for _ in loop:
+            begin = datetime.datetime.now()
             sth.bulk_upsert(
                 table,
                 dg.DataGeneratorPerColumn(self.schema1, 1000)
@@ -230,6 +255,8 @@ class TestAlterTiering(TieringTestBase):
                     dg.ColumnValueGeneratorConst(random.randbytes(1024)),
                 ),
             )
+            # do 3 times less writes so that moto server can handle all writes.
+            time.sleep((datetime.datetime.now() - begin).total_seconds()*2)
 
     def _loop_scan(
         self,
@@ -245,11 +272,14 @@ class TestAlterTiering(TieringTestBase):
 
         for _ in loop:
             LOGGER.info('executing SELECT')
+            begin = datetime.datetime.now()
+
             sth.execute_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
                 expected_status=expected_scan_status,
                 ignore_error={"Query invalidated on scheme/internal error during Data execution"}  # https://github.com/ydb-platform/ydb/issues/12854
             )
+            time.sleep((datetime.datetime.now() - begin).total_seconds())
 
     def _loop_set_ttl(
         self,
@@ -306,8 +336,8 @@ class TestAlterTiering(TieringTestBase):
         self._setup_tiering_test(ctx)
 
         self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))
-        self.n_tables = 4
-        self.n_writers = 4
+        self.n_tables = 2
+        self.n_writers = 2
 
         sth = ScenarioTestHelper(ctx)
 

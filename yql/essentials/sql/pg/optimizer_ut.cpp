@@ -16,8 +16,8 @@ Y_TEST_HOOK_BEFORE_RUN(InitTest) {
 }
 
 Y_UNIT_TEST(PgJoinSearch2Rels) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
     IOptimizer::TInput input = {.Rels = {rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq{
@@ -53,8 +53,8 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
 }
 
 Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
     IOptimizer::TInput input = {.Rels = {rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq{
@@ -95,8 +95,8 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
 }
 
 Y_UNIT_TEST(PgJoinSearch2RelsRight) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
     IOptimizer::TInput input = {.Rels = {rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq{
@@ -137,9 +137,9 @@ Y_UNIT_TEST(PgJoinSearch2RelsRight) {
 }
 
 Y_UNIT_TEST(PgJoinSearch3Rels) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
+    IOptimizer::TRel rel3 = {.Rows = 10000, .TotalCost = 9009, .TargetVars = {{'c'}}};
     IOptimizer::TInput input = {.Rels = {rel1, rel2, rel3}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq{

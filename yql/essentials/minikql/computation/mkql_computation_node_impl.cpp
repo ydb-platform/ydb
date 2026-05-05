@@ -2,8 +2,7 @@
 
 #include "yql/essentials/minikql/mkql_string_util.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 void ThrowNotSupportedImplForClass(const TString& className, const char* func) {
     THROW yexception() << "Unsupported access to '" << func << "' method of: " << className;
@@ -416,8 +415,9 @@ Y_NO_INLINE TString TBinaryComputationNodeBase::DebugStringImpl(const TString& t
     return typeName + "(" + Left_->DebugString() + "," + Right_->DebugString() + ")";
 }
 
-void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
-    map.emplace(ValueIndex_, RepresentationKind_);
+void TExternalComputationNode::CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependents) const {
+    Y_UNUSED(owner);
+    dependents.emplace(ValueIndex_, RepresentationKind_);
 }
 
 void TExternalComputationNode::CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const {
@@ -494,6 +494,12 @@ void TExternalComputationNode::SetGetter(TGetter&& getter) {
 void TExternalComputationNode::InvalidateValue(TComputationContext& ctx) const {
     for (const auto& index : InvalidationSet_) {
         ctx.MutableValues[index.first] = NUdf::TUnboxedValuePod::Invalid();
+    }
+}
+
+void TExternalComputationNode::CollectInvalidationIndexes(std::set<ui32>& out) const {
+    for (const auto& p : InvalidationSet_) {
+        out.insert(p.first);
     }
 }
 
@@ -884,8 +890,8 @@ TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstrou
     return map;
 }
 
-void ApplyChanges(const NUdf::TUnboxedValue& list, NUdf::IApplyContext& applyCtx) {
-    TThresher<false>::DoForEachItem(list,
+void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx) {
+    TThresher<false>::DoForEachItem(value,
                                     [&applyCtx](const NUdf::TUnboxedValue& item) {
                                         if (item.IsBoxed()) {
                                             item.Apply(applyCtx);
@@ -913,5 +919,4 @@ void CleanupCurrentContext() {
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

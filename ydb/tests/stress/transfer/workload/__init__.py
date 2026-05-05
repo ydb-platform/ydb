@@ -2,9 +2,12 @@
 import ydb
 from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 
+import logging
 import time
 import unittest
 import uuid
+
+logger = logging.getLogger("YdbTransferWorkload")
 
 
 class Workload(unittest.TestCase):
@@ -77,6 +80,7 @@ class Workload(unittest.TestCase):
             while time.time() < finished_at:
                 writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
                 self.message_count += 1
+                time.sleep(0.005)
 
     def wait_transfer_finished(self):
         iterations = 30
@@ -95,23 +99,41 @@ class Workload(unittest.TestCase):
             rs = rss[0]
             last_offset = rs.rows[0].last_offset
 
+            logger.info(f"Check result: last offset is {last_offset}, expected {self.message_count - 1}")
+
             if last_offset + 1 == self.message_count:
                 return
 
         raise Exception(f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
 
     def loop(self):
+        logger.info(f"Creating table {self.table_name}")
         self.create_table()
+        logger.info(f"Creating topic {self.topic_name}")
         self.create_topic()
+        logger.info(f"Creating transfer {self.transfer_name}")
         self.create_transfer()
 
+        logger.info(f"Writing to topic {self.topic_name}")
         self.write_to_topic()
 
+        logger.info("Waiting for transfer to finish")
         self.wait_transfer_finished()
+        logger.info("Finish")
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.pool.execute_with_retries(
+            f"DROP TRANSFER {self.transfer_name};"
+        )
+        self.pool.execute_with_retries(
+            f"DROP TOPIC {self.topic_name};"
+        )
+        self.pool.execute_with_retries(
+            f"DROP TABLE {self.table_name};"
+        )
+
         self.pool.stop()
         self.driver.stop()

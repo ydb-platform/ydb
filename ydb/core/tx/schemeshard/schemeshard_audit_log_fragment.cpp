@@ -131,6 +131,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BUILD INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         return "ALTER TABLE BUILD INDEX INIT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return "ALTER TABLE BUILD INDEX PUBLISH SHADOW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         return "ALTER TABLE BUILD INDEX APPLY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
@@ -292,8 +294,6 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CHANGE PATH STATE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return "SET CONSTRAINT";
     // secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         return "CREATE SECRET";
@@ -434,6 +434,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetInitiateBuildIndexMainTable().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));
@@ -687,8 +690,6 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         // For incremental restore finalization, we don't have a specific path in the message
         // since it operates on paths determined at runtime
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()}));
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
         break;

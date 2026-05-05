@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class TestDataPaging(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("data_paging")
+
     def check_data_paging_result(self, result_set, error):
         if error is not None:
             return False, error
@@ -15,7 +19,7 @@ class TestDataPaging(SolomonReadingTestBase):
         for result in result_set:
             rows.extend(result.rows)
 
-        if (len(rows) != self.data_paging_timeseries_size):
+        if len(rows) != self.data_paging_timeseries_size:
             return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.data_paging_timeseries_size)
 
         values = []
@@ -42,7 +46,6 @@ class TestDataPaging(SolomonReadingTestBase):
         result, error = self.execute_query(data_source_query)
         assert error is None
 
-        # simplest query with default downsampling settings
         query = """
             SELECT value FROM local_solomon.data_paging WITH (
                 selectors = @@{cluster="data_paging", service="my_service", test_type="data_paging_test"}@@,
@@ -71,7 +74,6 @@ class TestDataPaging(SolomonReadingTestBase):
         result, error = self.execute_query(data_source_query)
         assert error is None
 
-        # simplest query with default downsampling settings
         query = """
             SELECT value FROM local_monitoring.my_service WITH (
                 selectors = @@{test_type="data_paging_test"}@@,

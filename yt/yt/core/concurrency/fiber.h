@@ -78,7 +78,7 @@ private:
     std::atomic<TFiberId> FiberId_ = InvalidFiberId;
 
     // Guarded by State_.
-    TInstant WaitingSince_ = TInstant::Zero();
+    TCpuInstant WaitingSince_ = 0;
     TFls* Fls_ = nullptr;
 
     EFiberState TryLockAsIntrospector() noexcept;
@@ -127,7 +127,7 @@ public:
     static void ReadFibers(TFunctionView<void(TFiberList&)> callback);
 
 private:
-    const std::shared_ptr<TExecutionStack> Stack_;
+    const std::shared_ptr<NThreading::TExecutionStack> Stack_;
     TExceptionSafeContext MachineContext_;
 
     explicit TFiber(EExecutionStackKind stackKind = DefaultExecutionStackKind);

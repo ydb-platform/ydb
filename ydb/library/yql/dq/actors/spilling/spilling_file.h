@@ -31,7 +31,7 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
 
 TFsPath GetTmpSpillingRootForCurrentUser();
 
-NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead);
+NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);
 
 NActors::IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters);
 

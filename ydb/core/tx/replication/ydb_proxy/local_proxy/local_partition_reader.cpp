@@ -262,14 +262,22 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         );
 
         TString data;
-        if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
+        bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
+        if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
             data = codecImpl->Decompress(proto.GetData());
+            isCompressed = false;
         } else {
             data = std::move(*proto.MutableData());
         }
 
-        messages.emplace_back(std::move(information), std::move(data));
+        if (isCompressed) {
+            messages.push_back(TTopicMessage{NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage{
+                static_cast<NYdb::NTopic::ECodec>(proto.codec() + 1), std::move(data), information, nullptr}});
+        } else {
+            messages.emplace_back(std::move(information), std::move(data));
+        }
+
     }
     SentOffset = gotOffset + 1;
 

@@ -847,6 +847,7 @@ protected:
         const TServiceDescriptor& descriptor,
         NLogging::TLogger logger,
         TServiceOptions options = {});
+    ~TServiceBase();
 
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.
@@ -945,7 +946,7 @@ private:
     struct TRequestBucket
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
-        THashMap<TRequestId, TServiceContext*> RequestIdToContext;
+        THashMap<TRequestId, TWeakPtr<TServiceContext>> RequestIdToContext;
         THashMap<TRequestId, TPendingPayloadsEntry> RequestIdToPendingPayloads;
     };
 
@@ -954,7 +955,7 @@ private:
 
     struct TReplyBusData
     {
-        THashSet<TServiceContext*> Contexts;
+        THashSet<TWeakPtr<TServiceContext>, TTransparentWeakPtrHasher, TEqualTo<>> Contexts;
         TCallback<void(const TError&)> BusTerminationHandler;
     };
 
@@ -1032,7 +1033,7 @@ private:
     TError DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header);
 
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
-    void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
+    void OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakBus, const TError& error);
 
     void DoHandleRequest(TIncomingRequest&& incomingRequest);
     void ReplyError(TError error, TIncomingRequest&& incomingRequest);

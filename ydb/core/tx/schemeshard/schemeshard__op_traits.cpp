@@ -124,6 +124,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
@@ -154,7 +155,6 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
         case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
             return EOperationClass::Other;
 

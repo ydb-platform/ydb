@@ -6,7 +6,7 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPDLQMoverTests) {
 
-void MoveToDLQ(const TString& msg) {
+void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -24,7 +24,7 @@ void MoveToDLQ(const TString& msg) {
                     .BeginCondition()
                         .MaxProcessingAttempts(1)
                     .EndCondition()
-                    .MoveAction("/Root/topic1-dlq")
+                    .MoveAction(shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
 
@@ -99,8 +99,12 @@ void MoveToDLQ(const TString& msg) {
     }
 }
 
-Y_UNIT_TEST(MoveToDLQ_ShortMessage) {
-    MoveToDLQ(NUnitTest::RandomString(1_KB));
+Y_UNIT_TEST(MoveToDLQ_ShortDlqTopicName) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), true);
+}
+
+Y_UNIT_TEST(MoveToDLQ_FullDlqTopicName) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), false);
 }
 
 Y_UNIT_TEST(MoveToDLQ_BigMessage) {

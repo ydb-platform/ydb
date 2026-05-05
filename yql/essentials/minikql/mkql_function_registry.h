@@ -30,18 +30,15 @@
 //////////////////////////////////////////////////////////////////////////////
 class IOutputStream;
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class IMutableFunctionRegistry;
 class TTypeEnvironment;
 struct TFunctionTypeInfo;
 class TStatus;
 class TType;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TUdfModuleRemappings = THashMap<TString, TString>; // old => new
 using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf path
@@ -51,7 +48,7 @@ using TUdfModulePathsMap = THashMap<TString, TString>;   // module name => udf p
 //////////////////////////////////////////////////////////////////////////////
 class IFunctionRegistry: public TThrRefBase {
 public:
-    typedef TIntrusivePtr<IFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IFunctionRegistry>;
 
     ~IFunctionRegistry() override = default;
 
@@ -87,9 +84,10 @@ public:
 
     struct TFunctionProperties {
         bool IsTypeAwareness = false;
+        TMaybe<TString> PolyArgs;
     };
 
-    typedef std::map<TString, TFunctionProperties> TFunctionsMap;
+    using TFunctionsMap = std::map<TString, TFunctionProperties>;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
 
@@ -140,7 +138,8 @@ bool SplitModuleAndFuncName(
 TString FullName(const TStringBuf& module, const TStringBuf& func);
 
 inline TStringBuf ModuleName(const TStringBuf& name) {
-    TStringBuf moduleName, _;
+    TStringBuf moduleName;
+    TStringBuf _;
     if (SplitModuleAndFuncName(name, moduleName, _)) {
         return moduleName;
     }
@@ -151,5 +150,4 @@ const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

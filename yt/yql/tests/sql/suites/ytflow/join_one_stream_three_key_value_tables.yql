@@ -1,0 +1,61 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$input_stream = 
+    select 
+        key || "_before" as key_before,
+        key,
+        value
+    from Input
+    where value > 2;
+
+$joined_stream1 =
+    select 
+        origin_stream.key as key_after_first_join,
+        origin_stream.value as value,
+        origin_stream.key_before as key_before,
+        kv_table.kv_value as kv_value
+    from $input_stream as origin_stream
+    inner join InputKeyValueTable as kv_table
+    on origin_stream.key = kv_table.key;
+
+$joined_stream2 =
+    select 
+        stream_after_first_join.key_after_first_join as key,
+        stream_after_first_join.value as intermediate_value,
+        stream_after_first_join.key_before as key_before,
+        stream_after_first_join.kv_value as kv_value,
+        kv_table_a.kv_value_a as kv_value_a
+    from $joined_stream1 as stream_after_first_join
+    inner join InputKeyValueTableA as kv_table_a
+    on stream_after_first_join.key_after_first_join = kv_table_a.key;
+
+$joined_stream3 = 
+    select 
+        stream_after_second_join.key as key,
+        stream_after_second_join.intermediate_value as value,
+        stream_after_second_join.key_before,
+        stream_after_second_join.kv_value,
+        stream_after_second_join.kv_value_a,
+        kv_table_b.kv_value_b
+    from $joined_stream2 as stream_after_second_join
+    inner join InputKeyValueTableB as kv_table_b
+    on stream_after_second_join.key = kv_table_b.key;
+
+insert into Output
+select 
+    key,
+    value,
+    `stream_after_second_join.key_before` as key_before,
+    key || "_after" as key_after,
+    `stream_after_second_join.kv_value` as kv_value,
+    `stream_after_second_join.kv_value_a` as kv_value_a,
+    `kv_table_b.kv_value_b` as kv_value_b
+from $joined_stream3
+where value * 2 <= `kv_table_b.kv_value_b`;

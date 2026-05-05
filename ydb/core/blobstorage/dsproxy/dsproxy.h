@@ -240,6 +240,10 @@ public:
             Span.Attribute("database", AppData()->TenantName);
             Span.Attribute("storagePool", Info->GetStoragePoolName());
             params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+        } else if (ParentSpan.GetRetroSpanPtr()) {
+            const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.RTX");
         } else {
             // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
             //         "DSProxy.RTX");
@@ -310,7 +314,7 @@ protected:
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;
     TLogContext LogCtx;
-    NWilson::TSpan ParentSpan;
+    TLazyRetroSpan ParentSpan;
     TLazyRetroSpan Span;
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
     TString ErrorReason;
@@ -322,6 +326,7 @@ protected:
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
+    THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
     const TActorId Source;
@@ -395,6 +400,7 @@ struct TBlobStorageGroupMultiPutParameters {
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
     TDuration MaxTimeout = TDuration::Seconds(60);
+    bool ReduceInterpileTraffic;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;

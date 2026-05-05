@@ -3,6 +3,7 @@
 
 #pragma once
 #include <functional>
+#include <utility>
 
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/version.h"
@@ -48,7 +49,7 @@ public:
     Builder &AddCondition(std::function<bool(const InstrumentationScope &)> scope_matcher,
                           T scope_config)
     {
-      conditions_.emplace_back(scope_matcher, scope_config);
+      conditions_.emplace_back(std::move(scope_matcher), std::move(scope_config));
       return *this;
     }
 
@@ -66,7 +67,7 @@ public:
           [scope_name = std::string(scope_name)](const InstrumentationScope &scope_info) {
             return scope_info.GetName() == scope_name;
           };
-      conditions_.emplace_back(name_equals_matcher, scope_config);
+      conditions_.emplace_back(std::move(name_equals_matcher), std::move(scope_config));
       return *this;
     }
 
@@ -89,7 +90,7 @@ public:
       return ScopeConfigurator<T>(
           [conditions_ = this->conditions_, default_scope_config_ = this->default_scope_config_](
               const InstrumentationScope &scope_info) {
-            for (Condition condition : conditions_)
+            for (const Condition &condition : conditions_)
             {
               if (condition.scope_matcher(scope_info))
               {
@@ -111,8 +112,8 @@ public:
       std::function<bool(const InstrumentationScope &)> scope_matcher;
       T scope_config;
 
-      Condition(const std::function<bool(const InstrumentationScope &)> &matcher, const T &config)
-          : scope_matcher(matcher), scope_config(config)
+      Condition(std::function<bool(const InstrumentationScope &)> matcher, T config)
+          : scope_matcher(std::move(matcher)), scope_config(std::move(config))
       {}
     };
 
@@ -135,7 +136,7 @@ public:
 private:
   // Prevent direct initialization of ScopeConfigurator objects.
   explicit ScopeConfigurator(std::function<T(const InstrumentationScope &)> configurator)
-      : configurator_(configurator)
+      : configurator_(std::move(configurator))
   {}
 
   std::function<T(const InstrumentationScope &)> configurator_;

@@ -4,8 +4,7 @@
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 class TPrintVisitor: public INodeVisitor {
@@ -875,13 +874,12 @@ TString PrintNode(const TNode* node, bool singleLine) {
     return visitor.ToString();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 void Out<NKikimr::NMiniKQL::TType>(
-    IOutputStream& os,
-    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t)
+    IOutputStream& out,
+    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam value)
 {
-    os << PrintNode(&t, true);
+    out << PrintNode(&value, true);
 }

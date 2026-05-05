@@ -3,12 +3,16 @@
 
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
+*Note: This library is for C++ users. C programmers should consider [ffc.h](https://github.com/kolemannix/ffc.h). It is a high-performance port of fast_float to C.*
+
+
 The fast_float library provides fast header-only implementations for the C++
 from_chars functions for `float` and `double` types as well as integer types.
 These functions convert ASCII strings representing decimal values (e.g.,
 `1.3e10`) into binary types. We provide exact rounding (including round to
 even). In our experience, these `fast_float` functions many times faster than
 comparable number-parsing functions from existing C++ standard libraries.
+
 
 Specifically, `fast_float` provides the following two functions to parse
 floating-point numbers with a C++17-like syntax (the library itself only
@@ -69,7 +73,7 @@ int main() {
 }
 ```
 
-Though the C++17 standard has you do a comparison with `std::errc()` to check whether the conversion worked, you can avoid it by casting the result to a `bool` like so:
+Prior to C++26, checking for a successful `std::from_chars` conversion requires comparing the `from_chars_result::ec` member to `std::errc()`. As an extension `fast_float::from_chars` supports the improved C++26 API that allows checking the result by converting it to `bool`, like so:
 
 ```cpp
 #include "fast_float/fast_float.h"
@@ -83,7 +87,7 @@ int main() {
     std::cout << "parsed the number " << result << std::endl;
     return EXIT_SUCCESS;
   }
-  std::cerr << "failed to parse " << result << std::endl;
+  std::cerr << "failed to parse " << input << std::endl;
   return EXIT_FAILURE;
 }
 ```
@@ -141,9 +145,12 @@ Furthermore, we have the following restrictions:
   fixed-width floating-point types such as `std::float64_t`, `std::float32_t`,
   `std::float16_t`, and `std::bfloat16_t`.
 * We only support the decimal format: we do not support hexadecimal strings.
-* For values that are either very large or very small (e.g., `1e9999`), we
-  represent it using the infinity or negative infinity value and the returned
+* For values that are very large positives or negatives (e.g., `1e9999`), we
+  represent them using a positive or negative infinity and the returned
   `ec` is set to `std::errc::result_out_of_range`.
+* For values that are very close to zero (e.g., `1e-9999`), we represent them
+  using a positive or negative zero and the returned `ec` is set to
+  `std::errc::result_out_of_range`.
 
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little
 endian. We support 32-bit and 64-bit systems.
@@ -485,6 +492,7 @@ Packages
   [Jackson](https://github.com/FasterXML/jackson-core).
 * [There is a C# port of the fast_float
   library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
+* [There is a plain C port of the fast_float library](https://github.com/kolemannix/ffc.h) called ffc.h
 
 ## How fast is it?
 
@@ -533,7 +541,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v8.2.2
+  GIT_TAG tags/v8.2.4
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -549,7 +557,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v8.2.2)
+  GIT_TAG v8.2.4)
 ```
 
 ## Using as single header
@@ -561,7 +569,7 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v8.2.2/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.2.4/fast_float.h>
 
 ## Benchmarking
 

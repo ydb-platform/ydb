@@ -8,6 +8,26 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
+    namespace {
+        bool IsClusterStateReached(const NKikimrBridge::TClusterState& current, const NKikimrBridge::TClusterState& requested) {
+            if (current.GetGeneration() < requested.GetGeneration()) {
+                return false;
+            }
+            if (current.GetPrimaryPile() != requested.GetPrimaryPile() || current.GetPromotedPile() != requested.GetPromotedPile()) {
+                return false;
+            }
+            if (current.PerPileStateSize() != requested.PerPileStateSize()) {
+                return false;
+            }
+            for (size_t i = 0; i < current.PerPileStateSize(); ++i) {
+                if (current.GetPerPileState(i) != requested.GetPerPileState(i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
     TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query)
         : TActor(&TThis::StateFunc)
         , Self(self)
@@ -87,6 +107,13 @@ namespace NKikimr::NStorage {
             OnVStatusError(begin->second);
         }
         if (nodeId == WaitingReplyFromNode) {
+            if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+                    op && op->Command.HasSwitchBridgeClusterState() &&
+                    Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
+                    IsClusterStateReached(Self->StorageConfig->GetClusterState(),
+                                          op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {
+                return Finish(TResult::OK, std::nullopt);
+            }
             throw TExRace() << "Hop node disconnected";
         }
     }
@@ -233,7 +260,10 @@ namespace NKikimr::NStorage {
         if (!Self->BridgeInfo) {
             throw TExError() << "Not in bridge mode";
         } else {
-            Self->ApplyCommittedStorageConfig(request.GetCommittedStorageConfig());
+            const auto& config = request.GetCommittedStorageConfig();
+            if (!Self->CommittedStorageConfig || Self->CommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                Self->ApplyCommittedStorageConfig(config);
+            }
             Finish(TResult::OK, std::nullopt);
         }
     }
@@ -488,8 +518,12 @@ namespace NKikimr::NStorage {
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer
             const ui32 hopNodeId = Binding->NodeId;
-            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {.Sender = ev->Sender,
-                .SessionId = ev->InterconnectSession, .Cookie = ev->Cookie}, hopNodeId));
+            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
+                .Command = ev->Get()->Record,
+                .Sender = ev->Sender,
+                .SessionId = ev->InterconnectSession,
+                .Cookie = ev->Cookie,
+            }, hopNodeId));
             TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
                 ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
         } else {

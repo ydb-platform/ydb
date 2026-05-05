@@ -270,7 +270,7 @@ private:
 
     void EnsureCapacity(size_t more)
     {
-        if (Y_LIKELY(Current_ + more < EndPreallocated_)) {
+        if (Current_ + more < EndPreallocated_) [[likely]] {
             return;
         }
 

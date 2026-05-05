@@ -4,7 +4,7 @@
 - `ydb_version`: автоматически загрузить один из [официальных релизов {{ ydb-short-name }}](../../../../../downloads/index.md#ydb-server) по номеру версии. Например, `23.4.11`.
 - `ydb_archive`: локальный путь файловой системы к архиву дистрибутива {{ ydb-short-name }}, [загруженному](../../../../../downloads/index.md#ydb-server) или иным образом подготовленному заранее.
 
-Для использования [федеративных запросов](../../../../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../../../../concepts/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../../../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
+Для использования [федеративных запросов](../../../../../concepts/query_execution/federated_query/index.md) может потребоваться установка [коннектора](../../../../../concepts/query_execution/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../../../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
 
 - `ydb_install_fq_connector` — установите в `true` для установки коннектора.
 - Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:

@@ -6,8 +6,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -57,5 +56,4 @@ std::unique_ptr<ICheckRunner> MakeLexerRunner() {
     return std::make_unique<TLexerRunner>();
 }
 
-} // namespace NFastCheck
-} // namespace NYql
+} // namespace NYql::NFastCheck

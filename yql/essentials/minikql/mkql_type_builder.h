@@ -6,15 +6,13 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
-#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
 
 #include <arrow/datum.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TBlockTypeHelper: public NUdf::IBlockTypeHelper {
 public:
@@ -344,5 +342,4 @@ protected:
 
 void RebuildTypeIndex();
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

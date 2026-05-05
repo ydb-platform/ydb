@@ -12,7 +12,7 @@ namespace {
 
 TEST(TRecursiveSpinLockTest, SingleThread)
 {
-    TRecursiveSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TRecursiveSpinLock, lock);
     EXPECT_FALSE(lock.IsLocked());
     EXPECT_TRUE(lock.TryAcquire());
     EXPECT_TRUE(lock.IsLocked());
@@ -31,7 +31,7 @@ TEST(TRecursiveSpinLockTest, SingleThread)
 
 TEST(TRecursiveSpinLockTest, TwoThreads)
 {
-    TRecursiveSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(TRecursiveSpinLock, lock);
     TEvent e1, e2, e3, e4, e5, e6, e7;
 
     std::jthread t1([&] {

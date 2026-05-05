@@ -110,15 +110,6 @@ inline IOutputStream& operator <<(IOutputStream& out, NKikimr::NHive::TSequencer
     return out << sq.Next << "@[" << sq.Begin << ".." << sq.End << ')';
 }
 
-namespace std {
-    template <>
-    struct hash<NKikimr::TSubDomainKey> {
-        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
-            return key.Hash();
-        }
-    };
-}
-
 namespace NKikimr {
 namespace NHive {
 
@@ -251,6 +242,7 @@ protected:
     friend class TTxSetDown;
     friend class TTxProcessTabletMetrics;
     friend class TTxUpdateLastReassign;
+    friend class TTxShrinkPoolReply;
 
     friend class TDeleteTabletActor;
 
@@ -324,6 +316,8 @@ protected:
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
     ITransaction* CreateProcessTabletMetrics();
+    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& event);
+    ITransaction* CreateShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -331,6 +325,7 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
+    TActorId ShrinkPoolInitiator;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
@@ -342,6 +337,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
+    std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
@@ -359,6 +355,7 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(TDomainInfo* domain);
     std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
@@ -626,6 +623,8 @@ protected:
     void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
     void Handle(TEvHive::TEvSetDown::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -1106,6 +1105,9 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+    void RemoveNodeFromSegments(TNodeInfo* node);
+    void RemoveNodeFromSegments(TNodeId nodeId);
+    void UpdateNodeSegments(TNodeInfo* node);
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);

@@ -10,9 +10,9 @@ namespace NYql {
 
 struct TExprContext;
 class TExprNode;
-typedef TIntrusivePtr<TExprNode> TExprNodePtr;
-typedef std::vector<TExprNodePtr> TExprNodeList;
-typedef std::span<const TExprNodePtr> TExprNodeSpan;
+using TExprNodePtr = TIntrusivePtr<TExprNode>;
+using TExprNodeList = std::vector<TExprNodePtr>;
+using TExprNodeSpan = std::span<const TExprNodePtr>;
 
 class TExprNodeReplaceBuilder;
 
@@ -20,7 +20,7 @@ class TExprNodeBuilder {
     friend class TExprNodeReplaceBuilder;
 
 public:
-    typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
+    using ExtArgsFuncType = std::function<TExprNodePtr(const TStringBuf&)>;
 
 public:
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
@@ -118,7 +118,7 @@ class TExprNodeReplaceBuilder {
 
 private:
     struct TBuildAdapter {
-        typedef TExprNodeReplaceBuilder& ResultType;
+        using ResultType = TExprNodeReplaceBuilder&;
 
         explicit TBuildAdapter(TExprNodeReplaceBuilder& builder)
             : Builder(builder)

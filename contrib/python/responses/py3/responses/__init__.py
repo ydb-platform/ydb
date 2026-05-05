@@ -39,7 +39,7 @@ from responses.registries import FirstMatchRegistry
 try:
     from typing_extensions import Literal
 except ImportError:  # pragma: no cover
-    from typing import Literal  # type: ignore  # pragma: no cover
+    from typing import Literal  # pragma: no cover
 
 from io import BufferedReader
 from io import BytesIO
@@ -226,8 +226,8 @@ def get_wrapped(
                 responses._set_registry(registry)
 
             with assert_mock, responses:
-                # set 'assert_all_requests_are_fired' temporarily for a single run.
-                # Mock automatically unsets to avoid leakage to another decorated
+                # set 'assert_all_requests_are_fired' temporarily for a
+                # single run. Mock automatically unsets to avoid leakage to another decorated
                 # function since we still apply the value on 'responses.mock' object
                 return func(*args, **kwargs)
 
@@ -991,9 +991,8 @@ class RequestsMock:
         return self
 
     def __exit__(self, type: Any, value: Any, traceback: Any) -> None:
-        success = type is None
         try:
-            self.stop(allow_assert=success)
+            self.stop(allow_assert=True)
         finally:
             self.reset()
 
@@ -1008,8 +1007,7 @@ class RequestsMock:
         registry: Type[Any] = ...,
         assert_all_requests_are_fired: bool = ...,
     ) -> Callable[["_F"], "_F"]:
-        """Overload for scenario when
-        'responses.activate(registry=, assert_all_requests_are_fired=True)' is used.
+        """Overload for scenario when 'responses.activate(...)' is used.
         See https://github.com/getsentry/responses/pull/469 for more details
         """
 
@@ -1051,7 +1049,10 @@ class RequestsMock:
         self, url: str
     ) -> Dict[str, Union[str, int, float, List[Optional[Union[str, int, float]]]]]:
         params: Dict[str, Union[str, int, float, List[Any]]] = {}
-        for key, val in groupby(parse_qsl(urlsplit(url).query), lambda kv: kv[0]):
+        for key, val in groupby(
+            parse_qsl(urlsplit(url).query, keep_blank_values=True),
+            lambda kv: kv[0],
+        ):
             values = list(map(lambda x: x[1], val))
             if len(values) == 1:
                 values = values[0]  # type: ignore[assignment]
@@ -1151,7 +1152,9 @@ class RequestsMock:
         # first validate that current request is eligible to be retried.
         # See ``urllib3.util.retry.Retry`` documentation.
         if retries.is_retry(
-            method=response.request.method, status_code=response.status_code  # type: ignore[misc]
+            method=response.request.method,  # type: ignore[misc]
+            status_code=response.status_code,  # type: ignore[misc]
+            has_retry_after="Retry-After" in response.headers,  # type: ignore[misc]
         ):
             try:
                 retries = retries.increment(

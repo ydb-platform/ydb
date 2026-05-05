@@ -17,8 +17,9 @@ class Logger;
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
 /**
  * Creates new EventLogger instances.
+ * @deprecated
  */
-class OPENTELEMETRY_DEPRECATED EventLoggerProvider
+class EventLoggerProvider
 {
 public:
   virtual ~EventLoggerProvider() = default;

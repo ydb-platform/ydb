@@ -200,19 +200,19 @@ void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDeletedColumn
+struct TDeletedColumn
 {
-public:
     TDeletedColumn() = default;
     explicit TDeletedColumn(TColumnStableName stableName);
 
-    DEFINE_BYREF_RO_PROPERTY(TColumnStableName, StableName);
-    TDeletedColumn& SetStableName(TColumnStableName stableName);
+    DEFINE_BYREF_RW_PROPERTY(TColumnStableName, StableName);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer);
+void Deserialize(TDeletedColumn& schema, NYTree::INodePtr node);
+void Deserialize(TDeletedColumn& schema, NYson::TYsonPullParserCursor* cursor);
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);

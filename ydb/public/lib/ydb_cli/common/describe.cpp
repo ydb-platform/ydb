@@ -12,6 +12,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_secret.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/stream/format.h>
@@ -418,9 +420,11 @@ void PrintTtlSettings(const NTable::TTableDescription& tableDescription, IOutput
     }
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << "(unknown):" << Endl
-            << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown TTL settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
     }
 
     if (settings->GetRunInterval()) {
@@ -467,8 +471,58 @@ void PrintReadReplicasSettings(const NTable::TTableDescription& tableDescription
         break;
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown read replicas settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
+    }
+}
+
+/**
+ * Print the configuration for the table metrics.
+ *
+ * @param[in] tableDescription The description of the table
+ * @param[in] out The output stream to print to
+ */
+void PrintMetricsSettings(const NTable::TTableDescription& tableDescription, IOutputStream& out) {
+    const auto& settings = tableDescription.GetMetricsSettings();
+    if (!settings) {
+        return;
+    }
+
+    out << Endl << "Metrics settings: " << Endl;
+
+    switch (settings->GetMetricsLevel()) {
+    case NTable::TMetricsSettings::EMetricsLevel::Unspecified:
+        out << "Metrics level: UNSPECIFIED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Disabled:
+        out << "Metrics level: DISABLED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Database:
+        out << "Metrics level: DATABASE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Table:
+        out << "Metrics level: TABLE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Partition:
+        out << "Metrics level: PARTITION" << Endl;
+        break;
+
+    default:
+        NColorizer::TColors colors = NConsoleClient::AutoColors(out);
+
+        out << colors.RedColor()
+            << "Unknown metrics level: " << static_cast<int>(settings->GetMetricsLevel())
+            << colors.OldColor()
+            << Endl;
+
+        break;
     }
 }
 
@@ -697,9 +751,40 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
         return DescribeExternalTable(path, format);
     case NScheme::ESchemeEntryType::SysView:
         return DescribeSystemView(path, format);
+    case NScheme::ESchemeEntryType::Secret:
+        return DescribeSecret(path, format);
     default:
         return DescribeEntryDefault(entry, options);
     }
+}
+
+int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
+    NSecret::TSecretClient secretClient(Driver);
+
+    auto secretResult = secretClient.DescribeSecret(path).GetValueSync();
+    if (!secretResult.IsSuccess()) {
+        Out << secretResult.GetIssues().ToString() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
+        return PrintSecretResponsePretty(secretResult);
+    }
+    if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+    }
+
+    Ydb::Secret::DescribeSecretResult msg;
+    secretResult.SerializeTo(msg.mutable_self());
+    msg.set_version(static_cast<i64>(secretResult.GetVersion()));
+
+    return PrintProtoJsonBase64(msg, Out);
+}
+
+int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result) const {
+    Out << "Version: " << result.GetVersion() << Endl;
+    return EXIT_SUCCESS;
 }
 
 int TDescribeLogic::DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options) {
@@ -773,6 +858,7 @@ int TDescribeLogic::PrintTableResponsePretty(const NTable::TTableDescription& ta
             << (tableDescription.GetKeyBloomFilter().value() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription, Out);
+    PrintMetricsSettings(tableDescription, Out);
     PrintPermissionsIfNeeded(tableDescription, options);
     if (options.ShowStats) {
         PrintStatistics(tableDescription, Out);

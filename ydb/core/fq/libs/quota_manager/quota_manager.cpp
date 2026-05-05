@@ -868,7 +868,7 @@ private:
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TYdbConnectionPtr YdbConnection;
-    NDbPool::TDbPool::TPtr DbPool;
+    NDbPool::TDbPoolPtr DbPool;
     const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
     THashMap<TString /* SubjectType */, THashMap<TString /* MetricName */, TQuotaInfo>> QuotaInfoMap;
     THashMap<TString /* SubjectType */, THashMap<TString /* SubjectId */, TQuotaCache>> QuotaCacheMap;

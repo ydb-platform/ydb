@@ -4,7 +4,21 @@ import sys
 import random
 from collections import defaultdict, Counter
 
-description = 'Move vdisks out from overpopulated pdisks.'
+description = '''Balance VDisks across PDisks in a storage pool by invoking ReassignGroupDisk BSC command.
+It can operate in several modes:
+
+1. Overpopulated PDisk mode (--only-from-overpopulated-pdisks):
+   Moves VDisks from PDisks that exceed their expected slot count to less populated PDisks.
+
+2. Slot-based balancing (--sort-by=slots, default):
+   Redistributes VDisks to equalize slot usage across PDisks.
+
+3. Space-based balancing (--sort-by=space_ratio):
+   Redistributes VDisks based on available free space ratios.
+
+Use --storage-pool to limit balancing to a specific storage pool, or --group-ids to target
+specific groups. The tool runs iteratively until balance is achieved or no more moves are possible.
+'''
 
 
 class Constants:
@@ -37,6 +51,7 @@ def add_options(p):
     p.add_argument('--with-attention-to-replication', action='store_true', help='Take into account replicating vdisks picking node and pdisk with less amount of them')
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
+    p.add_argument('--max-iterations', type=int, default=0, help='Maximum number of balancing iterations (0 = unlimited)')
     common.add_basic_format_options(p)
 
 
@@ -52,6 +67,8 @@ class ClusterInfo:
         self.vdisks_groups_count_map = None
         self.replicating_pdisks = None
         self.pdisk_usage_w_donors = None
+        self.group_map = None
+        self.pdisk_slot_size_in_units_map = None
 
     @staticmethod
     def collect_cluster_info(count_replicating_pdisks=False):
@@ -63,10 +80,16 @@ class ClusterInfo:
         info.pdisk_usage = common.build_pdisk_usage_map(info.base_config, count_donors=False)
         info.pdisk_usage_w_donors = common.build_pdisk_usage_map(info.base_config, count_donors=True)
 
+        info.group_map = common.build_group_map(info.base_config)
+        info.pdisk_slot_size_in_units_map = {
+            common.get_pdisk_id(pdisk): common.get_pdisk_inferred_settings(pdisk)[1]
+            for pdisk in info.base_config.PDisk
+        }
+
         info.storage_pool_names_map = common.build_storage_pool_names_map(info.storage_pools)
         info.group_id_to_storage_pool_name_map = {
             group_id: info.storage_pool_names_map[(group.BoxId, group.StoragePoolId)]
-            for group_id, group in common.build_group_map(info.base_config).items()
+            for group_id, group in info.group_map.items()
             if (group.BoxId, group.StoragePoolId) != (0, 0)  # static group
         }
 
@@ -75,6 +98,12 @@ class ClusterInfo:
             num = sum(vslot.Status == 'READY' for vslot in common.vslots_of_group(group, info.vslot_map)) - len(group.VSlotId)
             info.vdisks_groups_count_map[num] += 1
         return info
+
+    def get_vslot_weight_on_pdisk(self, group_id, pdisk_id):
+        group = self.group_map.get(group_id)
+        group_size_in_units = group.GroupSizeInUnits if group is not None else 0
+        pdisk_slot_size_in_units = self.pdisk_slot_size_in_units_map.get(pdisk_id, 0)
+        return common.get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units)
 
     def list_replicating_pdisks(self):
         if self.replicating_pdisks is not None:
@@ -252,11 +281,13 @@ class BalancingStrategy(IBalancingStrategy):
         pdisk_map = self.cluster_info.pdisk_map
         histo = self.histo
 
+        weight_from = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_id)
+
         common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d' % (vslot_id, pdisk_id, pdisk_usage[pdisk_id]), file=sys.stdout)
 
         current_usage = pdisk_usage[pdisk_id]
         if not self.args.only_from_overpopulated_pdisks:
-            for i in range(0, current_usage - 1):
+            for i in range(0, current_usage - weight_from):
                 if histo[i]:
                     break
             else:
@@ -271,8 +302,9 @@ class BalancingStrategy(IBalancingStrategy):
         item = response.Status[index].ReassignedItem[0]
         pdisk_from = item.From.NodeId, item.From.PDiskId
         pdisk_to = item.To.NodeId, item.To.PDiskId
-        if pdisk_usage[pdisk_to] + 1 > pdisk_usage[pdisk_from] - 1:
-            if pdisk_usage_w_donors[pdisk_to] + 1 > pdisk_map[pdisk_to].ExpectedSlotCount:
+        weight_to = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_to)
+        if pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
+            if pdisk_usage_w_donors[pdisk_to] + weight_to > pdisk_map[pdisk_to].ExpectedSlotCount:
                 common.print_if_not_quiet(
                     self.args,
                     'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on latter',
@@ -285,9 +317,10 @@ class BalancingStrategy(IBalancingStrategy):
             inactive = []
             for pdisk in self.cluster_info.base_config.PDisk:
                 check_pdisk_id = common.get_pdisk_id(pdisk)
-                disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + 1 <= pdisk_map[check_pdisk_id].ExpectedSlotCount
+                check_weight = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, check_pdisk_id)
+                disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + check_weight <= pdisk_map[check_pdisk_id].ExpectedSlotCount
                 if disk_is_better:
-                    if not self.healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + 1 > pdisk_usage[pdisk_id] - 1:
+                    if not self.healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + check_weight > pdisk_usage[pdisk_id] - weight_from:
                         disk_is_better = False
                     if self.healthy_vslots_from_overpopulated_pdisks:
                         disk_is_better = False
@@ -621,6 +654,8 @@ def do(args):
 
     iteration_number = 1
     while True:
+        if args.max_iterations > 0 and iteration_number > args.max_iterations:
+            break
         common.print_if_not_quiet(args, f"\nStart balancing iteration {iteration_number}", file=sys.stdout)
         if groups_info.unhealthy_groups:
             common.print_if_verbose(args, f'Skipping vdisks from unhealthy groups: {groups_info.unhealthy_groups}', file=sys.stdout)

@@ -8,8 +8,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 struct TLogRow {
     TInstant Time;
@@ -27,5 +26,4 @@ struct TLogRow {
 TLogRow ParseLegacyLogRow(TStringBuf str);
 TLogRow ParseJsonLogRow(TStringBuf str);
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

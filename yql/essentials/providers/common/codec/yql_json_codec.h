@@ -6,9 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <library/cpp/enumbitset/enumbitset.h>
 
-namespace NYql {
-namespace NCommon {
-namespace NJsonCodec {
+namespace NYql::NCommon::NJsonCodec {
 
 using namespace NKikimr;
 
@@ -57,6 +55,4 @@ void WriteValueToJson(NJson::TJsonWriter& writer, const NUdf::TUnboxedValuePod& 
                       NMiniKQL::TType* type, TValueConvertPolicy convertPolicy = {});
 
 NUdf::TUnboxedValue ReadJsonValue(NJson::TJsonValue& json, NMiniKQL::TType* type, const NMiniKQL::THolderFactory& holderFactory);
-} // namespace NJsonCodec
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon::NJsonCodec

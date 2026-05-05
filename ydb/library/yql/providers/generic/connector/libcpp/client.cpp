@@ -409,7 +409,7 @@ namespace NYql::NConnector {
             };
 
             GetConnection(kind)->DoStreamRequest<TRequest, TResponse>(
-                std::move(request),
+                request,
                 std::move(callback),
                 rpc,
                 { .Timeout = timeout ? NYdb::TDeadline::SafeDurationCast(timeout) : NYdb::TDeadline::Duration::max() },

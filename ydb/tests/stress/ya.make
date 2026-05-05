@@ -8,6 +8,7 @@ RECURSE(
     kv_volume
     log
     mixedpy
+    nfs_backups
     node_broker
     olap_workload
     oltp_workload

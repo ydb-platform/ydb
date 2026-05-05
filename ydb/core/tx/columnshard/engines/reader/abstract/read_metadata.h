@@ -60,10 +60,8 @@ public:
     }
 
     bool NeedToDetectConflicts() const {
-        // do not detect conflicts for snapshot isolated or read committed transactions or txs with no lock
-        return LockId.has_value()
-            && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
-            && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::PESSIMISTIC_NONE;
+        // do not detect conflicts for snapshot isolated transactions or txs with no lock
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
     }
 
     void SetRequestedLimit(const ui64 value) {

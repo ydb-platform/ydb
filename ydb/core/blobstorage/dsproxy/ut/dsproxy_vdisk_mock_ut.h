@@ -97,14 +97,14 @@ public:
         SpecialStatuses[blobID] = status;
     }
 
-    const TString& GetBlobData(const TLogoBlobID& id) const {
+    bool CorruptData(const TLogoBlobID& id) {
         auto it = Blobs.find(id);
-        static const TString empty;
-        return it == Blobs.end() ? empty : it->second;
-    }
-
-    void OverwriteBlob(const TLogoBlobID& id, const TString& data) {
-        Blobs[id] = data;
+        if (it == Blobs.end() || it->second.empty()) {
+            return false;
+        }
+        TString& data = it->second;
+        data = TString(data.size(), 'X');
+        return true;
     }
 
     void OnVGet(const TEvBlobStorage::TEvVGet &vGet, TEvBlobStorage::TEvVGetResult &outVGetResult) {
@@ -540,7 +540,6 @@ public:
         return GetVDisk(vDisksId[subgroupIdx]);
     }
 
-    // Helper method to encrypt data and create part set
     void PrepareDataParts(const TLogoBlobID& id, const TString& data, TDataPartSet& partSet) {
         Y_ABORT_UNLESS(id.BlobSize() == data.size());
         const ui32 totalParts = Info->Type.TotalPartCount();
@@ -553,11 +552,6 @@ public:
         Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
     }
 
-    // Places a single part of `blobId` at the given subgroup slot.  Unlike
-    // Put(), which assumes the canonical "part i goes to slot i" mapping for
-    // block-* erasures and only writes to primary slots, this helper lets the
-    // caller pick any (subgroupIdx, partId) pair and is therefore suitable
-    // for mirror-3-dc layouts where parts are replicated across realms.
     void PutPartAtSlot(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId,
         const TString& data)
     {
@@ -571,22 +565,12 @@ public:
         GetVDiskInSubgroup(blobId, subgroupIdx).Put(pId, pData);
     }
 
-    // Replaces the data of an existing part with corrupted bytes (xor 0xFF).
-    // Requires the part to be already stored on the disk at the given subgroup index.
     void CorruptPart(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId) {
         TVDiskMock& vdisk = GetVDiskInSubgroup(blobId, subgroupIdx);
         TLogoBlobID partBlobId(blobId, partId);
-        TString existing = vdisk.GetBlobData(partBlobId);
-        Y_ABORT_UNLESS(!existing.empty(), "Part is not stored on the selected disk");
-        char* p = existing.Detach();
-        for (size_t i = 0; i < existing.size(); ++i) {
-            p[i] ^= 0xff;
-        }
-        vdisk.OverwriteBlob(partBlobId, existing);
+        Y_ABORT_UNLESS(vdisk.CorruptData(partBlobId), "Part is not stored on the selected disk");
     }
 
-    // Marks a previously-stored part as NOT_YET (replication in progress) on the
-    // disk that holds it at the given subgroup slot.
     void MarkPartNotYet(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId) {
         GetVDiskInSubgroup(blobId, subgroupIdx).SetNotYet(TLogoBlobID(blobId, partId));
     }

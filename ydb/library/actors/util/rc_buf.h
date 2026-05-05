@@ -819,9 +819,10 @@ public:
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
     {
-        auto span = Backend.GetData();
-        Begin = span.data();
-        End = Begin + span.size();
+        ptrdiff_t begin_offset = other.Begin - other.Backend.GetData().data();
+        ptrdiff_t end_offset = other.End - other.Backend.GetData().data();
+        Begin = Backend.GetData().data() + begin_offset;
+        End = Backend.GetData().data() + end_offset;
     }
 
     TRcBuf(TRcBuf&& other)
@@ -833,9 +834,11 @@ public:
     TRcBuf& operator =(const TRcBuf& other) {
         if (this != &other) {
             Backend = other.Backend;
-            auto span = Backend.GetData();
-            Begin = span.data();
-            End = Begin + span.size();
+            ptrdiff_t begin_offset =
+                other.Begin - other.Backend.GetData().data();
+            ptrdiff_t end_offset = other.End - other.Backend.GetData().data();
+            Begin = Backend.GetData().data() + begin_offset;
+            End = Backend.GetData().data() + end_offset;
         }
         return *this;
     }

@@ -202,7 +202,7 @@ private:
                     auto* bloom = olapIndex->MutableBloomFilter();
                     if (index.local_bloom_filter_index().has_false_positive_probability()) {
                         const double fpp = index.local_bloom_filter_index().false_positive_probability();
-                        if (auto c = NKikimr::NLocalIndex::NBloom::TConstants::ValidateFalsePositiveProbability(fpp);
+                        if (auto c = NKikimr::NLocalIndex::NBloom::TConstants::ValidateParams(fpp, NKikimr::NLocalIndex::NBloom::NDefaults::NGrammSize);
                             c.IsFail())
                         {
                             issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid bloom filter index '" << index.name() << "' parameters: " << c.GetErrorMessage()));

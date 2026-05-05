@@ -145,7 +145,16 @@ namespace {
                                         out << "DataInfo:";
                                         DIV() {
                                             out << "<pre><small>";
-                                            out << msg.DataInfo;
+                                            for (char ch : msg.DataInfo) {
+                                                switch (ch) {
+                                                    case '&':  out << "&amp;"; break;
+                                                    case '<':  out << "&lt;" ; break;
+                                                    case '>':  out << "&gt;" ; break;
+                                                    case '\'': out << "&#39;"; break;
+                                                    case '"':  out << "&quot;"; break;
+                                                    default:   out << ch     ; break;
+                                                }
+                                            }
                                             out << "</small></pre>";
                                         }
                                     }

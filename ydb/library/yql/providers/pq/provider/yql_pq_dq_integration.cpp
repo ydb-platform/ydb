@@ -96,7 +96,7 @@ public:
         return 0;
     }
 
-    bool GetPartition(const TExprNode& node, std::set<ui64>& partitions) {
+    bool GetPartitions(const TExprNode& node, std::set<ui64>& partitions) {
         partitions.clear();
         if (!node.IsCallable("AsList")) {
             return false;
@@ -130,7 +130,7 @@ public:
                     break;
                 }
                 std::set<ui64> predicatePartitions;
-                bool success = GetPartition(*topicSource.Partitions().Ptr(), predicatePartitions);
+                bool success = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
                 if (!success) {
                     YQL_CLOG(WARN, ProviderPq) << "Failed to get predicate partitions";
                 }
@@ -207,7 +207,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(expandedRowType)
-                    .Partitions(emptyList)
+                    .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .Predicate<TCoVoid>().Build()

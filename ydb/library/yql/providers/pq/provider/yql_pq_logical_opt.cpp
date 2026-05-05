@@ -339,16 +339,14 @@ public:
         
         size_t topicPartitionsCount = 0;
         TInstant minWriteTime = TInstant::Max();
-        if (federatedTopics.size() == 1) {
-            topicPartitionsCount = federatedTopics[0].PartitionsCount;
-            for (auto [p, time] : federatedTopics[0].MaxWriteTime) {
+        for (const auto& topic: federatedTopics) {
+            topicPartitionsCount = std::max(topicPartitionsCount, static_cast<size_t>(topic.PartitionsCount));
+            for (auto [p, time] : topic.MaxWriteTime) {
                 minWriteTime = std::min(minWriteTime, time);
             }
-        } else {
-            // TODO
-            // for (const auto& topic: federatedTopics) {
-            
-            // }
+        }
+        if (!topicPartitionsCount) {
+            return node;
         }
 
         if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()
@@ -357,7 +355,7 @@ public:
             return node;
         }
 
-        if (!dqPqTopicSource.Partitions().Ref().IsCallable("List")) {
+        if (!dqPqTopicSource.Partitions().Ref().IsCallable("Void")) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }

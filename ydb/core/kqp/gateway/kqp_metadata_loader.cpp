@@ -591,16 +591,16 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
             }
 
             case NKikimrSchemeOp::TAuth::kIam: {
-                if (objectDescription.SecretValues.size() != 0) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "IAM auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
-                    return;
-                }
                 if (authDescription.GetIam().GetServiceAccountId().empty()) {
                     SetError(externalDataSourceMetadata, "IAM auth requires non-empty SERVICE_ACCOUNT_ID");
                     return;
                 }
                 if (authDescription.GetIam().GetResourceId().empty()) {
                     SetError(externalDataSourceMetadata, "IAM auth requires non-empty RESOURCE_ID");
+                    return;
+                }
+                if (objectDescription.SecretValues.size() != 0) {
+                    SetError(externalDataSourceMetadata, TStringBuilder{} << "IAM auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
                     return;
                 }
                 return;
@@ -641,6 +641,10 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                 }
                 if (objectDescription.SecretValues[0].empty()) {
                     SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];

@@ -360,6 +360,13 @@ EMPTY_AUTH_FIELD_CASES = [
         [('s0', ''), ('s1', 'nonemptypwd')],
         "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME",
     ),
+    (
+        "pg_mdb_basic_empty_password_value",
+        'SOURCE_TYPE="PostgreSQL", MDB_CLUSTER_ID="cid", DATABASE_NAME="db", PROTOCOL="NATIVE", USE_TLS="FALSE"',
+        'AUTH_METHOD="MDB_BASIC", SERVICE_ACCOUNT_ID="mysa", SERVICE_ACCOUNT_SECRET_NAME="{s0}", LOGIN="user", PASSWORD_SECRET_NAME="{s1}"',
+        [('s0', 'nonemptysig'), ('s1', '')],
+        "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME",
+    ),
 ]
 
 
@@ -385,7 +392,8 @@ def test_external_data_source_with_empty_auth_fields(
       - BASIC           (Ydb): empty LOGIN
       - TOKEN           (Ydb): empty resolved TOKEN_SECRET_NAME value
       - MDB_BASIC       (PG):  empty SERVICE_ACCOUNT_ID / empty LOGIN /
-                               empty resolved signature value
+                               empty resolved signature value /
+                               empty resolved password value
 
     AUTH_METHOD="NONE" has nothing to validate; AUTH_METHOD="IAM" requires
     a registered MDB cluster and is exercised in dedicated tests.

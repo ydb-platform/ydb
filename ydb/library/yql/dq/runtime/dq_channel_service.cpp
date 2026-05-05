@@ -1045,6 +1045,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
+    LastActivity = TInstant::Now();
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
@@ -1678,7 +1679,7 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
     (*InputBufferCount)--;
 }
 
-void TNodeState::CleanupUnbound() {
+void TNodeState::HandleCleanup() {
     std::lock_guard lock(Mutex);
     auto now = TInstant::Now();
     while (!UnboundInputs.empty()) {
@@ -1704,6 +1705,9 @@ void TNodeState::CleanupUnbound() {
             }
         }
         UnboundOutputs.pop();
+    }
+    if (LastActivity && (TInstant::Now() - LastActivity) > TDuration::Seconds(30)) {
+        StartReconciliation(false);
     }
 }
 
@@ -2052,11 +2056,11 @@ IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSetting
     return new TFastDqInputChannel(Self, settings, buffer);
 }
 
-void TDqChannelService::CleanupUnbound() {
+void TDqChannelService::NotifyCleanup() {
     std::lock_guard lock(Mutex);
 
     for (auto& [_, nodeState] : NodeStates) {
-        nodeState->CleanupUnbound();
+        ActorSystem->Send(nodeState->NodeActorId, new TEvPrivate::TEvCleanup());
     }
 }
 

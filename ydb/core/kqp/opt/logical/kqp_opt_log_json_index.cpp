@@ -384,20 +384,10 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
     Y_UNREACHABLE();
 }
 
-TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
-    ECallableType callableType, std::optional<TExprBase> comparisonValue,
-    TExprContext& ctx, TPositionHandle pos)
+TPredicateCollectResult AppendComparisonValue(const TString& columnName, TCollectResult collectResult,
+    std::optional<TExprBase> comparisonValue)
 {
-    TIssues parseIssues;
-    const auto path = NJsonPath::ParseJsonPath(params.JsonPath, parseIssues, 1);
-    if (!parseIssues.Empty()) {
-        return MakeCollectError(ctx, pos, "Failed to parse JSON path expression: " + parseIssues.ToOneLineString());
-    }
-
-    auto collectResult = CollectJsonPath(path, callableType, params.Variables, params.ParamVariables);
-    if (collectResult.IsError()) {
-        return TPredicateCollectResult{"", std::move(collectResult)};
-    }
+    YQL_ENSURE(!collectResult.IsError(), "Expected valid collect result");
 
     auto& tokens = collectResult.GetTokens();
     if (collectResult.CanCollect() && comparisonValue.has_value()) {
@@ -415,7 +405,25 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
         collectResult.StopCollecting();
     }
 
-    return TPredicateCollectResult{params.ColumnName, std::move(collectResult)};
+    return TPredicateCollectResult{columnName, std::move(collectResult)};
+}
+
+TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
+    ECallableType callableType, std::optional<TExprBase> comparisonValue,
+    TExprContext& ctx, TPositionHandle pos)
+{
+    TIssues parseIssues;
+    const auto path = NJsonPath::ParseJsonPath(params.JsonPath, parseIssues, 1);
+    if (!parseIssues.Empty()) {
+        return MakeCollectError(ctx, pos, "Failed to parse JSON path expression: " + parseIssues.ToOneLineString());
+    }
+
+    auto collectResult = CollectJsonPath(path, callableType, params.Variables, params.ParamVariables);
+    if (collectResult.IsError()) {
+        return MakeCollectError(ctx, pos, collectResult.GetError().GetMessage());
+    }
+
+    return AppendComparisonValue(params.ColumnName, std::move(collectResult), comparisonValue);
 }
 
 std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const TExprBase& value) {
@@ -514,6 +522,11 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         return MakeCollectError(ctx, jsonLookup.Pos(), "SQL IN with JSON_VALUE with RETURNING Bool is not supported");
     }
 
+    auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
+    if (baseResult.Collect.IsError()) {
+        return baseResult;
+    }
+
     std::optional<TPredicateCollectResult> acc;
     for (const auto& item : collection.Cast<TExprList>()) {
         const auto literal = UnwrapValue(TExprBase(item));
@@ -522,7 +535,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
         }
 
-        auto itemResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, *extracted, ctx, literal.Pos());
+        auto itemResult = AppendComparisonValue(baseResult.ColumnName, baseResult.Collect, *extracted);
         if (!acc.has_value()) {
             acc = std::move(itemResult);
         } else {

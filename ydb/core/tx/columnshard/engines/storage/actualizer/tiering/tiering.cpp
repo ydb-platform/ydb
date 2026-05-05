@@ -6,7 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
@@ -134,11 +134,17 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
         std::shared_ptr<arrow::Scalar> max;
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
-        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
+        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMinMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
-                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                auto minmax =
+                    NArrow::NAccessor::TMinMax::MakeNull(portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                for (const TString& str : data) {
+                    minmax.UniteWith(NArrow::NAccessor::TMinMax::FromBinaryString(
+                        str, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type()));
+                }
+                max = minmax.Max();
             }
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);

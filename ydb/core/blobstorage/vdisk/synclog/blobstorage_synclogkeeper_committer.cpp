@@ -84,9 +84,9 @@ namespace NKikimr {
                     ui32 lastChunkFreePages = SyncLogSnap->DiskSnapPtr->LastChunkFreePagesNum();
                     ui32 chunkIdx = 0;
                     ui32 offset = 0;
-                    const bool lastChunkDeletedByThisCommit = lastChunkFreePages > 0 &&
-                        Find(CommitRecord.DeleteChunks.begin(), CommitRecord.DeleteChunks.end(),
-                            SyncLogSnap->DiskSnapPtr->LastChunkIdx()) != CommitRecord.DeleteChunks.end();
+                    const auto& delChunks = CommitRecord.DeleteChunks;
+                    const bool lastChunkDeletedByThisCommit =
+                        Find(delChunks.begin(), delChunks.end(), SyncLogSnap->DiskSnapPtr->LastChunkIdx()) != delChunks.end();
                     if (lastChunkFreePages > 0 && !lastChunkDeletedByThisCommit) {
                         // append to the chunk, but check if the chunk is not being deleted
                         Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);

@@ -46,7 +46,14 @@ _LLM_HINT = (
     "<!-- LLM: please classify the failure as one of "
     "TEST_ISSUE / YDB_ISSUE / TEST_INFRA_ISSUE; try to find the root cause "
     "and the commit that most likely introduced it; estimate severity "
-    "(HIGH / MEDIUM / LOW); when possible, propose a fix. -->"
+    "(HIGH / MEDIUM / LOW); when possible, propose a fix. "
+    "If error_type is VERIFY or SANITIZER, explicitly mention the concrete problem "
+    "being investigated using status_description in this exact 3-line shape: "
+    "'VERIFY failed (<ISO_UTC_TIMESTAMP>):' then "
+    "'<source_file>:<line>' then "
+    "'<assertion/message line>'. "
+    "Prefer lines like 'ydb/.../*.cpp:<line>' and requirement/assert text, and do NOT include "
+    "stacktrace frames or addresses (e.g. '+0x...', function backtrace lines). -->"
 )
 
 

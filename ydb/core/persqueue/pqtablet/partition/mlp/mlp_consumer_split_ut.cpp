@@ -1471,9 +1471,10 @@ void SingleGroupAvailableEventuallyImpl(TDuration pause) {
         CreateWriterActor(runtime, std::move(ws));
         auto writeResp = GetWriteResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), N, desc);
-        UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages[0].Status, Ydb::StatusIds::SUCCESS, desc);
+        for (size_t i = 0; i < N; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages[i].Status, Ydb::StatusIds::SUCCESS, (TStringBuilder() << desc << "; " << LabeledOutput(i)));
+        }
     };
-
 
     ACerr << ">>>>> Step: Write " << N << " messages with unique groups" << Endl;
     writeNMessages("first write");

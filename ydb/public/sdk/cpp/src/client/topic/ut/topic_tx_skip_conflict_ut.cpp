@@ -227,61 +227,49 @@ protected:
     }
 };
 
-#define DEFINE_TOPIC_TX_MATRIX_FIXTURES(SkipBool, MetaEnumVal, Suffix)                                               \
+/// Rows: (skipConflictFlag, trackMetaEnum, fixtureSuffix, expectedSecondTxCommitStatus).
+/// Same expected status is used for topic-only and distributed (topic+table) SeqNo tests.
+#define FOR_EACH_TOPIC_TX_MATRIX_ROW(X)                                                                                \
+    X(false, Absent, SkipConflictOff_MetaAbsent, EStatus::ABORTED)                                                     \
+    X(false, True, SkipConflictOff_MetaTrue, EStatus::ABORTED)                                                         \
+    X(false, False, SkipConflictOff_MetaFalse, EStatus::ABORTED)                                                     \
+    X(true, Absent, SkipConflictOn_MetaAbsent, EStatus::ABORTED)                                                     \
+    X(true, True, SkipConflictOn_MetaTrue, EStatus::ABORTED)                                                           \
+    X(true, False, SkipConflictOn_MetaFalse, EStatus::SUCCESS)
+
+#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                          \
     using TFixture_##Suffix##_Table = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureTable>; \
     using TFixture_##Suffix##_Query = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureQuery>;
 
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(false, Absent, SkipConflictOff_MetaAbsent)
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(false, True, SkipConflictOff_MetaTrue)
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(false, False, SkipConflictOff_MetaFalse)
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(true, Absent, SkipConflictOn_MetaAbsent)
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(true, True, SkipConflictOn_MetaTrue)
-DEFINE_TOPIC_TX_MATRIX_FIXTURES(true, False, SkipConflictOn_MetaFalse)
-
-#undef DEFINE_TOPIC_TX_MATRIX_FIXTURES
+FOR_EACH_TOPIC_TX_MATRIX_ROW(DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES)
+#undef DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta) {
 
-#define Y_SEQNO_TWO_WRITE_SESSIONS(TestBaseName, FixtureSuffix, ExpectedStatus)                                      \
-    Y_UNIT_TEST_F(TestBaseName##_Table_##FixtureSuffix, TFixture_##FixtureSuffix##_Table) {                          \
+#define REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                           \
+    Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_Table_##Suffix, TFixture_##Suffix##_Table) {                          \
         RunSeqNoConflictTwoWriteSessionsSameProducer(ExpectedStatus);                                                \
     }                                                                                                                \
-    Y_UNIT_TEST_F(TestBaseName##_Query_##FixtureSuffix, TFixture_##FixtureSuffix##_Query) {                          \
+    Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_Query_##Suffix, TFixture_##Suffix##_Query) {                          \
         RunSeqNoConflictTwoWriteSessionsSameProducer(ExpectedStatus);                                                \
-    }
-
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOff_MetaAbsent, EStatus::ABORTED)
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOff_MetaTrue, EStatus::ABORTED)
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOff_MetaFalse, EStatus::ABORTED)
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOn_MetaAbsent, EStatus::ABORTED)
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOn_MetaTrue, EStatus::ABORTED)
-Y_SEQNO_TWO_WRITE_SESSIONS(SeqNoConflict_TwoWriteSessions, SkipConflictOn_MetaFalse, EStatus::SUCCESS)
-
-#undef Y_SEQNO_TWO_WRITE_SESSIONS
-
-#define Y_SEQNO_DISTRIBUTED(TestBaseName, FixtureSuffix, ExpectedStatus)                                             \
-    Y_UNIT_TEST_F(TestBaseName##_Table_##FixtureSuffix, TFixture_##FixtureSuffix##_Table) {                          \
+    }                                                                                                                \
+    Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_Table_##Suffix, TFixture_##Suffix##_Table) {            \
         RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(ExpectedStatus);                                     \
     }                                                                                                                \
-    Y_UNIT_TEST_F(TestBaseName##_Query_##FixtureSuffix, TFixture_##FixtureSuffix##_Query) {                          \
-        RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(ExpectedStatus);                                     \
+    Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_Query_##Suffix, TFixture_##Suffix##_Query) {              \
+        RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(ExpectedStatus);                                   \
     }
 
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOff_MetaAbsent, EStatus::ABORTED)
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOff_MetaTrue, EStatus::ABORTED)
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOff_MetaFalse, EStatus::ABORTED)
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOn_MetaAbsent, EStatus::ABORTED)
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOn_MetaTrue, EStatus::ABORTED)
-Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOn_MetaFalse, EStatus::SUCCESS)
+FOR_EACH_TOPIC_TX_MATRIX_ROW(REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS)
+#undef REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS
+#undef FOR_EACH_TOPIC_TX_MATRIX_ROW
 
-#undef Y_SEQNO_DISTRIBUTED
-
-#define Y_INVALID_WRITE_SESSION_ATTR_TEST(TestBaseName, FixtureType)                                                 \
-    Y_UNIT_TEST_F(TestBaseName, FixtureType) {                                                                       \
-        CreateTopic("topic_A", TEST_CONSUMER, 1);                                                                  \
-                                                                                                                     \
+// Must expand inside Y_UNIT_TEST_F body: uses TFixture protected helpers.
+#define INVALID_WRITE_SESSION_ATTR_TEST_BODY()                                                                       \
+    do {                                                                                                             \
+        CreateTopic("topic_A", TEST_CONSUMER, 1);                                                                    \
         NTopic::TTopicClient client(GetDriver());                                                                    \
         NTopic::TWriteSessionSettings options;                                                                       \
         options.Path(GetTopicUtPath("topic_A"));                                                                     \
@@ -289,17 +277,14 @@ Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOn_M
         options.MessageGroupId(TEST_MESSAGE_GROUP_ID);                                                               \
         options.Codec(ECodec::RAW);                                                                                  \
         const auto& key = ::NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;                             \
-        options.AppendSessionMeta({key.data(), key.size()}, "not-a-bool");                                           \
-                                                                                                                     \
+        options.AppendSessionMeta({key.data(), key.size()}, "not-a-bool");                                          \
         auto ws = client.CreateWriteSession(options);                                                                \
-                                                                                                                     \
         std::optional<NTopic::TSessionClosedEvent> closed;                                                           \
         const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);                                        \
-        while (!closed.has_value()) {                                                                               \
+        while (!closed.has_value()) {                                                                                \
             UNIT_ASSERT_C(                                                                                           \
                 TInstant::Now() < deadline,                                                                          \
                 "timed out waiting for write session close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX"); \
-                                                                                                                     \
             if (auto ev = ws->GetEvent(false)) {                                                                     \
                 if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {                                      \
                     closed.emplace(*c);                                                                              \
@@ -311,16 +296,20 @@ Y_SEQNO_DISTRIBUTED(SeqNoConflict_Distributed_TwoWriteSessions, SkipConflictOn_M
         UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX"); \
         UNIT_ASSERT_VALUES_EQUAL(closed->GetStatus(), EStatus::BAD_REQUEST);                                       \
         const TString issues = closed->GetIssues().ToOneLineString();                                              \
-        UNIT_ASSERT_STRING_CONTAINS(issues, key);                                                                  \
+        UNIT_ASSERT_STRING_CONTAINS(issues, key);                                                                    \
         UNIT_ASSERT_STRING_CONTAINS(issues, "not-a-bool");                                                           \
-                                                                                                                     \
-        ws->Close(TDuration::Seconds(5));                                                                          \
-    }
+        ws->Close(TDuration::Seconds(5));                                                                            \
+    } while (false)
 
-Y_INVALID_WRITE_SESSION_ATTR_TEST(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Table, TFixtureTable)
-Y_INVALID_WRITE_SESSION_ATTR_TEST(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Query, TFixtureQuery)
+Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Table, TFixtureTable) {
+    INVALID_WRITE_SESSION_ATTR_TEST_BODY();
+}
 
-#undef Y_INVALID_WRITE_SESSION_ATTR_TEST
+Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Query, TFixtureQuery) {
+    INVALID_WRITE_SESSION_ATTR_TEST_BODY();
+}
+
+#undef INVALID_WRITE_SESSION_ATTR_TEST_BODY
 
 } // Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta)
 

@@ -12,7 +12,7 @@
 
 ## Подготовка источника данных для работы с топиками
 
-Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-object-type-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
 
 ```yql
 -- Секрет с токеном для подключения к YDB

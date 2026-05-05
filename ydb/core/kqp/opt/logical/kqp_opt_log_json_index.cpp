@@ -245,18 +245,26 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
     if (nodeVariables.IsCallable("AsDict")) {
         for (ui32 i = 0; i < nodeVariables.ChildrenSize(); ++i) {
             const auto& pair = *nodeVariables.ChildPtr(i);
+            if (pair.ChildrenSize() != 2) {
+                return std::unexpected("Expected key/value pair in PASSING clause");
+            }
 
-            const auto keyExpr = TExprBase(pair.HeadPtr());
+            const auto keyExpr = TExprBase(pair.ChildPtr(0));
             if (!keyExpr.Maybe<TCoUtf8>()) {
                 return std::unexpected("Expected Utf8 key in PASSING clause");
             }
 
             const auto varName = TString(keyExpr.Cast<TCoUtf8>().Literal().Value());
 
-            const auto applyExpr = TExprBase(pair.TailPtr());
+            const auto applyExpr = TExprBase(pair.ChildPtr(1));
             if (!applyExpr.Maybe<TCoApply>()) {
                 return std::unexpected(TStringBuilder() << "Variable '" << varName
                     << "' is bound to unsupported expression");
+            }
+
+            if (applyExpr.Ref().ChildrenSize() <= 1) {
+                return std::unexpected(TStringBuilder() << "Variable '" << varName
+                    << "' is bound to malformed expression");
             }
 
             const auto innerValue = UnwrapValue(TExprBase(applyExpr.Ref().ChildPtr(1)));

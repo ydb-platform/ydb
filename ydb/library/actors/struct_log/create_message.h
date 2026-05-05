@@ -3,6 +3,8 @@
 #include "key_name.h"
 #include "structured_message.h"
 
+#include <ydb/library/actors/core/event.h>
+
 #include <util/generic/maybe.h>
 
 #include <initializer_list>
@@ -10,37 +12,37 @@
 
 namespace NKikimr::NStructuredLog {
 
+template<typename>
+static constexpr bool IsMaybeImpl = false;
+template<typename T>
+static constexpr bool IsMaybeImpl<TMaybe<T>> = true;
+template<typename T>
+static constexpr bool IsMaybe = IsMaybeImpl<std::decay_t<T>>;
+
 class TCreateMessageArg {
 public:
 
     TCreateMessageArg() = default;
 
     // Native types support
-    template <typename T, typename K = TKeyName, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
+    template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {
-        GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value);
-    }
-
-    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
-    TCreateMessageArg(TKeyName&& name, const TMaybe<T>& value) {
-        if (value.Defined()) {
-            GetBuildMessage().AppendValue({std::forward<TKeyName>(name)}, value.GetRef());
-        }
-    }
-
-    template<unsigned N>
-    TCreateMessageArg(TKeyName&& name, const char(&value)[N]) {
-        GetBuildMessage().AppendFixedValue({std::forward<TKeyName>(name)}, value);
-    }
-
-    // Structured messages support
-    TCreateMessageArg(TKeyName&& name, const TStructuredMessage& subMessage) {
-        GetBuildMessage().AppendSubMessage({std::forward<TKeyName>(name)}, subMessage);
-    }
-
-    TCreateMessageArg(TKeyName&& name, const TMaybe<TStructuredMessage>& subMessage) {
-        if (subMessage.Defined()) {
-            GetBuildMessage().AppendSubMessage({std::forward<TKeyName>(name)}, subMessage.GetRef());
+        if constexpr (TNativeTypeSupport<T>::value) {
+            GetBuildMessage().AppendValue({std::move(name)}, value);
+        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
+            GetBuildMessage().AppendSubMessage({std::move(name)}, value);
+        } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
+            if (value.Defined()) {
+                GetBuildMessage().AppendSubMessage({std::move(name)}, value.GetRef());
+            }
+        } else if constexpr (IsMaybe<T>) {
+            if (value.Defined()) {
+                GetBuildMessage().AppendValue({std::move(name)}, value.GetRef());
+            }
+        } else {
+            TStringBuilder stream;
+            stream << value;
+            GetBuildMessage().AppendValue({std::move(name)}, TString(stream));
         }
     }
 

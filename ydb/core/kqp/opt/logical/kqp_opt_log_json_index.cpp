@@ -439,7 +439,7 @@ std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const
 
     // Parameter case (append to path)
     if (value.Maybe<TCoParameter>()) {
-        const auto* paramType = value.Cast<TCoParameter>().Ref().GetTypeAnn();
+        const auto paramType = value.Cast<TCoParameter>().Ref().GetTypeAnn();
         if (!IsSupportedJsonParamType(paramType)) {
             return std::unexpected(TString("Parameter with unsupported type"));
         }

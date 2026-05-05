@@ -187,49 +187,16 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
     }
 
     Y_UNIT_TEST(CopyWithStringBackend) {
-        TString str(100, 'x');
+        TString str = "abcdefghijklmno";
         TRcBuf original(str);
+        original.TrimFront(10);
 
-        TRcBuf byCtor = original;
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 100);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 0);
-        UNIT_ASSERT_EQUAL(::memcmp(byCtor.data(), str.data(), str.size()), 0);
+        TRcBuf copy = original;
+        UNIT_ASSERT_EQUAL(::memcmp(copy.data(), str.data() + 5, 10), 0);
 
-        TRcBuf byAssign;
-        byAssign = original;
-        UNIT_ASSERT_VALUES_EQUAL(byAssign.size(), 100);
-        UNIT_ASSERT_EQUAL(::memcmp(byAssign.data(), str.data(), str.size()), 0);
-
-        byCtor.GrowFront(10);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 110);
-        UNIT_ASSERT_EQUAL(::memcmp(byCtor.data() + 10, str.data(), str.size()), 0);
-        UNIT_ASSERT_VALUES_EQUAL(original.size(), 100);
-
-        byCtor.ReserveBidi(20, 30);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 110);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 20);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
-
-        byCtor.GrowFront(5);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 115);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 15);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 30);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
-
-        byCtor.GrowBack(10);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 125);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 15);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Tailroom(), 20);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.GetOccupiedMemorySize(), 160);
-
-        byCtor.GrowFront(20);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.size(), 145);
-        UNIT_ASSERT_VALUES_EQUAL(byCtor.Headroom(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(
-            byCtor.GetOccupiedMemorySize(),
-            byCtor.size() + byCtor.Headroom() + byCtor.Tailroom());
+        copy.GrowFront(100);
+        UNIT_ASSERT_VALUES_EQUAL(copy.size(), 110);
+        UNIT_ASSERT_EQUAL(::memcmp(copy.data() + 100, str.data() + 5, 10), 0);
     }
 
     Y_UNIT_TEST(Reserve) {

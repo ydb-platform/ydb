@@ -1492,16 +1492,13 @@ static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config
     auto& bsConfig = *config.MutableBlobStorageConfig();
     auto& ss = *bsConfig.MutableServiceSet();
 
-    for (int i = ss.VDisksSize() - 1; i >= 0; --i) {
-        const auto& vdisk = ss.GetVDisks(i);
+    EraseIf(*ss.MutableVDisks(), [&](const auto& vdisk) {
         if (vdisk.HasVDiskLocation()) {
             const auto& loc = vdisk.GetVDiskLocation();
-            if (!nodeIds.contains(loc.GetNodeID()) &&
-                    vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                ss.MutableVDisks()->DeleteSubrange(i, 1);
-            }
+            return !nodeIds.contains(loc.GetNodeID()) && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY;
         }
-    }
+        return false;
+    });
 
     THashSet<std::pair<ui32, ui32>> referencedPDisks;
     for (const auto& vdisk : ss.GetVDisks()) {
@@ -1511,22 +1508,15 @@ static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config
         }
     }
 
-    for (int i = ss.PDisksSize() - 1; i >= 0; --i) {
-        const auto& pdisk = ss.GetPDisks(i);
-        if (!nodeIds.contains(pdisk.GetNodeID()) &&
-                !referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()))) {
-            ss.MutablePDisks()->DeleteSubrange(i, 1);
-        }
-    }
+    EraseIf(*ss.MutablePDisks(), [&](const auto& pdisk) {
+        return !nodeIds.contains(pdisk.GetNodeID()) && !referencedPDisks.contains(std::pair(pdisk.GetNodeID(), pdisk.GetPDiskID()));
+    });
 
     if (bsConfig.HasDefineBox()) {
         auto *hosts = bsConfig.MutableDefineBox()->MutableHost();
-        for (int i = hosts->size() - 1; i >= 0; --i) {
-            const auto& host = hosts->Get(i);
-            if (host.GetEnforcedNodeId() && !nodeIds.contains(host.GetEnforcedNodeId())) {
-                hosts->DeleteSubrange(i, 1);
-            }
-        }
+        EraseIf(*hosts, [&](const auto& host) {
+            return host.GetEnforcedNodeId() && !nodeIds.contains(host.GetEnforcedNodeId());
+        });
     }
 }
 

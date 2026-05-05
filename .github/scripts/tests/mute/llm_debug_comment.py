@@ -73,8 +73,19 @@ def _link(url) -> str:
     return f"[link]({url})" if url else 'n/a'
 
 
+def _normalize_table_cell(value, max_len: int = 120) -> str:
+    """Render a value safely inside a markdown table cell."""
+    text = str(value or 'n/a')
+    # Keep markdown table structure intact.
+    text = text.replace('\r', ' ').replace('\n', ' ').replace('|', '\\|')
+    text = ' '.join(text.split())
+    if len(text) > max_len:
+        text = text[: max_len - 1] + '…'
+    return text
+
+
 def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[str, Dict]:
-    """Return ``full_name -> latest failing/muted CI run row`` from ``test_results``.
+    """Return ``full_name -> latest failing/muted CI run row`` from ``test_history_fast``.
 
     Returns ``{}`` (and logs a warning) when YDB is unavailable; callers still
     render the table with history links for every test.
@@ -92,9 +103,9 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
         return {}
 
     try:
-        table_path = ydb_wrapper.get_table_path('test_results')
+        table_path = ydb_wrapper.get_table_path('test_history_fast')
     except (KeyError, AttributeError):
-        logging.warning('test_results not registered in ydb_qa_config — debug links disabled')
+        logging.warning('test_history_fast not registered in ydb_qa_config — debug links disabled')
         return {}
 
     branch_esc = str(branch).replace("'", "''")
@@ -104,7 +115,7 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
         f"(suite_folder = '{s}' AND test_name = '{t}')" for s, t in pairs
     )
     query = f"""
-    SELECT suite_folder, test_name, job_id, status, error_type, run_timestamp,
+    SELECT suite_folder, test_name, job_id, status, error_type, status_description, run_timestamp,
            stderr, stdout, log, logsdir
     FROM `{table_path}`
     WHERE branch = '{branch_esc}'
@@ -119,7 +130,7 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
     try:
         rows = ydb_wrapper.execute_scan_query(query, query_name='mute_issue_llm_debug_links')
     except Exception as exc:
-        logging.warning('Failed to load debug links from test_results: %s', exc)
+        logging.warning('Failed to load debug links from test_history_fast: %s', exc)
         return {}
 
     latest: Dict[str, Dict] = {}
@@ -155,10 +166,11 @@ def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
             continue
         job_id = row.get('job_id')
         run_url = f"https://github.com/ydb-platform/ydb/actions/runs/{job_id}" if job_id else ''
+        type_text = _normalize_table_cell(row.get('error_type') or 'n/a', max_len=48).upper()
         lines.append(
             f"| `{short}` "
-            f"| `{row.get('status') or 'unknown'}` "
-            f"| `{(row.get('error_type') or 'n/a').upper()}` "
+            f"| `{_normalize_table_cell(row.get('status') or 'unknown', max_len=32)}` "
+            f"| `{type_text}` "
             f"| `{_format_ts(row.get('run_timestamp'))}` "
             f"| {_link(history)} "
             f"| {_link(run_url)} "

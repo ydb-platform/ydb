@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import time
 import requests
@@ -72,6 +73,22 @@ def handle_github_errors(response):
                 print("Message:", error.get('message', 'No message available'))
                 raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
 
+
+def _retry_backoff_seconds(attempt, response=None):
+    backoff_seconds = min(2**attempt, GITHUB_QUERY_MAX_BACKOFF_SECONDS)
+
+    if response is not None and response.status_code == 429:
+        retry_after_raw = response.headers.get('Retry-After') if response.headers else None
+        try:
+            retry_after = int(retry_after_raw)
+        except (TypeError, ValueError):
+            retry_after = 0
+        if retry_after > 0:
+            backoff_seconds = max(backoff_seconds, retry_after)
+
+    return backoff_seconds + random.uniform(0, 1)
+
+
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
@@ -90,7 +107,7 @@ def run_query(query, variables=None):
                 raise Exception(
                     f"Query failed after {GITHUB_QUERY_MAX_ATTEMPTS} attempts due to request error: {exc}. {query}"
                 ) from exc
-            backoff_seconds = min(2**attempt, GITHUB_QUERY_MAX_BACKOFF_SECONDS)
+            backoff_seconds = _retry_backoff_seconds(attempt)
             print(f"GitHub GraphQL request error: {exc}. Retrying in {backoff_seconds}s")
             time.sleep(backoff_seconds)
             continue
@@ -104,7 +121,7 @@ def run_query(query, variables=None):
             request.status_code in GITHUB_QUERY_RETRY_STATUSES
             and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1
         ):
-            backoff_seconds = min(2**attempt, GITHUB_QUERY_MAX_BACKOFF_SECONDS)
+            backoff_seconds = _retry_backoff_seconds(attempt, request)
             print(f"GitHub GraphQL returned {request.status_code}. Retrying in {backoff_seconds}s")
             time.sleep(backoff_seconds)
             continue

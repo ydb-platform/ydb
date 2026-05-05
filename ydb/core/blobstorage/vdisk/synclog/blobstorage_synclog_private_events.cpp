@@ -19,10 +19,21 @@ namespace NKikimr {
         {}
 
         TEvPhantomFlagStorageCommitData::TEvPhantomFlagStorageCommitData(
-                const std::optional<TPhantomFlagStorageData>& data)
+                const std::optional<TPhantomFlagStorageData>& data,
+                std::vector<ui32> retiredChunks)
             : Data(data)
+            , RetiredChunks(std::move(retiredChunks))
+        {}
+
+        TEvPhantomFlagExtractedFromChunk::TEvPhantomFlagExtractedFromChunk(
+                ui32 chunkIdx, TPhantomFlags&& flags)
+            : ChunkIdx(chunkIdx)
+            , Flags(std::move(flags))
+        {}
+
+        TEvPhantomFlagExtractionDone::TEvPhantomFlagExtractionDone(ui32 chunkIdx)
+            : ChunkIdx(chunkIdx)
         {}
 
     } // NSyncLog
 } // NKikimr
-

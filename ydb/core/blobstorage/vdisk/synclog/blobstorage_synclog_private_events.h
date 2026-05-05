@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_data.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
@@ -128,14 +129,35 @@ namespace NKikimr {
                 : public TEventLocal<TEvPhantomFlagStorageCommitData,
                                      TEvBlobStorage::EvPhantomFlagStorageCommitData>
         {
-            TEvPhantomFlagStorageCommitData(const std::optional<TPhantomFlagStorageData>& data);
+            TEvPhantomFlagStorageCommitData(const std::optional<TPhantomFlagStorageData>& data,
+                    std::vector<ui32> retiredChunks);
 
             std::optional<TPhantomFlagStorageData> Data;
+            std::vector<ui32> RetiredChunks;
         };
 
         struct TEvPhantomFlagStorageDrop
                 : public TEventLocal<TEvPhantomFlagStorageDrop,
                                      TEvBlobStorage::EvPhantomFlagStorageDrop>
         {};
+
+        struct TEvPhantomFlagExtractedFromChunk
+                : public TEventLocal<TEvPhantomFlagExtractedFromChunk,
+                                     TEvBlobStorage::EvPhantomFlagExtractedFromChunk>
+        {
+            TEvPhantomFlagExtractedFromChunk(ui32 chunkIdx, TPhantomFlags&& flags);
+
+            ui32 ChunkIdx;
+            TPhantomFlags Flags;
+        };
+
+        struct TEvPhantomFlagExtractionDone
+                : public TEventLocal<TEvPhantomFlagExtractionDone,
+                                     TEvBlobStorage::EvPhantomFlagExtractionDone>
+        {
+            TEvPhantomFlagExtractionDone(ui32 chunkIdx);
+
+            ui32 ChunkIdx;
+        };
     } // NSyncLog
 } // NKikimr

@@ -11,6 +11,10 @@
 namespace NKikimr {
 
     namespace NSyncLog {
+        struct TDeletedChunk {
+            ui32 ChunkIdx = 0;
+            ui32 UsedPagesNum = 0;
+        };
 
         ////////////////////////////////////////////////////////////////////////////
         // SYNC LOG FORMAT

@@ -10,6 +10,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 
+#include <vector>
+
 namespace NKikimr {
     namespace NSyncLog {
 
@@ -91,10 +93,10 @@ namespace NKikimr {
             void RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot);
             void RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
             void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
+            void RetireExtractedChunks(const std::vector<ui32>& chunkIdxs);
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
-            void FlushPhantomFlagStorageWriteBufferIfNeeded();
 
             TVector<ui32> GetChunksToForget() {
                 return std::exchange(ChunksToForget, {});
@@ -149,9 +151,11 @@ namespace NKikimr {
             THashSet<ui32> DeletedChunks;
             THashSet<ui32> DeletedChunksPending;
 
+            std::unordered_map<ui32, ui32> ChunksToExtract;
+
         private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
-            TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
+            TVector<TDeletedChunk> FixDiskOverflow(ui32 numChunksToAdd);
             // Build Snapshot of memory pages for swapping to disk
             TMemRecLogSnapshotPtr BuildSwapSnap();
             // We have limits on
@@ -165,7 +169,7 @@ namespace NKikimr {
             // i.e. for those records in SyncLog which keep user data
             ui64 CalculateFirstDataInRecovLogLsnToKeep() const;
             // Schedule chunks deletion and activate PhantomFlagStorage if needed
-            void DropUnsyncedChunks(const TVector<ui32>& chunks,
+            void DropUnsyncedChunks(const TVector<TDeletedChunk>& chunks,
                     const TSyncLogSnapshotPtr& snapshot);
         };
 

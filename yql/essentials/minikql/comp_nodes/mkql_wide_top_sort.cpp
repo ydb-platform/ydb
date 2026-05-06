@@ -823,7 +823,29 @@ private:
         return InputStatus == EFetchResult::Finish;
     }
 
+    static const char* ModeName(EOperatingMode m) {
+        switch (m) {
+            case EOperatingMode::InMemory:       return "InMemory";
+            case EOperatingMode::Spilling:       return "Spilling";
+            case EOperatingMode::MergeSpilled:   return "MergeSpilled";
+            case EOperatingMode::ProcessSpilled: return "ProcessSpilled";
+        }
+        return "Unknown";
+    }
+
     void SwitchMode(EOperatingMode mode) {
+        {
+            const size_t rowsInMemory = Indexes.size() > 0 ? Storage.size() / Indexes.size() : 0;
+            TStringBuilder msg;
+            msg << "[SwitchMode][" << (const void*)this << "] "
+                << ModeName(Mode) << " -> " << ModeName(mode)
+                << " | memUsed=" << TlsAllocState->GetUsed()
+                << " memLimit=" << TlsAllocState->GetLimit()
+                << " rowsInMemory=" << rowsInMemory
+                << " lastSpilledRows=" << LastSpilledRows
+                << " spilledStates=" << SpilledStates.size();
+            Cerr << msg << Endl;
+        }
         switch (mode) {
             case EOperatingMode::InMemory:
                 break;
@@ -866,6 +888,7 @@ private:
             }
         } else {
             SealInMemory();
+            LastSpilledRows = Full.size();
             if (Full.empty()) {
                 // Nothing to spill
                 SpilledStates.pop_back();
@@ -1022,6 +1045,7 @@ private:
     size_t MergeSourceCount = 0;
     bool MergeHeapBuilt = false;
     bool MergeFinishWriteInProgress = false;
+    size_t LastSpilledRows = 0;
     static constexpr size_t MaxMergeWidth = 10;
     static constexpr size_t MinSpillBatchRows = 2;
 };

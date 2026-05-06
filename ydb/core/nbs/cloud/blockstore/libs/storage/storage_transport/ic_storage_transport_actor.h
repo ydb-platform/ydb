@@ -4,9 +4,6 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
-#include <set>
-#include <thread>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,8 +12,7 @@ class TICStorageTransportActor
     : public NActors::TActorBootstrapped<TICStorageTransportActor>
 {
 private:
-    std::atomic<ui64> RequestIdGenerator = 0;
-    std::set<std::thread::id> ThreadIds;
+    ui64 RequestIdGenerator = 0;
 
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvConnect>>
         ConnectRequests;

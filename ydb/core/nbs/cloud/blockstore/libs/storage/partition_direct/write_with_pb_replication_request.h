@@ -31,19 +31,20 @@ private:
     // явных ответов
     TSet<ELocation> AvailableLocationsForDirectSending;
 
-
+    ui32 NumberOfDirectWritesInProgress{};
     const TDuration PbufferReplyTimeout;
 
     void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void TryToSendDirectWrites();
+    void TryToSendDirectWrites(bool isHedge=false);
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span) override;
 
     void ScheduleHedging() override;
+    void SendDirectWriteRequest(ELocation location);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

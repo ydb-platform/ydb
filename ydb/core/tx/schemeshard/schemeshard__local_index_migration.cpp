@@ -112,8 +112,8 @@ private:
         if (pathParts.empty()) {
             LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TLocalIndexMigrator: failed to split path '" << item.WorkingDir << "'");
-            // Try next item
-            ProcessItems(ctx);
+            SchemeShard->ReturnTxIdToCache(txId);
+            ctx.Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
             return;
         }
 
@@ -137,8 +137,8 @@ private:
         if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
             LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TLocalIndexMigrator: failed to convert index config for '" << item.WorkingDir << "'");
-            // Try next item
-            ProcessItems(ctx);
+            SchemeShard->ReturnTxIdToCache(txId);
+            ctx.Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
             return;
         }
 
@@ -174,6 +174,16 @@ private:
             break;
         case NKikimrScheme::StatusAccepted:
             Send(SelfActorId, new TEvSchemeShard::TEvNotifyTxCompletion(static_cast<ui64>(txId)));
+            break;
+        case NKikimrScheme::StatusMultipleModifications:
+        case NKikimrScheme::StatusNotAvailable:
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                << ", transient failure for " << AwaitingRequests.at(txId).DebugString()
+                << ", reason: " << record.GetReason() << ", will retry");
+            PendingItems.push_back(std::move(AwaitingRequests.at(txId)));
+            AwaitingRequests.erase(txId);
+            ctx.Schedule(RetryDelay, new TEvents::TEvWakeup());
             break;
         default:
             LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

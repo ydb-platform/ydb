@@ -1586,6 +1586,7 @@ struct TEvBlobStorage {
             : Id(origin.Id)
             , Deadline(origin.Deadline)
             , GetHandleClass(origin.GetHandleClass)
+            , SingleLine(origin.SingleLine)
         {}
 
         TEvCheckIntegrity(
@@ -1677,6 +1678,7 @@ struct TEvBlobStorage {
             }
         }
 
+        TBlobStorageGroupType::EErasureSpecies Erasure = TBlobStorageGroupType::ErasureNone;
         EPlacementStatus PlacementStatus = PS_OK;
         EDataStatus DataStatus = DS_OK;
         TString DataInfo; // textual info about checks in blob data
@@ -1693,6 +1695,7 @@ struct TEvBlobStorage {
                 << " Id# " << Id
                 << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
                 << " ErrorReason# " << ErrorReason
+                << " Erasure# " << TBlobStorageGroupType::ErasureSpeciesName(Erasure)
                 << " PlacementStatus# " << PlacementStatusToString(PlacementStatus)
                 << " DataStatus# " << DataStatusToString(DataStatus)
                 << " DataInfo# " << DataInfo

@@ -11,6 +11,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <iostream>
+
 // Flow control design principles
 //
 // 1. There are several ui64 counters which grow monotonically
@@ -479,7 +481,7 @@ public:
     std::atomic<bool> EarlyFinished = false;
     std::atomic<bool> Aborted = false;
 
-    IMemoryQuotaManager::TPtr QuotaManager;
+    IMemoryQuotaManager::TPtr QuotaManager = nullptr;
 };
 
 class TBroadcastInputDescriptor;
@@ -505,6 +507,7 @@ public:
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
+        QuotaManager = quotaManager;
     }
 
     ~TInputDescriptor() override;
@@ -575,11 +578,13 @@ public:
     void Terminate() override;
 
     void AbortChannel(const TString& message) override {
-        Y_UNUSED(message);
+        for(const auto& descriptor: InputDescriptors)
+            descriptor->AbortChannel(message);
     }
 
     void AbortChannelByMemoryLimit(ui64 bytes) override {
-        Y_UNUSED(bytes);
+        for(const auto& descriptor: InputDescriptors)
+            descriptor->AbortChannelByMemoryLimit(bytes);
     }
 
     void ExportPushStats(TDqAsyncStats& stats) override {
@@ -1092,6 +1097,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
         }
 
         void Push(NUdf::TUnboxedValue &&value) override {
+            // std::cout << "pushing through broadcast channel \n";
             if (!Serializer->Buffer->IsFinished())
             {
                 Serializer->Push(std::move(value));
@@ -1218,13 +1224,13 @@ class TBroadcastOutputChannel : public IDqOutputChannel
 
                 auto mainChannel = channelIds[0];
                 auto& mainBuffer = broadcastBuffer->Buffers[mainChannel];
-                auto& broadcastInputs = mainBuffer->Info.BroadcastInputActorIds;
-                broadcastInputs.push_back(mainBuffer->Info.InputActorId);
+                auto& broadcastInputs = mainBuffer->Info.BroadcastInputActors;
+                broadcastInputs.push_back({mainBuffer->Info.InputActorId, mainChannel});
                 mainBuffer->Info.InputActorId = {};
 
                 // erase other channels to same node
                 for (ui64 i = 1; i < channelIds.size(); i++) {
-                    broadcastInputs.push_back(broadcastBuffer->Buffers[channelIds[i]]->Info.InputActorId);
+                    broadcastInputs.push_back({broadcastBuffer->Buffers[channelIds[i]]->Info.InputActorId, channelIds[i]});
                     broadcastBuffer->Buffers.erase(channelIds[i]);
                 }
             }
@@ -1232,6 +1238,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
 
             for(auto& [_, buf] : broadcastBuffer->Buffers) {
 
+                // TODO: add quota manager
                 auto buffer = service->GetOutputBuffer(buf->Info, nullptr, Storage);
 
                 if (Aggregator)
@@ -1243,6 +1250,19 @@ class TBroadcastOutputChannel : public IDqOutputChannel
             }
 
             Service.reset();
+            // std::string s;
+            // for(auto& [_, buf] : broadcastBuffer->Buffers) {
+            //     s += std::to_string(buf->Info.ChannelId);
+            //     s += ", ";
+            //     s += buf->Info.OutputActorId.ToString();
+            //     s += ", ";
+            //     s += buf->Info.InputActorId.ToString();
+            //     s += " {";
+            //     for (auto& [x, y] : buf->Info.BroadcastInputActors)
+            //         s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+            //     s += "}\n";
+            // }
+            // std::cout << "binding finished:\n " << s << "\n";
         }
     };
 

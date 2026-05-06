@@ -27,8 +27,8 @@ struct TChannelInfo {
     NActors::TActorId OutputActorId;
     NActors::TActorId InputActorId;
 
-    // multiple actors for broadcast channels
-    TVector<NActors::TActorId> BroadcastInputActorIds;
+    // multiple actorIds and channelIds for broadcast channels
+    TVector<std::pair<NActors::TActorId, ui64>> BroadcastInputActors;
 };
 
 struct TChannelFullInfo : public TChannelInfo {

@@ -434,6 +434,8 @@ TOutputDescriptor::~TOutputDescriptor() {
 
 void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
 
+    // std::cout << "pushing data through outputDescriptor: " << Info.ChannelId << " " << Info.InputActorId.ToString() << " " <<Info.BroadcastInputActors.size() << '\n' ;
+
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
@@ -1058,6 +1060,8 @@ TNodeState::~TNodeState() {
 }
 
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
+    // std::cout << "pushing data through nodeState: " << descriptor->Info.ChannelId << " " << descriptor->Info.InputActorId.ToString() << " " << descriptor->Info.BroadcastInputActors.size() << '\n' ;
+
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
@@ -1065,6 +1069,8 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         descriptor->AbortChannelByMemoryLimit(data.Bytes);
         return;
     }
+
+    // std::cout << "pushing data through nodeState: channel not aborted\n";
 
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
@@ -1084,7 +1090,12 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
+    // std::cout << "pushing data through nodeState: waitQueue is empty\n";
+
     {
+
+        // std::cout << "pushing data through nodeState: no reconcilation\n";
+
         // in Reconciliation state we do not send new messages
         std::lock_guard lock(Mutex);
         if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.NodeSessionIcInflightBytes && Queue.size() < MaxInflightMessages) {
@@ -1101,6 +1112,8 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
             }
         }
     }
+
+    // std::cout << "pushing data through nodeState: reconcilation\n";
 
     bool result = false;
 
@@ -1144,12 +1157,29 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
 
     // setting multiple inputs if channel is broadcast channel
-    if (!item->Descriptor->Info.BroadcastInputActorIds.empty())
-        for (auto& inputId : item->Descriptor->Info.BroadcastInputActorIds){
-            auto* ids = ev->Record.MutableBroadcastDstActorIds();
-            auto *ex = ids->Add();
+    if (!item->Descriptor->Info.BroadcastInputActors.empty())
+        for (auto& [inputId, channelId] : item->Descriptor->Info.BroadcastInputActors){
+            auto* actorIds = ev->Record.MutableBroadcastDstActorIds();
+            auto *ex = actorIds->Add();
             ActorIdToProto(inputId, ex);
+
+            auto* ids = ev->Record.MutableBroadcastChannelIds();
+            auto *ex1 = ids->Add();
+            *ex1 = channelId;
         }
+
+    // std::string s;
+    // auto debugInfo = item->Descriptor->Info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+    // std::cout << "sending message:\n " << s << "\n";
 
     ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
 
@@ -1256,8 +1286,28 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
 
+    TVector<NActors::TActorId> actorIds;
+    TVector<ui64> channelIds;
     for (const auto& actorId : record.GetBroadcastDstActorIds())
-        info.BroadcastInputActorIds.push_back(NActors::ActorIdFromProto(actorId));
+        actorIds.push_back(NActors::ActorIdFromProto(actorId));
+    for (const auto& channelId : record.GetBroadcastChannelIds())
+        channelIds.push_back(channelId);
+
+    for (size_t i = 0; i < actorIds.size(); i++)
+        info.BroadcastInputActors.push_back({actorIds[i], channelIds[i]});
+
+    // std::string s;
+    // auto debugInfo = info;
+    // s += std::to_string(debugInfo.ChannelId);
+    // s += ", ";
+    // s += debugInfo.OutputActorId.ToString();
+    // s += ", ";
+    // s += debugInfo.InputActorId.ToString();
+    // s += " {";
+    // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+    //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+    // s += "}\n";
+    // std::cout << "handling channelData:\n " << s << "\n";
 
     auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
@@ -1728,8 +1778,15 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
+    TVector<NActors::TActorId> actorIds;
+    TVector<ui64> channelIds;
     for (const auto& actorId : record.GetBroadcastDstActorIds())
-        info.BroadcastInputActorIds.push_back(NActors::ActorIdFromProto(actorId));
+        actorIds.push_back(NActors::ActorIdFromProto(actorId));
+    for (const auto& channelId : record.GetBroadcastChannelIds())
+        channelIds.push_back(channelId);
+
+    for (size_t i = 0; i < actorIds.size(); i++)
+        info.BroadcastInputActors.push_back({actorIds[i], channelIds[i]});
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
@@ -1761,7 +1818,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
         parentDescriptor->LastSentPopBytes = curBytes;
     } else {
         curBytes = descriptor->GetPopBytes();
-        if (!descriptor->Info.BroadcastInputActorIds.empty()){
+        if (!descriptor->Info.BroadcastInputActors.empty()){
             auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(descriptor);
             broadcastDescriptor->LastSentPopBytes = curBytes;
         }
@@ -1777,17 +1834,25 @@ void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
     NActors::ActorIdToProto(parentDescriptor == nullptr ? descriptor->Info.InputActorId : NActors::TActorId{}, evUpdate->Record.MutableDstActorId());
     evUpdate->Record.SetChannelId(parentDescriptor == nullptr ? descriptor->Info.ChannelId : parentDescriptor->Info.ChannelId);
 
-    if (parentDescriptor && !parentDescriptor->Info.BroadcastInputActorIds.empty()){
-        for (auto& inputId : parentDescriptor->Info.BroadcastInputActorIds){
-            auto* ids = evUpdate->Record.MutableBroadcastDstActorIds();
-            auto *ex = ids->Add();
+    if (parentDescriptor && !parentDescriptor->Info.BroadcastInputActors.empty()){
+        for (auto& [inputId, channelId] : parentDescriptor->Info.BroadcastInputActors){
+            auto* actorIds = evUpdate->Record.MutableBroadcastDstActorIds();
+            auto *ex = actorIds->Add();
             ActorIdToProto(inputId, ex);
+
+            auto* ids = evUpdate->Record.MutableBroadcastChannelIds();
+            auto *ex1 = ids->Add();
+            *ex1 = channelId;
         }
-    } else if(!descriptor->Info.BroadcastInputActorIds.empty()) {
-        for (auto& inputId : descriptor->Info.BroadcastInputActorIds){
-            auto* ids = evUpdate->Record.MutableBroadcastDstActorIds();
-            auto *ex = ids->Add();
+    } else if(!descriptor->Info.BroadcastInputActors.empty()) {
+        for (auto& [inputId, channelId] : descriptor->Info.BroadcastInputActors){
+            auto* actorIds = evUpdate->Record.MutableBroadcastDstActorIds();
+            auto *ex = actorIds->Add();
             ActorIdToProto(inputId, ex);
+
+            auto* ids = evUpdate->Record.MutableBroadcastChannelIds();
+            auto *ex1 = ids->Add();
+            *ex1 = channelId;
         }
     }
 
@@ -1859,7 +1924,7 @@ std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    bool isBroadcast = !info.BroadcastInputActorIds.empty();
+    bool isBroadcast = !info.BroadcastInputActors.empty();
 
     std::shared_ptr<IInputDescriptor> result;
 
@@ -1867,13 +1932,28 @@ std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         result = std::make_shared<TBroadcastInputDescriptor>(info);
         TChannelFullInfo newInfo = info;
         auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(result);
-        newInfo.BroadcastInputActorIds.clear();
-        for (const auto& inputId : info.BroadcastInputActorIds) {
+        newInfo.BroadcastInputActors.clear();
+        for (const auto& [inputId, channelId] : info.BroadcastInputActors) {
             newInfo.InputActorId = inputId;
-            auto& newDescriptor = broadcastDescriptor->InputDescriptors.emplace_back(GetOrCreateInputDescriptor(newInfo, quotaManager, bound, leading));
+            newInfo.ChannelId = channelId;
+            auto it = InputDescriptors.find(newInfo);
+            Y_ENSURE(it != InputDescriptors.end());
+            auto& newDescriptor = broadcastDescriptor->InputDescriptors.emplace_back(it->second);
             auto nonBroadcastDescriptor = std::static_pointer_cast<TInputDescriptor>(newDescriptor);
             nonBroadcastDescriptor->parentDescriptor = broadcastDescriptor;
         }
+        // std::string s;
+        // auto debugInfo = broadcastDescriptor->Info;
+        // s += std::to_string(debugInfo.ChannelId);
+        // s += ", ";
+        // s += debugInfo.OutputActorId.ToString();
+        // s += ", ";
+        // s += debugInfo.InputActorId.ToString();
+        // s += " {";
+        // for (auto& [x, y] : debugInfo.BroadcastInputActors)
+        //     s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+        // s += "}\n";
+        // std::cout << "broadcast descriptor created:\n " << s << "\n";
     } else {
         result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
     }

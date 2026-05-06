@@ -274,6 +274,7 @@ message TEvChannelDataV2 {
     optional TWatermark Watermark = 17;
     // Multiple actor for broadcast messages
     repeated NActorsProto.TActorId BroadcastDstActorIds = 18;
+    repeated uint64 BroadcastChannelIds = 19;
 };
 
 message TEvChannelAckV2 {
@@ -326,6 +327,7 @@ message TEvChannelUpdateV2 {
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
 
-    // Multiple actor for broadcast messages
+    // Multiple actors for broadcast messages
     repeated NActorsProto.TActorId BroadcastDstActorIds = 10;
+    repeated uint64 BroadcastChannelIds = 11;
 };

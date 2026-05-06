@@ -240,9 +240,15 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         if (join->JoinAlgo != NKikimr::NKqp::EJoinAlgoType::Undefined) {
             res->Props.JoinAlgo = join->JoinAlgo;
         }
+
+        // This is essentially "set them to true if there will be no shuffle"
         res->Props.LeftShuffleEliminated = join->ShuffleLeftSideBy.empty();
         res->Props.RightShuffleEliminated = join->ShuffleRightSideBy.empty();
 
+        // Don't set "shuffle eliminated" for non-GraceJoins, because there
+        // were no shuffles to begin with, so therefore nothing to "eliminate"
+        res->Props.LeftShuffleEliminated &= join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+        res->Props.RightShuffleEliminated &= join->JoinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin;
         return res;
     }
 }

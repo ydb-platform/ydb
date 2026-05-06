@@ -19,8 +19,8 @@ public:
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
         , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
-        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders) {
-
+        , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
+    {
     }
 };
 
@@ -34,7 +34,8 @@ public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents)
         , Height(agents.Height->GetClient())
-        , WidthHistogram(agents.WidthHistogram.BuildGuard()) {
+        , WidthHistogram(agents.WidthHistogram.BuildGuard())
+    {
     }
 
     void SetHeight(const i32 height) {
@@ -121,7 +122,10 @@ public:
     TLevelCounters LastLevel;
     TLevelCounters Tiling;
 
-    TCounters(): LastLevel(TGlobalCounters::BuildLastClient()), Tiling(TGlobalCounters::BuildTilingClient()) {
+    TCounters()
+        : LastLevel(TGlobalCounters::BuildLastClient())
+        , Tiling(TGlobalCounters::BuildTilingClient())
+    {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
             Accumulators.emplace_back(TGlobalCounters::BuildAccumulatorClient(i));

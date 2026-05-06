@@ -780,14 +780,13 @@ public:
     template<typename T>
     TRcBuf(T&& backend, const TContiguousSpan& data)
     {
-        const char* old_base;
+        ptrdiff_t beginOffset = 0;
         if constexpr (std::is_same_v<std::decay_t<T>, IContiguousChunk::TPtr>) {
-            old_base = backend->GetData().data();
+            beginOffset = backend->GetData().data() - data.data();
         } else {
-            old_base = backend.GetData().data();
+            beginOffset = backend.GetData().data() - data.data();
         }
-        ptrdiff_t beginOffset = data.data() - old_base;
-        Backend = TBackend(std::forward<T>(backend));
+        Backend = std::move(backend);
         Begin = Backend.GetData().data() + beginOffset;
         End = Begin + data.size();
     }

@@ -15,6 +15,10 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/security/util/net.h>
+#include <util/network/address.h>
+
+
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -24,6 +28,11 @@ using TDeleteTopicEvent = yandex::cloud::events::ydb::topics::DeleteTopic;
 using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
+
+TString NormalizeRemoteAddress(const TString& peerName) {
+    auto addr = NKikimr::NSecurity::ParsePeername(peerName);
+    return addr ? NAddr::PrintHost(*addr) : peerName;
+}
 
 std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     switch (operation.GetOperationType()) {
@@ -216,7 +225,7 @@ void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     ev.mutable_event_metadata()->set_folder_id(info.FolderId);
 
     // RequestMetadata
-    ev.mutable_request_metadata()->set_remote_address(info.RemoteAddress);
+    ev.mutable_request_metadata()->set_remote_address(NormalizeRemoteAddress(info.RemoteAddress));
 }
 
 template <typename TEvent, typename TFillBody>

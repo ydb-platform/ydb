@@ -90,7 +90,7 @@ TICStorageTransportActor::~TICStorageTransportActor()
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
             request->PersistentBufferIds);
-        request->Promise.SetValue(response->Record);
+        request->Promise.SetValue(std::move(response->Record));
     }
 }
 
@@ -374,7 +374,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         return;
     }
 
-    LOG_ERROR(
+    LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
@@ -535,7 +535,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
-            LOG_ERROR(
+            LOG_INFO(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
                 "Received TEvReadPersistentBufferResult with requestId# %lu "
@@ -609,10 +609,10 @@ void TICStorageTransportActor::HandleReadResult(
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
-            LOG_ERROR(
+            LOG_INFO(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
-                "Recieved TEvReadResult with requestId# %lu was failed - can't "
+                "Received TEvReadResult with requestId# %lu was failed - can't "
                 "acquire data.",
                 requestId);
 

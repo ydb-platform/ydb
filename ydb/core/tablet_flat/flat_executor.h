@@ -504,6 +504,7 @@ class TExecutor
     ui64 TransactionPagesMemory = 0;
 
     bool BackupSnapshotInProgress = false;
+    ui32 BackupRetryAttempt = 0;
 
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
@@ -560,7 +561,7 @@ class TExecutor
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
     void FailBackup(const TString& error);
-    void ScheduleRetryBackup() const;
+    void ScheduleRetryBackup();
     TStringBuilder BackupLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);

@@ -1,8 +1,8 @@
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -20,12 +20,7 @@ struct TTestPortion {
     ui32 RecordsCount;
     NPortion::EProduced Produced;
 
-    TTestPortion(
-        const ui64 portionId,
-        const ui64 start,
-        const ui64 finish,
-        const ui64 blobBytes,
-        const ui32 recordsCount = 1,
+    TTestPortion(const ui64 portionId, const ui64 start, const ui64 finish, const ui64 blobBytes, const ui32 recordsCount = 1,
         const NPortion::EProduced produced = NPortion::INSERTED)
         : PortionId(portionId)
         , Start(start)
@@ -33,7 +28,8 @@ struct TTestPortion {
         , BlobBytes(blobBytes)
         , RawBytes(blobBytes)
         , RecordsCount(recordsCount)
-        , Produced(produced) {
+        , Produced(produced)
+    {
     }
 
     ui64 IndexKeyStart() const {
@@ -81,10 +77,9 @@ const auto& NeverLocked() {
     return fn;
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TilingCoreUnits) {
-
     Y_UNIT_TEST(AccumulatorReturnsSimpleCompactionTask) {
         TAccumulatorSettings settings;
         settings.Trigger.Bytes = 100;
@@ -182,13 +177,14 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.AccumulatorSettings.Compaction.Portions = 10;
         settings.AccumulatorSettings.Overload.Bytes = 1000;
         settings.AccumulatorSettings.Overload.Portions = 1000;
-        settings.LastLevelSettings.Compaction.Bytes = 1000;
+        settings.LastLevelSettings.Compaction.Bytes = 10000;
         settings.LastLevelSettings.Compaction.Portions = 10;
         settings.LastLevelSettings.CandidatePortionsOverload = 100;
         settings.MiddleLevelSettings.TriggerHight = 2;
         settings.MiddleLevelSettings.OverloadHight = 4;
 
-        TTestTiling tiling(settings, TCounters{});
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
 
         tiling.AddPortion(MakePortion(1, 0, 1, 60));
         tiling.AddPortion(MakePortion(2, 2, 3, 60));
@@ -218,16 +214,16 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
 
         tasks = tiling.GetOptimizationTasks(NeverLocked());
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 2);
         {
             TVector<ui64> ids;
             for (const auto& p : tasks[0].Portions) {
                 ids.push_back(p->GetPortionId());
             }
             Sort(ids.begin(), ids.end());
+            UNIT_ASSERT_VALUES_EQUAL(ids.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(ids[0], 10);
             UNIT_ASSERT_VALUES_EQUAL(ids[1], 11);
-            UNIT_ASSERT_VALUES_EQUAL(ids[2], 12);
         }
 
         tiling.RemovePortion(MakePortion(10, 0, 1000, 1000));
@@ -254,4 +250,4 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     }
 }
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

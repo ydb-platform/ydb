@@ -25,12 +25,16 @@ struct ICompactionUnit {
     }
 
     virtual void AddPortion(typename TPortion::TConstPtr p) {
-        Counters.Portions->AddPortion(p);
+        if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
+            Counters.Portions->AddPortion(p);
+        }
         DoAddPortion(p);
     }
 
     virtual void RemovePortion(typename TPortion::TConstPtr p) {
-        Counters.Portions->RemovePortion(p);
+        if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
+            Counters.Portions->RemovePortion(p);
+        }
         DoRemovePortion(p);
     }
 

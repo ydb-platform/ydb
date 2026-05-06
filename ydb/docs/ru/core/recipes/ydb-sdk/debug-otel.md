@@ -231,6 +231,12 @@ SDK автоматически прокидывает заголовок W3C `tr
   }
   ```
 
+  При использовании JDBC-драйвера достаточно добавить параметр `enableOpenTelemetryTracer=true` в строку подключения — драйвер подхватит глобальный OTel-провайдер автоматически:
+
+  ```
+  jdbc:ydb://<host>:<port>/<database>?enableOpenTelemetryTracer=true
+  ```
+
 - C++
 
   Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:

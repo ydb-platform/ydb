@@ -9,7 +9,7 @@
 namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings {
-    static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
+    static const inline TString AUTH_FLOW_COOKIE = "auth_flow";
     static const inline TString SESSION_COOKIE = "session_cookie";
     static const inline TString IMPERSONATED_COOKIE = "impersonated_cookie";
 

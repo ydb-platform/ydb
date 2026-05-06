@@ -39,24 +39,18 @@ TString TContext::GetRequestedAddress() const {
     return RequestedAddress;
 }
 
-TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    return TStringBuilder() << CreateNameYdbOidcCookie(CreateFlowId(secret, RequestedAddress)) << "="
-                            << GenerateCookie(secret) << ";"
+TString TContext::CreateAuthFlowCookie(const TString& secret) const {
+    return TStringBuilder() << CreateAuthFlowCookieName(CreateFlowId(secret, RequestedAddress)) << "="
+                            << CreateAuthFlowCookieValue(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
                             " Max-Age=" << TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME.Seconds() << ";"
                             " SameSite=None; Secure";
 }
 
-TString TContext::GenerateCookie(const TString& key) const {
-    NJson::TJsonValue json(NJson::JSON_MAP);
-    json["requested_address"] = RequestedAddress;
-    const TString requestedAddressContext = NJson::WriteJson(json, false);
-
-    TString digest = HmacSHA256(key, requestedAddressContext);
-
+TString TContext::CreateAuthFlowCookieValue(const TString& key) const {
     NJson::TJsonValue root(NJson::JSON_MAP);
-    root["requested_address_context"] = Base64Encode(requestedAddressContext);
-    root["digest"] = Base64Encode(digest);
+    root["requested_address"] = RequestedAddress;
+    root["digest"] = Base64Encode(HmacSHA256(key, RequestedAddress));
     return Base64Encode(NJson::WriteJson(root, false));
 }
 

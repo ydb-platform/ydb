@@ -28,13 +28,13 @@ TRestoreOidcContextResult MakeRestoreOidcContextError(TStringBuf errorMessage) {
     });
 }
 
-bool IsOidcContextCookieName(TStringBuf cookieName) {
-    return cookieName.StartsWith(TOpenIdConnectSettings::YDB_OIDC_COOKIE);
+bool IsAuthFlowCookieName(TStringBuf cookieName) {
+    return cookieName.StartsWith(TOpenIdConnectSettings::AUTH_FLOW_COOKIE);
 }
 
 TRestoreOidcContextResult TryRestoreOidcContextFromCookieValue(TStringBuf cookieValue, const TString& key) {
     TString signedRequestedAddress = Base64Decode(cookieValue);
-    TString requestedAddressContext;
+    TString requestedAddress;
     TString expectedDigest;
     NJson::TJsonValue jsonValue;
     NJson::TJsonReaderConfig jsonConfig;
@@ -42,38 +42,24 @@ TRestoreOidcContextResult TryRestoreOidcContextFromCookieValue(TStringBuf cookie
         return MakeRestoreOidcContextError("OIDC context cookie payload is not valid JSON");
     }
 
-    const NJson::TJsonValue* jsonRequestedAddressContext = nullptr;
-    if (jsonValue.GetValuePointer("requested_address_context", &jsonRequestedAddressContext) && jsonRequestedAddressContext->IsString()) {
-        requestedAddressContext = jsonRequestedAddressContext->GetString();
-        requestedAddressContext = Base64Decode(requestedAddressContext);
+    const NJson::TJsonValue* jsonRequestedAddress = nullptr;
+    if (!jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) || !jsonRequestedAddress->IsString()) {
+        return MakeRestoreOidcContextError("Requested address is missing in the OIDC context cookie");
     }
-    if (requestedAddressContext.empty()) {
-        return MakeRestoreOidcContextError("Requested address context is missing");
-    }
+    requestedAddress = jsonRequestedAddress->GetString();
+
     const NJson::TJsonValue* jsonDigest = nullptr;
     if (jsonValue.GetValuePointer("digest", &jsonDigest) && jsonDigest->IsString()) {
         expectedDigest = jsonDigest->GetString();
         expectedDigest = Base64Decode(expectedDigest);
     }
     if (expectedDigest.empty()) {
-        return MakeRestoreOidcContextError("Requested address context digest is missing");
+        return MakeRestoreOidcContextError("Requested address digest is missing");
     }
 
-    TString digest = HmacSHA256(key, requestedAddressContext);
+    const TString digest = HmacSHA256(key, requestedAddress);
     if (expectedDigest != digest) {
-        return MakeRestoreOidcContextError("Requested address context digest mismatch");
-    }
-
-    TString requestedAddress;
-    if (!NJson::ReadJsonTree(requestedAddressContext, &jsonConfig, &jsonValue)) {
-        return MakeRestoreOidcContextError("Requested address context is not valid JSON");
-    }
-
-    const NJson::TJsonValue* jsonRequestedAddress = nullptr;
-    if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) && jsonRequestedAddress->IsString()) {
-        requestedAddress = jsonRequestedAddress->GetString();
-    } else {
-        return MakeRestoreOidcContextError("Requested address is missing in the OIDC context cookie");
+        return MakeRestoreOidcContextError("Requested address digest mismatch");
     }
 
     return TRestoreOidcContextResult({
@@ -175,7 +161,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
     SetRequestIdHeader(responseHeaders, requestId);
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+    responseHeaders.Set("Set-Cookie", context.CreateAuthFlowCookie(settings.ClientSecret));
     if (context.IsNavigationRequest()) {
         responseHeaders.Set(LOCATION_HEADER, redirectUrl);
         return request->CreateResponse("302", "Authorization required", responseHeaders);
@@ -188,8 +174,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     return request->CreateResponse("401", "Unauthorized", responseHeaders, body);
 }
 
-TString CreateNameYdbOidcCookie(TStringBuf suffix) {
-    return TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE) + TString(suffix);
+TString CreateAuthFlowCookieName(TStringBuf suffix) {
+    return TString(TOpenIdConnectSettings::AUTH_FLOW_COOKIE) + TString(suffix);
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
@@ -220,14 +206,14 @@ TString ClearSecureCookie(const TString& name) {
 }
 
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix) {
-    TString cookieName = CreateNameYdbOidcCookie(cookieSuffix);
+    TString cookieName = CreateAuthFlowCookieName(cookieSuffix);
     if (cookies.Has(cookieName)) {
         return TryRestoreOidcContextFromCookieValue(cookies.Get(cookieName), key);
     }
 
-    // fallback to search for any cookie with YDB_OIDC_COOKIE prefix if cookie with specific suffix was not found
+    // fallback to search for any cookie with AUTH_FLOW_COOKIE prefix if cookie with specific suffix was not found
     for (const auto& [currentCookieName, currentCookieValue] : cookies.Cookies) {
-        if (currentCookieName == cookieName || !IsOidcContextCookieName(currentCookieName)) {
+        if (currentCookieName == cookieName || !IsAuthFlowCookieName(currentCookieName)) {
             continue;
         }
 

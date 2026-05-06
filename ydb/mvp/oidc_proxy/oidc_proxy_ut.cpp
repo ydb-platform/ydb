@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuf setCookie = headers.Get("Set-Cookie");
         UNIT_ASSERT_STRING_CONTAINS(
             setCookie,
-            CreateNameYdbOidcCookie(CreateFlowId(settings.ClientSecret, expectedRequestedAddress)));
+            CreateAuthFlowCookieName(CreateFlowId(settings.ClientSecret, expectedRequestedAddress)));
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateAuthFlowCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateAuthFlowCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateAuthFlowCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -855,7 +855,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateAuthFlowCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateAuthFlowCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);

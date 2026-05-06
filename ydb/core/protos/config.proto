@@ -1622,6 +1622,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 8388608 }];
+        optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
+            Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TVDiskControls {

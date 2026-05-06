@@ -4,6 +4,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 
 namespace NKikimr::NPQ::NMLP {
 

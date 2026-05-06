@@ -20,7 +20,7 @@ namespace NDq {
         ui64 RowsInBatch = 1000;
         ui64 MaxInflight = 20;
         ui64 DataInflight = 200_MB;
-        ui64 FileSizeLimit = 2_GB;
+        ui64 FileSizeLimit = 100_GB;
         ui64 BlockFileSizeLimit = 50_GB;
         std::unordered_map<std::string, ui64> FormatSizeLimits;
     };

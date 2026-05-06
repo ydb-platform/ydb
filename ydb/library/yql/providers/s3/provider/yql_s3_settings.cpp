@@ -51,6 +51,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
     }
     S3ReadActorFactoryConfig = NDq::CreateReadActorFactoryConfig(config);
     FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 100_GB;
+    S3ReadActorFactoryConfig.FileSizeLimit = FileSizeLimit;
     BlockFileSizeLimit = config.HasBlockFileSizeLimit() ? config.GetBlockFileSizeLimit() : 50_GB;
     MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 50000;
     MaxDiscoveryFilesPerQuery = config.HasMaxDiscoveryFilesPerQuery()

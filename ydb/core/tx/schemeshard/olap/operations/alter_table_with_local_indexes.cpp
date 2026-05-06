@@ -65,6 +65,33 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                     TStringBuilder() << "Index '" << indexName << "' appears in both UpsertIndexes and DropIndexes")};
             }
         }
+
+        // Check for conflicts: move's source appearing in DropIndexes
+        for (const auto& [sourceName, destinationName] : movedIndexNames) {
+            if (droppedIndexNames.contains(sourceName)) {
+                return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot drop and move index '" << sourceName << "' in the same operation")};
+            }
+        }
+
+        // Check for conflicts: same source appearing in multiple moves
+        THashSet<TString> moveSources;
+        for (const auto& [sourceName, destinationName] : movedIndexNames) {
+            if (moveSources.contains(sourceName)) {
+                return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Index '" << sourceName << "' appears as source in multiple move operations")};
+            }
+            moveSources.insert(sourceName);
+        }
+
+        // Check for conflicts: move's destination conflicting with UpsertIndexes
+        for (const auto& [sourceName, destinationName] : movedIndexNames) {
+            if (newIndexNames.contains(destinationName)) {
+                return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Cannot move index '" << sourceName << "' to '" << destinationName
+                    << "' because destination conflicts with an upsert operation")};
+            }
+        }
     }
 
     bool hasIndexChanges = !newIndexNames.empty() || !droppedIndexNames.empty() || !movedIndexNames.empty();
@@ -220,6 +247,17 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
         for (const auto& moveIdx : alterSchema.GetMoveIndex()) {
             const TString& sourceName = moveIdx.GetSourceName();
             const TString& destinationName = moveIdx.GetDestinationName();
+
+            // If replace_destination is set and destination exists, drop it first
+            if (moveIdx.GetReplaceDestination() && existingIndexNames.contains(destinationName)) {
+                auto dropScheme = TransactionTemplate(
+                    parentPathStr + "/" + tableName,
+                    NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+                dropScheme.SetInternal(true);
+                dropScheme.MutableDrop()->SetName(destinationName);
+
+                result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), dropScheme));
+            }
 
             auto scheme = TransactionTemplate(
                 parentPathStr + "/" + tableName,

@@ -73,8 +73,8 @@ bool BuildTopicCloudEventInfo(
         context.SS,
         status,
         reason,
-        userSID ? userSID : context.UserToken ? context.UserToken->GetUserSID() : context.UserSID,
-        peerName ? peerName : context.PeerName,
+        userSID,
+        peerName,
         info);
 }
 

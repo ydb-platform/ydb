@@ -20,73 +20,34 @@ namespace {
 class TLocalIndexMigrator : public TActorBootstrapped<TLocalIndexMigrator> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEMESHARD_LOCAL_INDEX_MIGRATOR;
+        return NKikimrServices::TActivity::SCHEMESHARD_TABLET_MIGRATOR;
     }
 
-    TLocalIndexMigrator(TTabletId selfTabletId, TActorId selfActorId,
-                        TVector<std::pair<TTxId, TLocalIndexMigrationItem>>&& items)
+    static constexpr TDuration RetryDelay = TDuration::MilliSeconds(100);
+
+    TLocalIndexMigrator(TTabletId selfTabletId, TActorId selfActorId, TSchemeShard* schemeshard,
+                        TVector<TLocalIndexMigrationItem>&& items)
         : SelfTabletId(selfTabletId)
         , SelfActorId(selfActorId)
+        , SchemeShard(schemeshard)
+        , PendingItems(std::move(items))
     {
-        AwaitingRequests.reserve(items.size());
-        for (auto& [txId, item] : items) {
-            AwaitingRequests.emplace(txId, std::move(item));
-        }
+        AwaitingRequests.reserve(PendingItems.size());
     }
 
     void Bootstrap() {
-        for (const auto& [txId, item] : AwaitingRequests) {
-            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
-            auto& record = request->Record;
-            record.SetTxId(static_cast<ui64>(txId));
-
-            // Extract table name from working directory
-            auto pathParts = SplitPath(item.WorkingDir);
-            if (pathParts.empty()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TLocalIndexMigrator: failed to split path '" << item.WorkingDir << "'");
-                Done(txId);
-                continue;
-            }
-
-            TString tableName = pathParts.back();
-            pathParts.pop_back();
-            TString parentDir = JoinPath(pathParts);
-
-            auto& modifyScheme = *record.AddTransaction();
-            modifyScheme.SetWorkingDir(parentDir);
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-            modifyScheme.SetInternal(true);
-            modifyScheme.SetFailOnExist(false);
-
-            auto& alterColumnTable = *modifyScheme.MutableAlterColumnTable();
-            alterColumnTable.SetName(tableName);
-
-            auto& alterSchema = *alterColumnTable.MutableAlterSchema();
-            auto& upsertIndex = *alterSchema.AddUpsertIndexes();
-
-            // Convert TIndexCreationConfig to TOlapIndexRequested
-            if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TLocalIndexMigrator: failed to convert index config for '" << item.WorkingDir << "'");
-                Done(txId);
-                continue;
-            }
-
-            Send(SelfActorId, request.Release());
-        }
-
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TLocalIndexMigrator: Bootstrap with " << PendingItems.size() << " pending items");
+        // Process items immediately
+        ProcessItems(TlsActivationContext->AsActorContext());
         Become(&TLocalIndexMigrator::StateWork);
-
-        if (AwaitingRequests.empty()) {
-            PassAway();
-        }
     }
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            cFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -96,10 +57,107 @@ public:
     }
 
 private:
-    void Done(TTxId txId) {
+    void HandleWakeup() {
+        ProcessItems(TlsActivationContext->AsActorContext());
+    }
+
+    void ProcessItems(const TActorContext& ctx) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TLocalIndexMigrator: ProcessItems called, PendingItems=" << PendingItems.size()
+            << ", AwaitingRequests=" << AwaitingRequests.size());
+
+        if (PendingItems.empty()) {
+            if (AwaitingRequests.empty()) {
+                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator: All items processed, passing away");
+                PassAway();
+            }
+            return;
+        }
+
+        // Only process one item at a time to avoid concurrent ALTER operations on the same table
+        if (!AwaitingRequests.empty()) {
+            // Wait for current operation to complete before processing next item
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator: Waiting for " << AwaitingRequests.size() << " request(s) to complete");
+            return;
+        }
+
+        TTxId txId = SchemeShard->GetCachedTxId(ctx);
+        if (txId == InvalidTxId) {
+            // No more TxIds available, wait and retry
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator: TxId cache exhausted, waiting for "
+                << PendingItems.size() << " remaining item(s)");
+            ctx.Schedule(RetryDelay, new TEvents::TEvWakeup());
+            return;
+        }
+
+        // Get next item
+        auto item = std::move(PendingItems.back());
+        PendingItems.pop_back();
+
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TLocalIndexMigrator: Processing index from table '" << item.WorkingDir
+            << "' with TxId=" << txId << ", remaining=" << PendingItems.size());
+
+        // Create and send ModifySchemeTransaction
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto& record = request->Record;
+        record.SetTxId(static_cast<ui64>(txId));
+
+        // Extract table name from working directory
+        auto pathParts = SplitPath(item.WorkingDir);
+        if (pathParts.empty()) {
+            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator: failed to split path '" << item.WorkingDir << "'");
+            // Try next item
+            ProcessItems(ctx);
+            return;
+        }
+
+        TString tableName = pathParts.back();
+        pathParts.pop_back();
+        TString parentDir = JoinPath(pathParts);
+
+        auto& modifyScheme = *record.AddTransaction();
+        modifyScheme.SetWorkingDir(parentDir);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetFailOnExist(false);
+
+        auto& alterColumnTable = *modifyScheme.MutableAlterColumnTable();
+        alterColumnTable.SetName(tableName);
+
+        auto& alterSchema = *alterColumnTable.MutableAlterSchema();
+        auto& upsertIndex = *alterSchema.AddUpsertIndexes();
+
+        // Convert TIndexCreationConfig to TOlapIndexRequested
+        if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
+            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator: failed to convert index config for '" << item.WorkingDir << "'");
+            // Try next item
+            ProcessItems(ctx);
+            return;
+        }
+
+        AwaitingRequests.emplace(txId, std::move(item));
+        Send(SelfActorId, request.Release());
+    }
+
+    void Done(TTxId txId, const TActorContext& ctx) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TLocalIndexMigrator: Done for TxId=" << txId
+            << ", AwaitingRequests=" << AwaitingRequests.size()
+            << ", PendingItems=" << PendingItems.size());
         AwaitingRequests.erase(txId);
-        if (AwaitingRequests.empty()) {
+        if (AwaitingRequests.empty() && PendingItems.empty()) {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TLocalIndexMigrator: All items completed, passing away");
             PassAway();
+        } else {
+            // Process next item after current one completes
+            ProcessItems(ctx);
         }
     }
 
@@ -111,7 +169,7 @@ private:
         case NKikimrScheme::StatusSuccess:
         case NKikimrScheme::StatusAlreadyExists:
             // StatusAlreadyExists: a concurrent operation already created the scheme object.
-            Done(txId);
+            Done(txId, ctx);
             break;
         case NKikimrScheme::StatusAccepted:
             Send(SelfActorId, new TEvSchemeShard::TEvNotifyTxCompletion(static_cast<ui64>(txId)));
@@ -121,26 +179,29 @@ private:
                 "TLocalIndexMigrator at schemeshard: " << SelfTabletId
                 << ", failed to " << AwaitingRequests.at(txId).DebugString()
                 << ", reason: " << record.GetReason());
-            Done(txId);
+            Done(txId, ctx);
             break;
         }
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext&) {
-        Done(TTxId(ev->Get()->Record.GetTxId()));
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+        Done(TTxId(ev->Get()->Record.GetTxId()), ctx);
     }
 
 private:
     const TTabletId SelfTabletId;
     const TActorId SelfActorId;
+    TSchemeShard* SchemeShard;
+    TVector<TLocalIndexMigrationItem> PendingItems;
     THashMap<TTxId, TLocalIndexMigrationItem> AwaitingRequests;
 };
 
 } // anonymous namespace
 
 THolder<IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, TActorId selfActorId,
-                                         TVector<std::pair<TTxId, TLocalIndexMigrationItem>>&& items) {
-    return MakeHolder<TLocalIndexMigrator>(selfTabletId, selfActorId, std::move(items));
+                                         TSchemeShard* schemeshard,
+                                         TVector<TLocalIndexMigrationItem>&& items) {
+    return MakeHolder<TLocalIndexMigrator>(selfTabletId, selfActorId, schemeshard, std::move(items));
 }
 
 } // namespace NKikimr::NSchemeShard

@@ -192,7 +192,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
         return;
     }
 
-    TVector<std::pair<TTxId, TLocalIndexMigrationItem>> items;
+    TVector<TLocalIndexMigrationItem> items;
 
     for (const auto& tablePathId : ColumnTables.GetAllPathIds()) {
         const auto tableInfo = ColumnTables.GetVerifiedPtr(tablePathId);
@@ -209,6 +209,10 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
         const auto columnIdToName = NOlap::BuildColumnIdToNameMap(schema);
         const TString workingDir = TPath::Init(tablePathId, this).PathString();
 
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "CollectLocalIndexMigrations: processing table " << workingDir
+            << " with " << schema.IndexesSize() << " index(es)");
+
         for (const auto& indexProto : schema.GetIndexes()) {
             const TString& indexName = indexProto.GetName();
 
@@ -216,6 +220,9 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             if (const TPathId* childId = tablePath->FindChild(indexName)) {
                 const auto& child = PathsById.at(*childId);
                 if (child->IsTableIndex() && !child->Dropped()) {
+                    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "CollectLocalIndexMigrations: skipping index " << indexName
+                        << " (already exists as scheme object)");
                     continue;
                 }
             }
@@ -228,7 +235,9 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 continue;
             }
 
-            items.emplace_back(GetCachedTxId(ctx), TLocalIndexMigrationItem{
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CollectLocalIndexMigrations: adding index " << indexName << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
                 .WorkingDir = workingDir,
                 .IndexConfig = std::move(indexConfig),
             });
@@ -236,13 +245,16 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
     }
 
     if (items.empty()) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "CollectLocalIndexMigrations: no indexes to migrate");
         return;
     }
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "CollectLocalIndexMigrations: starting migrator for " << items.size() << " index(es)");
+    LocalIndexMigrationStarted = true;
 
-    Register(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), std::move(items)).Release());
+    Register(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
 }
 
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
@@ -299,6 +311,16 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     StartStopShred();
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+
+    // Start local index migration if feature flag is enabled
+    // This ensures migration starts even if we don't receive a new TEvAllocateResult
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "ActivateAfterInitialization: checking local index migration"
+        << ", feature flag: " << AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()
+        << ", LocalIndexMigrationStarted: " << LocalIndexMigrationStarted);
+    if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject() && !LocalIndexMigrationStarted) {
+        CollectLocalIndexMigrations(ctx);
+    }
 
     InitializeStatistics(ctx);
 
@@ -487,7 +509,7 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     }
 
     if (CachedTxIds.size() == InitiateCachedTxIdsCount / 3) {
-        ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+        ctx.Send(new IEventHandle(TxAllocatorClient, SelfId(), new TEvTxAllocatorClient::TEvAllocate(InitiateCachedTxIdsCount)));
     }
 
     return txId;
@@ -7410,7 +7432,6 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         }
 
         if (!LocalIndexMigrationStarted) {
-            LocalIndexMigrationStarted = true;
             CollectLocalIndexMigrations(ctx);
         }
 

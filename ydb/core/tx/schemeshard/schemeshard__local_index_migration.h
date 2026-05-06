@@ -6,6 +6,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+class TSchemeShard;
+
 struct TLocalIndexMigrationItem {
     TString WorkingDir;
     NKikimrSchemeOp::TIndexCreationConfig IndexConfig;
@@ -14,6 +16,7 @@ struct TLocalIndexMigrationItem {
 };
 
 THolder<NActors::IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, NActors::TActorId selfActorId,
-                                                  TVector<std::pair<TTxId, TLocalIndexMigrationItem>>&& items);
+                                                  TSchemeShard* schemeshard,
+                                                  TVector<TLocalIndexMigrationItem>&& items);
 
 } // namespace NKikimr::NSchemeShard

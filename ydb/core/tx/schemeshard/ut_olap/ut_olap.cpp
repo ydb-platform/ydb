@@ -1923,6 +1923,128 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         }
     }
 
+    // Test migration with many local indexes (more than DefaultBatchSize of 20)
+    // to verify batch processing and TxId allocation works correctly.
+    Y_UNIT_TEST(LocalIndexMigrationManyIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        // Start with flag=false: no scheme objects created
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+
+        // Increase MaxTableIndices limit to allow many indexes (default is 20)
+        NSchemeShard::TSchemeLimits limits;
+        limits.MaxTableIndices = 200;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        ui64 txId = 100;
+
+        // Create multiple tables with many local indexes each
+        // Total: 4 tables * 30 indexes = 120 indexes (above InitiateCachedTxIdsCount of 100)
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            TString tableSchema = Sprintf(R"(
+                Name: "%s"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+            )", tableName.c_str());
+
+            // Add 30 bloom filter indexes per table
+            for (int i = 0; i < 30; ++i) {
+                tableSchema += Sprintf(R"(
+                    Indexes {
+                        Id: %d
+                        Name: "bloom_%d"
+                        ClassName: "BLOOM_FILTER"
+                        BloomFilter {
+                            ColumnIds: [2]
+                            FalsePositiveProbability: 0.01
+                        }
+                    }
+                )", 4 + i, i);
+            }
+
+            tableSchema += "}";
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema);
+            env.TestWaitNotification(runtime, txId);
+
+            // Before migration: no scheme object children
+            {
+                auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            }
+        }
+
+        // Track TEvWakeup events to verify TxId exhaustion
+        bool sawTxIdExhaustion = false;
+        auto observer = runtime.AddObserver<TEvents::TEvWakeup>([&](const auto&) {
+            sawTxIdExhaustion = true;
+        });
+
+        // Enable flag and restart SchemeShard to trigger migrator actor
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // The migrator runs schema operations asynchronously; allow time for
+        // TxId allocation and schema operations to complete.
+        // With 120 indexes across 4 tables, the migrator will process them as TxIds become available.
+        // This will trigger TxId exhaustion (cache has 100 TxIds initially), which can be seen in logs.
+        runtime.SimulateSleep(TDuration::Seconds(60));
+
+        // Verify that we encountered TxId exhaustion (TEvWakeup events)
+        UNIT_ASSERT_C(sawTxIdExhaustion, "Expected to see TxId exhaustion (TEvWakeup events) during migration");
+
+        // After migration: all indexes should appear as scheme objects
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            {
+                auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+
+                const auto& children = descr.GetPathDescription().GetChildren();
+                UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
+
+                // Verify all indexes are present and have correct type
+                for (int i = 0; i < 30; ++i) {
+                    TString expectedName = Sprintf("bloom_%d", i);
+                    bool found = false;
+                    for (const auto& child : children) {
+                        if (child.GetName() == expectedName) {
+                            UNIT_ASSERT_VALUES_EQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+                            found = true;
+                            break;
+                        }
+                    }
+                    UNIT_ASSERT_C(found, TStringBuilder() << "Index " << expectedName << " not found in table " << tableName);
+                }
+            }
+
+            // Verify a few sample indexes are ready
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        }
+
+        // Restart again to verify migration is idempotent (no duplicate scheme objects)
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(30));
+
+        for (int tableNum = 0; tableNum < 4; ++tableNum) {
+            TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
+            auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+        }
+    }
+
     // Test orphaned index scheme object cleanup: when scheme object children exist
     // but their corresponding indexes are removed from the column table schema,
     // they should be cleaned up during initialization.

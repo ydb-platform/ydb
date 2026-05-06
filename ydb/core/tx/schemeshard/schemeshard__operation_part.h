@@ -100,6 +100,7 @@ public:
     TStorageChanges& DbChanges;
 
     TMaybe<NACLib::TUserToken> UserToken;
+    TString UserSID;
     TString PeerName;
     bool IsAllowedPrivateTables = false;
 
@@ -609,9 +610,6 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxStat
 
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
-
-ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);

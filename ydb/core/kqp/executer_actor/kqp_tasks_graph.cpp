@@ -1068,8 +1068,16 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     settings->SetMaxDelayedRows(dqSourceStreamLookup.GetMaxDelayedRows());
     settings->SetIsMultiget(dqSourceStreamLookup.GetIsMultiGet());
     settings->SetIsMultiMatches(dqSourceStreamLookup.GetIsMultiMatches());
-    if (dqSourceStreamLookup.HasFullscanLimit()) {
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinFullscan()) {
+        Y_ENSURE (
+            !dqSourceStreamLookup.HasFullscanLimit() || dqSourceStreamLookup.GetFullscanLimit() == 0,
+            TStringBuilder{} << "EnableDqStreamLookupJoinFullscan disabled, but FullscanLimit is " << dqSourceStreamLookup.GetFullscanLimit()
+        );
+        settings->SetFullscanLimit(0);
+    } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
+    } else if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinFullscanDefault()) {
+        settings->SetFullscanLimit(0);
     }
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();

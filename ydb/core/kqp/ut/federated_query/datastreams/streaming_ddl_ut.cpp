@@ -1055,6 +1055,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
             if (WithFeatureFlag) {
                 setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+                setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
+                setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscanDefault(true);
             }
         }
 
@@ -1984,6 +1986,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscanDefault(true);
         }
         const auto connectorClient = SetupMockConnectorClient();
 

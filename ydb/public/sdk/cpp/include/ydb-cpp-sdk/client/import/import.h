@@ -161,6 +161,11 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
         // Destination path.
         // database path where to import data
         std::string Dst;
+
+        // Source path in database.
+        // If the export contains the database objects list, you may specify the database object name,
+        // and the FS path will be looked up in the database objects list by the import procedure
+        std::string SrcPathDb = {};
     };
 
     FLUENT_SETTING(std::string, BasePath);
@@ -169,6 +174,8 @@ struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSet
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(bool, NoACL);
     FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+    FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_DEFAULT(EIndexPopulationMode, IndexPopulationMode, EIndexPopulationMode::Build);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };

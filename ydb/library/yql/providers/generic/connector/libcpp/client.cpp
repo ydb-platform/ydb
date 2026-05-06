@@ -262,7 +262,7 @@ namespace NYql::NConnector {
             };
 
             GetConnection(kind)->DoRequest<NApi::TDescribeTableRequest, NApi::TDescribeTableResponse>(
-                std::move(request),
+                request,
                 std::move(callback),
                 &NApi::Connector::Stub::AsyncDescribeTable,
                 { .Timeout = timeout ? NYdb::TDeadline::SafeDurationCast(timeout) : NYdb::TDeadline::Duration::max() },
@@ -409,7 +409,7 @@ namespace NYql::NConnector {
             };
 
             GetConnection(kind)->DoStreamRequest<TRequest, TResponse>(
-                std::move(request),
+                request,
                 std::move(callback),
                 rpc,
                 { .Timeout = timeout ? NYdb::TDeadline::SafeDurationCast(timeout) : NYdb::TDeadline::Duration::max() },

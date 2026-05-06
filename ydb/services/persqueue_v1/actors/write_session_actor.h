@@ -172,7 +172,7 @@ private:
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
 private:
-    void CreatePartitionWriterCache(const TActorContext& ctx);
+    bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
     NWilson::TSpan GenerateInitSpan() const {

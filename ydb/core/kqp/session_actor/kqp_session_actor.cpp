@@ -1280,7 +1280,7 @@ public:
             if (!QueryState->TxCtx->EnableOltpSink) {
                 QueryState->TxCtx->EnableOltpSink = phyQuery.GetEnableOltpSink();
             }
-            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink()) {
+            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink() && !AppData()->FeatureFlags.GetEnableOltpSinkForTopicOnlyTx()) {
                 ReplyQueryError(Ydb::StatusIds::ABORTED,
                                 "Transaction execution settings have been changed (EnableOltpSink).");
                 return false;
@@ -1927,6 +1927,7 @@ public:
                 }
             }
             request.TopicOperations = std::move(txCtx.TopicOperations);
+            request.TopicOperations.SetSkipConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || txCtx.EnableOlapSink.value_or(false))) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
@@ -2007,6 +2008,7 @@ public:
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
+            txCtx->TxManager->SetSkipTopicsConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
         }
 
         if (txCtx->EnableOltpSink.value_or(false)

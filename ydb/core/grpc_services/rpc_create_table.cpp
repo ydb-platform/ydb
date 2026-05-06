@@ -150,6 +150,7 @@ private:
             if (col.HasId()) {
                 if (!usedColIds.insert(col.GetId()).second) {
                     issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate column ID " << col.GetId() << " for column '" << col.GetName() << "'"));
+                    code = StatusIds::BAD_REQUEST;
                     return false;
                 }
                 nextColId = Max(nextColId, col.GetId() + 1);

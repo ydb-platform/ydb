@@ -28,6 +28,9 @@ inline bool ConvertOlapIndexToCreationConfig(
         for (ui32 colId : indexProto.GetBloomFilter().GetColumnIds()) {
             auto it = columnIdToName.find(colId);
             if (it == columnIdToName.end()) {
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "ConvertOlapIndexToCreationConfig: BloomFilter column ID " << colId
+                    << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -38,6 +41,9 @@ inline bool ConvertOlapIndexToCreationConfig(
         config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
         auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId());
         if (it == columnIdToName.end()) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "ConvertOlapIndexToCreationConfig: BloomNGrammFilter column ID " << indexProto.GetBloomNGrammFilter().GetColumnId()
+                << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -45,6 +51,8 @@ inline bool ConvertOlapIndexToCreationConfig(
         return true;
     }
 
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "ConvertOlapIndexToCreationConfig: Unrecognized index type for index '" << indexProto.GetName() << "'");
     return false;
 }
 

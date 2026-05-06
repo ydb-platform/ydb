@@ -52,7 +52,8 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        defer db.Close(ctx)
        ...
    }
-   ```
+
+     ```
 
          // Set global tracer of this application.
          otel.SetTracerProvider(tracerProvider)
@@ -122,7 +123,8 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        defer db.Close()
        ...
    }
-   ```
+
+     ```
 
 - Python
 

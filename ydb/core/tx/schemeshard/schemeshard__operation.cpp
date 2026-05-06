@@ -407,7 +407,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
-        context.UserSID = UserSID;
         context.PeerName = PeerName;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.

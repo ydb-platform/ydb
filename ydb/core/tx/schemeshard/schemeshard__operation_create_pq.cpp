@@ -289,16 +289,12 @@ class TCreatePQ: public TSubOperation {
     ui64 StreamReservedThroughputChange = 0;
     ui64 StreamReservedStorageChange = 0;
     ui64 StreamShardsCountChange = 0;
-    TString UserSID;
-    TString PeerName;
 
 public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
-        UserSID = context.UserSID ? context.UserSID : context.UserToken ? context.UserToken->GetUserSID() : TString();
-        PeerName = context.PeerName;
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const auto& createDEscription = Transaction.GetCreatePersQueueGroup();

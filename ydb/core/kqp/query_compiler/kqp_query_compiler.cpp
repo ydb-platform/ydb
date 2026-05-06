@@ -1835,7 +1835,7 @@ private:
 
                         return false;
                     }) || std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-                        return !columnsSet.contains(columnName);
+                        return !columnsSet.contains(columnName.StringValue());
                     });
 
                     if (needLookup) {

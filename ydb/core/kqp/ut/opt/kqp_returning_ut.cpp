@@ -345,12 +345,14 @@ Y_UNIT_TEST_TWIN(ReturningSerial, EnableIndexStreamWrite) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
-            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
+            DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(
+            EnableIndexStreamWrite ? R"([[1;[3]];[2;[2]];[3;[2]]])" : R"([[2;[2]];[3;[2]];[1;[3]]])",
+            FormatResultSetYson(result.GetResultSet(0)));
     }
 
     {

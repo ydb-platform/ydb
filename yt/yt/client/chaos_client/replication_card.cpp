@@ -607,7 +607,7 @@ TTimestamp GetReplicationProgressTimestampForKeyOrThrow(
 {
     auto timestamp = FindReplicationProgressTimestampForKey(progress, key.Elements());
     if (!timestamp) {
-        THROW_ERROR_EXCEPTION("Key %v is out or replication progress range", key);
+        THROW_ERROR_EXCEPTION("Key %v is out of replication progress range", key);
     }
     return *timestamp;
 }

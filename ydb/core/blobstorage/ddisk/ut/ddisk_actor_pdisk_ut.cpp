@@ -115,6 +115,22 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestReadWithoutConnect({.ForcePDiskFallback = true});
     }
 
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_Uring) {
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_Uring) {
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/true);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/true);
+    }
+
     Y_UNIT_TEST(Smoke_2Tablets_2VChunks_1Segment) {
         TestSyncWithDDisk(2, 2, 8, 1);
     }

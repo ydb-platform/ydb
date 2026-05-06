@@ -91,7 +91,11 @@ private:
 
         switch (status) {
             case NTxProxy::TResultStatus::ExecComplete:
-                return ReplyOkAndDie();
+                if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
+                    return ReplyError(Ydb::StatusIds::ALREADY_EXISTS, ssStatus);
+                } else {
+                    return ReplyOkAndDie();
+                }
             case NTxProxy::TResultStatus::ExecInProgress:
                 return DoWaitCompletion();
             case NTxProxy::TResultStatus::ProxyShardNotAvailable:

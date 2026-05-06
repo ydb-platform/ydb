@@ -103,7 +103,7 @@ class TestSelect1(object):
 
     @yq_all
     def test_select_10_p_19_plus_1(self, client):
-        sql = "SELECT 10000000000000000000+1 AS LargeColumn;"
+        sql = "SELECT 10000000000000000000+-1 AS LargeColumn;"
         query_id = client.create_query("simple1", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         describe_string = str(client.describe_query(query_id).result)

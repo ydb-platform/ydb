@@ -27,12 +27,14 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
         CpuUsage = 0;
         CpuBurstUsage = 0;
         CpuBurstThrottle = 0;
+        ReadBurstUsage = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             child->UpdateBottomUp(totalLimit);
             CpuDemand += child->CpuDemand;
             CpuUsage += child->CpuUsage;
             CpuBurstUsage += child->CpuBurstUsage;
             CpuBurstThrottle += child->CpuBurstThrottle;
+            ReadBurstUsage += child->ReadBurstUsage;
         });
     }
 

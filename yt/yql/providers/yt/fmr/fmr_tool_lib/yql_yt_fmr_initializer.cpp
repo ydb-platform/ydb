@@ -140,7 +140,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto fmrYtJobSerivce = fmrServices->YtJobService;
         auto jobLauncher = fmrServices->JobLauncher;
         auto func = [tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
-            return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
+            auto discovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
+            return RunJob(task, discovery, Nothing(), fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
         auto settings = NFmr::GetDefaultJobFactorySettings(fmrOperationSpec);

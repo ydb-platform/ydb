@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_BOOST_TUPLE_ITERATOR_09262006_1851)
+#ifndef FUSION_BOOST_TUPLE_ITERATOR_09262006_1851
 #define FUSION_BOOST_TUPLE_ITERATOR_09262006_1851
 
 #include <boost/fusion/support/config.hpp>

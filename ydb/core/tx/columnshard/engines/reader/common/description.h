@@ -8,7 +8,9 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
-namespace NLWTrace { class TOrbit; }
+namespace NLWTrace {
+class TOrbit;
+}
 
 namespace NKikimr::NOlap::NReader {
 
@@ -67,17 +69,13 @@ public:
         ScanCursor = cursor;
     }
 
-    void SetLock(
-        std::optional<ui64> lockId, 
-        std::optional<ui32> lockNodeId,
-        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
-        const NColumnShard::TLockFeatures* lock,
-        const bool readOnlyConflicts
-    ) {
+    void SetLock(std::optional<ui64> lockId, std::optional<ui32> lockNodeId, std::optional<NKikimrDataEvents::ELockMode> lockMode,
+        const NColumnShard::TLockFeatures* lock, const bool readOnlyConflicts) {
         LockId = lockId;
         LockNodeId = lockNodeId;
         LockMode = lockMode;
-        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+        auto snapshotIsolation =
+            lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
 
         readNonconflictingPortions = !readOnlyConflicts;
 

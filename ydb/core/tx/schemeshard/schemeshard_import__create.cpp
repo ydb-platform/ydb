@@ -1897,7 +1897,10 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
+                if (item.Table) {
+                    ++item.NextIndexIdx;
+                }
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

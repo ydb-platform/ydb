@@ -187,16 +187,15 @@ message TEvLockRows {
     // Lock parameters of the current query or transaction
     optional uint64 LockId = 2;
     optional uint32 LockNodeId = 3;
-    optional uint64 LockTimestamp = 4;
 
     // A desired lock mode, only PESSIMISTIC lock modes are supported
-    optional ELockMode LockMode = 5;
+    optional ELockMode LockMode = 4;
 
     // An optional snapshot of the current query
     // Rows which have been modified since the specified snapshot will be
     // returned in the ModifiedKeys list after locking, which usually means
     // a read committed transaction will need to re-read these rows.
-    optional NKikimrProto.TRowVersion Snapshot = 6;
+    optional NKikimrProto.TRowVersion Snapshot = 5;
 
     // Previously acquired locks at the destination shard, which are validated
     // before processing the request. This could be used to avoid re-acquiring
@@ -204,30 +203,30 @@ message TEvLockRows {
     // to support savepoints in the future. All locks listed here are implied
     // to belong to the same transaction and will never conflict with each
     // other.
-    repeated TLock ExistingLocks = 7;
+    repeated TLock ExistingLocks = 6;
 
     // When true rows already locked by other transactions are skipped without
     // waiting for conflicting transactions to commit or abort.
-    optional bool SkipLocked = 8;
+    optional bool SkipLocked = 7;
 
     // Destination global table id, must include SchemaVersion to detect schema changes
-    optional TTableId TableId = 9;
+    optional TTableId TableId = 8;
 
     // A list of primary key column ids used in the payload. This list is
     // matched against current table schema, and specifies column order, which
     // must currently match schema primary key exactly, including order.
-    repeated uint32 ColumnIds = 10 [packed = true];
+    repeated uint32 ColumnIds = 9 [packed = true];
 
     // Index of the message payload which contains serialized keys to lock.
-    optional uint64 PayloadIndex = 11;
+    optional uint64 PayloadIndex = 10;
 
     // Format of the payload. DataShard only supports FORMAT_CELLVEC at the
     // moment, where serialized data is in the TSerializedCellMatrix format,
     // with each row matching ColumnIds cells with primary keys to lock.
-    optional EDataFormat PayloadFormat = 12;
+    optional EDataFormat PayloadFormat = 11;
 
     // An optional schema for the serialized keys, used for FORMAT_ARROW
-    optional string PayloadSchema = 13;
+    optional string PayloadSchema = 12;
 }
 
 message TEvLockRowsCancel {

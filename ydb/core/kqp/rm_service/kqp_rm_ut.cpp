@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
@@ -278,6 +279,7 @@ public:
         UNIT_TEST(SingleSnapshotByExchanger);
         UNIT_TEST(Reduce);
         UNIT_TEST(ConcurrentTasks);
+        UNIT_TEST(ConcurrentChannels);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
@@ -292,6 +294,7 @@ public:
     void SingleSnapshotByExchanger();
     void Reduce();
     void ConcurrentTasks();
+    void ConcurrentChannels();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
     void NodesMembership();
@@ -526,6 +529,61 @@ void KqpRm::ConcurrentTasks() {
         }
 
         UNIT_ASSERT_GT(failedAllocations.load(), 0);
+        AssertResourceManagerStats(rm, 1000, 100);
+        AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 1);
+    }
+
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+void KqpRm::ConcurrentChannels() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+
+        {
+            auto qm = CreateChannelQuotaManager(rm, tx, 0, 16);
+
+            std::array<TMuxEvent, 10> events;
+            NPar::LocalExecutor().RunAdditionalThreads(10);
+            std::atomic<ui64> failedAllocations = 0;
+
+            for (auto i = 0u; i < 10u; i++) {
+                NPar::LocalExecutor().Exec([&](int taskId) mutable {
+                    auto count = 0u;
+                    for (auto n = 0u; n < 20u; n++) {
+                        for (auto j = 0u; j < 20u; j++) {
+                            if (!qm->AllocateQuota(j * 10u)) {
+                                failedAllocations++;
+                                Sleep(TDuration::MilliSeconds(j * 10));
+                                break;
+                            }
+                            count += j;
+                        }
+                        for (auto j = 20u; j > 0u; j--) {
+                            if (count < j) {
+                                break;
+                            }
+                            qm->FreeQuota(j * 10u);
+                            count -= j;
+                        }
+                    }
+                    qm->FreeQuota(count * 10u);
+                    events[taskId - 1].Signal();
+                }, i + 1, NPar::TLocalExecutor::MED_PRIORITY);
+            }
+
+            for (auto i = 0; i < 10; i++) {
+                events[i].WaitI();
+            }
+
+            UNIT_ASSERT_GT(failedAllocations.load(), 0);
+        }
+
         AssertResourceManagerStats(rm, 1000, 100);
         AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 1);
     }

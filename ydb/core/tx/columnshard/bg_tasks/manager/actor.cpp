@@ -1,4 +1,5 @@
 #include "actor.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_progress.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
 
@@ -51,4 +52,4 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
     SaveSessionState();
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

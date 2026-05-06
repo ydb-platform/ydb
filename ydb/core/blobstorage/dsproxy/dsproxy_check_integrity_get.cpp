@@ -24,6 +24,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     bool HasErrorDisks = false;
 
     ui32 VGetsInFlight = 0;
+    THashMap<ui32, TString> VGetsResults;
 
     using TEvCheckIntegrityResult = TEvBlobStorage::TEvCheckIntegrityResult;
     std::unique_ptr<TEvCheckIntegrityResult> PendingResult;
@@ -34,9 +35,10 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             PendingResult->ErrorReason = ErrorReason;
             PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
             PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN;
-            PendingResult->Id = Id;
         }
 
+        PendingResult->Id = Id;
+        PendingResult->Erasure = Info->Type.GetErasure();
         SendResponseAndDie(std::move(PendingResult));
     }
 
@@ -105,6 +107,10 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         Y_ABORT_UNLESS(VGetsInFlight > 0);
         --VGetsInFlight;
 
+        TEvBlobStorage::TEvVGetResult* msg = ev->Get();
+        const ui32 idxInSubgroup = Info->GetIdxInSubgroup(vDiskId, Id.Hash());
+        VGetsResults[idxInSubgroup] = msg->ToString();
+
         switch (NKikimrProto::EReplyStatus newStatus = QuorumTracker.ProcessReply(vDiskId, status)) {
             case NKikimrProto::ERROR:
                 ErrorReason = "Group is disintegrated or has network problems";
@@ -121,7 +127,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
         if (status == NKikimrProto::OK) {
             for (size_t i = 0; i < record.ResultSize(); ++i) {
-                UpdateFromResponseData(ev->Get(), record.GetResult(i), vDiskId);
+                UpdateFromResponseData(msg, record.GetResult(i), vDiskId);
             }
         } else {
             HasErrorDisks = true;
@@ -134,7 +140,6 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
     void Analyze() {
         PendingResult.reset(new TEvCheckIntegrityResult(NKikimrProto::OK));
-        PendingResult->Id = Id;
         PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN;
 
         TBlobStorageGroupInfo::TSubgroupVDisks faultyDisks(&Info->GetTopology()); // empty set
@@ -188,7 +193,11 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         str << "Disks:" << separator;
         for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
             auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
-            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << separator;
+            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort);
+            if (auto it = VGetsResults.find(diskIdx); it != VGetsResults.end()) {
+                str << " " << it->second;
+            }
+            str << separator;
         }
 
         PendingResult->DataInfo = str.Str();
@@ -201,7 +210,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         ++*Mon->NodeMon->RestartCheckIntegrity;
 
         auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
-            Id, Deadline, GetHandleClass);
+            Id, Deadline, GetHandleClass, SingleLine);
         ev->RestartCounter = counter;
         return ev;
     }

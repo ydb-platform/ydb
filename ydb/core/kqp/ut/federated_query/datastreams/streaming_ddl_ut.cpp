@@ -1,12 +1,10 @@
 #include "common.h"
 
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 #include <fmt/format.h>
 
@@ -1412,22 +1410,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
+            UpdateConfig(appConfig);
 
             Sleep(TDuration::Seconds(1));
 
@@ -2427,9 +2412,36 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamingQueryDispositionDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(false);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionDisabledInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `my_query` WITH (
+                STREAMING_DISPOSITION = OLDEST
+            ) AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+    }
+
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionOutputTopic";
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 

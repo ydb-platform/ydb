@@ -2,6 +2,7 @@
 #include "schema_operation.h"
 
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
@@ -23,7 +24,11 @@ public:
     ~TCreateTopicOperationActor() = default;
 
     void Bootstrap() {
-        DoCreate();
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            return DoCreate();
+        } else {
+            return DoGetClustersList();
+        }
     }
 
     TString BuildLogPrefix() const override {
@@ -35,9 +40,35 @@ public:
     }
 
 private:
-    void DoCreate() {
-        LOG_D("DoCreate");
+    void DoGetClustersList() {
+        LOG_D("DoGetClustersList");
+        Become(&TCreateTopicOperationActor::GetClustersListState);
+        Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
+    }
 
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
+
+        auto& response = *ev->Get();
+        if (!response.Success) {
+            return ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Failed to get clusters list");
+        }
+
+        ClustersList = std::move(response.ClustersList);
+
+        return DoCreate();
+    }
+
+    STFUNC(GetClustersListState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoCreate() {
+        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -59,13 +90,22 @@ private:
 
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
         modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetFailedOnAlreadyExists(!Settings.IfNotExists);
 
         auto* config = modifyScheme.MutableCreatePersQueueGroup();
         config->SetName(name);
 
-        auto result = Settings.Strategy->ApplyChanges(Settings.Database,modifyScheme, *config);
+        auto result = Settings.Strategy->ApplyChanges(
+            GetLocalClusterName(ClustersList),
+            Settings.Database,
+            modifyScheme,
+            *config
+        );
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Create);
+        }
+        if (result) {
+            result = ValidateLocalCluster(ClustersList, config->GetPQTabletConfig());
         }
 
         if (!result) {
@@ -74,12 +114,16 @@ private:
 
         ModifyScheme = modifyScheme;
 
-        RegisterWithSameMailbox(CreateSchemaOperation(
-            SelfId(),
-            path,
-            std::move(proposal),
-            Settings.Cookie
-        ));
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        } else {
+            RegisterWithSameMailbox(CreateSchemaOperation(
+                SelfId(),
+                path,
+                std::move(proposal),
+                Settings.Cookie
+            ));
+        }
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
@@ -98,8 +142,12 @@ private:
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
         LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
-        if (errorCode == Ydb::StatusIds::SUCCESS) {
+        if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
+        }
+        if (Settings.IfNotExists && errorCode == Ydb::StatusIds::ALREADY_EXISTS) {
+            errorCode = Ydb::StatusIds::SUCCESS;
+            errorMessage = "";
         }
         Send(ParentId, new TEvCreateTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();
@@ -110,6 +158,7 @@ private:
     const TCreateTopicOperationSettings Settings;
 
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
+    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };
 
 }

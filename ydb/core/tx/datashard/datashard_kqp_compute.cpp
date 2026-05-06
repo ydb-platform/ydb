@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr {
@@ -14,7 +16,7 @@ using namespace NTable;
 using namespace NUdf;
 
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, NACLib::TUserContext::TPtr);
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, TIntrusivePtr<NACLib::TUserContext>);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
@@ -23,7 +25,7 @@ struct TKqpDatashardComputationMap {
     THashMap<TString, TCallableDatashardBuilderFunc> Map;
 };
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, NACLib::TUserContext::TPtr userCtx) {
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     MKQL_ENSURE_S(computeCtx);
     MKQL_ENSURE_S(computeCtx->Database);
 

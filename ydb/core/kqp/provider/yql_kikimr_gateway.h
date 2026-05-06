@@ -998,6 +998,13 @@ struct TAlterTopicSettings {
     bool MissingOk;
 };
 
+struct TCreateTopicSettings {
+    Ydb::Topic::CreateTopicRequest Request;
+    TString Name;
+    TString WorkDir;
+    bool ExistingOk;
+};
+
 struct TSequenceSettings {
     TMaybe<i64> MinValue;
     TMaybe<i64> MaxValue;
@@ -1442,6 +1449,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request, bool existingOk) = 0;
+
+    virtual NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) = 0;
 

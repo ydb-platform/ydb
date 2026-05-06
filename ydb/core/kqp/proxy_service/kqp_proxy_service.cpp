@@ -34,10 +34,12 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/security/util.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -319,7 +321,8 @@ public:
         NYql::NDq::TDqChannelLimits limits = {
             .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
             .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
-            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes()
+            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
+            .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
         };
 
         ui32 channelPoolId = AppData()->UserPoolId;
@@ -594,8 +597,10 @@ public:
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
             if (sessionInfo.AttachedRpcId) {
-                Send(sessionInfo.AttachedRpcId,
-                    CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId).release());
+                auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
+                    ? CreateEvCloseSessionResponseWithNodeShutdown(sessionInfo.SessionId)
+                    : CreateEvCloseSessionResponse(sessionInfo.SessionId);
+                Send(sessionInfo.AttachedRpcId, ev.release());
             }
         }
     }
@@ -1171,8 +1176,10 @@ public:
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         if (sessionInfo->AttachedRpcId) {
-            Send(sessionInfo->AttachedRpcId,
-                CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId).release());
+            auto ev = AppData()->FeatureFlags.GetEnableNodeShutdownHints()
+                ? CreateEvCloseSessionResponseWithSessionShutdown(sessionInfo->SessionId)
+                : CreateEvCloseSessionResponse(sessionInfo->SessionId);
+            Send(sessionInfo->AttachedRpcId, ev.release());
         }
     }
 
@@ -1850,6 +1857,11 @@ private:
                     finished = true;
                     break;
                 }
+            }
+
+            if (NKikimr::IsQueryWithSensitiveInfo(sessionInfo->QueryText)) {
+                ++startIt;
+                continue;
             }
 
             auto* sessionProto = result->Record.AddSessions();

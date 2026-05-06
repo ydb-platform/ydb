@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/cast.h>
@@ -352,7 +353,7 @@ public:
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-        NACLib::TUserContext::TPtr userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
@@ -371,39 +372,39 @@ public:
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        const ui32 defaultFilledColumnCount, NACLib::TUserContext::TPtr userCtx) override
+        const ui32 defaultFilledColumnCount, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userCtx);
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        NACLib::TUserContext::TPtr userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpsertRow(tableId, key, ops, userCtx);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        NACLib::TUserContext::TPtr userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.ReplaceRow(tableId, key, ops, userCtx);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.InsertRow(tableId, key, ops, userCtx);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.UpdateRow(tableId, key, ops, userCtx);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, NACLib::TUserContext::TPtr userCtx) override
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, NACLib::TUserContext::TPtr userCtx) override {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, TIntrusivePtr<NACLib::TUserContext> userCtx) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -417,7 +418,7 @@ public:
         UserDb.EraseRow(tableId, key, userCtx);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, NACLib::TUserContext::TPtr userCtx) override
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         UserDb.EraseRow(tableId, key, userCtx);
     }
@@ -509,7 +510,7 @@ private:
 //
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
     : StepTxId(stepTxId)
     , KeyValidator(*self)
 {

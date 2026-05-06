@@ -25,9 +25,8 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 
     for (auto& portionInfo : AppendedPortions) {
         auto& constructor = portionInfo.GetPortionConstructor().MutablePortionConstructor();
-        constructor.MutableMeta().SetCompactionLevel(
-            GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0),
-                portionInfo.GetPortionConstructor().GetCompactionInfo()));
+        constructor.MutableMeta().SetCompactionLevel(GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(
+            GetPortionsToMove().GetTargetCompactionLevel().value_or(0), portionInfo.GetPortionConstructor().GetCompactionInfo()));
     }
 }
 
@@ -60,7 +59,8 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
     std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
-    , GranuleMeta(granule) {
+    , GranuleMeta(granule)
+{
     Y_ABORT_UNLESS(GranuleMeta);
 
     for (const auto& portionInfo : portions) {

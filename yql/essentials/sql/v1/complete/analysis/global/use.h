@@ -2,7 +2,7 @@
 
 #include "global.h"
 #include "input.h"
-#include "named_node.h"
+#include "named_node_resolution.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
@@ -10,8 +10,8 @@
 
 namespace NSQLComplete {
 
-TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const TNamedNodes& nodes);
+TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const INamedNodes& nodes);
 
-TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes);
+TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const INamedNodes& nodes);
 
 } // namespace NSQLComplete

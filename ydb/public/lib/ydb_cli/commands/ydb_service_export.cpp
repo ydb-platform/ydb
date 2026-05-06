@@ -449,6 +449,14 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     auto originalItems = settings.Item_;
     if (expandItems) {
         ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        if (settings.Item_.empty()) {
+            if (!ExclusionPatterns.empty()) {
+                Cerr << "No items to export after applying exclude filters" << Endl;
+            } else {
+                Cerr << "No items to export" << Endl;
+            }
+            return EXIT_FAILURE;
+        }
     }
 
     TResponse response = CallExport<TResponse>(client, settings).ExtractValueSync();

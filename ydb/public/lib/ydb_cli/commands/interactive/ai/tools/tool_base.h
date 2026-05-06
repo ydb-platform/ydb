@@ -13,6 +13,8 @@ protected:
 public:
     TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description);
 
+    void SetAutoAction(TInteractiveConfigurationManager::EToolAutoAction autoAction) final;
+
     const NJson::TJsonValue& GetParametersSchema() const final;
 
     const TString& GetDescription() const final;
@@ -29,6 +31,7 @@ protected:
 private:
     const NJson::TJsonValue ParametersSchema;
     const TString Description;
+    TInteractiveConfigurationManager::EToolAutoAction AutoAction = TInteractiveConfigurationManager::EToolAutoAction::Ask;
 };
 
 class TDatabaseToolBase : public TToolBase {

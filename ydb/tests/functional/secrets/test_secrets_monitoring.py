@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-from .conftest import create_secrets, DATABASE, ROOT
+
 import logging
+
+from ydb.tests.functional.secrets.lib.secrets_plugin import create_secrets, DATABASE, ROOT
 import requests
 
 logger = logging.getLogger(__name__)

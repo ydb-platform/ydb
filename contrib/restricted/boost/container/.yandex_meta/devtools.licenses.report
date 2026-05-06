@@ -136,7 +136,7 @@ BELONGS ya.make
 
 KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algorithm.hpp at line 6, include/boost/container/detail/construct_in_place.hpp at line 6, include/boost/container/detail/destroyers.hpp at line 6, include/boost/container/detail/is_pair.hpp at line 6, include/boost/container/detail/iterator.hpp at line 6, include/boost/container/detail/iterators.hpp at line 7, include/boost/container/detail/mpl.hpp at line 6, include/boost/container/detail/pair.hpp at line 6, include/boost/container/detail/transform_iterator.hpp at line 7, include/boost/container/detail/type_traits.hpp at line 6, include/boost/container/detail/value_init.hpp at line 6, include/boost/container/stable_vector.hpp at line 14
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algorithm.hpp at line 6, include/boost/container/detail/construct_in_place.hpp at line 6, include/boost/container/detail/destroyers.hpp at line 6, include/boost/container/detail/is_pair.hpp at line 6, include/boost/container/detail/iterator.hpp at line 6, include/boost/container/detail/iterators.hpp at line 7, include/boost/container/detail/mpl.hpp at line 6, include/boost/container/detail/pair.hpp at line 6, include/boost/container/detail/transform_iterator.hpp at line 7, include/boost/container/detail/type_traits.hpp at line 6, include/boost/container/detail/value_init.hpp at line 6, include/boost/container/experimental/nest.hpp at line 7, include/boost/container/stable_vector.hpp at line 14
     License text:
         // Distributed under the Boost Software License, Version 1.0.
         // (See accompanying file LICENSE_1_0.txt or copy at
@@ -158,6 +158,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algo
         include/boost/container/detail/transform_iterator.hpp [6:8]
         include/boost/container/detail/type_traits.hpp [5:7]
         include/boost/container/detail/value_init.hpp [5:7]
+        include/boost/container/experimental/nest.hpp [6:8]
         include/boost/container/stable_vector.hpp [13:15]
 
 KEEP     BSL-1.0              2d6ab63dc95009634a63de40db7de32e
@@ -259,7 +260,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/adaptive_po
 
 KEEP     BSL-1.0              4ebf5547dee6ab6b8aeb6b822352227b
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/is_constructible.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -271,6 +272,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/container/detail/flat_tree.hpp [3:5]
+        include/boost/container/detail/is_constructible.hpp [3:5]
         include/boost/container/detail/tree.hpp [3:5]
         include/boost/container/list.hpp [3:5]
         include/boost/container/string.hpp [3:5]
@@ -404,6 +406,21 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/comp
         include/boost/container/detail/compare_functors.hpp [3:5]
         include/boost/container/detail/std_fwd.hpp [3:5]
 
+KEEP     BSL-1.0              8457187f7136699ce1b6d6cfb4c2a46c
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/segtor.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2026. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/segtor.hpp [3:5]
+
 KEEP     BSL-1.0              86a53b60341cbe61df8532f22feab8ef
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/thread_mutex.hpp at line 5
@@ -477,6 +494,21 @@ BELONGS ya.make
     Files with this license:
         src/dlmalloc_2_8_6.c [3:4]
 
+KEEP     BSL-1.0              bbdcea20b7f90df7be3ca3fa46e56523
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/pmr/segtor.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/pmr/segtor.hpp [3:5]
+
 KEEP     BSL-1.0              d61752484f220755bd1f5e838c59307b
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/addressof.hpp at line 5, include/boost/container/detail/alloc_helpers.hpp at line 5, include/boost/container/detail/iterator_to_raw_pointer.hpp at line 5, include/boost/container/detail/next_capacity.hpp at line 5, include/boost/container/detail/placement_new.hpp at line 7, include/boost/container/new_allocator.hpp at line 5
@@ -516,7 +548,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator.h
 
 KEEP     BSL-1.0              e6c1b8875419d26f70968fbe28d861a6
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/aligned_allocation.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5, include/boost/container/uses_allocator_construction.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -528,7 +560,25 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp a
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/container/deque.hpp [3:5]
+        include/boost/container/detail/aligned_allocation.hpp [3:5]
         include/boost/container/detail/operator_new_helpers.hpp [3:5]
+        include/boost/container/uses_allocator_construction.hpp [3:5]
+
+KEEP     BSL-1.0              ed6c702973aeac50a008f9671870703a
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/deque_impl.hpp at line 5, include/boost/container/experimental/pmr/nest.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025-2026. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/detail/deque_impl.hpp [3:5]
+        include/boost/container/experimental/pmr/nest.hpp [3:5]
 
 KEEP     BSL-1.0              f328b5d41ed9ab62066d53579e348e68
 BELONGS ya.make

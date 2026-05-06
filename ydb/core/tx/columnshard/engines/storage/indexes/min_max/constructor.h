@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 class TIndexConstructor: public TSkipIndexConstructor {

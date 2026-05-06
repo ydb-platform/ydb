@@ -27,28 +27,21 @@ namespace NYql::NFmr {
 class TFmrJob: public IFmrJob {
 public:
     TFmrJob(
-        const TString& tableDataServiceDiscoveryFilePath,
+        ITableDataServiceDiscovery::TPtr discovery,
+        TMaybe<TVanillaInfo> vanillaInfo,
         IYtJobService::TPtr ytJobService,
         TFmrUserJobLauncher::TPtr jobLauncher,
         const TFmrJobSettings& settings,
         const TMaybe<TFmrTvmJobSettings>& tvmSettings = Nothing()
     )
-        : TableDataServiceDiscoveryFilePath_(tableDataServiceDiscoveryFilePath)
+        : Discovery_(std::move(discovery))
+        , VanillaInfo_(std::move(vanillaInfo))
         , YtJobService_(ytJobService)
         , JobLauncher_(jobLauncher)
         , Settings_(settings)
         , TvmSettings_(tvmSettings)
     {
-        auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
-        if (tvmSettings.Defined()) {
-            TvmClient_ = MakeFmrTvmClient({
-                .SourceTvmAlias = tvmSettings->WorkerTvmAlias,
-                .TvmPort = tvmSettings->TvmPort,
-                .TvmSecret = tvmSettings->TvmSecret
-            });
-            TableDataServiceTvmId_ = tvmSettings->TableDataServiceTvmId;
-        }
-        TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, TvmClient_, TableDataServiceTvmId_);
+        InitTableDataService(tvmSettings);
     }
 
     virtual std::variant<TFmrError, TStatistics> Download(
@@ -280,7 +273,7 @@ public:
             // deserialize map job and fill params
             TStringStream serializedJobStateStream(params.SerializedMapJobState);
             mapJob.Load(serializedJobStateStream);
-            FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
+            FillMapFmrJob(mapJob, params, clusterConnections, Discovery_, VanillaInfo_, userJobSettings, YtJobService_);
             mapJob.SetTvmSettings(TvmSettings_);
             return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
         };
@@ -363,8 +356,21 @@ private:
     }
 
 private:
+    void InitTableDataService(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
+        if (tvmSettings.Defined()) {
+            TvmClient_ = MakeFmrTvmClient({
+                .SourceTvmAlias = tvmSettings->WorkerTvmAlias,
+                .TvmPort = tvmSettings->TvmPort,
+                .TvmSecret = tvmSettings->TvmSecret
+            });
+            TableDataServiceTvmId_ = tvmSettings->TableDataServiceTvmId;
+        }
+        TableDataService_ = MakeTableDataServiceClient(Discovery_, TvmClient_, TableDataServiceTvmId_);
+    }
+
     ITableDataService::TPtr TableDataService_; // Table data service http client
-    const TString TableDataServiceDiscoveryFilePath_;
+    ITableDataServiceDiscovery::TPtr Discovery_;
+    TMaybe<TVanillaInfo> VanillaInfo_;
     IYtJobService::TPtr YtJobService_;
     TFmrUserJobLauncher::TPtr JobLauncher_;
     TFmrJobSettings Settings_;
@@ -374,25 +380,27 @@ private:
 };
 
 IFmrJob::TPtr MakeFmrJob(
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
     const TFmrJobSettings& settings,
     const TMaybe<TFmrTvmJobSettings>& workerTvmSettings
 ) {
-    return MakeIntrusive<TFmrJob>(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, settings, workerTvmSettings);
+    return MakeIntrusive<TFmrJob>(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, settings, workerTvmSettings);
 }
 
 TJobResult RunJob(
     TTask::TPtr task,
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
     std::shared_ptr<std::atomic<bool>> cancelFlag,
     const TMaybe<TFmrTvmJobSettings>& tvmSettings
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(tableDataServiceDiscoveryFilePath, ytJobService, jobLauncher, jobSettings, tvmSettings);
+    IFmrJob::TPtr job = MakeFmrJob(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, jobSettings, tvmSettings);
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -429,12 +437,16 @@ void FillMapFmrJob(
     TFmrUserJob& mapJob,
     const TMapTaskParams& mapTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
     const TFmrUserJobSettings& userJobSettings,
     IYtJobService::TPtr jobService
 ) {
     mapJob.SetSettings(userJobSettings);
-    mapJob.SetTableDataService(tableDataServiceDiscoveryFilePath);
+    if (vanillaInfo.Defined()) {
+        mapJob.SetVanillaInfo(*vanillaInfo);
+    }
+    mapJob.SetTableDataServiceDiscovery(std::move(discovery));
     mapJob.SetTaskInputTables(mapTaskParams.Input);
     mapJob.SetTaskFmrOutputTables(mapTaskParams.Output);
     mapJob.SetClusterConnections(clusterConnections);

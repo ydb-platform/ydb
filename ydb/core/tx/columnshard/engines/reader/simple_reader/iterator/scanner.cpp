@@ -23,7 +23,8 @@ TConclusionStatus TScanHead::Start() {
 }
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
+    : Context(context)
+{
     auto readMetadataContext = context->GetReadMetadata();
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =

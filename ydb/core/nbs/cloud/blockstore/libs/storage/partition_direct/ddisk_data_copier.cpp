@@ -1,12 +1,13 @@
 #include "ddisk_data_copier.h"
 
-#include "read_request.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -157,7 +158,7 @@ void TDDiskDataCopier::StartCopyRange()
     auto callContext = MakeIntrusive<TCallContext>(requestId);
     callContext->RootTraceId = copyRangeState->Span.GetTraceId();
 
-    auto readExecutor = std::make_shared<TReadRequestExecutor>(
+    auto readExecutor = CreateReadRequestExecutor(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
@@ -170,7 +171,7 @@ void TDDiskDataCopier::StartCopyRange()
     future.Subscribe(
         [weakSelf = weak_from_this(),
          copyRangeState = std::move(copyRangeState)]   //
-        (const TFuture<TReadRequestExecutor::TResponse>& f) mutable
+        (const TFuture<IReadRequestExecutor::TResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
                 self->OnRangeRead(std::move(copyRangeState), f.GetValue());
@@ -181,7 +182,7 @@ void TDDiskDataCopier::StartCopyRange()
 
 void TDDiskDataCopier::OnRangeRead(
     TCopyRangeRequestStatePtr copyRangeState,
-    const TReadRequestExecutor::TResponse& response)
+    const IReadRequestExecutor::TResponse& response)
 {
     copyRangeState->Span.Event("OnRangeRead");
 

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
 
 import pytest
 import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
+import yaml
 
 import yatest
 
@@ -330,3 +331,78 @@ class TestImpex(BaseCliTestWithDatabase):
             additional_args=["--threads", "1", "--max-in-flight", "1", "--batch-bytes", "1"]
         )
         return self.run_export(ftype)
+
+    def _prepare_infer_input(self, tmp_path, request):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + request.node.name
+        csv_path = self.tmp_path / "infer_input.csv"
+        self.write_data_to_tmp_file(csv_path, False, DATA["csv"])
+        return csv_path
+
+    def _verify_table_exists(self, table_path):
+        query = "SELECT count(*) FROM `{}`".format(table_path)
+        self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"])
+
+    def test_tools_infer_csv_execute(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ])
+        assert "CREATE TABLE" in result.stderr
+        assert "PRIMARY KEY" in result.stderr
+        assert "key" in result.stderr
+        assert "id" in result.stderr
+        assert "value" in result.stderr
+        self._verify_table_exists(self.table_path)
+
+    def test_tools_infer_csv_no_execute(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--header",
+            str(csv_path),
+        ])
+        assert "CREATE TABLE" in result.stdout
+        assert "PRIMARY KEY" in result.stdout
+        assert "key" in result.stdout
+        assert "id" in result.stdout
+        assert "value" in result.stdout
+
+    def test_tools_infer_csv_execute_with_profile(self, tmp_path, request, table_type):
+        csv_path = self._prepare_infer_input(tmp_path, request)
+
+        profile_file = str(self.tmp_path / "profile.yaml")
+        profile_content = {
+            "profiles": {
+                "test_profile": {
+                    "endpoint": self.grpc_endpoint(),
+                    "database": self.root_dir,
+                },
+            },
+            "active_profile": "test_profile",
+        }
+        with open(profile_file, "w") as f:
+            yaml.dump(profile_content, f)
+
+        result = yatest.common.execute([
+            ydb_bin(),
+            "--profile-file", profile_file,
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ])
+
+        result = result.std_err.decode("utf-8")
+        assert "CREATE TABLE" in result
+        assert "PRIMARY KEY" in result
+        assert "key" in result
+        assert "id" in result
+        assert "value" in result
+        self._verify_table_exists(self.table_path)

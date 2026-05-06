@@ -4,6 +4,7 @@
 #include "probes.h"
 
 #include <ydb/core/util/pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 LWTRACE_USING(DATASHARD_PROVIDER)
@@ -16,7 +17,7 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
                                                                         bool delayed,
                                                                         NWilson::TSpan &&datashardTransactionSpan,
-                                                                        NACLib::TUserContext::TPtr userCtx)
+                                                                        TIntrusivePtr<NACLib::TUserContext> userCtx)
     : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
@@ -51,7 +52,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "Errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
 
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);

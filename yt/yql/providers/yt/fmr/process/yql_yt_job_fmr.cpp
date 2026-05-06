@@ -6,6 +6,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
+#include <yt/yql/providers/yt/fmr/vanilla/tds_discovery/yql_yt_vanilla_tds_discovery.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
@@ -25,7 +26,8 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         YtJobServiceType_,
         IsOrdered_,
         Settings_,
-        TvmSettings_
+        TvmSettings_,
+        VanillaInfo_
     );
 }
 
@@ -39,7 +41,8 @@ void TFmrUserJob::Load(IInputStream& s) {
         YtJobServiceType_,
         IsOrdered_,
         Settings_,
-        TvmSettings_
+        TvmSettings_,
+        VanillaInfo_
     );
 }
 
@@ -144,7 +147,20 @@ void TFmrUserJob::InitializeFmrUserJob() {
     UnionInputTablesQueue_ = MakeIntrusive<TFmrRawTableQueue>(inputTablesSize);
     QueueReader_ = MakeIntrusive<TFmrRawTableQueueReader>(UnionInputTablesQueue_);
 
-    auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_});
+    ITableDataServiceDiscovery::TPtr tableDataServiceDiscovery;
+    std::unique_ptr<IVanillaPeerTracker> peerTracker;
+    if (Discovery_) {
+        tableDataServiceDiscovery = Discovery_;
+    } else if (VanillaInfo_.Defined()) {
+        peerTracker = std::make_unique<TStaticVanillaPeerTracker>(VanillaInfo_->Tracker);
+        auto vanillaDiscovery = MakeVanillaTdsDiscovery(*peerTracker, TVanillaTdsDiscoverySettings{
+            .TdsPort    = VanillaInfo_->TdsPort
+        });
+        vanillaDiscovery->Start();
+        tableDataServiceDiscovery = vanillaDiscovery;
+    } else {
+        tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_});
+    }
     TTvmId tableDataServiceTvmId = 0;
     IFmrTvmClient::TPtr tvmClient;
     if (TvmSettings_.Defined()) {

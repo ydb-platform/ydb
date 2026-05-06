@@ -12,9 +12,8 @@ class TCreateTopicActor: public TGrpcProxyActor<TCreateTopicActor, NGRpcService:
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TCreateTopicActor, NGRpcService::TEvCreateTopicRequest>;
 
 public:
-    TCreateTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc)
+    TCreateTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TCreateTopicActor, NGRpcService::TEvCreateTopicRequest>(request)
-        , LocalDc(localDc)
     {
     }
 
@@ -26,7 +25,6 @@ public:
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
             .UserToken = GetUserToken(),
-            .LocalDc = std::move(LocalDc),
         }));
     }
 
@@ -46,15 +44,12 @@ private:
                 TRpcOpBase::StateFuncBase(ev);
         }
     }
-
-private:
-    TString LocalDc;
 };
 
 } // namespace
     
-NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request, const TString& localDc) {
-    return new TCreateTopicActor(request, localDc);
+NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request) {
+    return new TCreateTopicActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

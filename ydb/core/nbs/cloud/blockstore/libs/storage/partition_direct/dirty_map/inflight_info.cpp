@@ -255,10 +255,12 @@ void TInflightInfo::UnlockPBuffer()
 
     if (PBuffersLockCount == 0) {
         ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, false);
-    }
 
-    if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
-        ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+        if (State == EState::PBufferWritten) {
+            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
+        } else if (State == EState::PBufferFlushed) {
+            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+        }
     }
 }
 

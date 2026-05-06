@@ -57,7 +57,7 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default()
         .DontSerializeDefault();
 
-    registrar.ExternalBaseClassParameter("with_monitoring_gescriptor", &TThat::WithMonitoringDescriptor)
+    registrar.ExternalBaseClassParameter("with_monitoring_descriptor", &TThat::WithMonitoringDescriptor)
         .Default()
         .DontSerializeDefault();
 

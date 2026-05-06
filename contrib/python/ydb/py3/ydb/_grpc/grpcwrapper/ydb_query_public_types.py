@@ -67,11 +67,12 @@ class QuerySerializableReadWrite(BaseQueryTxMode):
 class QueryOnlineReadOnly(BaseQueryTxMode):
     """Each read operation in the transaction is reading the data that is most recent at execution time.
     The consistency of retrieved data depends on the allow_inconsistent_reads setting:
-        * false (consistent reads): Each individual read operation returns consistent data,
-          but no consistency is guaranteed between reads.
-          Reading the same table range twice may return different results.
-        * true (inconsistent reads): Even the data fetched by a particular
-          read operation may contain inconsistent results.
+
+    * false (consistent reads): Each individual read operation returns consistent data,
+      but no consistency is guaranteed between reads.
+      Reading the same table range twice may return different results.
+    * true (inconsistent reads): Even the data fetched by a particular
+      read operation may contain inconsistent results.
     """
 
     def __init__(self, allow_inconsistent_reads: bool = False):

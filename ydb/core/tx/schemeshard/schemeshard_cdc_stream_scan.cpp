@@ -183,11 +183,11 @@ private:
 
         if (streamInfo->ScanShards.empty()) {
             NIceDb::TNiceDb db(txc.DB);
-            for (const auto& shard : table->GetPartitions()) {
+            for (const auto* shard : table->GetPartitions()) {
                 const auto status = TCdcStreamInfo::TShardStatus(NKikimrTxDataShard::TEvCdcStreamScanResponse::PENDING);
-                streamInfo->ScanShards.emplace(shard.ShardIdx, status);
-                streamInfo->PendingShards.insert(shard.ShardIdx);
-                Self->PersistCdcStreamScanShardStatus(db, streamPathId, shard.ShardIdx, status);
+                streamInfo->ScanShards.emplace(shard->ShardIdx, status);
+                streamInfo->PendingShards.insert(shard->ShardIdx);
+                Self->PersistCdcStreamScanShardStatus(db, streamPathId, shard->ShardIdx, status);
             }
         }
 

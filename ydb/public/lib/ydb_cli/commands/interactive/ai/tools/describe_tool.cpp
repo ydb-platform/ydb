@@ -76,10 +76,11 @@ protected:
         }
 
         Options.Database = Database;
+
+        PrintFtxuiMessage("", TStringBuilder() << "Describing path " << Path, ftxui::Color::Green);
     }
 
     bool AskPermissions() final {
-        PrintFtxuiMessage("", TStringBuilder() << "Describing path " << Path, ftxui::Color::Green);
         return true;
     }
 

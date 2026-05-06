@@ -136,8 +136,9 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
     }
 
     ui64 counter = 0;
-    rboCtx.ExecutionJson = root.GetExecutionJson(counter);
-    rboCtx.ExplainJson = root.GetExplainJson(counter);
+    THashMap<IOperator*, ui32> operatorIds;
+    rboCtx.ExecutionJson = root.GetExecutionJson(counter, operatorIds);
+    rboCtx.ExplainJson = root.GetExplainJson(counter, operatorIds);
 
     return ConvertToPhysical(root, rboCtx);
 }

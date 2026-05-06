@@ -1,0 +1,54 @@
+{
+    "_yql_row_spec" = {
+        "StrictSchema" = %true;
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String";
+                    ];
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String";
+                    ];
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "Float";
+                    ];
+                ];
+            ];
+        ];
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "key";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "subkey";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "value";
+            "required" = %true;
+            "type" = "float";
+            "type_v3" = "float";
+        };
+    ];
+}

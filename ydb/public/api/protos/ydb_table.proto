@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -1314,7 +1315,7 @@ message ExecuteDataQueryRequest {
     TransactionControl tx_control = 2;
     Query query = 3;
     // Map of query parameters (optional)
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
@@ -1659,7 +1660,7 @@ message ExecuteScanQueryRequest {
     reserved 1; // session_id
     reserved 2; // tx_control
     Query query = 3;
-    map<string, TypedValue> parameters = 4;
+    map<string, TypedValue> parameters = 4 [(Ydb.sensitive) = true];
     reserved 5; // query_cache_policy
     Mode mode = 6;
     reserved 7; // report_progress

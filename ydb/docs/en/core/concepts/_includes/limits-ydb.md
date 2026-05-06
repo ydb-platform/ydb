@@ -62,3 +62,11 @@ In previous versions of {{ ydb-short-name }}, queries were typically executed us
 | Maximum query result size | 50 MB | The complete results of some queries may exceed the set limit. If this occurs, the query will fail and return no data. | PRECONDITION_FAILED |
 
 {% endcut %}
+
+## Resource pool limits {#resource_pool}
+
+| Parameter | Value |
+| :--- | :--- |
+| Maximum number of resource pool classifiers | 1000 |
+
+Limits on resource counts are also constrained by schema object limits. See [above](#schema-object).

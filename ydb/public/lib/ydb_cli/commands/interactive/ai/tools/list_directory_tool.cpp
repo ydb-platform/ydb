@@ -41,11 +41,8 @@ public:
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
-
         Directory = CanonizePath(parser.GetKey(DIRECTORY_PROPERTY).GetString());
-    }
 
-    bool AskPermissions() final {
         TString message;
         if (Directory == Database || Directory == Database + "/") {
             message = "Listing database root directory";
@@ -54,8 +51,9 @@ protected:
         }
 
         PrintFtxuiMessage("", message, ftxui::Color::Green);
+    }
 
-        // Directory listing is always allowed
+    bool AskPermissions() final {
         return true;
     }
 

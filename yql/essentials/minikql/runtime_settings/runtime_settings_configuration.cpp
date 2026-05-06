@@ -14,6 +14,7 @@ TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TRuntimeSetti
     : TRuntimeSettings(settings)
 {
     REGISTER_RUNTIME_SETTING(DatumValidation);
+    REGISTER_RUNTIME_SETTING(TestHostSetting);
 }
 
 } // namespace NYql

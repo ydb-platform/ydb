@@ -253,7 +253,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "CollectLocalIndexMigrations: starting migrator for " << items.size() << " index(es)");
 
-    Register(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
+    LocalIndexMigratorId = ctx.RegisterWithSameMailbox(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
 }
 
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
@@ -5221,6 +5221,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
+    if (LocalIndexMigratorId) {
+        ctx.Send(LocalIndexMigratorId, new TEvents::TEvPoisonPill());
+    }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
@@ -7431,7 +7434,7 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
             CollectSysViewUpdates(ctx);
         }
 
-        if (!LocalIndexMigrationStarted) {
+        if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject() && !LocalIndexMigrationStarted) {
             LocalIndexMigrationStarted = true;
             CollectLocalIndexMigrations(ctx);
         }

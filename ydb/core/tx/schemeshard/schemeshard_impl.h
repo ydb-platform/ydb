@@ -451,6 +451,7 @@ public:
 
     bool SysViewsRosterUpdateStarted = false;
     bool LocalIndexMigrationStarted = false;
+    TActorId LocalIndexMigratorId;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;

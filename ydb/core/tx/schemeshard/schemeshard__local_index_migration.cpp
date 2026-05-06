@@ -175,22 +175,23 @@ private:
         case NKikimrScheme::StatusAccepted:
             Send(SelfActorId, new TEvSchemeShard::TEvNotifyTxCompletion(static_cast<ui64>(txId)));
             break;
-        case NKikimrScheme::StatusMultipleModifications:
-        case NKikimrScheme::StatusNotAvailable:
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TLocalIndexMigrator at schemeshard: " << SelfTabletId
-                << ", transient failure for " << AwaitingRequests.at(txId).DebugString()
-                << ", reason: " << record.GetReason() << ", will retry");
-            PendingItems.push_back(std::move(AwaitingRequests.at(txId)));
-            AwaitingRequests.erase(txId);
-            ctx.Schedule(RetryDelay, new TEvents::TEvWakeup());
-            break;
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TLocalIndexMigrator at schemeshard: " << SelfTabletId
-                << ", failed to " << AwaitingRequests.at(txId).DebugString()
-                << ", reason: " << record.GetReason());
-            Done(txId, ctx);
+            if (AwaitingRequests.at(txId).Backoff.HasMore()) {
+                auto delay = AwaitingRequests.at(txId).Backoff.Next();
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to " << AwaitingRequests.at(txId).DebugString()
+                    << ", reason: " << record.GetReason() << ", will retry after delay " << delay);
+                PendingItems.push_back(std::move(AwaitingRequests.at(txId)));
+                AwaitingRequests.erase(txId);
+                ctx.Schedule(delay, new TEvents::TEvWakeup());
+            } else {
+                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TLocalIndexMigrator at schemeshard: " << SelfTabletId
+                    << ", failed to " << AwaitingRequests.at(txId).DebugString()
+                    << " after max retries, reason: " << record.GetReason() << ", dying");
+                PassAway();
+            }
             break;
         }
     }

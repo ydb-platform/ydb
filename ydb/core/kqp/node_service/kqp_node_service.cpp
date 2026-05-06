@@ -498,7 +498,7 @@ private:
                 str << Endl;
 
                 str << "Active Transactions:" << Endl;
-                State_->DumpInfo(str);
+                State_->DumpInfo(str, ev->Get()->Request.GetParams());
                 str << Endl;
             }
         }
@@ -626,18 +626,47 @@ private:
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
 
         const TCgiParameters &cgi = ev->Get()->Request.GetParams();
-        TActorId id;
 
         auto caId = cgi.Get("ca");
-        if (caId && State_->ValidateComputeActorId(caId, id)) {
-            TActivationContext::Send(ev->Forward(id));
-            return;
+        if (caId) {
+            UrlUnescape(caId);
+            TActorId computeActorId;
+            if (computeActorId.Parse(caId.c_str(), caId.size())) {
+                if (computeActorId.NodeId() != SelfId().NodeId()) {
+                    TStringStream response;
+                    response << "HTTP/1.1 307 Temporary Redirect\r\n";
+                    response << "Location: /node/" << computeActorId.NodeId() << "/actors/kqp_node?" << cgi.Print() << "\r\n";
+                    response << "Connection: Keep-Alive\r\n";
+                    response << "\r\n";
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    return;
+                }
+                if (State_->ValidateComputeActorId(caId, computeActorId)) {
+                    TActivationContext::Send(ev->Forward(computeActorId));
+                    return;
+                }
+            }
         }
 
         auto exId = cgi.Get("ex");
-        if (exId && State_->ValidateKqpExecuterId(exId, SelfId().NodeId(), id)) {
-            TActivationContext::Send(ev->Forward(id));
-            return;
+        if (exId) {
+            UrlUnescape(exId);
+            TActorId executerId;
+            if (executerId.Parse(exId.c_str(), exId.size())) {
+                if (executerId.NodeId() != SelfId().NodeId()) {
+                    TStringStream response;
+                    response << "HTTP/1.1 307 Temporary Redirect\r\n";
+                    response << "Location: /node/" << executerId.NodeId() << "/actors/kqp_node?" << cgi.Print() << "\r\n";
+                    response << "Connection: Keep-Alive\r\n";
+                    response << "\r\n";
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    return;
+                }
+                if (State_->ValidateKqpExecuterId(exId, executerId)) {
+                    TActivationContext::Send(ev->Forward(executerId));
+                    return;
+                }
+            }
         }
 
         TStringStream str;
@@ -646,7 +675,7 @@ private:
                 str << "TKqpNodeService, SelfId=" << SelfId() << Endl;
                 str << Endl << "Current config:" << Endl;
                 str << Config.DebugString() << Endl;
-                State_->DumpInfo(str);
+                State_->DumpInfo(str, cgi);
             }
         }
 

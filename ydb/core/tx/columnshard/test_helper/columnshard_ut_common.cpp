@@ -425,7 +425,7 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         NKikimrSchemeOp::TIndexDataExtractor proto;
         proto.SetClassName(NOlap::NIndexes::TDefaultDataExtractor::GetClassNameStatic());
         proto.MutableDefault();
-        extractor->DeserializeFromProto(proto);
+        extractor.DeserializeFromProto(proto);
         if (NOlap::NIndexes::NMinMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
             *schema->AddIndexes() =
                 NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(1000 + i,

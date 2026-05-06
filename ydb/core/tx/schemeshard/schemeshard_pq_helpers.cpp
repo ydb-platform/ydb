@@ -130,10 +130,14 @@ bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
             break;
         default:
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Skipping send topic cloud event for operation: "
+                    << NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType()));
+
             return TDone::ProgressState(context);
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Scheduling send topic cloud event for operation: "
             << NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType()));
 

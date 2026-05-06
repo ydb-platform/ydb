@@ -89,7 +89,7 @@ private:
     void SendToDistConf() {
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto* req = ev->Record.MutableDemandRetroTrace();
-        for (const NWilson::TTraceId& traceId : PendingTraceIds) {
+        for (const NWilson::TTraceId& traceId : std::exchange(PendingTraceIds, {})) {
             traceId.Serialize(req->AddTraceId());
         }
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());

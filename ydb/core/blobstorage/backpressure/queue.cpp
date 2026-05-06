@@ -38,6 +38,7 @@ TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamic
     , QueueSerializedBytes(counters->GetCounter("QueueSerializedBytes", true, visibility))
     , QueueDeserializedItems(counters->GetCounter("QueueDeserializedItems", true, visibility))
     , QueueDeserializedBytes(counters->GetCounter("QueueDeserializedBytes", true, visibility))
+    , QueueConnected(counters->GetCounter("QueueConnected", true, visibility))
     , QueueSize(counters->GetCounter("QueueSize", false, visibility))
 {}
 
@@ -335,6 +336,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
 void TBlobStorageQueue::OnConnect() {
     SetMaxWindowSize(1000000000); // default value is one second
     CostSettingsUpdate = TInstant::Zero(); // request cost model update in first message
+    ++*QueueConnected;
 }
 
 TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {

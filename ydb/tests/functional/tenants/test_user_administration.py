@@ -5,6 +5,7 @@ import logging
 import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.tls_tools import driver_tls_kwargs
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -54,14 +55,54 @@ def ydb_cluster_configuration():
 
 @pytest.fixture(scope='module')
 def ydb_configurator(ydb_cluster_configuration):
-    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    config_generator = KikimrConfigGenerator(
+        protected_mode=True,
+        **ydb_cluster_configuration,
+    )
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': False,
+        'enable_node_registration_by_token': False,
     }
     config_generator.yaml_config['domains_config']['disable_builtin_security'] = True
     security_config = config_generator.yaml_config['domains_config']['security_config']
-    security_config['administration_allowed_sids'].append('clusteradmin')
+    # Narrow admin SIDs so dbadmin is not cluster admin under protected_mode
+    security_config['administration_allowed_sids'] = [
+        'root', 'root@builtin', 'clusteradmin', 'clusteradmins@cert',
+    ]
+    # Node broker cert identity only (not full cluster admin)
+    security_config['register_dynamic_node_allowed_sids'] = ['clusteradmins@cert']
+    # Root without password for harness get-token
+    security_config['default_users'] = [{'name': 'root', 'password': ''}]
+    config_generator.full_config = config_generator.yaml_config
     return config_generator
+
+
+@pytest.fixture(scope='module')
+def ydb_endpoint(ydb_cluster):
+    node = ydb_cluster.nodes[1]
+    if getattr(ydb_cluster.config, 'grpc_ssl_enable', False):
+        return "grpcs://%s:%s" % (node.host, node.grpc_ssl_port)
+    return "%s:%s" % (node.host, node.port)
+
+
+@pytest.fixture(scope='function')
+def ydb_client(ydb_cluster, ydb_endpoint, request):
+    # CA only: user identity from login, not clusteradmins@cert
+    tls_kwargs = driver_tls_kwargs(ydb_cluster, with_client_cert=False)
+
+    def _make_driver(database_path, **kwargs):
+        merged = dict(tls_kwargs)
+        merged.update(kwargs)
+        driver_config = ydb.DriverConfig(ydb_endpoint, database_path, **merged)
+        driver = ydb.Driver(driver_config)
+
+        def stop_driver():
+            driver.stop()
+
+        request.addfinalizer(stop_driver)
+        return driver
+
+    return _make_driver
 
 
 @pytest.fixture(scope='module')
@@ -69,7 +110,10 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     cluster_admin = ydb.AuthTokenCredentials(ydb_cluster.config.default_clusteradmin)
 
     # prepare root database
-    driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint, ydb_root, credentials=cluster_admin,
+        **driver_tls_kwargs(ydb_cluster),
+    )
     with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
@@ -80,51 +124,52 @@ def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
 def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
     cluster_admin = ydb.AuthTokenCredentials(ydb_cluster.config.default_clusteradmin)
 
-    # prepare tenant database
     database_path = ydb_database_module_scope
-    driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint, database_path, credentials=cluster_admin,
+        **driver_tls_kwargs(ydb_cluster),
+    )
     with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
-            # setup for database admins, first
             session.execute_scheme("create user dbadmin password '1234'")
-            session.execute_scheme('create group dbadmins')
-            session.execute_scheme('alter group dbadmins add user dbadmin')
-
-            # additional setup for individual tests
-            session.execute_scheme("create user ordinaryuser password '1234'")
-
-            session.execute_scheme("create group ordinarygroup")
             session.execute_scheme("create user dbadmin2 password '1234'")
             session.execute_scheme("create user dbadmin3 password '1234' nologin")
             session.execute_scheme("create user dbadmin4 password '1234'")
+            session.execute_scheme("create user ordinaryuser password '1234'")
+            session.execute_scheme("create group dbadmins")
             session.execute_scheme("create group dbsubadmins")
-            session.execute_scheme('alter group dbadmins add user dbadmin2, dbadmin3, dbadmin4, dbsubadmins')
+            session.execute_scheme("create group ordinarygroup")
+            session.execute_scheme("alter group dbadmins add user dbadmin")
+            session.execute_scheme("alter group dbadmins add user dbadmin2, dbadmin3, dbadmin4, dbsubadmins")
+            session.execute_scheme("grant \"ydb.generic.use\" on `{}` to dbadmin".format(database_path))
+            session.execute_scheme("grant \"ydb.generic.use\" on `{}` to dbadmin2".format(database_path))
+            session.execute_scheme("grant \"ydb.generic.use\" on `{}` to dbadmin3".format(database_path))
+            session.execute_scheme("grant \"ydb.generic.use\" on `{}` to dbadmin4".format(database_path))
+            session.execute_scheme("grant \"ydb.generic.use\" on `{}` to ordinaryuser".format(database_path))
 
-        # setup for database admins, second
-        # make dbadmin the real admin of the database
-        driver.scheme_client.modify_permissions(database_path, ydb.ModifyPermissionsSettings().change_owner('dbadmins'))
+        driver.scheme_client.modify_permissions(
+            database_path,
+            ydb.ModifyPermissionsSettings().change_owner('dbadmins')
+        )
 
     return database_path
 
 
-# python sdk does not legally expose login method, so that is a crude way
-# to get auth-token in exchange to credentials
-def login_user(endpoint, database, user, password):
-    driver_config = ydb.DriverConfig(endpoint, database)
-    credentials = ydb.StaticCredentials(driver_config, user, password)
-    return credentials._make_token_request()['access_token']
+def login_user_credentials(endpoint, database, user, password, tls_kwargs=None):
+    driver_config = ydb.DriverConfig(endpoint, database, **(tls_kwargs or {}))
+    return ydb.StaticCredentials(driver_config, user, password)
 
 
 @pytest.mark.parametrize('subject_user', [
     'ordinaryuser',
     pytest.param('dbadmin4', id='dbadmin')
 ])
-def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, subject_user):
+def test_user_can_change_password_for_himself(ydb_cluster, ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, subject_user):
     database_path = prepared_tenant_db
+    tls_kwargs = driver_tls_kwargs(ydb_cluster, with_client_cert=False)
 
-    user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '1234')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, subject_user, '1234', tls_kwargs=tls_kwargs)
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
@@ -133,8 +178,7 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
         with pool.checkout() as session:
             session.execute_scheme(f"alter user {subject_user} password '4321'")
 
-    user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '4321')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, subject_user, '4321', tls_kwargs=tls_kwargs)
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
@@ -155,11 +199,11 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
                 assert 'Access denied for' in ex.message
 
 
-def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
+def test_database_admin_cant_change_database_owner(ydb_cluster, ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
     database_path = prepared_tenant_db
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, 'dbadmin', '1234',
+                                         tls_kwargs=driver_tls_kwargs(ydb_cluster, with_client_cert=False))
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
@@ -180,11 +224,11 @@ def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_d
     pytest.param('drop group dbadmins', id='remove-admin-group'),
     pytest.param('alter group dbadmins rename to dbadminsdemoted', id='rename-admin-group'),
 ])
-def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
+def test_database_admin_cant_change_database_admin_group(ydb_cluster, ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
     database_path = prepared_tenant_db
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, 'dbadmin', '1234',
+                                         tls_kwargs=driver_tls_kwargs(ydb_cluster, with_client_cert=False))
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
@@ -203,11 +247,11 @@ def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_
     pytest.param('alter user dbadmin2 nologin', id='block'),
     pytest.param('alter user dbadmin3 login', id='unblock'),
 ])
-def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
+def test_database_admin_cant_change_database_admin_user(ydb_cluster, ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
     database_path = prepared_tenant_db
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, 'dbadmin', '1234',
+                                         tls_kwargs=driver_tls_kwargs(ydb_cluster, with_client_cert=False))
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()
@@ -222,11 +266,11 @@ def test_database_admin_cant_change_database_admin_user(ydb_endpoint, prepared_r
         assert 'Access denied.' in exc_info.value.message
 
 
-def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
+def test_database_admin_can_create_user(ydb_cluster, ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
     database_path = prepared_tenant_db
 
-    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
-    credentials = ydb.AuthTokenCredentials(user_auth_token)
+    credentials = login_user_credentials(ydb_endpoint, database_path, 'dbadmin', '1234',
+                                         tls_kwargs=driver_tls_kwargs(ydb_cluster, with_client_cert=False))
 
     with ydb_client(database_path, credentials=credentials) as driver:
         driver.wait()

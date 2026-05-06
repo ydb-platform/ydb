@@ -49,3 +49,23 @@ def generate_selfsigned_cert(hostname):
     )
 
     return cert_pem, key_pem
+
+
+def driver_tls_kwargs(cluster, with_client_cert=True):
+    """TLS kwargs for ``ydb.DriverConfig`` when ``grpc_ssl_enable`` is set."""
+    cfg = cluster.config
+    if not getattr(cfg, 'grpc_ssl_enable', False):
+        return {}
+    with open(cfg.grpc_tls_ca_path, 'rb') as f:
+        root = f.read()
+    if not with_client_cert:
+        return {'root_certificates': root}
+    with open(cfg.grpc_tls_cert_path, 'rb') as f:
+        cert = f.read()
+    with open(cfg.grpc_tls_key_path, 'rb') as f:
+        key = f.read()
+    return {
+        'root_certificates': root,
+        'certificate_chain': cert,
+        'private_key': key,
+    }

@@ -184,7 +184,8 @@ class TDefaultNodeBrokerClient
             }
         }
 
-            NYdb::NDiscovery::TNodeRegistrationResult Result;
+        NYdb::NDiscovery::TNodeRegistrationResult Result;
+
     public:
         TResult(NYdb::NDiscovery::TNodeRegistrationResult result)
             : Result(std::move(result))
@@ -204,10 +205,10 @@ class TDefaultNodeBrokerClient
             const TGrpcSslSettings& grpcSettings,
             const TString addr,
             const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
-            const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
+        NYdb::TDriverConfig config = CreateDriverConfig(
+            grpcSettings, addr, env, settings.DomainPath_, std::nullopt);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -216,11 +217,10 @@ class TDefaultNodeBrokerClient
         return result;
     }
 
-   static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeImpl(
+    static NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeImpl(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const NYdb::NDiscovery::TNodeRegistrationSettings& settings,
-        const TString& nodeRegistrationToken,
         const IEnv& env,
         IInitLogger& logger)
     {
@@ -231,7 +231,6 @@ class TDefaultNodeBrokerClient
                 result = TryToRegisterDynamicNode(grpcSettings,
                                                   addr,
                                                   settings,
-                                                  nodeRegistrationToken,
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
@@ -282,12 +281,11 @@ public:
     {
         auto newRegSettings = GetNodeRegistrationSettings(regSettings);
 
-       NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
-                                                                                  addrs,
-                                                                                  newRegSettings,
-                                                                                  regSettings.NodeRegistrationToken,
-                                                                                  env,
-                                                                                  logger);
+        NYdb::NDiscovery::TNodeRegistrationResult result = RegisterDynamicNodeImpl(grpcSettings,
+                                                                                   addrs,
+                                                                                   newRegSettings,
+                                                                                   env,
+                                                                                   logger);
 
         return std::make_shared<TResult>(std::move(result));
     }
@@ -421,7 +419,7 @@ class TDefaultDynConfigClient
                                                      settings.TenantName,
                                                      settings.NodeType,
                                                      settings.DomainName,
-                                                     settings.StaffApiUserToken,
+                                                     TString(),
                                                      true,
                                                      1);
 

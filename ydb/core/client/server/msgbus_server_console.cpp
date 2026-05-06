@@ -31,13 +31,14 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        const auto& token = request.GetSecurityToken();
-        if (!token.empty()) {
-            TBase::SetSecurityToken(token);
+        const auto& clientCertificates = msg.FindClientCert();
+        if (!clientCertificates.empty()) {
+            IsNodeAuthorizedByCertificate = true;
+            TBase::SetSecurityToken(TString(clientCertificates.front()));
         } else {
-            const auto& clientCertificates = msg.FindClientCert();
-            if (!clientCertificates.empty()) {
-                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            const auto& token = request.GetSecurityToken();
+            if (!token.empty()) {
+                TBase::SetSecurityToken(token);
             }
         }
         // Don`t require admin access for GetNodeConfigRequest
@@ -364,13 +365,17 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        return IsRegisterDynamicNodeAccessAllowed(
+            AppData(),
+            IsNodeAuthorizedByCertificate,
+            TBase::GetParsedToken().Get());
     }
 
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
     TActorId ConsolePipe;
+    bool IsNodeAuthorizedByCertificate = false;
 };
 
 } // namespace

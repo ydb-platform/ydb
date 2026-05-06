@@ -1486,7 +1486,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
 class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
     @classmethod
     def setup_class(cls):
-        cls.cluster = cls._start_cluster(KikimrConfigGenerator(
+        configurator = KikimrConfigGenerator(
             extra_feature_flags=[
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
@@ -1495,7 +1495,17 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
             domain_login_only=False,
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
-        ))
+            protected_mode=True,
+        )
+        # No token-based dyn node registration (mTLS slots only).
+        configurator.yaml_config.setdefault('auth_config', {})['enable_node_registration_by_token'] = False
+        # /Root +F for clusteradmins@cert (driver without user token).
+        configurator.yaml_config['domains_config']['security_config'].setdefault(
+            'default_access', []
+        ).append('+F:clusteradmins@cert')
+        configurator.full_config = configurator.yaml_config
+
+        cls.cluster = cls._start_cluster(configurator)
 
         cls.database = os.path.join(cls.root_dir, "db1")
 
@@ -1511,7 +1521,8 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
         cls.database_nodes = cls.cluster.register_and_start_slots(cls.database, count=3)
         cls.cluster.wait_tenant_up(cls.database, cls.cluster.config.default_clusteradmin)
 
-        cls.driver = cls._start_driver(cls.database, ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin))
+        # Driver: mTLS (clusteradmins@cert), no user token.
+        cls.driver = cls._start_driver(cls.database, credentials=None)
 
     @classmethod
     def teardown_class(cls):
@@ -1712,6 +1723,10 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
     def setup_class(cls):
         super().setup_class()
 
+        # Separate TLS dir for restore cluster (no cert clash with primary).
+        restore_tls_data_path = os.path.join(yatest.common.output_path(), "restore_cluster_tls")
+        os.makedirs(restore_tls_data_path, exist_ok=True)
+
         cfg = KikimrConfigGenerator(
             extra_feature_flags=[
                 "enable_strict_acl_check",
@@ -1722,34 +1737,35 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
             domain_login_only=False,
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
+            protected_mode=True,
+            grpc_tls_data_path=restore_tls_data_path,
         )
+        cfg.yaml_config.setdefault('auth_config', {})['enable_node_registration_by_token'] = False
+        cfg.yaml_config['domains_config']['security_config'].setdefault(
+            'default_access', []
+        ).append('+F:clusteradmins@cert')
+        cfg.full_config = cfg.yaml_config
 
         cls.restore_cluster = KiKiMR(
             cfg,
             cluster_name="restore_cluster"
         )
-
         cls.restore_cluster.start()
 
         cls.restore_root_dir = "/Root2"
         cls.restore_database = os.path.join(cls.restore_root_dir, "db1")
+        # Pre-register slots (restore CLI waits for DB nodes).
         cls.restore_database_nodes = cls.restore_cluster.register_and_start_slots(
-            cls.restore_database,
-            count=1
+            cls.restore_database, count=3
         )
 
-        restore_driver_config = ydb.DriverConfig(
-            database=cls.restore_database,
-            endpoint="%s:%s" % (
-                cls.restore_cluster.nodes[1].host,
-                cls.restore_cluster.nodes[1].port
-            ),
-            credentials=ydb.AuthTokenCredentials(cls.cluster.config.default_clusteradmin),
-        )
-        cls.restore_driver = ydb.Driver(restore_driver_config)
+        # Restore driver starts in tests after the restore DB exists.
+        cls.restore_driver = None
 
     @classmethod
     def teardown_class(cls):
+        if cls.restore_driver is not None:
+            cls.restore_driver.stop()
         cls.restore_cluster.unregister_and_stop_slots(cls.restore_database_nodes)
         cls.restore_cluster.stop()
         super().teardown_class()
@@ -1822,7 +1838,11 @@ class TestClusterBackupRestore(BaseTestMultipleClusterBackupInFiles):
         self.restore_cluster_backup()
 
         self.restore_cluster.wait_tenant_up(self.restore_database, self.cluster.config.default_clusteradmin)
-        self.restore_driver.wait(timeout=10)
+        type(self).restore_driver = self._start_driver(
+            self.restore_database,
+            credentials=None,
+            cluster=self.restore_cluster,
+        )
 
 
 class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
@@ -1924,7 +1944,11 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
         self.restore_cluster_backup(input="cluster_backup")
 
         self.restore_cluster.wait_tenant_up(self.restore_database, self.cluster.config.default_clusteradmin)
-        self.restore_driver.wait(timeout=10)
+        type(self).restore_driver = self._start_driver(
+            self.restore_database,
+            credentials=None,
+            cluster=self.restore_cluster,
+        )
 
         self.restore_database_backup(input="database_backup")
 

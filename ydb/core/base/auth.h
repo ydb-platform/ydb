@@ -5,6 +5,12 @@
 
 namespace NKikimr {
 
+// Dynamic node registration.
+bool IsRegisterDynamicNodeAccessAllowed(
+    const TAppData* appData,
+    bool authorizedByCertificate,
+    const NACLib::TUserToken* userToken);
+
 // Check token against given list of allowed sids
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs);
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs);

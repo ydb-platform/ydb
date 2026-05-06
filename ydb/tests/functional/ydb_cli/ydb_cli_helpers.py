@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.tls_tools import driver_tls_kwargs
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -42,11 +43,18 @@ class BaseCliTestWithDatabase:
     def _start_driver(cls, database: str, credentials=None, cluster: Optional[KiKiMR] = None):
         if cluster is None:
             cluster = cls.cluster
-        driver = ydb.Driver(ydb.DriverConfig(
+        driver_config_kwargs = dict(
             database=database,
             endpoint=f"{cluster.nodes[1].host}:{cluster.nodes[1].port}",
             credentials=credentials,
-        ))
+        )
+        # protected_mode: mTLS driver as clusteradmins@cert
+        if getattr(cluster.config, "protected_mode", False):
+            driver_config_kwargs.update(driver_tls_kwargs(cluster))
+            driver_config_kwargs["endpoint"] = (
+                f"grpcs://{cluster.nodes[1].host}:{cluster.nodes[1].grpc_ssl_port}"
+            )
+        driver = ydb.Driver(ydb.DriverConfig(**driver_config_kwargs))
         driver.wait(timeout=cls.startup_timeout)
         return driver
 

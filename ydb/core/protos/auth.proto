@@ -63,6 +63,7 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+    optional bool EnableNodeRegistrationByToken = 90 [default = true];
 }
 
 message TUserRegistryConfig {

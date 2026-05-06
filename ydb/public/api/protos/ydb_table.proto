@@ -348,6 +348,8 @@ message TableIndex {
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
+    // maximum level of parallelism for index build operation
+    optional uint32 parallel = 13;
 }
 
 // Represent table index with index state

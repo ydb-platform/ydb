@@ -677,11 +677,11 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
     }
 }
 
-void TBlackboard::BlobIsDone(const TLogoBlobID& id) {
+void TBlackboard::MoveBlobToDone(const TLogoBlobID& id) {
     const TLogoBlobID fullId = id.FullID();
     if (const auto it = BlobStates.find(fullId); it != BlobStates.end()) {
         auto result = DoneBlobStates.insert(BlobStates.extract(it));
-        Y_ABORT_UNLESS(result.inserted);
+        Y_DEBUG_ABORT_UNLESS(result.inserted);
     }
 }
 

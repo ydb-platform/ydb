@@ -388,6 +388,10 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         txc.DB.NoMoreReadsForTx();
 
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+            << ", userToken: " << Request->Get()->Record.GetUserToken()
+            << ", at schemeshard: " << selfId);
+
         auto [userToken, tokenParseError] = ParseUserToken(Request->Get()->Record.GetUserToken());
         if (tokenParseError) {
             Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId), "Failed to parse user token");
@@ -401,11 +405,18 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             UserSID = record.GetUserSID();
             SanitizedToken = record.GetSanitizedToken();
         }
+
         PeerName = record.GetPeerName();
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationPropose Execute"
+            << ", userSID: " << UserSID
+            << ", sanitizedToken: " << SanitizedToken
+            << ", peerName: " << PeerName
+            << ", at schemeshard: " << selfId);
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
+        context.UserSID = UserSID;
         context.PeerName = PeerName;
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.

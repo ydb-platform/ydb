@@ -18,6 +18,8 @@ bool BuildTopicCloudEventInfo(
     TOperationContext& context,
     NKikimrScheme::EStatus status,
     const TString& reason,
+    const TString& userSID,
+    const TString& peerName,
     NPQ::NCloudEvents::TCloudEventInfo& info)
 {
     const TString workingDir = operation.GetWorkingDir();
@@ -47,8 +49,8 @@ bool BuildTopicCloudEventInfo(
         info.DatabaseId = databaseId;
     }
 
-    info.RemoteAddress = context.PeerName;
-    info.UserSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
+    info.RemoteAddress = peerName ? peerName : context.PeerName;
+    info.UserSID = userSID ? userSID : context.UserToken ? context.UserToken->GetUserSID() : context.UserSID;
     info.Issue = reason;
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = operation;
@@ -69,7 +71,7 @@ void FinishWithError(
     result->SetError(status, errStr);
 
     NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, errStr, info)) {
+    if (!BuildTopicCloudEventInfo(operation, context, status, errStr, TString(), TString(), info)) {
         return;
     }
 
@@ -85,10 +87,12 @@ void ScheduleSendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
     TOperationContext& context,
     NKikimrScheme::EStatus status,
-    const TString& reason)
+    const TString& reason,
+    const TString& userSID,
+    const TString& peerName)
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, reason, info)) {
+    if (!BuildTopicCloudEventInfo(operation, context, status, reason, userSID, peerName, info)) {
         LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
             "Failed to build topic cloud event info for operation: "
                 << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
@@ -103,9 +107,15 @@ void ScheduleSendTopicCloudEvent(
         new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
 
-TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx)
+TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(
+    const TOperationId& id,
+    const TTxTransaction& tx,
+    const TString& userSID,
+    const TString& peerName)
     : TDone(id)
     , Transaction(tx)
+    , UserSID(userSID)
+    , PeerName(peerName)
 {
     auto events = AllIncomingEvents();
     events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
@@ -131,7 +141,9 @@ bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
         Transaction,
         context,
         NKikimrScheme::StatusSuccess,
-        TString());
+        TString(),
+        UserSID,
+        PeerName);
 
     return TDone::ProgressState(context);
 }

@@ -188,7 +188,9 @@ void FillRequestedPermission(
     auto* permission = permissions->Add();
     permission->set_permission("ydb.databases.alter");
     permission->set_resource_type("ydb.databases");
-    TString resourceId = info.DatabaseId.empty() ? info.TopicPath : info.DatabaseId + "/" + info.TopicPath;
+    TString resourceId = info.DatabaseId.empty() || info.TopicPath.StartsWith("/")
+        ? info.DatabaseId + info.TopicPath
+        : info.DatabaseId + "/" + info.TopicPath;
     permission->set_resource_id(resourceId);
     permission->set_authorized(true);
 }

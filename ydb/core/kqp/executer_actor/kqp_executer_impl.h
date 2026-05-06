@@ -265,6 +265,17 @@ protected:
                 for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
                     shardIds.insert(shardId);
                 }
+                {
+                    const double totalRows = stage.GetEstimatedRows();
+                    auto& shards = stageInfo.Meta.PrunedPartitions.back();
+                    stageInfo.Meta.EstimatedRowsPerTableOp.push_back(totalRows);
+                    if (totalRows > 0 && !shards.empty()) {
+                        const double perShard = totalRows / static_cast<double>(shards.size());
+                        for (auto& [shardId, shardInfo] : shards) {
+                            shardInfo.EstimatedRows = perShard;
+                        }
+                    }
+                }
 
                 if (isFullScan && !source.HasItemsLimit()) {
                     Counters->Counters->FullScansExecuted->Inc();
@@ -285,6 +296,17 @@ protected:
                     stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->Prune(op, stageInfo, isFullScan));
                     for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
                         shardIds.insert(shardId);
+                    }
+                    {
+                        const double totalRows = op.GetEstimatedRows();
+                        auto& shards = stageInfo.Meta.PrunedPartitions.back();
+                        stageInfo.Meta.EstimatedRowsPerTableOp.push_back(totalRows);
+                        if (totalRows > 0 && !shards.empty()) {
+                            const double perShard = totalRows / static_cast<double>(shards.size());
+                            for (auto& [shardId, shardInfo] : shards) {
+                                shardInfo.EstimatedRows = perShard;
+                            }
+                        }
                     }
 
                     // TODO: read settings once - and store the result somewhere to use in Tasks Graph later.

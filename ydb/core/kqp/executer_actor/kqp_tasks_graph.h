@@ -90,6 +90,8 @@ struct TStageInfoMeta {
 
     // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps.
     std::vector<TShardIdToInfoMap> PrunedPartitions;
+    // Estimated row counts per table op (indexed as PrunedPartitions), from query optimizer statistics.
+    std::vector<double> EstimatedRowsPerTableOp;
 
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;

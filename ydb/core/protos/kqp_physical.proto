@@ -232,6 +232,9 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }
+
+    // Estimated number of rows to read, from query optimizer statistics.
+    double EstimatedRows = 9;
 }
 
 message TKqpPhyCnUnionAll {
@@ -562,6 +565,8 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    // Estimated number of rows produced by this stage, from query optimizer statistics.
+    double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
 }

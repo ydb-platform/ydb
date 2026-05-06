@@ -1,7 +1,7 @@
 name: Automerge PR
 on:
   schedule:
-    - cron: "*/5 * * * *"   # At every 5th minute
+    - cron: "17 * * * *"   # At minute 17 past every hour
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}
@@ -11,6 +11,7 @@ env:
 jobs:
   check-pr:
     runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 70
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -36,5 +37,17 @@ jobs:
           REPO: ${{ github.repository }}
           TOKEN: ${{ env.GH_TOKEN }}
         run: |
+          set -euo pipefail
           cd ./ydb/ci/rightlib
-          ./automerge.py
+          loop_interval_seconds=300
+          loop_iterations=12
+
+          for ((iteration=1; iteration<=loop_iterations; iteration++)); do
+            echo "::group::automerge iteration ${iteration}/${loop_iterations}"
+            ./automerge.py
+            echo "::endgroup::"
+
+            if (( iteration < loop_iterations )); then
+              sleep "${loop_interval_seconds}"
+            fi
+          done

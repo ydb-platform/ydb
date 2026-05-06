@@ -102,7 +102,9 @@ SDK автоматически прокидывает заголовок W3C `tr
 
       db, err := ydb.Open(ctx,
           os.Getenv("YDB_CONNECTION_STRING"),
-          ydbOtel.WithTraces(),
+          ydbOtel.WithTraces(
+              ydbOtel.WithTracer(tp.Tracer("ydb-go-sdk")),
+          ),
       )
       if err != nil {
           panic(err)

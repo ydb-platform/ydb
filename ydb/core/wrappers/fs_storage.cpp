@@ -162,8 +162,20 @@ private:
     }
 
 public:
+    static TString ValidatePath(const TString& basePath) {
+        TFsPath path(basePath);
+        Y_ENSURE(path.Exists(), "BasePath must exist: " << basePath);
+
+        TString realPath = path.RealPath().GetPath();
+        Y_ENSURE(realPath == basePath, "BasePath must not contain symlinks"
+            << ": basePath# " << basePath
+            << ", realPath# " << realPath);
+
+        return realPath;
+    }
+
     TFsOperationActor(const TString& basePath)
-        : BasePath(basePath)
+        : BasePath(ValidatePath(basePath))
     {
     }
 
@@ -173,6 +185,7 @@ public:
 
     void Bootstrap() {
         FS_LOG_T("TFsOperationActor Bootstrap called");
+
         Become(&TThis::StateWork);
     }
 
@@ -398,6 +411,9 @@ public:
         Sort(children);
         for (const auto& name : children) {
             TFsPath child = dir / name;
+            if (child.IsSymlink()) {
+                continue;
+            }
             if (child.IsFile()) {
                 const TString& path = child.GetPath();
                 if (!marker.empty() && path <= marker) {
@@ -435,7 +451,18 @@ public:
         try {
             TFsPath dirPath(prefix);
 
-            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
+            if (!dirPath.Exists()) {
+                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix does not exist");
+                return;
+            }
+
+            if (!dirPath.IsDirectory()) {
+                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is not a directory");
+                return;
+            }
+
+            TFsPath realDirPath = dirPath.RealPath();
+            if (!realDirPath.IsNonStrictSubpathOf(BasePath)) {
                 ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
                 return;
             }

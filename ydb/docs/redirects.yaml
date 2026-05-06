@@ -364,7 +364,7 @@ common:
   - from: reference/ydb-sdk/recipes/bulk-upsert.md
     to: recipes/ydb-sdk/bulk-upsert.md
   - from: reference/ydb-sdk/recipes/debug-jaeger.md
-    to: recipes/ydb-sdk/debug-jaeger.md
+    to: recipes/ydb-sdk/debug-otel.md
   - from: reference/ydb-sdk/recipes/debug-logs.md
     to: recipes/ydb-sdk/debug-logs.md
   - from: reference/ydb-sdk/recipes/debug-prometheus.md

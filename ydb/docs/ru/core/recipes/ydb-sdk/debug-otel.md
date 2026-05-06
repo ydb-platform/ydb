@@ -1,12 +1,12 @@
 # Трассировка с OpenTelemetry
 
-{{ ydb-short-name }} SDK инструментируют каждую операцию с базой данных спанами [OpenTelemetry](https://opentelemetry.io/), обеспечивая сквозную распределённую трассировку от кода приложения до каждого gRPC-вызова к YDB. Сам сервер также умеет трассировать внутренние операции и связывать их с клиентскими спанами через контекст трассировки W3C — подробнее об этом в разделе [Передача внешнего trace-id в {{ ydb-short-name }}](../../reference/observability/tracing/external-traces.md). Спаны экспортируются по стандартному протоколу OTLP и совместимы с Jaeger, Grafana Tempo, Zipkin и любым другим бэкендом, поддерживающим OpenTelemetry.
+{{ ydb-short-name }} SDK инструментируют операции Query Service спанами [OpenTelemetry](https://opentelemetry.io/), обеспечивая распределённую трассировку от кода приложения до каждого gRPC-вызова к YDB. Спаны экспортируются по стандартному протоколу OTLP и совместимы с Jaeger, Grafana Tempo, Zipkin и любым другим бэкендом, поддерживающим OpenTelemetry.
 
 ## Создаваемые спаны {#spans}
 
 В настоящее время спаны поддерживаются для операций Query Service. Поддержка топиков и других сервисов планируется в будущих версиях SDK.
 
-Для каждой операции создаются следующие спаны:
+Создаются следующие спаны:
 
 | Спан | Тип | Описание |
 |---|---|---|
@@ -43,10 +43,11 @@ ydb.RunWithRetry  (Internal)
 | `ydb.node.id` / `ydb.node.dc` | Идентификатор и датацентр узла YDB |
 | `db.response.status_code` | Код статуса YDB, устанавливается при возникновении `YdbException` |
 | `error.type` | `"transport_error"`, `"ydb_error"` или полное имя класса исключения |
+| `ydb.retry.backoff_ms` | Время ожидания перед повторной попыткой (мс), устанавливается на спанах `ydb.Try` начиная со второй попытки |
 
 ## Контекст трассировки W3C {#w3c}
 
-Заголовок W3C `traceparent` автоматически добавляется в каждый исходящий gRPC-вызов. Это связывает серверные трассировки YDB с клиентскими спанами в вашем бэкенде без дополнительной настройки.
+SDK автоматически прокидывает заголовок W3C `traceparent` в каждый исходящий gRPC-вызов. Это позволяет серверу YDB трассировать внутренние операции в рамках той же трассы — без дополнительной настройки. Подробнее о серверной трассировке — в разделе [Передача внешнего trace-id в {{ ydb-short-name }}](../../reference/observability/tracing/external-traces.md).
 
 ## Подключение к SDK {#integration}
 
@@ -250,7 +251,7 @@ ydb.RunWithRetry  (Internal)
 
   // 1. Инициализируем провайдер трассировки OTel
   otlp::OtlpHttpExporterOptions opts;
-  opts.url = "http://localhost:4317/v1/traces";
+  opts.url = "http://localhost:4318/v1/traces";
   auto exporter  = otlp::OtlpHttpExporterFactory::Create(opts);
   auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
   auto res       = resource::Resource::Create({{"service.name", "my-service"}});

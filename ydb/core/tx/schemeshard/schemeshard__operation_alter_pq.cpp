@@ -77,11 +77,14 @@ class TAlterPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction, UserSID, PeerName);
         default:
             return nullptr;
         }
     }
+
+    TString UserSID;
+    TString PeerName;
 
 public:
     using TSubOperation::TSubOperation;
@@ -540,6 +543,8 @@ public:
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
+        UserSID = context.UserSID ? context.UserSID : context.UserToken ? context.UserToken->GetUserSID() : TString();
+        PeerName = context.PeerName;
 
         const auto& alter = Transaction.GetAlterPersQueueGroup();
 

@@ -279,7 +279,7 @@ class TCreatePQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction, UserSID, PeerName);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

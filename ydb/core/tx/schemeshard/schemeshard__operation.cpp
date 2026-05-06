@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
+#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -461,6 +462,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", at schemeshard: " << Self->TabletID());
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
+        SendTopicCloudEventIfNeeded(ctx);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.
@@ -472,6 +474,52 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         ctx.Send(sender, Response.Release(), 0, cookie);
 
         OnComplete.ApplyOnComplete(Self, ctx);
+    }
+
+    void SendTopicCloudEventIfNeeded(const TActorContext& ctx) {
+        switch (Response->Record.GetStatus()) {
+            case NKikimrScheme::StatusSuccess:
+            case NKikimrScheme::StatusAccepted:
+                break;
+            default:
+                return;
+        }
+
+        const auto sendTopicCloudEvent = [this, &ctx](const auto& transaction) {
+            switch (transaction.GetOperationType()) {
+                case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+                case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+                case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+                    break;
+                default:
+                    return;
+            }
+
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Sending topic cloud event for operation: "
+                    << NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType()));
+
+            SendTopicCloudEvent(
+                transaction,
+                Self,
+                ctx,
+                NKikimrScheme::StatusSuccess,
+                TString(),
+                UserSID,
+                PeerName);
+        };
+
+        const auto txId = TTxId(Request->Get()->Record.GetTxId());
+        if (Self->Operations.contains(txId)) {
+            for (const auto& part : Self->Operations.at(txId)->Parts) {
+                sendTopicCloudEvent(part->GetTransaction());
+            }
+            return;
+        }
+
+        for (const auto& transaction : Request->Get()->Record.GetTransaction()) {
+            sendTopicCloudEvent(transaction);
+        }
     }
 };
 
@@ -1488,7 +1536,12 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+<<<<<<< HEAD
 
+=======
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
+>>>>>>> 138fa72a7cc (LOGBROKER-10215 Better)
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return CancelBuildIndex(op.NextPartId(), tx, context);
 

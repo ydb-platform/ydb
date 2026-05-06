@@ -116,7 +116,7 @@ void CreateTierExternalDataSource(
     const TString& accessKeySecretName,
     const TString& secretKeySecretName,
     const bool replace,
-    const bool isSecretNewStyle) {
+    const bool isSchemaSecrets) {
     const TString query = fmt::format(R"(
         {create_stmt} EXTERNAL DATA SOURCE `{tier_path}` WITH (
             SOURCE_TYPE="ObjectStorage",
@@ -132,7 +132,7 @@ void CreateTierExternalDataSource(
         "location"_a = location,
         "access_key_secret"_a = accessKeySecretName,
         "secret_key_secret"_a = secretKeySecretName,
-        "secret_prop_name"_a = isSecretNewStyle ? "PATH" : "NAME"
+        "secret_prop_name"_a = isSchemaSecrets ? "PATH" : "NAME"
     );
 
     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             accessKeySecretName,
             secretKeySecretName,
             false /*replace*/,
-            true);
+            true /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             oldAccessKeyName,
             oldSecretKeyName,
             false /*replace*/,
-            false);
+            false /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             newAccessKeySecretName,
             newSecretKeySecretName,
             true /*replace*/,
-            true);
+            true /* isSchemaSecrets */);
 
         csController->WaitActualization(TDuration::Seconds(5));
 
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             invalidAccessKeyName,
             invalidSecretKeyName,
             false /*replace*/,
-            false);
+            false /* isSchemaSecrets */);
 
         {
             const TString query = fmt::format(R"(
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             validAccessKeySecretName,
             validSecretKeySecretName,
             true /*replace*/,
-            true);
+            true /* isSchemaSecrets */);
 
         csController->WaitActualization(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));

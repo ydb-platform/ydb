@@ -41,7 +41,7 @@ SELECT * FROM clickhouse_datasource.<table_name>
 - `clickhouse_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с кластерами ClickHouse существует ряд ограничений:
 

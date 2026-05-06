@@ -3,7 +3,7 @@
 namespace NKikimr::NStructuredLog {
 
 namespace {
-    thread_local std::vector<TStructuredMessage> BuildMessageStack;
+thread_local std::vector<TStructuredMessage> BuildMessageStack;
 }
 
 TStructuredMessage& TCreateMessageArg::PushBuildMessage() {
@@ -11,9 +11,7 @@ TStructuredMessage& TCreateMessageArg::PushBuildMessage() {
     return GetBuildMessage();
 }
 
-TStructuredMessage& TCreateMessageArg::GetBuildMessage() {
-    return BuildMessageStack.back();
-}
+TStructuredMessage& TCreateMessageArg::GetBuildMessage() { return BuildMessageStack.back(); }
 
 TStructuredMessage TCreateMessageArg::PopBuildMessage() {
     auto result = std::move(GetBuildMessage());
@@ -21,4 +19,4 @@ TStructuredMessage TCreateMessageArg::PopBuildMessage() {
     return result;
 }
 
-}
+}  // namespace NKikimr::NStructuredLog

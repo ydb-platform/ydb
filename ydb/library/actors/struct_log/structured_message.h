@@ -1,8 +1,8 @@
 #pragma once
 
 #include "key_name.h"
-#include "native_types_support.h"
 #include "native_types_mapping.h"
+#include "native_types_support.h"
 
 #include <algorithm>
 #include <initializer_list>
@@ -21,7 +21,6 @@ class TStructuredMessage {
     static const unsigned PreallocatedDataSize = 256;
 
 public:
-
     TStructuredMessage() {
         AttachedValues.reserve(PreallocatedValueCount);
         Data.reserve(PreallocatedDataSize);
@@ -33,7 +32,7 @@ public:
     TStructuredMessage& operator=(const TStructuredMessage&) = default;
     TStructuredMessage& operator=(TStructuredMessage&&) = default;
 
-    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
+    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
     inline TStructuredMessage& AppendValue(std::vector<TKeyName>&& name, const T& value) {
         auto typeCode = TTypesMapping::GetCode<T>();
 
@@ -47,8 +46,8 @@ public:
         return *this;
     }
 
-    template<unsigned N>
-    inline TStructuredMessage& AppendFixedValue(std::vector<TKeyName>&& name, const char(&value)[N]) {
+    template <unsigned N>
+    inline TStructuredMessage& AppendFixedValue(std::vector<TKeyName>&& name, const char (&value)[N]) {
         auto typeCode = TTypesMapping::GetCode<TString>();
 
         auto offset = Data.size();
@@ -63,9 +62,11 @@ public:
 
     inline TStructuredMessage& AppendMessage(const TStructuredMessage& message) {
         auto offset = Data.size();
-        for(auto& subItem: message.AttachedValues) {
+        for (auto& subItem : message.AttachedValues) {
             auto name = subItem.Name;
-            AttachedValues.emplace_back(std::move(name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
+            AttachedValues.emplace_back(
+                std::move(name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber
+            );
         }
 
         auto oldSize = Data.size();
@@ -80,11 +81,13 @@ public:
     inline TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage) {
         auto offset = Data.size();
 
-        for(auto subItem: subMessage.AttachedValues) {
+        for (auto subItem : subMessage.AttachedValues) {
             std::vector<TKeyName> addKey{name};
             std::copy(begin(subItem.Name), end(subItem.Name), std::back_inserter(addKey));
 
-            AttachedValues.emplace_back(std::move(addKey), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
+            AttachedValues.emplace_back(
+                std::move(addKey), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber
+            );
         }
 
         auto oldSize = Data.size();
@@ -113,11 +116,12 @@ public:
     std::optional<std::size_t> GetValueIndex(const std::vector<TKeyName>& name) const {
         CheckSorted();
 
-        auto it = std::upper_bound(begin(AttachedValues), end(AttachedValues), name,
-            [](const auto& name, const auto& b) -> bool
-            {
-                return b.Name > name;
-            } );
+        auto it = std::upper_bound(
+            begin(AttachedValues),
+            end(AttachedValues),
+            name,
+            [](const auto& name, const auto& b) -> bool { return b.Name > name; }
+        );
         if (it == begin(AttachedValues)) return {};
 
         it--;
@@ -126,29 +130,29 @@ public:
         return it - begin(AttachedValues);
     }
 
-    bool HasValue(const TString& name) const {
-        return GetValueIndex(name).has_value();
-    }
+    bool HasValue(const TString& name) const { return GetValueIndex(name).has_value(); }
 
-    template<typename T>
+    template <typename T>
     bool CheckValueType(std::size_t index) const {
         CheckSorted();
         return AttachedValues[index].TypeCode == TTypesMapping::GetCode<T>();
     }
 
-    template<typename T>
+    template <typename T>
     std::optional<T> GetValue(std::size_t index) const {
         CheckSorted();
 
         T result;
         auto& attachedValue = AttachedValues[index];
-        if (!TTypesMapping::Deserialize(result, attachedValue.TypeCode, Data.data() + attachedValue.Offset, attachedValue.Length)) {
+        if (!TTypesMapping::Deserialize(
+                result, attachedValue.TypeCode, Data.data() + attachedValue.Offset, attachedValue.Length
+            )) {
             return {};
         }
         return result;
     }
 
-    template<typename T>
+    template <typename T>
     std::optional<T> GetValue(const TString& name) const {
         auto index = GetValueIndex(name);
         if (!index.has_value()) {
@@ -170,7 +174,7 @@ public:
     }
 
     void RemoveValues(const std::initializer_list<TString>& names) {
-        for(auto name: names) {
+        for (auto name : names) {
             RemoveValue(name);
         }
     }
@@ -182,7 +186,7 @@ public:
         auto value = AttachedValues[index];
         AttachedValues.erase(begin(AttachedValues) + index);
 
-        auto pos = std::upper_bound( begin(AttachedValues), end(AttachedValues), value);
+        auto pos = std::upper_bound(begin(AttachedValues), end(AttachedValues), value);
         value.AddNumber = AddNumber++;
         AttachedValues.insert(pos, std::move(value));
         RemoveDups();
@@ -196,11 +200,11 @@ public:
         }
     }
 
-    template<typename C>
+    template <typename C>
     bool ForEachSerialized(const C& c) const {
         CheckSorted();
 
-        for(auto& item:AttachedValues) {
+        for (auto& item : AttachedValues) {
             if (!c(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length)) {
                 return false;
             }
@@ -208,14 +212,14 @@ public:
         return true;
     }
 
-    template<typename C>
+    template <typename C>
     void ForEachTyped(const C& c) const {
         CheckSorted();
 
-        for(auto& item:AttachedValues) {
-            TTypesMapping::Invoke(item.TypeCode, Data.data() + item.Offset, item.Length,
-                [&](const auto& value) {c(item.Name, value);}
-            );
+        for (auto& item : AttachedValues) {
+            TTypesMapping::Invoke(item.TypeCode, Data.data() + item.Offset, item.Length, [&](const auto& value) {
+                c(item.Name, value);
+            });
         }
     }
 
@@ -236,24 +240,25 @@ protected:
         TAttachedValue(const TAttachedValue&) = default;
         TAttachedValue(TAttachedValue&&) = default;
 
-        TAttachedValue(std::vector<TKeyName>&& name, TNativeTypeCode typeCode, std::size_t Offset, std::size_t Length, unsigned addNumber)
-            : Name(std::move(name))
-            , TypeCode(typeCode)
-            , Offset(Offset)
-            , Length(Length)
-            , AddNumber(addNumber)
-        {};
+        TAttachedValue(
+            std::vector<TKeyName>&& name,
+            TNativeTypeCode typeCode,
+            std::size_t Offset,
+            std::size_t Length,
+            unsigned addNumber
+        )
+            : Name(std::move(name)), TypeCode(typeCode), Offset(Offset), Length(Length), AddNumber(addNumber){};
 
         TAttachedValue& operator=(const TAttachedValue&) = default;
-        bool operator<(const TAttachedValue& value) const
-        {
+        bool operator<(const TAttachedValue& value) const {
             if (Name < value.Name) {
                 return true;
             }
             if (Name > value.Name) {
                 return false;
             }
-            return AddNumber > value.AddNumber; // Last added value will be first and std::unique will has retained this value
+            return AddNumber >
+                   value.AddNumber;  // Last added value will be first and std::unique will has retained this value
         }
     };
     mutable std::vector<TAttachedValue> AttachedValues;
@@ -264,7 +269,7 @@ protected:
 
     void CheckSorted() const {
         if (AttachedValuesSorted) {
-            return ;
+            return;
         }
 
         std::sort(begin(AttachedValues), end(AttachedValues));
@@ -273,13 +278,11 @@ protected:
     }
 
     void RemoveDups() const {
-        auto it = std::unique( begin(AttachedValues), end(AttachedValues),
-            [](const auto& a, const auto& b)->bool
-            {
-                return a.Name == b.Name;
-            });
+        auto it = std::unique(begin(AttachedValues), end(AttachedValues), [](const auto& a, const auto& b) -> bool {
+            return a.Name == b.Name;
+        });
         AttachedValues.erase(it, end(AttachedValues));
     }
 };
 
-}
+}  // namespace NKikimr::NStructuredLog

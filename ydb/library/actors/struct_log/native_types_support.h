@@ -17,11 +17,11 @@ namespace NKikimr::NStructuredLog {
 
 using TBinaryData = std::vector<std::uint8_t>;
 
-template<typename T>
-struct TNativeTypeSupport : public std::false_type{};
+template <typename T>
+struct TNativeTypeSupport : public std::false_type {};
 
-template<> struct TNativeTypeSupport<TString> : public std::true_type
-{
+template <>
+struct TNativeTypeSupport<TString> : public std::true_type {
     using TLength = std::size_t;
 
     static void Serialize(const TString& value, TBinaryData& data) {
@@ -38,11 +38,11 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
     }
 
     static bool Deserialize(TString& value, const void* data, std::size_t length) {
-        if (sizeof (TLength) > length) {
+        if (sizeof(TLength) > length) {
             return false;
         }
 
-        TLength stringLength =  *(reinterpret_cast<const TLength*>(data));
+        TLength stringLength = *(reinterpret_cast<const TLength*>(data));
         if (sizeof(TLength) + stringLength != length) {
             return false;
         }
@@ -52,13 +52,9 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
         return true;
     }
 
-    static TString ToString(const TString& value) {
-        return value;
-    }
+    static TString ToString(const TString& value) { return value; }
 
-    static void AppendToString(const TString& value, TStringBuilder& stringBuffer) {
-        stringBuffer.append(value);
-    }
+    static void AppendToString(const TString& value, TStringBuilder& stringBuffer) { stringBuffer.append(value); }
 };
 
-}
+}  // namespace NKikimr::NStructuredLog

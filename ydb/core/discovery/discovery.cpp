@@ -16,6 +16,17 @@
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
 
+#define LOG_T(service, stream) LOG_TRACE_S(*TlsActivationContext, service, stream)
+#define LOG_D(service, stream) LOG_DEBUG_S(*TlsActivationContext, service, stream)
+#define LOG_E(service, stream) LOG_ERROR_S(*TlsActivationContext, service, stream)
+
+#define CLOG_T(stream) LOG_T(NKikimrServices::DISCOVERY_CACHE, stream)
+#define CLOG_D(stream) LOG_D(NKikimrServices::DISCOVERY_CACHE, stream)
+
+#define DLOG_T(stream) LOG_T(NKikimrServices::DISCOVERY, stream)
+#define DLOG_D(stream) LOG_D(NKikimrServices::DISCOVERY, stream)
+#define DLOG_E(stream) LOG_E(NKikimrServices::DISCOVERY, stream)
+
 namespace NKikimr {
 
 namespace NDiscovery {
@@ -313,7 +324,7 @@ namespace NDiscoveryPrivate {
                 }
                 auto cookie = ++LastCookie;
                 BoardLookupStartTime[cookie] = TMonotonic::Now();
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Lookup"
+                CLOG_D("Lookup"
                     << ": path# " << database
                     << ", cookie# " << cookie);
                 Register(CreateBoardLookupActor(database, SelfId(), mode, {}, cookie));
@@ -333,7 +344,7 @@ namespace NDiscoveryPrivate {
         }
 
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle " << ev->Get()->ToString());
+            CLOG_T("Handle " << ev->Get()->ToString());
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 return;
             }
@@ -358,7 +369,7 @@ namespace NDiscoveryPrivate {
         }
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle " << ev->Get()->ToString());
+            CLOG_T("Handle " << ev->Get()->ToString());
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
 
@@ -425,7 +436,7 @@ namespace NDiscoveryPrivate {
         }
 
         void HandleOnInitialization(TEvPrivate::TEvRequest::TPtr& ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle on initialization " << ev->Get()->ToString());
+            CLOG_T("Handle on initialization " << ev->Get()->ToString());
 
             const auto* msg = ev->Get();
 
@@ -433,7 +444,7 @@ namespace NDiscoveryPrivate {
         }
 
         void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle on work " << ev->Get()->ToString());
+            CLOG_T("Handle on work " << ev->Get()->ToString());
 
             const auto* msg = ev->Get();
 
@@ -461,13 +472,13 @@ namespace NDiscoveryPrivate {
         }
 
         void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle on initialization " << ev->Get()->ToString());
+            CLOG_T("Handle on initialization " << ev->Get()->ToString());
             BridgeInfo = ev->Get()->BridgeInfo;
             TryFinishInitialization();
         }
 
         void HandleOnWork(TEvNodeWardenStorageConfig::TPtr& ev) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Handle on work " << ev->Get()->ToString());
+            CLOG_T("Handle on work " << ev->Get()->ToString());
             BridgeInfo = ev->Get()->BridgeInfo;
         }
 
@@ -501,7 +512,7 @@ namespace NDiscoveryPrivate {
                 return;
             }
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY_CACHE, "Finish initialization"
+            CLOG_D("Finish initialization"
                 << ": awaiting requests count# " << AwaitingRequests.size());
 
             Become(&TThis::StateWork);
@@ -587,11 +598,11 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Handle " << ev->ToString()
+        DLOG_T("Handle " << ev->ToString()
             << ": cookie# " << ev->Cookie);
 
         if (ev->Cookie != LookupCookie) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Stale lookup response"
+            DLOG_D("Stale lookup response"
                 << ": got# " << ev->Cookie
                 << ", expected# " << LookupCookie);
             return;
@@ -610,7 +621,7 @@ public:
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Handle " << SchemeCacheResponse->ToString()
+        DLOG_T("Handle " << SchemeCacheResponse->ToString()
             << ": entry# " << entry.ToString());
 
         if (response->ErrorCount > 0) {
@@ -620,7 +631,7 @@ public:
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::DATABASE_NOT_EXIST,
                     "Requested database does not exist"));
             default:
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Unexpected status"
+                DLOG_D("Unexpected status"
                     << ": entry# " << entry.ToString());
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                     "Database resolve failed with no certain result"));
@@ -628,7 +639,7 @@ public:
         }
 
         if (!entry.DomainInfo) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Empty domain info"
+            DLOG_D("Empty domain info"
                 << ": entry# " << entry.ToString());
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database resolve failed with no certain result"));
@@ -646,14 +657,14 @@ public:
                     ->GetSubgroup("path", path)
                     ->GetCounter("pathIsNotDatabase", true)->Inc();
 
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Path is not database"
+                DLOG_E("Path is not database"
                     << ": database# " << path);
             }
         }
 
         auto info = entry.DomainInfo;
         if (NeedResolveResources(info)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Resolve resources domain"
+            DLOG_D("Resolve resources domain"
                 << ": domain key# " << info->DomainKey
                 << ", resources domain key# " << info->ResourcesDomainKey);
 
@@ -698,7 +709,7 @@ public:
                 || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
 
             if (!isDomain && !isSubDomain) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Path is not database"
+                DLOG_D("Path is not database"
                     << ": entry# " << entry.ToString());
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::ACCESS_DENIED,
                     "Requested path is not database name"));
@@ -706,7 +717,7 @@ public:
         }
 
         if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Lookup error"
+            DLOG_D("Lookup error"
                 << ": status# " << ui64(LookupResponse->Status));
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database nodes resolve failed with no certain result"));
@@ -716,7 +727,7 @@ public:
     }
 
     void Lookup(const TString& db) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Lookup"
+        DLOG_T("Lookup"
             << ": path# " << db);
 
         const auto path = NKikimr::SplitPath(db);
@@ -755,7 +766,7 @@ public:
 
     template <typename T>
     void Navigate(const T& id) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DISCOVERY, "Navigate"
+        DLOG_T("Navigate"
             << ": path# " << id);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();

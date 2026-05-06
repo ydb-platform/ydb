@@ -22,15 +22,16 @@ public:
         OutputText = &outputText;
         FirstValue = true;
 
-        auto processValue = [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
+        auto processValue =
+            [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
+                auto it = TypeValueWriterMap.find(typeCode);
+                if (it != end(TypeValueWriterMap)) {
+                    ValueWriter.KeyName = &name;
+                    return it->second(data, length);
+                } else {
+                    return false;
+                }
+            };
         if (!message.ForEachSerialized(processValue)) {
             return false;
         };
@@ -60,7 +61,7 @@ protected:
 
             bool first = true;
 
-            for(auto& keyItem: *KeyName) {
+            for (auto& keyItem : *KeyName) {
                 if (first) {
                     first = false;
                 } else {
@@ -76,5 +77,4 @@ protected:
     TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
 };
 
-
-}
+}  // namespace NKikimr::NStructuredLog

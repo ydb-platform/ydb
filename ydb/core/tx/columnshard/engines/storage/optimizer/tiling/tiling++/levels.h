@@ -1,26 +1,29 @@
 #pragma once
 
-#include <util/generic/function_ref.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
+
 #include <ydb/library/intersection_tree/intersection_tree.h>
+
+#include <util/generic/function_ref.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 template <std::totally_ordered TKey, typename TPortion>
-struct LastLevel : ICompactionUnit<TKey, TPortion> {
+struct LastLevel: ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TLastLevelSettings Settings;
 
     LastLevel(TLastLevelSettings settings, const TCounters& counters)
         : TBase(counters.GetLastLevelCounters())
-        , Settings(settings) {
+        , Settings(settings)
+    {
     }
 
     struct TPortionByIndexKeyEndComparator {
-        using is_transparent = void; // Enable heterogeneous lookup
+        using is_transparent = void;   // Enable heterogeneous lookup
 
         bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
             return left->IndexKeyEnd() < right->IndexKeyEnd();
@@ -96,7 +99,7 @@ struct LastLevel : ICompactionUnit<TKey, TPortion> {
                 }
             }
             if (success) {
-                return {CompactionTask<TKey, TPortion>{result, 1}};
+                return { CompactionTask<TKey, TPortion>{ result, 1 } };
             }
         }
         AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
@@ -129,14 +132,15 @@ struct LastLevel : ICompactionUnit<TKey, TPortion> {
 };
 
 template <std::totally_ordered TKey, typename TPortion>
-struct Accumulator : ICompactionUnit<TKey, TPortion> {
+struct Accumulator: ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TAccumulatorSettings Settings;
 
     Accumulator(TAccumulatorSettings settings, const TCounters& counters)
         : TBase(counters.GetAccumulatorCounters(0))
-        , Settings(settings) {
+        , Settings(settings)
+    {
     }
 
     void DoActualize() override {
@@ -170,7 +174,7 @@ struct Accumulator : ICompactionUnit<TKey, TPortion> {
             currentBlobBytes += it->GetTotalBlobBytes();
             if (currentBlobBytes > Settings.Compaction.Bytes || result.Portions.size() > Settings.Compaction.Portions) {
                 result.TargetLevel = 0;
-                return {result};
+                return { result };
             }
         }
         AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
@@ -200,7 +204,7 @@ struct Accumulator : ICompactionUnit<TKey, TPortion> {
 };
 
 template <std::totally_ordered TKey, typename TPortion>
-struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
+struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TMiddleLevelSettings Settings;
@@ -209,7 +213,8 @@ struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
     MiddleLevel(TMiddleLevelSettings settings, ui32 levelIdx, const TCounters& counters)
         : TBase(counters.GetLevelCounters(levelIdx))
         , Settings(settings)
-        , LevelIdx(levelIdx) {
+        , LevelIdx(levelIdx)
+    {
     }
 
     TIntersectionTree<TKey, ui64> Intersections;
@@ -275,7 +280,7 @@ struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
             return {};
         }
         result.TargetLevel = LevelIdx;
-        return {result};
+        return { result };
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -284,4 +289,4 @@ struct MiddleLevel : ICompactionUnit<TKey, TPortion> {
     }
 };
 
-} // NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

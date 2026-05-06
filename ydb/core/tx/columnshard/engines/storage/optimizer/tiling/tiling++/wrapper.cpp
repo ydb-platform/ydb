@@ -1,3 +1,4 @@
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
@@ -8,15 +9,12 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling.h>
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-
-#include <util/generic/hash_set.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -164,8 +162,7 @@ struct TPlannerSettings {
                 }
                 TilingSettings.AgingSettings.MaxPortionPromotion = value.GetUInteger();
             } else {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                    "event", "tiling_core_unknown_setting_ignored")("setting", name);
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling_core_unknown_setting_ignored")("setting", name);
             }
         }
         return TConclusionStatus::Success();
@@ -211,7 +208,7 @@ protected:
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
         result->SetTargetCompactionLevel(task.TargetLevel);
         result->SetPortionExpectedSize(PortionExpectedSize);
-        return {result};
+        return { result };
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -235,23 +232,21 @@ protected:
     }
 
 public:
-    TOptimizerPlannerAdapter(
-        const TInternalPathId pathId,
-        const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
-        const TPlannerSettings& settings)
+    TOptimizerPlannerAdapter(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TPlannerSettings& settings)
         : TBase(pathId, std::nullopt)
         , Counters()
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
-        , PortionExpectedSize(settings.PortionExpectedSize) {
+        , PortionExpectedSize(settings.PortionExpectedSize)
+    {
         AFL_VERIFY(StoragesManager);
         Y_UNUSED(PrimaryKeysSchema);
     }
 };
 
-} // namespace
+}   // namespace
 
 class TTilingOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 private:
@@ -264,12 +259,14 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")("proto", proto.DebugString());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
+                "proto", proto.DebugString());
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")("description", status.GetErrorDescription());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
+                "description", status.GetErrorDescription());
             return false;
         }
         return true;
@@ -299,10 +296,9 @@ private:
         TFactory::TRegistrator<TTilingOptimizerPlannerConstructor>(GetClassNameStatic());
 
 public:
-
     TString GetClassName() const override {
         return GetClassNameStatic();
     }
 };
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

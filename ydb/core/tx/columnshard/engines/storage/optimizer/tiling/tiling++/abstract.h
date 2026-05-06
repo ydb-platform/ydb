@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+
 #include <util/generic/function_ref.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
@@ -19,13 +20,15 @@ struct ICompactionUnit {
     const TLevelCounters& Counters;
 
     ICompactionUnit(const TLevelCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
     }
 
     virtual void AddPortion(typename TPortion::TConstPtr p) {
         Counters.Portions->AddPortion(p);
         DoAddPortion(p);
     }
+
     virtual void RemovePortion(typename TPortion::TConstPtr p) {
         Counters.Portions->RemovePortion(p);
         DoRemovePortion(p);
@@ -44,4 +47,4 @@ protected:
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;
 };
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -1,17 +1,17 @@
 #pragma once
 
-#include <algorithm>
-
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/settings.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+
+#include <algorithm>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 template <std::totally_ordered TKey, typename TPortion>
-struct Tiling : ICompactionUnit<TKey, TPortion> {
+struct Tiling: ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
 
@@ -24,7 +24,8 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
         : TBase(counters.GetTilingCounters())
         , Settings(std::move(settings))
         , Accumulator(Settings.AccumulatorSettings, counters)
-        , LastLevel(Settings.LastLevelSettings, counters) {
+        , LastLevel(Settings.LastLevelSettings, counters)
+    {
         for (ui64 i = 2; i < Settings.MiddleLevelCount; ++i) {
             MiddleLevels.emplace(i, MiddleLevel<TKey, TPortion>(Settings.MiddleLevelSettings, i, counters));
         }
@@ -37,11 +38,13 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
 
     TIntersectionTree<TKey, ui64> Intersections;
     THashMap<ui64, typename TPortion::TPtr> PortionById;
+
     /// DEBUG routing snapshot: must match physical home (Accumulator / LastLevel / MiddleLevel) for counter Add/Sub.
     struct TPortionPlacementForDebug {
         ui8 Level = 0;
         ui64 Width = 0;
     };
+
     THashMap<ui64, TPortionPlacementForDebug> InternalLevelForDebug;
     THashMap<ui64, typename TPortion::TConstPtr> PortionRegistry;
     THashMap<ui64, TInstant> InsertTimeByPortionId;
@@ -75,13 +78,9 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
         const ui64 portionId = p->GetPortionId();
         const auto existingIt = InternalLevelForDebug.find(portionId);
         if (existingIt != InternalLevelForDebug.end()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
-                "event", "tiling++_portion_already_exists")(
-                "portion_id", portionId)(
-                "existing_level", (ui32)existingIt->second.Level)(
-                "existing_width", existingIt->second.Width)(
-                "blob_bytes", p->GetTotalBlobBytes())(
-                "action", "removing_before_readd");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_portion_already_exists")("portion_id", portionId)(
+                "existing_level", (ui32)existingIt->second.Level)("existing_width", existingIt->second.Width)(
+                "blob_bytes", p->GetTotalBlobBytes())("action", "removing_before_readd");
             DoRemovePortion(p);
         }
 
@@ -119,20 +118,20 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
 
         if (level == 0) {
             Accumulator.AddPortion(p);
-            InternalLevelForDebug[portionId] = {.Level = 0, .Width = 0};
+            InternalLevelForDebug[portionId] = { .Level = 0, .Width = 0 };
         } else if (level == 1) {
             LastLevel.AddPortion(p);
-            InternalLevelForDebug[portionId] = {.Level = 1, .Width = measure};
+            InternalLevelForDebug[portionId] = { .Level = 1, .Width = measure };
         } else {
             MiddleLevels.at(level).RegisterRoutingWidth(portionId, measure);
             MiddleLevels.at(level).AddPortion(p);
-            InternalLevelForDebug[portionId] = {.Level = level, .Width = measure};
+            InternalLevelForDebug[portionId] = { .Level = level, .Width = measure };
         }
 
         if (level != 1 && Settings.AgingSettings.Enabled) {
             const TInstant now = TInstant::Now();
             InsertTimeByPortionId[portionId] = now;
-            PortionsByTime.insert({now, portionId});
+            PortionsByTime.insert({ now, portionId });
         }
     }
 
@@ -173,7 +172,7 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
 
         auto tit = InsertTimeByPortionId.find(portionId);
         if (tit != InsertTimeByPortionId.end()) {
-            PortionsByTime.erase({tit->second, portionId});
+            PortionsByTime.erase({ tit->second, portionId });
             InsertTimeByPortionId.erase(tit);
         }
         PortionRegistry.erase(portionId);
@@ -191,8 +190,7 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
 
         std::vector<typename TPortion::TConstPtr> expired;
         expired.reserve(std::min<size_t>(maxCount, PortionsByTime.size()));
-        for (auto it = PortionsByTime.begin();
-             expired.size() < maxCount && it != PortionsByTime.end() && it->first + wait <= currentInstant;
+        for (auto it = PortionsByTime.begin(); expired.size() < maxCount && it != PortionsByTime.end() && it->first + wait <= currentInstant;
              ++it) {
             auto pit = PortionRegistry.find(it->second);
             if (pit != PortionRegistry.end()) {
@@ -261,8 +259,8 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
                 maxMiddleLevelKey = level;
             }
         }
-        return {middleLevelsPriority, maxMiddleLevelKey};
+        return { middleLevelsPriority, maxMiddleLevelKey };
     }
 };
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

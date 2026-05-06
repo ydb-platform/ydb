@@ -16,7 +16,7 @@ struct TLastLevelSettings {
         ui64 Bytes;
     };
 
-    TLimit Compaction{1'000, 64ULL * 1024 * 1024};
+    TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
     ui64 CandidatePortionsOverload = 10;
 };
 
@@ -26,9 +26,9 @@ struct TAccumulatorSettings {
         ui64 Bytes;
     };
 
-    TLimit Compaction{1'000, 64ULL * 1024 * 1024};
-    TLimit Trigger{1'000, 2ULL * 1024 * 1024};
-    TLimit Overload{10'000, 256ULL * 1024 * 1024};
+    TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
+    TLimit Trigger{ 1'000, 2ULL * 1024 * 1024 };
+    TLimit Overload{ 10'000, 256ULL * 1024 * 1024 };
 };
 
 struct TMiddleLevelSettings {
@@ -47,4 +47,4 @@ struct TTilingSettings {
     ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
 };
 
-} // namespace NKikimr::NOlap::NStorageOptimizer::NTiling
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

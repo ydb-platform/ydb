@@ -57,7 +57,7 @@ void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
         {
             if (auto self = std::static_pointer_cast<
                     TWriteWithDirectReplicationRequestExecutor>(
-                    weakSelf.lock()))
+                    weakSelf.lock()))   // TODO shared?
             {
                 self->SendWriteRequestsToHandoffPBuffers();
             }

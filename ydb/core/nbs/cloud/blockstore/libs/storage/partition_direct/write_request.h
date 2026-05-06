@@ -52,21 +52,16 @@ public:
 protected:
     void Reply(NProto::TError error);
 
-    using SendWriteRequestCallback = std::function<void(
-        ELocation location,
-        const TDBGWriteBlocksResponse& response,
-        std::shared_ptr<NWilson::TSpan> span)>;
-    void SendWriteRequest(
-        ELocation location,
-        SendWriteRequestCallback customCallback = nullptr);
+    void SendWriteRequest(ELocation location);
 
-    void OnWriteResponse(
+    virtual void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void ScheduleRequestTimeoutCallback();
     void RequestTimeoutCallback();
+    [[nodiscard]] bool ShouldReplyOk() const;
 
     TVector<ELocation> GetAvailableHandOffLocations() const;
 
@@ -87,8 +82,6 @@ protected:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
-
-    ui32 ResponsesOfHandOffs = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

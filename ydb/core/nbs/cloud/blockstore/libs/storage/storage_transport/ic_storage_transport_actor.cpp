@@ -53,6 +53,7 @@ void TICStorageTransportActor::HandleConnect(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
         ConnectRequests.emplace(requestId, ev->Release().Release());
@@ -106,6 +107,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
         WriteToPBufferRequests.emplace(requestId, ev->Release().Release());
@@ -196,6 +198,15 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     const TActorContext& ctx)
 {
     auto* msg = ev->Get();
+
+    ThreadIds.insert(std::this_thread::get_id());
+    if (ThreadIds.size() > 1) {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "maks_ololo ThreadIds.size() == %d",
+            ThreadIds.size());
+    }
 
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
@@ -299,6 +310,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
         WriteToDDiskRequests.emplace(requestId, ev->Release().Release());
@@ -387,6 +399,7 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
         EraseFromPBufferRequests.emplace(requestId, ev->Release().Release());
@@ -446,6 +459,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] =
@@ -526,6 +540,7 @@ void TICStorageTransportActor::HandleRead(
     const TActorContext& ctx)
 {
     auto* msg = ev->Get();
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] =
@@ -604,6 +619,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
 
     auto [it, inserted] =
@@ -673,6 +689,7 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    ThreadIds.insert(std::this_thread::get_id());
     const ui64 requestId = ++RequestIdGenerator;
 
     ListPBufferEntriesRequests.emplace(requestId, ev->Release().Release());

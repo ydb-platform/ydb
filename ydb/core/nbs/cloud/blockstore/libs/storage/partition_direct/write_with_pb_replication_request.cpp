@@ -3,11 +3,45 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+namespace {
+
+void EraseLocation(TSet<ELocation>& allLocations, ELocation deletingLocation)
+{
+    auto it = allLocations.find(deletingLocation);
+    Y_ASSERT(it != allLocations.end());
+    allLocations.erase(it);
+}
+
+TVector<ELocation> TakeNLocations(TSet<ELocation>& locations, ui32 n)
+{
+    Y_ASSERT(n > 0);
+    Y_ASSERT(locations.size() >= n);
+    const TVector<ELocation> mainCandidates = {ELocation::HOPBuffer0, ELocation::HOPBuffer1};
+    TVector<ELocation> res;
+    res.reserve(n);
+
+    for (size_t i = 0; i < mainCandidates.size() && res.size() < n; ++i) {
+        auto it = locations.find(mainCandidates[i]);
+        if (it != locations.end()) {
+            res.push_back(*it);
+            locations.erase(it);
+        }
+    }
+    while (res.size() < n) {
+        res.push_back(*locations.begin());
+        locations.erase(locations.begin());
+    }
+    return res;
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,52 +69,25 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
           hedgingDelay,
           timeout)
     , PbufferReplyTimeout(pbufferReplyTimeout)
-{}
+{
+    AvailableLocationsForDirectSending = {
+        ELocation::PBuffer0,
+        ELocation::PBuffer1,
+        ELocation::PBuffer2,
+        ELocation::HOPBuffer0,
+        ELocation::HOPBuffer1};
+}
 
 void TWriteWithPbReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    ++PlannedRequests;
     SendWriteRequestToManyPBuffers(
         {ELocation::PBuffer0, ELocation::PBuffer1, ELocation::PBuffer2});
 }
 
-void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
-{
-    if (!HedgingDelay) {
-        return;
-    }
-
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers: schedule hedge %s, %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
-
-    ++PlannedRequests;
-    DirectBlockGroup->Schedule(
-        HedgingDelay,
-        [weakSelf = weak_from_this()]()
-        {
-            if (auto self = std::static_pointer_cast<
-                    TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
-            {
-                if (!self->CompletedWrites.Count()) {
-                    self->SendWriteRequestToManyPBuffers(
-                        {ELocation::PBuffer2,
-                         ELocation::HOPBuffer0,
-                         ELocation::HOPBuffer1},
-                        true);
-                }
-            }
-        });
-}
-
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
-    TVector<ELocation> locations,
-    bool isHedge)
+    TVector<ELocation> locations)
 {
     if (Promise.IsReady()) {
         return;
@@ -88,16 +95,17 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
 
     TVector<ui8> hostsIndexes;
     hostsIndexes.reserve(3);
+
+    EraseLocation(AvailableLocationsForDirectSending, locations[0]);
     for (auto location: locations) {
         hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
+        RequestedWrites.Set(location);
     }
-    RequestedWrites.Set(locations[0]);
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "SendWriteRequestToManyPBuffers: isHedge:[%d], %s, %s",
-        isHedge,
+        "SendWriteRequestToManyPBuffers, %s, %s",
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
@@ -121,14 +129,15 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    ++FinishedRequests;
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse: overall err: %s, %s, %s",
+        "OnWriteToManyPBuffersResponse: overall err: %s, %s, %s, num responses "
+        "inside: %d",
         FormatError(response.OverallError).c_str(),
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+        Request->Headers.Range.Print().c_str(),
+        response.Responses.size());
 
     if (HasError(response.OverallError)) {
         LOG_ERROR(
@@ -164,36 +173,33 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
                     Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
                     Request->Headers.Range.Print().c_str());
             }
+            EraseLocation(AvailableLocationsForDirectSending, location);
         }
     }
 
-    if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse response with no single retries %s %s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
+    if (ShouldReplyOk()) {
         Reply(MakeError(S_OK));
         return;
     }
 
-    //-----
+    TryToSendDirectWrites();
+}
+
+void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites()
+{
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "OnWriteToManyPBuffersResponse trying to send fallback writeRequest: "
+        "OnWriteToManyPBuffersResponse considering to send fallback "
+        "writeRequest: "
         "%s, %s",
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
-    bool allWriteWithPbReplicationRespondsReceived =
-        FinishedRequests == PlannedRequests;
     bool haveEnoughHandOffs =
-        CompletedWrites.Count() + availableHandOffLocations.size() >=
+        CompletedWrites.Count() + AvailableLocationsForDirectSending.size() >=
         QuorumDirectBlockGroupHostCount;
-    if (allWriteWithPbReplicationRespondsReceived && !haveEnoughHandOffs) {
+    if (!haveEnoughHandOffs) {
         auto resultError =
             MakeError(E_FAIL, "Hand-offs retries are not available");
         LOG_ERROR(
@@ -208,23 +214,67 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
-    //--
-
-    // Sending request to handoff in case of 1-2 errors
-    for (size_t i = 0;
-         i < QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
-         ++i)
-    {
+    Y_ASSERT(QuorumDirectBlockGroupHostCount > CompletedWrites.Count());
+    ui32 neededRequestsNumber =
+        QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
+    Y_ASSERT(neededRequestsNumber <= AvailableLocationsForDirectSending.size());
+    for (auto location: TakeNLocations(AvailableLocationsForDirectSending, neededRequestsNumber)) {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "trying to send fallback writeRequest to %d handoff location %s %s",
-            availableHandOffLocations[i],
+            location,
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
-        SendWriteRequest(availableHandOffLocations[i]);
+        SendWriteRequest(location);
     }
+}
+
+void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
+    ELocation location,
+    const TDBGWriteBlocksResponse& response,
+    std::shared_ptr<NWilson::TSpan> span)
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    if (!HasError(response.Error)) {
+        CompletedWrites.Set(location);
+        if (ShouldReplyOk()) {
+            Reply(MakeError(S_OK));
+        }
+        return;
+    }
+    auto ender = TEndSpanWithError(std::move(span), response.Error);
+
+    TryToSendDirectWrites();
+}
+
+void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
+{
+    if (!HedgingDelay) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "SendWriteRequestToManyPBuffers: schedule hedge %s, %s",
+        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+        Request->Headers.Range.Print().c_str());
+
+    DirectBlockGroup->Schedule(
+        HedgingDelay,
+        [self =
+             std::static_pointer_cast<TWriteWithPbReplicationRequestExecutor>(
+                 shared_from_this())]()
+        {
+            if (!self->Promise.IsReady()) {
+                self->TryToSendDirectWrites();
+            }
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

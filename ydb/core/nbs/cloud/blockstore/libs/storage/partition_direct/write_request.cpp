@@ -57,12 +57,22 @@ TBaseWriteRequestExecutor::GetFuture() const
 
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TBaseWriteRequestExecutor::Reply %s, %s",
-        Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-        Request->Headers.Range.Print().c_str());
+    if (HasError(error)) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TBaseWriteRequestExecutor::Reply error: %s %s, %s",
+            FormatError(error).c_str(),
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str());
+    } else {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TBaseWriteRequestExecutor::Reply %s, %s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str());
+    }
 
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
@@ -71,9 +81,7 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .CompletedWrites = CompletedWrites});
 }
 
-void TBaseWriteRequestExecutor::SendWriteRequest(
-    ELocation location,
-    SendWriteRequestCallback customCallback)
+void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
     if (Promise.IsReady()) {
         return;
@@ -96,15 +104,8 @@ void TBaseWriteRequestExecutor::SendWriteRequest(
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
-        [self = shared_from_this(),
-         location,
-         span = std::move(span),
-         callback = std::move(customCallback)]                              //
+        [self = shared_from_this(), location, span = std::move(span)]       //
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
-            if (callback) {
-                callback(location, f.GetValue(), std::move(span));
-                return;
-            }
             self->OnWriteResponse(location, f.GetValue(), std::move(span));
         });
 }
@@ -118,14 +119,9 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
         return;
     }
 
-    if (location == ELocation::HOPBuffer0 || location == ELocation::HOPBuffer1)
-    {
-        ++ResponsesOfHandOffs;
-    }
-
     if (!HasError(response.Error)) {
         CompletedWrites.Set(location);
-        if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
+        if (ShouldReplyOk()) {
             Reply(MakeError(S_OK));
         }
         return;
@@ -139,9 +135,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer0);
-        return;
-    }
-    if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
+    } else if (!RequestedWrites.Get(ELocation::HOPBuffer1)) {
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -149,23 +143,17 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer1);
-        return;
+    } else {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TBaseWriteRequestExecutor. All hand-offs attempts are over. %s",
+            FormatError(response.Error).c_str());
+
+        Reply(response.Error);
+
+        auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
-
-    bool stillWaitingAnotherResponse = ResponsesOfHandOffs != 2;
-    if (stillWaitingAnotherResponse) {
-        return;
-    }
-
-    LOG_ERROR(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TBaseWriteRequestExecutor. All hand-offs attempts are over. %s",
-        FormatError(response.Error).c_str());
-
-    Reply(response.Error);
-
-    auto ender = TEndSpanWithError(std::move(span), response.Error);
 }
 
 void TBaseWriteRequestExecutor::ScheduleRequestTimeoutCallback()
@@ -194,6 +182,11 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
         Request->Headers.Range.Print().c_str());
 
     Reply(MakeError(E_TIMEOUT, "Write request timeout"));
+}
+
+bool TBaseWriteRequestExecutor::ShouldReplyOk() const
+{
+    return CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount;
 }
 
 TVector<ELocation>

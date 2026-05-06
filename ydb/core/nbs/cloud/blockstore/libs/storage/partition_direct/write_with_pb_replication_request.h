@@ -27,13 +27,21 @@ public:
     void Run() override;
 
 private:
-    const TDuration PbufferReplyTimeout;
-    ui32 PlannedRequests = 0;
-    ui32 FinishedRequests = 0;
+    // набор локаций, в которые не было прямых походов + из которых не было
+    // явных ответов
+    TSet<ELocation> AvailableLocationsForDirectSending;
 
-    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations, bool isHedge = false);
+
+    const TDuration PbufferReplyTimeout;
+
+    void SendWriteRequestToManyPBuffers(TVector<ELocation> locations);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
+    void TryToSendDirectWrites();
+    void OnWriteResponse(
+        ELocation location,
+        const TDBGWriteBlocksResponse& response,
+        std::shared_ptr<NWilson::TSpan> span) override;
 
     void ScheduleHedging() override;
 };

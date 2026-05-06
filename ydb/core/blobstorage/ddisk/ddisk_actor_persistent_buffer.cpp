@@ -384,7 +384,7 @@ namespace NKikimr::NDDisk {
     std::vector<ui64> CalculateChecksums(TRope& payload, ui32 sectorSize) {
         std::vector<ui64> res;
         for (ui32 i = 0; i < payload.size() / sectorSize; ++i) {
-            auto it = payload.Position(sectorSize * (i - 1));
+            auto it = payload.Position(sectorSize * i);
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                 *it.ContiguousDataMut() = 0;
             }

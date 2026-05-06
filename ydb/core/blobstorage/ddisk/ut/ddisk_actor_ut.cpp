@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResult, TReplyStatus::OK);
 
-        write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds1, selector, lsn, NDDisk::TWriteInstruction(0));
+        write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds1, selector, lsn + 1, NDDisk::TWriteInstruction(0));
         write->AddPayload(TRope(payload));
         SendToDDisk(ctx, disk.PBServiceId, write.release());
 
@@ -1367,36 +1367,36 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const ui32 size = BlockSize * 100;
         TString payload = NUnitTest::RandomString(size);
         const NDDisk::TBlockSelector selector{3, 0, size};
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+
+        write->AddPayload(TRope(payload));
+        SendToDDisk(ctx, disk.PBServiceId, write.release());
+        auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(pbWriteRaw->Get()->Data.size() == size + BlockSize);
         {
-            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-            write->AddPayload(TRope(payload));
-            SendToDDisk(ctx, disk.PBServiceId, write.release());
-
-            {
-                TString badPayload = NUnitTest::RandomString(size);
-                auto badWrite = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-                badWrite->AddPayload(TRope(badPayload));
-                SendToDDisk(ctx, disk.PBServiceId, badWrite.release());
-
-                auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
-                AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
-            }
-            {
-                const NDDisk::TBlockSelector badSelector{3, 0, size};
-                auto badWrite = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, badSelector, lsn, NDDisk::TWriteInstruction(0));
-                badWrite->AddPayload(TRope(payload));
-                SendToDDisk(ctx, disk.PBServiceId, badWrite.release());
-
-                auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
-                AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
-            }
-            auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-            UNIT_ASSERT(pbWriteRaw->Get()->Data.size() == size + BlockSize);
-            ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            // Invalid data
+            TString badPayload = payload;
+            badPayload[badPayload.size() - 1000] = 123;
+            auto badWrite = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            badWrite->AddPayload(TRope(badPayload));
+            SendToDDisk(ctx, disk.PBServiceId, badWrite.release());
 
             auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
-            AssertStatus(writeResult, TReplyStatus::OK);
+            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
         }
+        {
+            // invalid VChunk
+            const NDDisk::TBlockSelector badSelector{4, 0, size};
+            auto badWrite = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, badSelector, lsn, NDDisk::TWriteInstruction(0));
+            badWrite->AddPayload(TRope(payload));
+            SendToDDisk(ctx, disk.PBServiceId, badWrite.release());
+
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+        }
+        ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult, TReplyStatus::OK);
     }
 
     Y_UNIT_TEST(PersistentBufferWriteDuplicates) {
@@ -1436,9 +1436,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         {
             // Invalid data
-            payload = NUnitTest::RandomString(size);
+            TString badPayload = payload;
+            badPayload[badPayload.size() - 1000] = 123;
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-            write->AddPayload(TRope(payload));
+            write->AddPayload(TRope(badPayload));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
             auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
             AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);

@@ -4,6 +4,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -76,6 +77,9 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
     cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
     cmdWrite.SetExternalOperation(true);
+    if (item.MessageGroupId) {
+        cmdWrite.SetChoosePartitionKey(AsKeyBound(Hash(*item.MessageGroupId)));
+    }
 
     NKikimrPQClient::TDataChunk proto;
     proto.SetCodec(0); // NPersQueue::CODEC_RAW

@@ -10,11 +10,45 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
 #include <nlohmann/json.hpp>
+
+#include <array>
+#include <memory>
+
+#include <library/cpp/logger/stream.h>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
 using namespace NActors;
+
+namespace {
+
+using NYdb::TDriver;
+using NYdb::TDriverConfig;
+using NYdb::NTopic::TCreateTopicSettings;
+
+TDriverConfig MakeKinesisKllTestDriverConfig(THttpProxyTestMock& fixture) {
+    TDriverConfig config;
+    config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
+    config.SetDatabase("/Root");
+    config.SetAuthToken("root@builtin");
+    config.SetLog(std::make_unique<TStreamLogBackend>(&Cerr));
+    return config;
+}
+
+TDriver MakeKinesisKllTestDriver(THttpProxyTestMock& fixture) {
+    return TDriver(MakeKinesisKllTestDriverConfig(fixture));
+}
+
+void CreateKinesisKllTestTopicOrFail(TDriver& driver, const TString& topicName, TCreateTopicSettings& settings) {
+    NYdb::NTopic::TTopicClient client(driver);
+    auto ct = client.CreateTopic(topicName, settings).GetValueSync();
+    UNIT_ASSERT_C(ct.IsSuccess(), ct.GetIssues().ToString());
+}
+
+} // namespace
 
 static void PatchRateBins(NJson::TJsonValue& json)
 {
@@ -394,6 +428,115 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             auto res = SendHttpRequest("/Root", "kinesisApi.PutRecords", req,
                                        FormAuthorizationStr("ru-central1"));
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+        }
+    }
+
+    Y_UNIT_TEST_F(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_ExplicitHashKey,
+                  THttpProxyTestMockForKinesisWithKllAutosplit) {
+        static constexpr std::array<const char*, 7> ExplicitHashKeys = {
+            "10000000000000000000000000000000000000",
+            "20000000000000000000000000000000000000",
+            "30000000000000000000000000000000000000",
+            "40000000000000000000000000000000000000",
+            "50000000000000000000000000000000000000",
+            "60000000000000000000000000000000000000",
+            "70000000000000000000000000000000000000",
+        };
+
+        const TString topicName = "kinesis_kll_autosplit_stream";
+        const TString consumerName = "kinesis_kll_autosplit_consumer";
+        const TString streamPath = TStringBuilder() << "/Root/" << topicName;
+
+        auto driver = MakeKinesisKllTestDriver(*this);
+
+        constexpr ui64 partitionWriteSpeedBytesPerSec = 512 * 1_KB;
+        NYdb::NTopic::TCreateTopicSettings createSettings;
+        createSettings
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(20))
+            .EndAddConsumer()
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(1)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(1))
+                .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeedBytesPerSec)
+            .PartitionWriteBurstBytes(partitionWriteSpeedBytesPerSec);
+        CreateKinesisKllTestTopicOrFail(driver, topicName, createSettings);
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describeResult = topicClient.DescribeTopic(topicName).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult);
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        auto describePartitionCount = [&]() -> size_t {
+            auto d = topicClient.DescribeTopic(topicName).GetValueSync();
+            UNIT_ASSERT_C(d.IsSuccess(), d);
+            return d.GetTopicDescription().GetPartitions().size();
+        };
+
+        auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+            const TInstant deadline = TInstant::Now() + maxWait;
+            size_t last = describePartitionCount();
+            while (last < minPartitions && TInstant::Now() < deadline) {
+                Sleep(TDuration::Seconds(1));
+                last = describePartitionCount();
+            }
+            return last;
+        };
+
+        // Same order of magnitude as SQS test (256 KiB body cap there); Kinesis allows larger payloads.
+        const TString msg(256 * 1024 - 1, 'a');
+
+        auto putRecord = [&](ui64 seqNo) {
+            NJson::TJsonValue req;
+            req["StreamName"] = streamPath;
+            req["Records"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+            req["Records"].AppendValue(NJson::TJsonValue(NJson::JSON_MAP));
+            NJson::TJsonValue& rec = req["Records"].Back();
+            rec["PartitionKey"] = "pk";
+            rec["ExplicitHashKey"] = TString(ExplicitHashKeys[seqNo % ExplicitHashKeys.size()]);
+            rec["Data"] = Base64Encode(msg);
+            for (ui32 attempt = 0; attempt < 5; ++attempt) {
+                auto res = SendHttpRequest("/Root", "kinesisApi.PutRecords", req,
+                                           FormAuthorizationStr("ru-central1"));
+                UNIT_ASSERT_C(res.HttpCode == 200, res.Body);
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+                if (GetByPath<i64>(json, "FailedRecordCount") == 0) {
+                    return;
+                }
+                Sleep(TDuration::Seconds(1));
+            }
+            UNIT_FAIL("PutRecords failed after retries");
+        };
+
+        {
+            for (ui64 seq = 1; seq <= 2; ++seq) {
+                putRecord(seq);
+            }
+            auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(45));
+            UNIT_ASSERT_C(partitionsCount >= 3, "partitions: " << partitionsCount << " expected: >= 3");
+        }
+        {
+            for (ui64 seq = 3; seq <= 6; ++seq) {
+                putRecord(seq);
+            }
+            auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
+            UNIT_ASSERT_C(partitionsCount >= 5, "partitions: " << partitionsCount << " expected: >= 5");
+        }
+        {
+            for (ui64 seq = 7; seq <= 10; ++seq) {
+                putRecord(seq);
+            }
+            auto partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+            UNIT_ASSERT_C(partitionsCount >= 7, "partitions: " << partitionsCount << " expected: >= 7");
         }
     }
 

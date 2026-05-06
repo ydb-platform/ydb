@@ -352,14 +352,14 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
     auto ctx = ActorContext();
 
     auto* shardsQueue = ForcedCompactionShardsByTable.FindPtr(tablePathId);
-    bool needReplaceShards = false;
+    size_t removedSrcShardCount = 0;
     for (const auto& srcShardIdx : srcShardIdxs) {
         auto* shardCompactionPtr = InProgressForcedCompactionsByShard.FindPtr(srcShardIdx);
         if (!shardCompactionPtr) {
             continue;
         }
         Y_ENSURE(shardCompactionPtr->Get()->Id == compaction->Id);
-        needReplaceShards = true;
+        ++removedSrcShardCount;
 
         InProgressForcedCompactionsByShard.erase(srcShardIdx);
         compaction->ShardsInFlight.erase(srcShardIdx);
@@ -372,18 +372,19 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
         PersistForcedCompactionDoneShard(db, srcShardIdx);
     }
 
-    if (needReplaceShards) {
+    if (removedSrcShardCount > 0) {
+        // need to replace src shards with dst shards
         for (const auto& dstShardIdx : dstShardIdxs) {
             AddForcedCompactionShard(dstShardIdx, tablePathId, compaction);
         }
         PersistForcedCompactionShards(db, *compaction, dstShardIdxs);
 
-        if (compaction->TotalShardCount >= srcShardIdxs.size()) {
-            compaction->TotalShardCount -= srcShardIdxs.size();
+        if (compaction->TotalShardCount >= removedSrcShardCount) {
+            compaction->TotalShardCount -= removedSrcShardCount;
         } else {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [SplitMerge] "
                 "Inconsistent TotalShardCount# " << compaction->TotalShardCount
-                << ", but there are " << srcShardIdxs.size() << " src shards"
+                << ", but removed " << removedSrcShardCount << " in-flight src shards"
                 << ", setting TotalShardCount to 0"
                 << ", " << dstShardIdxs.size() << " dst shards"
                 << " for compaction# " << compaction->Id
@@ -398,7 +399,7 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
         PersistForcedCompactionState(db, *compaction);
 
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [SplitMerge] "
-            "Replaced " << srcShardIdxs.size() << " src shards with " << dstShardIdxs.size() << " dst shards"
+            "Replaced " << removedSrcShardCount << " src shards with " << dstShardIdxs.size() << " dst shards"
             << " for compaction# " << compaction->Id
             << ", tablePathId# " << tablePathId
             << ", new TotalShardCount# " << compaction->TotalShardCount

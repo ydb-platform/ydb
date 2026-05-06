@@ -2,6 +2,7 @@
 
 #include "types.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
@@ -127,6 +128,30 @@ private:
         }
 
     private:
+        using SysDuration = SysClock::duration;
+
+        static SysDuration ToBoundedSysDuration(const TDuration& d) {
+            return std::chrono::duration_cast<SysDuration>(TDeadline::SafeDurationCast(d));
+        }
+
+        template <typename Rep, typename Period>
+        static SysDuration ToBoundedSysDuration(const std::chrono::duration<Rep, Period>& d) {
+            return std::chrono::duration_cast<SysDuration>(TDeadline::SafeDurationCast(d));
+        }
+
+        static SysTimePoint SafeAddSystemTime(SysTimePoint tp, SysDuration d) {
+            if (d > SysDuration::zero()) {
+                if (tp > SysClock::time_point::max() - d) {
+                    return SysClock::time_point::max();
+                }
+            } else if (d < SysDuration::zero()) {
+                if (SysClock::time_point::min() - d > tp) {
+                    return SysClock::time_point::min();
+                }
+            }
+            return tp + d;
+        }
+
         void UpdateTicket() {
             auto response = std::make_shared<TResponse>();
 
@@ -202,6 +227,9 @@ private:
                     return true;
                 }
                 FillContext(guard);
+                if (NeedStop_) {
+                    return false;
+                }
             }
             UpdateTicket();
             return true;
@@ -219,7 +247,7 @@ private:
 
                 const auto now = SysClock::now();
                 const auto retryDelay = std::min(BackoffTimeout_, BACKOFF_MAX);
-                NextTicketUpdate_ = now + retryDelay;
+                NextTicketUpdate_ = SafeAddSystemTime(now, ToBoundedSysDuration(retryDelay));
                 BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
             } else {
                 LastRequestError_ = "";
@@ -227,12 +255,14 @@ private:
                 BackoffTimeout_ = BACKOFF_START;
 
                 const auto now = SysClock::now();
-                const auto refreshAt = now + std::chrono::microseconds(IamEndpoint_.RefreshPeriod.MicroSeconds());
-                const auto expiresAt = SysTimePoint{} + std::chrono::seconds(result.expires_at().seconds());
-                const auto requestMargin = std::chrono::microseconds(IamEndpoint_.RequestTimeout.MicroSeconds());
+                const SysTimePoint refreshAt = SafeAddSystemTime(now, ToBoundedSysDuration(IamEndpoint_.RefreshPeriod));
+                const SysTimePoint expiresAt = SysClock::from_time_t(result.expires_at().seconds());
+                const SysDuration requestMargin = ToBoundedSysDuration(IamEndpoint_.RequestTimeout);
 
-                NextTicketUpdate_ = std::min(refreshAt, expiresAt) - requestMargin;
-                NextTicketUpdate_ = std::max(NextTicketUpdate_, now + MINIMUM_REFRESH_INTERVAL);
+                SysTimePoint nextUpdate = std::min(refreshAt, expiresAt);
+                nextUpdate = SafeAddSystemTime(nextUpdate, -requestMargin);
+                nextUpdate = std::max(nextUpdate, SafeAddSystemTime(now, ToBoundedSysDuration(MINIMUM_REFRESH_INTERVAL)));
+                NextTicketUpdate_ = nextUpdate;
 
                 TokenReady_.notify_all();
             }

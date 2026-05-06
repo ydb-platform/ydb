@@ -9,7 +9,7 @@ class TIamServiceCredentialsProviderFactory : public ICredentialsProviderFactory
 private:
     class TCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
     public:
-        TCredentialsProvider(const TIamServiceParams& params, std::weak_ptr<ICoreFacility> responseFacility = {})
+        TCredentialsProvider(const TIamServiceParams& params, std::weak_ptr<ICoreFacility> responseFacility)
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 [&params](TRequest& req) {
                     req.set_service_id(params.ServiceId);

@@ -1,6 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
-
-#include "core_facility.h"
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.pb.h>
@@ -134,7 +133,7 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
     params.RequestTimeout = TDuration::MilliSeconds(400);
 
     auto work = [&params] {
-        auto facility = std::make_shared<TTestCoreFacility>();
+        auto facility = std::make_shared<TSimpleCoreFacility>();
         TIamOAuthCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService> provider(
             params,
             facility);

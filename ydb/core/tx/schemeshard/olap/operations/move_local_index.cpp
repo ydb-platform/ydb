@@ -80,6 +80,7 @@ public:
                 }
             }
             Y_ABORT_UNLESS(renamed, "Neither srcName nor dstName found in column table schema during rename");
+            ++tableInfo->AlterVersion;
             context.SS->PersistColumnTable(db, tablePathId, *tableInfo);
         }
 
@@ -220,7 +221,7 @@ public:
         TPath srcPath(context.SS);
         bool srcIndexInMainTable = false;
 
-        if (srcName.Contains('/')) {
+        if (srcName.StartsWith('/')) {
             // Full path (for moving parent table case)
             srcPath = TPath::Resolve(srcName, context.SS);
         } else {
@@ -342,10 +343,8 @@ public:
         auto newIndexPath = dstPath.Base();
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveLocalIndex, newIndexPath->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveLocalIndex, newIndexPath->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::Propose;
-        txState.SourcePathId = srcPath.Base()->PathId;
-        context.SS->IncrementPathDbRefCount(srcPath.Base()->PathId);
 
         newIndexPath->PathState = NKikimrSchemeOp::EPathStateCreate;
         newIndexPath->CreateTxId = OperationId.GetTxId();

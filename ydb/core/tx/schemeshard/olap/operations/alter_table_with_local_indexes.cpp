@@ -76,12 +76,18 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
 
         // Check for conflicts: same source appearing in multiple moves
         THashSet<TString> moveSources;
+        THashSet<TString> moveDestinations;
         for (const auto& [sourceName, destinationName] : movedIndexNames) {
             if (moveSources.contains(sourceName)) {
                 return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
                     TStringBuilder() << "Index '" << sourceName << "' appears as source in multiple move operations")};
             }
+            if (moveDestinations.contains(destinationName)) {
+                return {CreateReject(NextPartId(nextId, result), NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Index '" << destinationName << "' appears as destination in multiple move operations")};
+            }
             moveSources.insert(sourceName);
+            moveDestinations.insert(destinationName);
         }
 
         // Check for conflicts: move's destination conflicting with UpsertIndexes

@@ -3666,7 +3666,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             } else if (name == "MultiGet"sv) {
                 isMultiget = option.Value().Cast().Ptr();
             } else if (name == "FullscanLimit"sv) {
-                isMultiget = option.Value().Cast().Ptr();
+                fullscanLimit = option.Value().Cast().Ptr();
             }
         }
     }

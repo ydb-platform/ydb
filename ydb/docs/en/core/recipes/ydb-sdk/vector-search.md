@@ -4,20 +4,12 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-<<<<<<< HEAD
-- [Vector search](#vector-search)
-=======
   - [Vector search](#vector-search)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
   - [Connecting to {{ ydb-short-name }}](#connect-ydb)
   - [Creating a table](#create-table)
   - [Inserting vectors](#insert-vectors)
   - [Adding an index](#add-vector-index)
-<<<<<<< HEAD
-  - [Vector search](#search-by-vector)
-=======
   - [Search by vector](#search-by-vector)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
   - [Full example](#full-example)
 
 This recipe creates a text store with the following structure:
@@ -66,17 +58,6 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
 
     To run queries, create a `ydb.QuerySessionPool`.
 
-<<<<<<< HEAD
-    ```python
-    driver = ydb.Driver(
-        endpoint=ydb_endpoint,
-        database=ydb_database,
-        credentials=ydb_credentials,
-    )
-    driver.wait(5, fail_fast=True)
-    pool = ydb.QuerySessionPool(driver)
-    ```
-=======
     - Native SDK
 
       To run queries, create a `ydb.QuerySessionPool`.
@@ -115,7 +96,6 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
       ```
 
     {% endlist %}
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
 - C++
 
@@ -209,10 +189,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
 
         pool.execute_with_retries(query)
 
-<<<<<<< HEAD
-        print(f"Vector table {table_name} created")
-    ```
-=======
       ```python
       import ydb
       
@@ -250,7 +226,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
 - JavaScript
 
@@ -376,9 +351,6 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` (identifier), `document` (text), and `embedding` (vector representation of the text, pre-serialized to a byte sequence).
 
-<<<<<<< HEAD
-    To use the structure in the example below, create `items_struct_type = ydb.StructType()` with types for all fields. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
-=======
     The example builds `items_struct_type = ydb.StructType()` with field types, then wraps the list with `ydb.ListType(items_struct_type)`.
 
     {% list tabs %}
@@ -430,7 +402,6 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           pool.execute_with_retries(
               query, {"$items": (items, ydb.ListType(items_struct_type))}
           )
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
           print(f"{len(items)} items inserted")
       ```
@@ -737,9 +708,6 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
     The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` (identifier), `document` (text), and `embedding` (vector representation of the text).
 
-<<<<<<< HEAD
-    To use the structure in the example below, create `items_struct_type = ydb.StructType()` with types for all fields. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
-=======
     The example builds `items_struct_type = ydb.StructType()` with field types, then wraps the list with `ydb.ListType(items_struct_type)`.
 
     {% list tabs %}
@@ -785,7 +753,6 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
           print(f"{len(items)} items inserted")
       ```
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
     - Native SDK (Asyncio)
 
@@ -1256,19 +1223,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
 - Python
 
-<<<<<<< HEAD
-    ```python
-    def search_items_vector_as_bytes(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-        top_clusters: int = 10,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
     {% list tabs %}
 
     - Native SDK
@@ -1328,7 +1282,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
       ```
 
     - Native SDK (Asyncio)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
       ```python
       import ydb
@@ -1593,19 +1546,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
 - Python (alternative)
 
-<<<<<<< HEAD
-    ```python
-    def search_items_vector_as_float_list(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-        top_clusters: int = 10,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
     {% list tabs %}
 
     - Native SDK
@@ -1665,7 +1605,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
       ```
 
     - Native SDK (Asyncio)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
       ```python
       import ydb
@@ -1819,89 +1758,6 @@ The following example combines all the steps above:
 
     Usage example
 
-<<<<<<< HEAD
-    ```python
-    def print_results(items):
-        if len(items) == 0:
-            print("No items found")
-            return
-
-        for item in items:
-            print(f"[score={item['score']}] {item['id']}: {item['document']}")
-
-    def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
-        pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
-
-        print("Vector table dropped")
-
-    def main(
-        ydb_endpoint: str,
-        ydb_database: str,
-        ydb_credentials: ydb.AbstractCredentials,
-        table_name: str,
-        index_name: str,
-    ):
-        driver = ydb.Driver(
-            endpoint=ydb_endpoint,
-            database=ydb_database,
-            credentials=ydb_credentials,
-        )
-        driver.wait(5, fail_fast=True)
-        pool = ydb.QuerySessionPool(driver)
-
-        drop_vector_table_if_exists(pool, table_name)
-
-        create_vector_table(pool, table_name)
-
-        items = [
-            {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-            {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-            {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-            {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-            {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-            {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-            {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-            {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-            {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-        ]
-
-        insert_items_vector_as_bytes(pool, table_name, items)
-
-        items = search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            strategy="CosineSimilarity",
-            limit=3,
-            top_clusters=10,
-        )
-        print_results(items)
-
-        add_vector_index(
-            pool,
-            driver,
-            table_name,
-            index_name=index_name,
-            strategy="similarity=cosine",
-            dimension=3,
-            levels=1,
-            clusters=3,
-        )
-
-        items = search_items_vector_as_bytes(
-            pool,
-            table_name,
-            embedding=[1, 0, 0],
-            index_name=index_name,
-            strategy="CosineSimilarity",
-            limit=3,
-            top_clusters=10,
-        )
-        print_results(items)
-
-        pool.stop()
-        driver.stop()
-=======
     {% list tabs %}
 
     - Native SDK
@@ -1990,7 +1846,6 @@ The following example combines all the steps above:
 
           pool.stop()
           driver.stop()
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
 
       if __name__ == "__main__":

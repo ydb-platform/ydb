@@ -2755,8 +2755,6 @@ Most often, committing is conveniently done within the reader that has read the 
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -2780,5 +2778,4 @@ Most often, committing is conveniently done within the reader that has read the 
   ).join().expectSuccess("Error commit!");
   ```
 
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 {% endlist %}

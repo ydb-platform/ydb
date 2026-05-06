@@ -90,15 +90,16 @@ namespace NKikimr {
         struct TEvPhantomFlagStorageGetSnapshot
                 : public TEventLocal<TEvPhantomFlagStorageGetSnapshot,
                                      TEvBlobStorage::EvPhantomFlagStorageGetSnapshot>
-        {};
+        {
+            // Persistent PhantomFlagStorage  also includes flags from the main synclog
+            TSyncLogSnapshotPtr SyncLogSnapshot;
+        };
 
         struct TEvPhantomFlagStorageGetSnapshotResult
                 : public TEventLocal<TEvPhantomFlagStorageGetSnapshotResult,
                                      TEvBlobStorage::EvPhantomFlagStorageGetSnapshotResult>
         {
-            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot)
-                : Snapshot(std::move(snapshot))
-            {}
+            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot);
 
             TPhantomFlagStorageSnapshot Snapshot;
         };

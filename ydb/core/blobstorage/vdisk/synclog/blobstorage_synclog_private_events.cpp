@@ -13,6 +13,11 @@ namespace NKikimr {
 
         TEvSyncLogSnapshotResult::~TEvSyncLogSnapshotResult() = default;
 
+        TEvPhantomFlagStorageGetSnapshotResult::TEvPhantomFlagStorageGetSnapshotResult(
+                TPhantomFlagStorageSnapshot&& snapshot)
+            : Snapshot(snapshot)
+        {}
+
         TEvPhantomFlagStorageWriteItems::TEvPhantomFlagStorageWriteItems(
                 std::vector<TPhantomFlagStorageItem>&& items)
             : Items(std::move(items))

@@ -495,6 +495,9 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {
+            if (PhantomFlagStorageState.IsPersistent()) {
+                request->Get()->SyncLogSnapshot = SyncLogPtr->GetSnapshot();
+            }
             PhantomFlagStorageState.RequestSnapshot(request);
         }
 
@@ -513,7 +516,7 @@ namespace NKikimr {
                 PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
                 if (!PhantomFlagStorageState.IsActive() && !chunks.empty() && SelfId != TActorId{}) {
                     PhantomFlagStorageState.StartBuilding();
-                    TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, snapshot));
+                    TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, snapshot, true));
                 }
             }
 

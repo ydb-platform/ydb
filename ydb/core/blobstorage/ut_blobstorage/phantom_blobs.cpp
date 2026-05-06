@@ -3,7 +3,7 @@
 
 using namespace NKikimr;
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
@@ -195,7 +195,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest() {
             Initialize();
             const std::vector<TLogoBlobID> blobs = WriteInitialData();
-            auto itMiddle = blobs.begin() + blobs.size() / 2;
+            auto itMiddle1 = blobs.begin() + blobs.size() * 1 / 3;
+            auto itMiddle2 = blobs.begin() + blobs.size() * 2 / 3;
 
             Ctest << "Set Keep flags" << Endl;
             CollectBlobs(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
@@ -206,7 +207,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             WaitForSync();
 
             Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
-            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle));
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle1));
             WaitForSync();
 
             WriteUnsyncedBlobs();
@@ -214,14 +215,14 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             BaldSyncLog();
 
             Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
-            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle1, itMiddle2));
             WaitForSync();
 
             WriteUnsyncedBlobs();
-
             BaldSyncLog();
-
             CheckMemoryConsumption();
+
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle2, blobs.end()));
 
             Ctest << "Restart nodes" << Endl;
             ToggleNodes(false, false, true);
@@ -398,7 +399,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .EnablePhantomFlagStorage = false,
             .TinySyncLog = true,
             .EnablePersistentPhantomFlagStorage = false,
-        }, 100, 10000, nodeStates, expectPhantoms);
+        }, 300, 10000, nodeStates, expectPhantoms);
         if (nodeStates2) {
             ctx.RunTestWithUpdate(*nodeStates2);
         } else {

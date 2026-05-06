@@ -1,5 +1,6 @@
 #include "phantom_flags.h"
 #include "phantom_flag_thresholds.h"
+#include "phantom_flag_storage_builder.h"
 #include "phantom_flag_storage_processor.h"
 
 #include <util/generic/overloaded.h>
@@ -62,6 +63,7 @@ private:
         hFunc(TEvPhantomFlagExtractedFromChunk, Handle)
         hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
+        hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
     )
 
     PDISK_TERMINATE_STATE_FUNC_DEF;
@@ -201,15 +203,15 @@ private:
         PendingRead.ChunksToRead.erase(chunkIdx);
         ProcessReadBuffer(ev->Get()->Data, chunkIdx);
         if (PendingRead.ChunksToRead.empty()) {
-            FinalizeRead();
+            Register(CreatePhantomFlagStorageBuilderActor(Ctx.SyncLogCtx, SelfId(),
+                    std::move(PendingRead.SyncLogSnapshot), false));
         }
-        ProcessQueues();
     }
 
     void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
         STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP08, VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Handle TEvPhantomFlagStorageGetSnapshot"));
-        EnqueueGetSnapshot(ev->Sender);
+        EnqueueGetSnapshot(ev->Sender, std::move(ev->Get()->SyncLogSnapshot));
         ProcessQueues();
     }
 
@@ -228,6 +230,15 @@ private:
             EnqueueChunkDeletion(chunkIdx);
         }
         ProcessQueues();
+    }
+
+    void Handle(const TEvPhantomFlagStorageFinishBuilder::TPtr& ev) {
+        TPhantomFlags& flags = ev->Get()->Flags;
+        STLOG(PRI_INFO, BS_PHANTOM_FLAG_PROCESSOR, BSPFP13, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvPhantomFlagStorageFinishBuilder"),
+                (FlagCount, flags.size()));
+        std::move(flags.begin(), flags.end(), std::back_inserter(PendingRead.Flags));
+        FinalizeRead();
     }
 
     void HandlePoison(const TEvents::TEvPoisonPill::TPtr&, const TActorContext&) {
@@ -253,8 +264,8 @@ private:
         RequestQueue.emplace_back(TDeleteChunk{chunkIdx});
     }
 
-    void EnqueueGetSnapshot(TActorId requester) {
-        RequestQueue.emplace_front(TGetSnapshot{requester});
+    void EnqueueGetSnapshot(TActorId requester, TSyncLogSnapshotPtr&& snapshot) {
+        RequestQueue.emplace_front(TGetSnapshot{requester, std::move(snapshot)});
     }
 
     void ProcessQueues() {
@@ -264,7 +275,7 @@ private:
             RequestInFlight = true;
             std::visit(TOverloaded{
                 [&](const std::monostate&) {},
-                [&](const TGetSnapshot& req) { GetSnapshot(req.Requester); },
+                [&](TGetSnapshot& req) { GetSnapshot(req.Requester, std::move(req.Snapshot)); },
                 [&](const TDeleteChunk& req) { DeleteChunk(req.ChunkIdx); },
             }, request);
             return;
@@ -334,9 +345,9 @@ private:
         }
     }
 
-    void GetSnapshot(TActorId requester) {
+    void GetSnapshot(TActorId requester, TSyncLogSnapshotPtr&& snapshot) {
         RequestInFlight = true;
-        PendingRead.Reset(requester);
+        PendingRead.Reset(requester, std::move(snapshot));
         for (const auto [chunkIdx, chunk] : Data.Chunks) {
             if (chunk.DataSize > 0) {
                 Send(Ctx.SyncLogCtx->PDiskCtx->PDiskId,
@@ -349,7 +360,8 @@ private:
                 "Start reading snapshot"),
                 (ChunkToReadCount, PendingRead.ChunksToRead.size()));
         if (PendingRead.ChunksToRead.empty()) {
-            FinalizeRead();
+            Register(CreatePhantomFlagStorageBuilderActor(Ctx.SyncLogCtx, SelfId(),
+                    std::move(PendingRead.SyncLogSnapshot), false));
         }
     }
 
@@ -361,6 +373,7 @@ private:
         Send(PendingRead.Requester, new TEvPhantomFlagStorageGetSnapshotResult(
                 TPhantomFlagStorageSnapshot(std::move(PendingRead.Flags),
                                             std::move(PendingRead.Thresholds))));
+        ProcessQueues();
     }
 
     void AllocateNewChunk() {
@@ -421,6 +434,7 @@ private:
 private:
     struct TGetSnapshot {
         TActorId Requester;
+        TSyncLogSnapshotPtr Snapshot;
     };
 
     struct TDeleteChunk {
@@ -443,12 +457,14 @@ private:
         TPhantomFlags Flags;
         TPhantomFlagThresholds Thresholds;
         TActorId Requester = TActorId{};
+        TSyncLogSnapshotPtr SyncLogSnapshot;
 
-        void Reset(TActorId requester) {
+        void Reset(TActorId requester, TSyncLogSnapshotPtr&& snapshot) {
             ChunksToRead.clear();
             Flags.clear();
             Thresholds.Clear();
             Requester = requester;
+            SyncLogSnapshot = std::move(snapshot);
         }
     };
 

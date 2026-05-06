@@ -7,6 +7,7 @@ PY_SRCS(
     insert_delete_all_types.py
     select_partition.py
     secondary_index.py
+    tli.py
 )
 
 PEERDIR(

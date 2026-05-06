@@ -34,7 +34,7 @@ class WorkloadRunner:
         deleted = self.client.remove_recursively(self.tables_prefix)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
-    def run(self):
+    def run(self, enabled_workloads=None, disabled_workloads=None):
         stop = threading.Event()
         workloads = [
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
@@ -46,9 +46,14 @@ class WorkloadRunner:
             WorkloadTli(self.client, self.name, stop)
         ]
 
+        if enabled_workloads is not None:
+            workloads = [w for w in workloads if w.name in enabled_workloads]
+        if disabled_workloads is not None:
+            workloads = [w for w in workloads if w.name not in disabled_workloads]
+
         for w in workloads:
             w.start()
-        started_at = started_at = time.time()
+        started_at = time.time()
         while time.time() - started_at < self.duration:
             print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
             for w in workloads:

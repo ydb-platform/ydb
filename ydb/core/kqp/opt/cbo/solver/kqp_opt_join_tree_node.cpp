@@ -55,14 +55,20 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
         if (orderingIdx == TJoinOptimizerNodeInternal::DontShuffle) {
             return {}; // SE — do not shuffle.
         }
-        if (orderingIdx == TJoinOptimizerNodeInternal::NoOrdering ||
-            (!enableShuffleElimination && join->JoinAlgo == EJoinAlgoType::GraceJoin)) {
+
+        if (join->JoinAlgo != EJoinAlgoType::GraceJoin) {
+            return {};
+        }
+
+        if (orderingIdx == TJoinOptimizerNodeInternal::NoOrdering || !enableShuffleElimination) {
             return joinKeys;
         }
+
         if (orderingIdx >= 0 && fdStorage) {
             return fdStorage->GetInterestingOrderingsColumnNamesByIdx(orderingIdx);
         }
-        return {};
+
+        return joinKeys;
     };
 
     newJoin->ShuffleLeftSideBy = pickShuffleBy(join->ShuffleLeftSideByOrderingIdx, join->LeftJoinKeys);

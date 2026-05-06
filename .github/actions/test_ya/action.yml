@@ -610,13 +610,17 @@ runs:
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
           teststatus=$(cat statusrep.txt)
+          status_sha="$ORIGINAL_HEAD"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            status_sha="${{ github.event.pull_request.head.sha }}"
+          fi
           if [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else
             testmessage="The check has been failed"
           fi
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-              https://api.github.com/repos/${{github.repository}}/statuses/${ORIGINAL_HEAD} \
+              https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
           if [[ $teststatus != "success" ]]; then

@@ -123,20 +123,7 @@ protected:
         return result;
     }
 
-    void AppendValue(const i8& value) { JsonWriter.WriteLongLong(value); }
-    void AppendValue(const ui8& value) { JsonWriter.WriteULongLong(value); }
-    void AppendValue(const i16& value) { JsonWriter.WriteLongLong(value); }
-    void AppendValue(const ui16& value) { JsonWriter.WriteULongLong(value); }
-    void AppendValue(const i32& value) { JsonWriter.WriteLongLong(value); }
-    void AppendValue(const ui32& value) { JsonWriter.WriteULongLong(value); }
-    void AppendValue(const i64& value) { JsonWriter.WriteLongLong(value); }
-    void AppendValue(const ui64& value) { JsonWriter.WriteULongLong(value); }
-    void AppendValue(const bool& value) { JsonWriter.WriteBool(value); }
     void AppendValue(const TString& value) { JsonWriter.WriteString(value); }
-    void AppendValue(const float& value) { JsonWriter.WriteFloat(value); }
-    void AppendValue(const double& value) { JsonWriter.WriteDouble(value); }
-    void AppendValue(const long double& value) { JsonWriter.WriteDouble(value); }
-    void AppendValue(const NActors::TActorId& value) { JsonWriter.WriteString(value.ToString()); }
 };
 
 class TJsonWriter {

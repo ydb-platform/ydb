@@ -12,20 +12,7 @@
 namespace NKikimr::NStructuredLog {
 
 enum class TNativeTypeCode : std::uint8_t {
-    Int8 = 0,
-    UInt8,
-    Int16,
-    UInt16,
-    Int32,
-    UInt32,
-    Int64,
-    UInt64,
-    Bool,
-    String,
-    Float,
-    Double,
-    LongDouble,
-    ActorId
+    String = 0,
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
@@ -185,21 +172,6 @@ struct TNativeTypeCodeMapping<TPair>
     }
 };
 
-using TTypesMapping = TNativeTypeCodeMapping<
-    TNativeTypeCodePair<ui8, TNativeTypeCode::UInt8>,
-    TNativeTypeCodePair<i8, TNativeTypeCode::Int8>,
-    TNativeTypeCodePair<ui16, TNativeTypeCode::UInt16>,
-    TNativeTypeCodePair<i16, TNativeTypeCode::Int16>,
-    TNativeTypeCodePair<ui32, TNativeTypeCode::UInt32>,
-    TNativeTypeCodePair<i32, TNativeTypeCode::Int32>,
-    TNativeTypeCodePair<ui64, TNativeTypeCode::UInt64>,
-    TNativeTypeCodePair<i64, TNativeTypeCode::Int64>,
-    TNativeTypeCodePair<bool, TNativeTypeCode::Bool>,
-    TNativeTypeCodePair<TString, TNativeTypeCode::String>,
-    TNativeTypeCodePair<float, TNativeTypeCode::Float>,
-    TNativeTypeCodePair<double, TNativeTypeCode::Double>,
-    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>,
-    TNativeTypeCodePair<NActors::TActorId, TNativeTypeCode::ActorId>
->;
+using TTypesMapping = TNativeTypeCodeMapping<TNativeTypeCodePair<TString, TNativeTypeCode::String>>;
 
 }

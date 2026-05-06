@@ -547,7 +547,6 @@ namespace NActors {
         bool json,
         const TMaybe<NKikimr::NStructuredLog::TStructuredMessage>& structuredMessage) noexcept
     try {
-
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         TLogRecord::TMetaFlags metaFlags;
@@ -598,7 +597,6 @@ namespace NActors {
             } break;
 
             case NActors::NLog::TSettings::JSON_FORMAT: {
-
                 NJsonWriter::TBuf j;
                 j.BeginObject()
                     .WriteKey("@timestamp")
@@ -649,6 +647,7 @@ namespace NActors {
                 if (structuredMessage.Defined()) {
                     StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
                 }
+
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(

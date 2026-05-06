@@ -27,17 +27,19 @@ public:
     // Native types support
     template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {
-        if constexpr (TNativeTypeSupport<T>::value) {
-            GetBuildMessage().AppendValue({std::move(name)}, value);
-        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
+        if constexpr (std::is_same<T, TStructuredMessage>::value) {
             GetBuildMessage().AppendSubMessage({std::move(name)}, value);
         } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
             if (value.Defined()) {
                 GetBuildMessage().AppendSubMessage({std::move(name)}, value.GetRef());
             }
+        } else if constexpr (TNativeTypeSupport<T>::value) {
+            GetBuildMessage().AppendValue({std::move(name)}, value);
         } else if constexpr (IsMaybe<T>) {
             if (value.Defined()) {
-                GetBuildMessage().AppendValue({std::move(name)}, value.GetRef());
+                TStringBuilder stream;
+                stream << value.GetRef();
+                GetBuildMessage().AppendValue({std::move(name)}, TString(stream));
             }
         } else {
             TStringBuilder stream;

@@ -1,5 +1,6 @@
 #include "blob_depot_tablet.h"
 #include "recommissioner.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -28,7 +29,9 @@ namespace NKikimr::NBlobDepot {
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
+                YDBLOG_COMP_CRIT(BLOB_DEPOT, "unexpected event", {"Marker", "BDT00"},
+                    {"Id", Self->GetLogId()},
+                    {"Type", type});
                 break;
         }
     }

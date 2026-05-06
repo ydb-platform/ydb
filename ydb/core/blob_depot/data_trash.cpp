@@ -1,5 +1,6 @@
 #include "data.h"
 #include "s3.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -54,9 +55,14 @@ namespace NKikimr::NBlobDepot {
                 ? std::nullopt
                 : std::make_optional(*--record.Trash.end());
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT85, "issuing hard barrier TEvCollectGarbage", (Id, Self->GetLogId()),
-                (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
-                (HardGenStep, hardGenStep), (MinTrashId, minTrashId), (MaxTrashId, maxTrashId));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "issuing hard barrier TEvCollectGarbage", {"Marker", "BDT85"},
+                {"Id", Self->GetLogId()},
+                {"Channel", int(record.Channel)},
+                {"GroupId", record.GroupId},
+                {"Msg", ev->ToString()},
+                {"HardGenStep", hardGenStep},
+                {"MinTrashId", minTrashId},
+                {"MaxTrashId", maxTrashId});
 
             ++record.CollectGarbageRequestsInFlight;
 
@@ -178,10 +184,15 @@ namespace NKikimr::NBlobDepot {
             record.TrashInFlight.swap(trashInFlight);
             record.IssuedGenStep = nextGenStep;
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (Id, Self->GetLogId()),
-                (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
-                (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
-                (LeastExpectedBlobId, leastExpectedBlobId), (TrashInFlight.size, record.TrashInFlight.size()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "issuing TEvCollectGarbage", {"Marker", "BDT11"},
+                {"Id", Self->GetLogId()},
+                {"Channel", int(record.Channel)},
+                {"GroupId", record.GroupId},
+                {"Msg", ev->ToString()},
+                {"LastConfirmedGenStep", record.LastConfirmedGenStep},
+                {"IssuedGenStep", record.IssuedGenStep},
+                {"LeastExpectedBlobId", leastExpectedBlobId},
+                {"TrashInFlight.size", record.TrashInFlight.size()});
 
             const ui64 id = ++LastCollectCmdId;
             const ui64 queryId = RandomNumber<ui64>();
@@ -233,8 +244,12 @@ namespace NKikimr::NBlobDepot {
         const TCollectCmd& info = cmd.mapped();
         const ui32 groupId = info.GroupId;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (Id, Self->GetLogId()),
-            (Channel, ev->Get()->Channel), (GroupId, groupId), (Hard, info.Hard), (Msg, ev->Get()->ToString()));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TEvCollectGarbageResult", {"Marker", "BDT12"},
+            {"Id", Self->GetLogId()},
+            {"Channel", ev->Get()->Channel},
+            {"GroupId", groupId},
+            {"Hard", info.Hard},
+            {"Msg", ev->Get()->ToString()});
 
         BDEV(BDEV03, "TrashManager_collectResult", (BDT, Self->TabletID()), (GroupId, groupId), (Channel, ev->Get()->Channel),
             (Q, info.QueryId), (Cookie, ev->Cookie), (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));

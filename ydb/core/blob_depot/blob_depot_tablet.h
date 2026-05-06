@@ -7,6 +7,7 @@
 #include "mon_main.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NTesting {
 
@@ -166,14 +167,16 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor", {"Marker", "BDT24"},
+                {"Id", GetLogId()});
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
         }
 
         void OnLoadFinished() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT25, "OnLoadFinished", (Id, GetLogId()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnLoadFinished", {"Marker", "BDT25"},
+                {"Id", GetLogId()});
             Become(&TThis::StateWork);
             SignalTabletActive(TActivationContext::AsActorContext());
         }
@@ -195,14 +198,16 @@ namespace NKikimr::NBlobDepot {
         void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (Id, GetLogId()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnDetach", {"Marker", "BDT26"},
+                {"Id", GetLogId()});
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT27, "OnTabletDead", (Id, GetLogId()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "OnTabletDead", {"Marker", "BDT27"},
+                {"Id", GetLogId()});
             PassAway();
         }
 

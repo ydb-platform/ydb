@@ -2,6 +2,7 @@
 #include "schema.h"
 #include "data.h"
 #include "blocks.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -31,8 +32,10 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT77, "TTxCollectGarbage::Execute", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TTxCollectGarbage::Execute", {"Marker", "BDT77"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie});
 
             Y_ABORT_UNLESS(Self->Data->IsLoaded());
 
@@ -50,8 +53,12 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Finished, Finished), (MoreData, MoreData));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TTxCollectGarbage::Complete", {"Marker", "BDT78"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie},
+                {"Finished", Finished},
+                {"MoreData", MoreData});
 
             Self->Data->CommitTrash(this);
 
@@ -175,8 +182,11 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT82, "TTxCollectGarbage::Finish", (Id, Self->GetLogId()),
-                (Sender, Request->Sender), (Cookie, Request->Cookie), (Error, error));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TTxCollectGarbage::Finish", {"Marker", "BDT82"},
+                {"Id", Self->GetLogId()},
+                {"Sender", Request->Sender},
+                {"Cookie", Request->Cookie},
+                {"Error", error});
             TActivationContext::Send(response.release());
             Finished = true;
         }
@@ -214,21 +224,27 @@ namespace NKikimr::NBlobDepot {
                         NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrierGenCtr)), \
                         NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrierCollect)) \
                     ); \
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT45, "replaced " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "replaced " #TYPE " barrier through decommission", {"Marker", "BDT45"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } else { \
-                    STLOG(PRI_ERROR, BLOB_DEPOT, BDT36, "decreasing " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDBLOG_COMP_ERROR(BLOB_DEPOT, "decreasing " #TYPE " barrier through decommission", {"Marker", "BDT36"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } \
             } else if (current.TYPE##GenCtr == barrierGenCtr && current.TYPE != barrierCollect) { \
-                STLOG(PRI_ERROR, BLOB_DEPOT, BDT43, "barrier value mismatch through decommission", \
-                    (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                    (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                    (Barrier, barrier)); \
+                YDBLOG_COMP_ERROR(BLOB_DEPOT, "barrier value mismatch through decommission", {"Marker", "BDT43"}, \
+                    {"TabletId", barrier.TabletId}, \
+                    {"Channel", int(barrier.Channel)}, \
+                    {"GenCtr", current.TYPE##GenCtr}, \
+                    {"Collect", current.TYPE}, \
+                    {"Barrier", barrier}); \
             } \
         }
 
@@ -242,8 +258,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT74, "TBarrierServer::Handle(TEvCollectGarbage)", (Id, Self->GetLogId()),
-            (Sender, ev->Sender), (Cookie, ev->Cookie), (Msg, record));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TBarrierServer::Handle(TEvCollectGarbage)", {"Marker", "BDT74"},
+            {"Id", Self->GetLogId()},
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie},
+            {"Msg", record});
         if (Self->Data->IsLoaded()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
                 std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));

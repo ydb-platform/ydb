@@ -1,5 +1,6 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -54,7 +55,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void IssueResolve() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA49, "IssueResolve", (AgentId, Agent.LogId), (QueryId, GetQueryId()));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "IssueResolve", {"Marker", "BDA49"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()});
                 Agent.Issue(Resolve, this, nullptr);
             }
 
@@ -62,12 +65,16 @@ namespace NKikimr::NBlobDepot {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA50, "TEvGetResult", (AgentId, Agent.LogId),
-                        (QueryId, GetQueryId()), (Response, *p));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "TEvGetResult", {"Marker", "BDA50"},
+                        {"AgentId", Agent.LogId},
+                        {"QueryId", GetQueryId()},
+                        {"Response", *p});
                     TQuery::HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA51, "TEvResolveResult", (AgentId, Agent.LogId),
-                        (QueryId, GetQueryId()), (Response, (*p)->Record));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "TEvResolveResult", {"Marker", "BDA51"},
+                        {"AgentId", Agent.LogId},
+                        {"QueryId", GetQueryId()},
+                        {"Response", (*p)->Record});
                     if (context) {
                         TQuery::HandleResolveResult(std::move(context), **p);
                     } else {
@@ -79,14 +86,17 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock() override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "OnUpdateBlock", {"Marker", "BDA18"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()});
                 CheckBlockedGeneration();
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg.Record));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "HandleResolveResult", {"Marker", "BDA19"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Msg", msg.Record});
 
                 Agent.BlobMappingCache.HandleResolveResult(id, msg.Record, nullptr);
 
@@ -139,8 +149,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 /*tag*/, TReadOutcome&& outcome) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Outcome, outcome));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "OnRead", {"Marker", "BDA20"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Outcome", outcome});
 
                 std::visit(TOverloaded{
                     [&](TReadOutcome::TOk& ok) {

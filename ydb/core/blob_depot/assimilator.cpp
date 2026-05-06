@@ -3,6 +3,8 @@
 #include "blocks.h"
 #include "garbage_collection.h"
 #include "data.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -139,7 +141,8 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::PassAway() {
         if (!Token.expired()) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT52, "TAssimilator::PassAway", (Id, Self->GetLogId()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TAssimilator::PassAway", {"Marker", "BDT52"},
+                {"Id", Self->GetLogId()});
         }
         TActorBootstrapped::PassAway();
     }
@@ -167,7 +170,9 @@ namespace NKikimr::NBlobDepot {
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
+                YDBLOG_COMP_CRIT(BLOB_DEPOT, "unexpected event", {"Marker", "BDT00"},
+                    {"Id", Self->GetLogId()},
+                    {"Type", type});
                 break;
         }
     }
@@ -195,8 +200,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::SendAssimilateRequest() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT53, "TAssimilator::SendAssimilateRequest", (Id, Self->GetLogId()),
-            (SelfId, SelfId()));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TAssimilator::SendAssimilateRequest", {"Marker", "BDT53"},
+            {"Id", Self->GetLogId()},
+            {"SelfId", SelfId()});
         Y_ABORT_UNLESS(Self->Config.GetIsDecommittingGroup());
         SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
             SkipBarriersUpTo, SkipBlobsUpTo, false, false));
@@ -240,13 +246,17 @@ namespace NKikimr::NBlobDepot {
                 ui32 maxItems = 10'000;
                 for (auto& blocks = Ev->Blocks; maxItems && !blocks.empty(); blocks.pop_front(), --maxItems) {
                     auto& block = blocks.front();
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT31, "assimilated block", (Id, Self->Self->GetLogId()), (Block, block));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "assimilated block", {"Marker", "BDT31"},
+                        {"Id", Self->Self->GetLogId()},
+                        {"Block", block});
                     Self->Self->BlocksManager->AddBlockOnDecommit(block, txc);
                     Self->SkipBlocksUpTo.emplace(block.TabletId);
                 }
                 for (auto& barriers = Ev->Barriers; maxItems && !barriers.empty(); barriers.pop_front(), --maxItems) {
                     auto& barrier = barriers.front();
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT32, "assimilated barrier", (Id, Self->Self->GetLogId()), (Barrier, barrier));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "assimilated barrier", {"Marker", "BDT32"},
+                        {"Id", Self->Self->GetLogId()},
+                        {"Barrier", barrier});
                     if (!Self->Self->BarrierServer->AddBarrierOnDecommit(barrier, maxItems, txc, this)) {
                         Y_ABORT_UNLESS(!maxItems);
                         break;
@@ -256,7 +266,9 @@ namespace NKikimr::NBlobDepot {
                 }
                 for (auto& blobs = Ev->Blobs; maxItems && !blobs.empty(); blobs.pop_front(), --maxItems) {
                     auto& blob = blobs.front();
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT33, "assimilated blob", (Id, Self->Self->GetLogId()), (Blob, blob));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "assimilated blob", {"Marker", "BDT33"},
+                        {"Id", Self->Self->GetLogId()},
+                        {"Blob", blob});
                     Self->Self->Data->AddDataOnDecommit(blob, txc, this);
                     Self->SkipBlobsUpTo.emplace(blob.Id);
                     Self->Self->Data->LastAssimilatedBlobId = blob.Id;
@@ -295,9 +307,11 @@ namespace NKikimr::NBlobDepot {
                         }
                     };
 
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT47, "decommit state change", (Id, Self->Self->GetLogId()),
-                        (From, toString(decommitStateOnEntry)), (To, toString(decommitState)),
-                        (UnblockRegisterActorQ, UnblockRegisterActorQ));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "decommit state change", {"Marker", "BDT47"},
+                        {"Id", Self->Self->GetLogId()},
+                        {"From", toString(decommitStateOnEntry)},
+                        {"To", toString(decommitState)},
+                        {"UnblockRegisterActorQ", UnblockRegisterActorQ});
                 } else {
                     MoreData = true;
                 }
@@ -314,7 +328,8 @@ namespace NKikimr::NBlobDepot {
                     Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
                 } else {
                     if (UnblockRegisterActorQ) {
-                        STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->Self->GetLogId()));
+                        YDBLOG_COMP_INFO(BLOB_DEPOT, "blocks assimilation complete", {"Marker", "BDT35"},
+                            {"Id", Self->Self->GetLogId()});
                         Self->Self->ProcessRegisterAgentQ();
                     }
 
@@ -327,8 +342,10 @@ namespace NKikimr::NBlobDepot {
         if (ev->Get()->Status == NKikimrProto::OK) {
             Self->Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
         } else {
-            STLOG(PRI_INFO, BLOB_DEPOT, BDT75, "TEvAssimilate failed", (Id, Self->GetLogId()),
-                (Status, ev->Get()->Status), (ErrorReason, ev->Get()->ErrorReason));
+            YDBLOG_COMP_INFO(BLOB_DEPOT, "TEvAssimilate failed", {"Marker", "BDT75"},
+                {"Id", Self->GetLogId()},
+                {"Status", ev->Get()->Status},
+                {"ErrorReason", ev->Get()->ErrorReason});
 
             ActionInProgress = false;
             Action();
@@ -408,8 +425,10 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
-            (LastScannedKey, LastScannedKey), (NumGets, Gets.size()));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TAssimilator::ScanDataForCopying", {"Marker", "BDT54"},
+            {"Id", Self->GetLogId()},
+            {"LastScannedKey", LastScannedKey},
+            {"NumGets", Gets.size()});
 
         THPTimer timer;
 
@@ -443,9 +462,14 @@ namespace NKikimr::NBlobDepot {
             TData::TScanRange r{LastScannedKey ? TData::TKey(*LastScannedKey) : TData::TKey::Min(), TData::TKey::Max()};
             Self->Data->ScanRange(r, nullptr, nullptr, callback);
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT56, "ScanDataForCopying step", (Id, Self->GetLogId()),
-                (LastScannedKey, LastScannedKey), (ScanQ.size, ScanQ.size()), (TotalSize, TotalSize),
-                (EntriesToProcess, EntriesToProcess), (Timeout, timeout), (NumGets, Gets.size()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "ScanDataForCopying step", {"Marker", "BDT56"},
+                {"Id", Self->GetLogId()},
+                {"LastScannedKey", LastScannedKey},
+                {"ScanQ.size", ScanQ.size()},
+                {"TotalSize", TotalSize},
+                {"EntriesToProcess", EntriesToProcess},
+                {"Timeout", timeout},
+                {"NumGets", Gets.size()});
 
             if (timeout) { // timeout hit, reschedule work
                 TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
@@ -499,8 +523,11 @@ namespace NKikimr::NBlobDepot {
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& resp = msg.Responses[i];
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT34, "got TEvGetResult", (Id, Self->GetLogId()), (BlobId, resp.Id),
-                (Status, resp.Status), (NumGets, Gets.size()));
+            YDBLOG_COMP_DEBUG(BLOB_DEPOT, "got TEvGetResult", {"Marker", "BDT34"},
+                {"Id", Self->GetLogId()},
+                {"BlobId", resp.Id},
+                {"Status", resp.Status},
+                {"NumGets", Gets.size()});
 
             switch (resp.Status) {
                 case NKikimrProto::OK:
@@ -613,8 +640,11 @@ namespace NKikimr::NBlobDepot {
         auto [key, getId] = std::move(it->second);
         Puts.erase(it);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
-            (NumGets, Gets.size()), (Key, key));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "got TEvPutResult", {"Marker", "BDT37"},
+            {"Id", Self->GetLogId()},
+            {"Msg", msg},
+            {"NumGets", Gets.size()},
+            {"Key", key});
 
         // process get
         const auto jt = Gets.find(getId);
@@ -638,7 +668,9 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT93, "got TEvCollectGarbageResult", (Id, Self->GetLogId()), (Msg, msg));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "got TEvCollectGarbageResult", {"Marker", "BDT93"},
+            {"Id", Self->GetLogId()},
+            {"Msg", msg});
         ++(msg.Status == NKikimrProto::OK ? Self->AsStats.CollectGarbageOK : Self->AsStats.CollectGarbageError);
 
         Y_ABORT_UNLESS(CollectGarbageInFlight);
@@ -668,7 +700,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::OnCopyDone() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT38, "data copying is done", (Id, Self->GetLogId()));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "data copying is done", {"Marker", "BDT38"},
+            {"Id", Self->GetLogId()});
         Y_ABORT_UNLESS(Gets.empty());
 
         class TTxFinishCopying : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
@@ -712,22 +745,26 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT39, "received TEvClientConnected", (Id, Self->GetLogId()), (Status, msg.Status));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "received TEvClientConnected", {"Marker", "BDT39"},
+            {"Id", Self->GetLogId()},
+            {"Status", msg.Status});
         if (msg.Status != NKikimrProto::OK) {
             CreatePipe();
         }
     }
 
     void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr /*ev*/) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT40, "received TEvClientDestroyed", (Id, Self->GetLogId()));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "received TEvClientDestroyed", {"Marker", "BDT40"},
+            {"Id", Self->GetLogId()});
         CreatePipe();
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev) {
         auto& msg = *ev->Get();
         const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT41, "received TEvControllerGroupDecommittedResponse", (Id, Self->GetLogId()),
-            (Status, status));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "received TEvControllerGroupDecommittedResponse", {"Marker", "BDT41"},
+            {"Id", Self->GetLogId()},
+            {"Status", status});
         if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
             class TTxFinishDecommission : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             public:

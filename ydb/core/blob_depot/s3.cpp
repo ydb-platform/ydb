@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -15,7 +16,8 @@ namespace NKikimr::NBlobDepot {
     TS3Manager::~TS3Manager() = default;
 
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "Init", {"Marker", "BDTS05"},
+            {"Settings", settings});
         if (settings) {
             auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings->GetSettings());
             WrapperId = Self->Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));

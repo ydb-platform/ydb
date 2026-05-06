@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -124,8 +125,11 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, Request.Id));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "allocated BlobSeqId", {"Marker", "BDA21"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"BlobSeqId", blobSeqId},
+                    {"BlobId", Request.Id});
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
@@ -200,8 +204,11 @@ namespace NKikimr::NBlobDepot {
                     item->ClearUncertainWrite();
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "IssueCommitBlobSeq", {"Marker", "BDA30"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"UncertainWrite", uncertainWrite},
+                    {"Msg", CommitBlobSeq});
 
                 Agent.Issue(CommitBlobSeq, this, nullptr);
 
@@ -210,8 +217,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void RemoveBlobSeqFromInFlight() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "RemoveBlobSeqFromInFlight", {"Marker", "BDA32"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()});
 
                 Y_ABORT_UNLESS(IsInFlight);
                 IsInFlight = false;
@@ -260,8 +268,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "TEvPutResult", {"Marker", "BDA22"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Msg", msg});
 
                 BDEV_QUERY(BDEV11, "TEvPut_resultFromProxy", (BlobId, msg.Id), (Status, msg.Status),
                     (ErrorReason, msg.ErrorReason));
@@ -290,8 +300,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "TEvCommitBlobSeqResult", {"Marker", "BDA31"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Msg", msg});
 
                 Y_ABORT_UNLESS(WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = false;
@@ -374,8 +386,10 @@ namespace NKikimr::NBlobDepot {
                 const TS3Locator temp = TS3Locator::FromProto(*locator);
                 TString key = temp.MakeObjectName(Agent.S3BasePath);
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Key, key));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "starting WriteActor", {"Marker", "BDA54"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()},
+                    {"Key", key});
 
                 WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id, temp);
 

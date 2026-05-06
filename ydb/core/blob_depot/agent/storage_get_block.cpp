@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -19,8 +20,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock() override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA52, "OnUpdateBlock", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDBLOG_COMP_DEBUG(BLOB_DEPOT_AGENT, "OnUpdateBlock", {"Marker", "BDA52"},
+                    {"AgentId", Agent.LogId},
+                    {"QueryId", GetQueryId()});
                 Initiate();
             }
 

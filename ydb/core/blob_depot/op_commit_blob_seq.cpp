@@ -3,6 +3,7 @@
 #include "data.h"
 #include "blocks.h"
 #include "s3.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -131,8 +132,12 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT68, "TTxCommitBlobSeq process key", (Id, Self->GetLogId()),
-                        (Key, key), (Item, item), (CanBeCollected, canBeCollected), (Generation, generation));
+                    YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TTxCommitBlobSeq process key", {"Marker", "BDT68"},
+                        {"Id", Self->GetLogId()},
+                        {"Key", key},
+                        {"Item", item},
+                        {"CanBeCollected", canBeCollected},
+                        {"Generation", generation});
 
                     if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
@@ -214,8 +219,10 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-            (Msg, ev->Get()->Record));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TEvDiscardSpoiledBlobSeq", {"Marker", "BDT57"},
+            {"Id", GetLogId()},
+            {"AgentId", agent.Connection->NodeId},
+            {"Msg", ev->Get()->Record});
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written
 

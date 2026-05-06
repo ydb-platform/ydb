@@ -1,6 +1,7 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 #include "space_monitor.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -25,7 +26,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT58, "TEvControllerGroupMetricsExchange", (Id, GetLogId()), (Msg, ev->Get()->Record));
+        YDBLOG_COMP_DEBUG(BLOB_DEPOT, "TEvControllerGroupMetricsExchange", {"Marker", "BDT58"},
+            {"Id", GetLogId()},
+            {"Msg", ev->Get()->Record});
 
         if (Config.HasVirtualGroupId()) {
             auto response = std::make_unique<TEvBlobStorage::TEvControllerGroupMetricsExchange>();

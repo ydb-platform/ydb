@@ -1,6 +1,8 @@
 #include "s3.h"
 
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -58,11 +60,13 @@ namespace NKikimr::NBlobDepot {
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         } else {
-                            STLOG(PRI_WARN, BLOB_DEPOT, BDTS09, "key not found", (Id, LogId),
-                                (Key, deleted.KeyHasBeenSet() ? std::make_optional<TString>(deleted.GetKey().c_str()) : std::nullopt));
+                            YDBLOG_COMP_WARN(BLOB_DEPOT, "key not found", {"Marker", "BDTS09"},
+                                {"Id", LogId},
+                                {"Key", deleted.KeyHasBeenSet() ? std::make_optional<TString>(deleted.GetKey().c_str()) : std::nullopt});
                         }
                     } else {
-                        STLOG(PRI_WARN, BLOB_DEPOT, BDTS10, "key not set", (Id, LogId));
+                        YDBLOG_COMP_WARN(BLOB_DEPOT, "key not set", {"Marker", "BDTS10"},
+                            {"Id", LogId});
                     }
                 }
                 for (const Aws::S3::Model::Error& error : result.GetErrors()) {
@@ -73,19 +77,23 @@ namespace NKikimr::NBlobDepot {
                             Locators.erase(it);
                         }
                     } else {
-                        STLOG(PRI_WARN, BLOB_DEPOT, BDTS11, "failed to delete object from S3", (Id, LogId),
-                            (Key, error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt),
-                            (Error, error.GetMessage().c_str()));
+                        YDBLOG_COMP_WARN(BLOB_DEPOT, "failed to delete object from S3", {"Marker", "BDTS11"},
+                            {"Id", LogId},
+                            {"Key", error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt},
+                            {"Error", error.GetMessage().c_str()});
                     }
                 }
             } else {
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
-                    (Error, msg.GetError().GetMessage().c_str()));
+                YDBLOG_COMP_WARN(BLOB_DEPOT, "failed to delete object(s) from S3", {"Marker", "BDTS12"},
+                    {"Id", LogId},
+                    {"Error", msg.GetError().GetMessage().c_str()});
             }
 
             for (const auto& [key, locator] : Locators) {
                 locatorsError.push_back(locator);
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS08, "failed to delete object from S3", (Id, LogId), (Locator, locator));
+                YDBLOG_COMP_WARN(BLOB_DEPOT, "failed to delete object from S3", {"Marker", "BDTS08"},
+                    {"Id", LogId},
+                    {"Locator", locator});
                 BDEV(BDEV31, "deleted_from_S3:error", (BDT, TabletId), (Locator, locator));
             }
 
@@ -99,8 +107,10 @@ namespace NKikimr::NBlobDepot {
 
         void Finish(std::optional<TString> error) {
             if (error) {
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS03, "failed to delete object(s) from S3", (Id, LogId), (Locators, Locators),
-                    (Error, error));
+                YDBLOG_COMP_WARN(BLOB_DEPOT, "failed to delete object(s) from S3", {"Marker", "BDTS03"},
+                    {"Id", LogId},
+                    {"Locators", Locators},
+                    {"Error", error});
             }
             std::vector<TS3Locator> locatorsOk;
             std::vector<TS3Locator> locatorsError;
@@ -139,7 +149,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_INFO, BLOB_DEPOT, BDTS04, "TTxDeleteTrashS3 complete", (Id, Self->GetLogId()), (Locators, Locators));
+            YDBLOG_COMP_INFO(BLOB_DEPOT, "TTxDeleteTrashS3 complete", {"Marker", "BDTS04"},
+                {"Id", Self->GetLogId()},
+                {"Locators", Locators});
 
             size_t len = 0;
             for (const TS3Locator& locator : Locators) {
@@ -158,7 +170,9 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TS3Manager::AddTrashToCollect(TS3Locator locator) {
-        STLOG(PRI_INFO, BLOB_DEPOT, BDTS06, "AddTrashToCollect", (Id, Self->GetLogId()), (Locator, locator));
+        YDBLOG_COMP_INFO(BLOB_DEPOT, "AddTrashToCollect", {"Marker", "BDTS06"},
+            {"Id", Self->GetLogId()},
+            {"Locator", locator});
         BDEV(BDEV32, "add_S3_trash_to_collect", (BDT, Self->TabletID()), (Locator, locator));
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;

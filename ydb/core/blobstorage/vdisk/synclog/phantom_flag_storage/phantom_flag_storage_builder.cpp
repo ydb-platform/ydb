@@ -27,7 +27,6 @@ public:
     {}
 
     void Bootstrap() {
-        Cerr << "TPhantomFlagStorageBuilderActor::Bootstrap " << !!SyncLogSnapshot << Endl;
         if (!SyncLogSnapshot) {
             Finish();
             return;

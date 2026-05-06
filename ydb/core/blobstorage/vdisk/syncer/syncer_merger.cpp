@@ -249,7 +249,7 @@ public:
     }
 
     std::unique_ptr<TEvAddFullSyncSsts> GenerateCommitMessage(const TActorId sstWriterId) {
-        return std::move(SstWriter.GenerateCommitMessage(sstWriterId));
+        return SstWriter.GenerateCommitMessage(sstWriterId);
     }
 
     TActorId GetLevelIndexActorId() const {
@@ -353,7 +353,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
         ++SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS05, VDISKP(VCtx->VDiskLogPrefix,
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS30, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: Send TEvVSyncFull"),
             (VDiskId, vDiskId));
 
@@ -366,9 +366,6 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         auto commit = [this]<class TMerger>(TMerger& merger) {
             auto msg = merger.GenerateCommitMessage(SelfId());
             if (msg) {
-                STLOG(PRI_DEBUG, BS_SYNCER, BSFS05, VDISKP(VCtx->VDiskLogPrefix,
-                    "TIndexMergerActor: Send commit"));
-
                 Send(merger.GetLevelIndexActorId(), msg.release());
                 ++CommitsInFlight;
             }
@@ -446,7 +443,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             msg->PeerSyncStates[vDiskId] = sync.Current;
         }
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS27, VDISKP(VCtx->VDiskLogPrefix,
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS28, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: NotifySchedulerAndDie"));
 
         Send(SchedulerActorId, msg.release());
@@ -507,6 +504,8 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
                 auto data = std::move(msg->Extracted.LogoBlobs->Extract());
                 if (sync.FullRecoverInfo->Stage == NKikimrBlobStorage::PhantomFlags) {
                     // TODO: handle PhantomFlags
+                    STLOG(PRI_DEBUG, BS_SYNCER, BSFS29, VDISKP(VCtx->VDiskLogPrefix,
+                        "TIndexMergerActor: TODO: handle PhantomFlags"));
                 } else {
                     LogoBlobMerger.PushData(vDiskId, std::move(data));
                 }
@@ -537,6 +536,9 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
                     BlockMerger.EndOfStream(vDiskId);
                     BarrierMerger.EndOfStream(vDiskId);
                     break;
+                default:
+                    Y_VERIFY_S(false, VCtx->VDiskLogPrefix
+                        << "Invalid full sync stage: " << (ui64)sync.FullRecoverInfo->Stage);
             }
 
             if (sync.EndOfStream) {

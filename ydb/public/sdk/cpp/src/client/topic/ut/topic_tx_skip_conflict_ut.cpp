@@ -6,6 +6,7 @@
 
 #include <util/datetime/base.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <variant>
@@ -215,7 +216,6 @@ protected:
         }
     }
 
-    /// Verifies user rollback under SkipConflictCheck: no committed topic data and no orphan tx keys.
     void RunRollbackCleanupTopicOnly() {
         CreateTopic("topic_A", TEST_CONSUMER, 1);
 
@@ -235,7 +235,6 @@ protected:
         CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
     }
 
-    /// Same as RunRollbackCleanupTopicOnly, but with data-shard participation in the same transaction.
     void RunRollbackCleanupDistributed() {
         static constexpr const char* kTable = "table_A";
         const std::vector<TTableRecord> rows = {
@@ -262,6 +261,56 @@ protected:
 
         CheckTabletKeys("topic_A");
         CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    void RunConcurrentDifferentProducersSamePartition() {
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+        const std::string producer1 = TEST_MESSAGE_GROUP_ID + "_1";
+        const std::string producer2 = TEST_MESSAGE_GROUP_ID + "_2";
+
+        auto makeSettings = [&](const std::string& producer) {
+            NTopic::TWriteSessionSettings options;
+            options.Path(GetTopicUtPath("topic_A"));
+            options.ProducerId(producer);
+            options.MessageGroupId(producer);
+            options.Codec(ECodec::RAW);
+            AugmentWriteSessionSettings(options);
+            return options;
+        };
+
+        NTopic::TTopicClient client(GetDriver());
+
+        auto session1 = CreateSession();
+        auto tx1 = session1->BeginTx();
+        {
+            auto ws1 = client.CreateSimpleBlockingWriteSession(makeSettings(producer1));
+            UNIT_ASSERT_C(ws1->Write(NTopic::TWriteMessage("p1-m1"), tx1.get()), "producer1 tx1 message1");
+            UNIT_ASSERT_C(ws1->Write(NTopic::TWriteMessage("p1-m2"), tx1.get()), "producer1 tx1 message2");
+            UNIT_ASSERT_C(ws1->Close(), "close producer1 write session");
+        }
+
+        auto session2 = CreateSession();
+        auto tx2 = session2->BeginTx();
+        {
+            auto ws2 = client.CreateSimpleBlockingWriteSession(makeSettings(producer2));
+            UNIT_ASSERT_C(ws2->Write(NTopic::TWriteMessage("p2-m1"), tx2.get()), "producer2 tx2 message1");
+            UNIT_ASSERT_C(ws2->Write(NTopic::TWriteMessage("p2-m2"), tx2.get()), "producer2 tx2 message2");
+            UNIT_ASSERT_C(ws2->Close(), "close producer2 write session");
+        }
+
+        session1->CommitTx(*tx1, EStatus::SUCCESS);
+        session2->CommitTx(*tx2, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4u);
+
+        std::sort(messages.begin(), messages.end());
+        std::vector<std::string> expected = {"p1-m1", "p1-m2", "p2-m1", "p2-m2"};
+        std::sort(expected.begin(), expected.end());
+        UNIT_ASSERT_VALUES_EQUAL(messages, expected);
+
+        CheckTabletKeys("topic_A");
     }
 };
 
@@ -337,6 +386,14 @@ Y_UNIT_TEST_F(RollbackCleanup_Distributed_Table_SkipConflictOn_MetaFalse, TFixtu
 
 Y_UNIT_TEST_F(RollbackCleanup_Distributed_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
     RunRollbackCleanupDistributed();
+}
+
+Y_UNIT_TEST_F(DifferentProducersConcurrent_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunConcurrentDifferentProducersSamePartition();
+}
+
+Y_UNIT_TEST_F(DifferentProducersConcurrent_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunConcurrentDifferentProducersSamePartition();
 }
 
 // Must expand inside Y_UNIT_TEST_F body: uses TFixture protected helpers.

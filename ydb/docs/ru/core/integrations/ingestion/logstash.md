@@ -129,10 +129,10 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 
 #### Проверка наличия записанных сообщений в {{ ydb-short-name }}
 
-Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../../reference/ydb-cli/commands/scan-query.md)):
+Теперь можно убедиться, что все отправленные сообщения записаны в таблице. Выполним запрос через [{{ ydb-cli }} sql](../../reference/ydb-cli/sql.md) (команда `{{ ydb-cli }} table query execute -t scan` устарела):
 
-```yql
-SELECT * FROM `logstash_demo`;
+```bash
+{{ ydb-cli }} sql -s 'SELECT * FROM `logstash_demo`;'
 ```
 
 и получим список записанных событий:

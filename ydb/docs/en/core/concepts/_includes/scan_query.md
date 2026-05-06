@@ -6,7 +6,7 @@ This execution mode has the following distinctive properties:
 
 * It is *read-only*.
 * In *SERIALIZABLE_RW* mode, a data snapshot is taken, and all further work happens on top of that snapshot. As a result, the impact on the OLTP transaction stream is minimal (only snapshot acquisition).
-* The query result is a data stream ([gRPC stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). Therefore, scan queries do not have a limit on the number of rows in the result.
+* The query result is a data stream ([gRPC stream](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)). Therefore, scan queries do not have a limit on the number of rows in the result.
 * Due to high overhead, it is suitable only for ad-hoc queries.
 
 {% note info %}
@@ -24,7 +24,7 @@ Scan queries are not considered a full-fledged way to run OLAP workloads because
 * There are no optimizations for point reads or small-range reads.
 * Automatic retries are not supported in SDKs.
 
-For OLAP workloads, {{ ydb-short-name }} provides a specialized table type — [column-oriented](../datamodel/table.md#column-tables) tables. They store each column's data separately from other columns, so only the columns directly involved in the query are read during execution.
+For OLAP workloads, {{ ydb-short-name }} provides a specialized table type — [column-oriented](../datamodel/table.md#column-oriented-tables) tables. They store each column's data separately from other columns, so only the columns directly involved in the query are read during execution.
 
 {% note info %}
 

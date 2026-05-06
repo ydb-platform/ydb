@@ -108,6 +108,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          ENABLE_NEED_AI_REVIEW_LABEL: ${{ vars.ENABLE_NEED_AI_REVIEW_LABEL || '' }}
         run: .github/scripts/tests/mute/create_new_muted_ya.py create_issues --file_path="${{ env.MUTED_YA_FILE_PATH }}" --branch=${{ env.BASE_BRANCH }} --build-type=${{ matrix.build_type }}
 
       - name: Add issues to PR

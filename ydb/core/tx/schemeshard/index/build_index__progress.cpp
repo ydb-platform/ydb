@@ -678,8 +678,14 @@ private:
             path->PathId.ToProto(ev->Record.MutablePathId());
         }
 
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+        const auto& vectorSettings = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        // Only send settings when vector_type and vector_dimension are known,
+        // otherwise the datashard will sample without format validation
+        TString unused;
+        if (NKikimr::NKMeans::ValidateSettings(vectorSettings, unused)) {
+            *ev->Record.MutableSettings() = vectorSettings;
+        }
         ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
         if (buildInfo.KMeans.Parent != 0) {
@@ -1132,6 +1138,7 @@ private:
         std::array<TCell, 2> pk;
         if (buildInfo.KMeans.IsEmpty) {
             // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
+            Y_ENSURE(buildInfo.Clusters);
             auto emptyVector = buildInfo.Clusters->GetEmptyRow();
             TVector<TCell> emptyCells = {TCell(emptyVector.data(), emptyVector.size())};
             for (ui32 level = 1; level <= buildInfo.KMeans.Levels; level++) {
@@ -1782,6 +1789,46 @@ private:
                 // Supported to not crash if we have duplicate clusters for some reason
                 return FillVectorIndexNextParent(txc, buildInfo);
             }
+            if (!buildInfo.Clusters) {
+                TStringBuf embedding;
+                for (const auto& [_, row] : buildInfo.Sample.Rows) {
+                    auto cell = TSerializedCellVec::ExtractCell(row, 0);
+                    if (!cell.IsNull() && cell.Size() > 0) {
+                        embedding = cell.AsBuf();
+                        break;
+                    }
+                }
+                if (!embedding.empty()) {
+                    auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                        buildInfo.SpecializedIndexDescription);
+                    TString error;
+                    if (!NKikimr::NKMeans::AutoSelectVectorSettings(*desc.MutableSettings()->mutable_settings(), embedding)) {
+                        error = "Failed to autodetect vector index settings, please set up vector_dimensions and vector_type manually";
+                    } else {
+                        buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(
+                            desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
+                    }
+                }
+
+                if (!buildInfo.Clusters) {
+                    NIceDb::TNiceDb db{txc.DB};
+                    Self->PersistBuildIndexAddIssue(db, buildInfo,
+                        "Cannot build vector index: "
+                        "no valid embedding found to auto-detect vector settings, "
+                        "please specify vector_type and vector_dimension manually");
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                    Progress(BuildId);
+                    return false;
+                }
+            }
+
+            if (buildInfo.KMeans.Parent == 0) {
+                // Persist autodetected settings
+                // We check parent to prevent multiply time rewrite same thing
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
+            }
+
             if (buildInfo.KMeans.Rounds > 1) {
                 LOG_D("FillVectorIndex Recompute " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
@@ -1873,6 +1920,14 @@ private:
         }
 
         if (buildInfo.KMeans.IsEmpty) {
+            if (!buildInfo.Clusters) {
+                NIceDb::TNiceDb db{txc.DB};
+                Self->PersistBuildIndexAddIssue(db, buildInfo,
+                    "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified");
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(BuildId);
+                return false;
+            }
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;

@@ -63,6 +63,14 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+
+bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error);
+bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+
+void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 rowCount, bool isPrefixed = false);
+bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& settings, const TStringBuf& embedding);
+bool NeedsVectorSettingsAutoSelect(const Ydb::Table::VectorIndexSettings& settings);
+
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error);
 void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio);
 void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio);

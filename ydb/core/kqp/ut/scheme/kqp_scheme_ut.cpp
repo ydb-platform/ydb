@@ -4458,7 +4458,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
             "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
-            "vector_type should be set");
+            CreateTable ? "" : "table is empty and vector_type/vector_dimension were not specified");
+
 
         // vector_dimension
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
@@ -4475,7 +4476,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
-            "vector_dimension should be set");
+            CreateTable ? "" : "table is empty and vector_type/vector_dimension were not specified");
 
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
@@ -4491,8 +4492,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid levels: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
             "Invalid levels: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
-            "levels should be set");
+        // levels is now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2", "");
 
         // clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
@@ -4510,8 +4511,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid clusters: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
             "Invalid clusters: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
-            "clusters should be set");
+        // clusters is now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1", "");
+        // clusters and levels are now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024", "");
 
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",

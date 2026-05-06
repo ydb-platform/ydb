@@ -15,6 +15,7 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/viewer/tests test.py.test_topic_data_cdc
+ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects

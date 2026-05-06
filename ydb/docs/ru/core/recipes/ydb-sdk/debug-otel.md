@@ -1,137 +1,271 @@
-# Включение трассировки в OpenTelemetry
+# Трассировка с OpenTelemetry
 
-Ниже приведены примеры кода включения трассировки в OpenTelemetry в разных {{ ydb-short-name }} SDK.
+{{ ydb-short-name }} SDK инструментируют каждую операцию с базой данных спанами [OpenTelemetry](https://opentelemetry.io/), обеспечивая сквозную распределённую трассировку от кода приложения до каждого gRPC-вызова к YDB. Спаны экспортируются по стандартному протоколу OTLP и совместимы с Jaeger, Grafana Tempo, Zipkin и любым другим бэкендом, поддерживающим OpenTelemetry.
+
+## Создаваемые спаны {#spans}
+
+Для каждой операции с базой данных создаются следующие спаны:
+
+| Спан | Тип | Описание |
+|---|---|---|
+| `ydb.Driver.Initialize` | `Internal` | Первичная инициализация драйвера: обнаружение кластера и аутентификация |
+| `ydb.CreateSession` | `Client` | Создание сессии через gRPC `CreateSession` и `AttachStream` |
+| `ydb.RunWithRetry` | `Internal` | Охватывает весь цикл повторных попыток для одной операции |
+| `ydb.Try` | `Internal` | Один спан на каждую попытку, включая первую; дочерние RPC-спаны прикрепляются к нему |
+| `ydb.ExecuteQuery` | `Client` | Выполнение одного YQL-запроса |
+| `ydb.Commit` | `Client` | Фиксация транзакции |
+| `ydb.Rollback` | `Client` | Откат транзакции |
+
+Типичное дерево спанов для транзакционной операции с повторными попытками выглядит следующим образом:
+
+```
+ydb.RunWithRetry  (Internal)
+└─ ydb.Try        (Internal)   ← 1-я попытка
+   ├─ ydb.ExecuteQuery (Client)
+   ├─ ydb.ExecuteQuery (Client)
+   └─ ydb.Commit       (Client)
+```
+
+При повторной попытке создаётся дополнительный дочерний спан `ydb.Try` с атрибутом `ydb.retry.backoff_ms`, равным времени ожидания перед этой попыткой в миллисекундах.
+
+## Атрибуты спанов {#attributes}
+
+На RPC-спанах проставляются следующие атрибуты:
+
+| Атрибут | Описание |
+|---|---|
+| `db.system.name` | Всегда `"ydb"` |
+| `db.namespace` | Путь к базе данных YDB |
+| `server.address` / `server.port` | Основной эндпоинт из строки подключения |
+| `network.peer.address` / `network.peer.port` | Фактический gRPC-эндпоинт, использованный для вызова |
+| `ydb.node.id` / `ydb.node.dc` | Идентификатор и датацентр узла YDB |
+| `db.response.status_code` | Код статуса YDB, устанавливается при возникновении `YdbException` |
+| `error.type` | `"transport_error"`, `"ydb_error"` или полное имя класса исключения |
+
+## Контекст трассировки W3C {#w3c}
+
+Заголовок W3C `traceparent` автоматически добавляется в каждый исходящий gRPC-вызов. Это связывает серверные трассировки YDB с клиентскими спанами в вашем бэкенде без дополнительной настройки.
+
+## Подключение к SDK {#integration}
 
 {% list tabs %}
 
 - Go
 
-  {% list tabs %}
+  Установите адаптер OpenTelemetry для {{ ydb-short-name }} Go SDK:
 
-  - Native SDK
+  ```bash
+  go get github.com/ydb-platform/ydb-go-sdk-otel
+  ```
 
-     ```go
-     package main
+  Настройте `TracerProvider` и передайте адаптер в `ydb.Open`:
 
-     import (
-         "context"
+  ```go
+  package main
 
-         "github.com/ydb-platform/ydb-go-sdk/v3"
-         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+  import (
+      "context"
+      "os"
 
-         ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
-         ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-         otelTrace "go.opentelemetry.io/otel/sdk/trace"
-     )
+      "go.opentelemetry.io/otel"
+      "go.opentelemetry.io/otel/attribute"
+      "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+      "go.opentelemetry.io/otel/sdk/resource"
+      sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-     func main() {
-         ...
-         tracerProvider := otelTrace.NewTracerProvider(
-             // WithBatcher registers the exporter with the TracerProvider.
-             // The exporter must implement the SpanExporter interface.
-             // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-             otelTrace.WithBatcher(exp),
-             // WithResource attaches metadata (like service name and environment) to all spans
-             // created by this TracerProvider. Use resource.NewWithAttributes with standard
-             // semantic keys such as semconv.ServiceNameKey.
-             otelTrace.WithResource(resource.NewWithAttributes(res)),
-         )
-         defer tracerProvider.Shutdown(ctx)
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
+  )
 
-         // Set global tracer of this application.
-         otel.SetTracerProvider(tracerProvider)
+  func main() {
+      ctx := context.Background()
 
-         // Create a root span.
-         ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-         defer span.End()
+      exporter, err := otlptracegrpc.New(ctx,
+          otlptracegrpc.WithEndpoint("localhost:4317"),
+          otlptracegrpc.WithInsecure(),
+      )
+      if err != nil {
+          panic(err)
+      }
+      res, _ := resource.Merge(resource.Default(), resource.NewSchemaless(
+          attribute.String("service.name", "my-service"),
+      ))
+      tp := sdktrace.NewTracerProvider(
+          sdktrace.WithBatcher(exporter),
+          sdktrace.WithResource(res),
+      )
+      defer tp.Shutdown(ctx)
+      otel.SetTracerProvider(tp)
 
-         // If you want to see otel-trace-id in the logs,
-         // it’s important to connect the adapters in a specific order — first otel, then logger.
-         db, err := ydb.Open(ctx,
-             os.Getenv("YDB_CONNECTION_STRING"),
-             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-             ydbZap.WithTraces(logger, trace.DetailsAll),
-         )
-         if err != nil {
-             panic(err)
-         }
-         defer db.Close(ctx)
-         ...
-     }
-     ```
-
-  - database/sql
-
-     ```go
-     package main
-
-     import (
-         "context"
-         "database/sql"
-
-         "github.com/ydb-platform/ydb-go-sdk/v3"
-         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-
-         ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
-         ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-         otelTrace "go.opentelemetry.io/otel/sdk/trace"
-     )
-
-     func main() {
-         ...
-         tracerProvider := otelTrace.NewTracerProvider(
-             // WithBatcher registers the exporter with the TracerProvider.
-             // The exporter must implement the SpanExporter interface.
-             // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-             otelTrace.WithBatcher(exp),
-             // WithResource attaches metadata (like service name and environment) to all spans
-             // created by this TracerProvider. Use resource.NewWithAttributes with standard
-             // semantic keys such as semconv.ServiceNameKey.
-             otelTrace.WithResource(resource.NewWithAttributes(res)),
-         )
-         defer tracerProvider.Shutdown(ctx)
-
-         // Set global tracer of this application.
-         otel.SetTracerProvider(tracerProvider)
-
-         // Create a root span.
-         ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-         defer span.End()
-
-         // If you want to see otel-trace-id in the logs,
-         // it’s important to connect the adapters in a specific order — first otel, then logger.
-         nativeDriver, err := ydb.Open(ctx,
-             os.Getenv("YDB_CONNECTION_STRING"),
-             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-             ydbZap.WithTraces(logger, trace.DetailsAll),
-         )
-         if err != nil {
-             panic(err)
-         }
-         defer nativeDriver.Close(ctx)
-
-         connector, err := ydb.Connector(nativeDriver)
-         if err != nil {
-             panic(err)
-         }
-         db := sql.OpenDB(connector)
-         defer db.Close()
-         ...
-     }
-     ```
-
-  {% endlist %}
-
-- Java
-
-  Функциональность на данный момент не поддерживается.
+      db, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydbOtel.WithTraces(),
+      )
+      if err != nil {
+          panic(err)
+      }
+      defer db.Close(ctx)
+  }
+  ```
 
 - Python
 
-  Функциональность на данный момент не поддерживается.
+  Установите дополнительные зависимости `opentelemetry` и экспортёр OTLP:
 
-- JavaScript
+  ```bash
+  pip install ydb[opentelemetry]
+  pip install opentelemetry-exporter-otlp-proto-grpc
+  ```
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  Вызовите `enable_tracing()` после настройки глобального `TracerProvider`:
+
+  ```python
+  from opentelemetry import trace
+  from opentelemetry.sdk.trace import TracerProvider
+  from opentelemetry.sdk.trace.export import BatchSpanProcessor
+  from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+  from opentelemetry.sdk.resources import Resource
+
+  import ydb
+  from ydb.opentelemetry import enable_tracing
+
+  resource = Resource(attributes={"service.name": "my-service"})
+  provider = TracerProvider(resource=resource)
+  provider.add_span_processor(
+      BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4317"))
+  )
+  trace.set_tracer_provider(provider)
+
+  enable_tracing()
+
+  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+      driver.wait(timeout=5)
+      with ydb.QuerySessionPool(driver) as pool:
+          pool.execute_with_retries("SELECT 1")
+
+  provider.shutdown()
+  ```
+
+- .NET
+
+  Добавьте NuGet-пакет:
+
+  ```bash
+  dotnet add package Ydb.Sdk.OpenTelemetry
+  ```
+
+  Зарегистрируйте инструментацию {{ ydb-short-name }} при настройке OpenTelemetry в вашем сервисе:
+
+  ```csharp
+  services.AddOpenTelemetry()
+      .WithTracing(builder => builder
+          .AddYdb()
+          .AddOtlpExporter());
+  ```
+
+- Java
+
+  Добавьте зависимости YDB SDK и OpenTelemetry (пример для Maven):
+
+  ```xml
+  <dependency>
+      <groupId>tech.ydb</groupId>
+      <artifactId>ydb-sdk-core</artifactId>
+      <version>${ydb.sdk.version}</version>
+  </dependency>
+  <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-sdk</artifactId>
+      <version>${otel.version}</version>
+  </dependency>
+  <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-exporter-otlp</artifactId>
+      <version>${otel.version}</version>
+  </dependency>
+  ```
+
+  Создайте экземпляр OpenTelemetry SDK и передайте его в транспорт через `OpenTelemetryTracer`:
+
+  ```java
+  import io.opentelemetry.api.OpenTelemetry;
+  import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
+  import io.opentelemetry.sdk.OpenTelemetrySdk;
+  import io.opentelemetry.sdk.resources.Resource;
+  import io.opentelemetry.sdk.trace.SdkTracerProvider;
+  import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+  import io.opentelemetry.semconv.resource.attributes.ResourceAttributes;
+  import tech.ydb.core.auth.CloudAuthHelper;
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.core.opentelemetry.OpenTelemetryTracer;
+  import tech.ydb.query.QueryClient;
+
+  Resource resource = Resource.getDefault().toBuilder()
+      .put(ResourceAttributes.SERVICE_NAME, "my-service")
+      .build();
+
+  SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
+      .setResource(resource)
+      .addSpanProcessor(BatchSpanProcessor.builder(
+          OtlpGrpcSpanExporter.builder()
+              .setEndpoint("http://localhost:4317")
+              .build()
+      ).build())
+      .build();
+
+  OpenTelemetry openTelemetry = OpenTelemetrySdk.builder()
+      .setTracerProvider(tracerProvider)
+      .build();
+
+  try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+          .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+          .withTracer(OpenTelemetryTracer.fromOpenTelemetry(openTelemetry))
+          .build();
+       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+      // Используйте queryClient здесь
+  }
+  ```
+
+- C++
+
+  Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:
+
+  ```cpp
+  #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/trace.h>
+
+  #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+  #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
+  #include <opentelemetry/sdk/trace/tracer_provider.h>
+  #include <opentelemetry/sdk/trace/simple_processor_factory.h>
+  #include <opentelemetry/sdk/resource/resource.h>
+  #include <opentelemetry/trace/provider.h>
+
+  namespace sdktrace = opentelemetry::sdk::trace;
+  namespace otlp     = opentelemetry::exporter::otlp;
+  namespace resource = opentelemetry::sdk::resource;
+  using namespace NYdb;
+
+  // 1. Инициализируем провайдер трассировки OTel
+  otlp::OtlpHttpExporterOptions opts;
+  opts.url = "http://localhost:4317/v1/traces";
+  auto exporter  = otlp::OtlpHttpExporterFactory::Create(opts);
+  auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+  auto res       = resource::Resource::Create({{"service.name", "my-service"}});
+  auto otelProvider = std::make_shared<sdktrace::TracerProvider>(
+      std::move(processor), res);
+  opentelemetry::trace::Provider::SetTracerProvider(otelProvider);
+
+  // 2. Оборачиваем в провайдер трассировки YDB
+  auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(otelProvider);
+
+  // 3. Создаём драйвер YDB с включённой трассировкой
+  auto driverConfig = TDriverConfig()
+      .SetEndpoint("localhost:2136")
+      .SetDatabase("/local")
+      .SetTraceProvider(ydbTraceProvider);
+
+  TDriver driver(driverConfig);
+  ```
 
 {% endlist %}

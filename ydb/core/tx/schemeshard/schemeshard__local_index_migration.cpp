@@ -15,12 +15,13 @@ TString TLocalIndexMigrationItem::DebugString() const {
 
 namespace {
 
-// Modeled on TSysViewsRosterUpdate: pre-allocated TxIds, all operations fired in
-// parallel, finishes when the awaiting map drains.
+// Modeled on TSysViewsRosterUpdate: pre-allocated TxIds, operations processed
+// sequentially (one at a time) to avoid concurrent ALTER operations on the same
+// table, finishes when all items are processed.
 class TLocalIndexMigrator : public TActorBootstrapped<TLocalIndexMigrator> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEMESHARD_TABLET_MIGRATOR;
+        return NKikimrServices::TActivity::SCHEMESHARD_LOCAL_INDEX_MIGRATOR;
     }
 
     static constexpr TDuration RetryDelay = TDuration::MilliSeconds(100);

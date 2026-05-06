@@ -85,6 +85,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         if (isLocalIndex) {
             const TString srcIndexPath = srcPath.PathString() + "/" + name;
             result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            continue;
         } else {
             result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
         }

@@ -213,7 +213,9 @@ inline bool ConvertRequestedIndexToAlteringConfig(
         case NKikimrSchemeOp::TOlapIndexRequested::kBloomNGrammFilter: {
             config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
             const auto& nf = indexProto.GetBloomNGrammFilter();
-            config.AddKeyColumnNames(nf.GetColumnName());
+            if (!nf.GetColumnName().empty()) {
+                config.AddKeyColumnNames(nf.GetColumnName());
+            }
             auto* desc = config.MutableBloomNGrammFilterDescription();
             if (nf.HasFalsePositiveProbability()) {
                 desc->SetFalsePositiveProbability(nf.GetFalsePositiveProbability());

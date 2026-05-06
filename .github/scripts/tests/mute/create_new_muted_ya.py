@@ -89,6 +89,13 @@ def grace_started_at_to_utc_date(value):
     return None
 
 
+def _owner_for_routing(row):
+    """Owner for issue routing/queue: prefer effective owner overrides, fallback to raw owner."""
+    if not row:
+        return "unknown"
+    return row.get('effective_owner_team') or row.get('owner') or "unknown"
+
+
 def merge_mute_aggregate_with_fast_unmute_grace(
     all_data,
     aggregated_for_mute_default,
@@ -412,7 +419,7 @@ def aggregate_test_data(all_data, period_days):
                     'fail_count': 0,
                     'mute_count': 0,
                     'skip_count': 0,
-                    'owner': test.get('owner'),
+                    'owner': _owner_for_routing(test),
                     'owner_date': test.get('date_window'),
                     'is_muted': test.get('is_muted'),
                     'is_muted_date': test.get('date_window'),  # Store the date used for is_muted.
@@ -440,7 +447,7 @@ def aggregate_test_data(all_data, period_days):
                 # Owner must follow the latest day in the window (tests_monitor owner can change
                 # when TESTOWNERS is updated); the first row is the earliest date due to sort order.
                 if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('owner_date', 0)):
-                    aggregated[full_name]['owner'] = test.get('owner')
+                    aggregated[full_name]['owner'] = _owner_for_routing(test)
                     aggregated[full_name]['owner_date'] = test.get('date_window')
 
             # Accumulate aggregated counters.
@@ -1137,7 +1144,7 @@ def create_mute_issues(
                 'success_rate': success_rate,
                 'days_in_state': days_in_state,
                 'date_window': _format_issue_date_window(date_window),
-                'owner': monitor.get('owner'),
+                'owner': _owner_for_routing(monitor),
                 'state': state,
                 'summary': summary,
                 'fail_count': source.get('fail_count'),

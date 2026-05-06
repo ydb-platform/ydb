@@ -32,10 +32,11 @@ namespace NKikimr::NPQ::NMLP {
             struct TFullState {
                 ESendReasons Reasons = ESendReasons::None;
                 ui64 GroupsCount = Max<ui64>();
+                TInstant Timestamp;
             };
 
             TFullState SendReasons;
-            TMaybe<TFullState> LastSendReasons;
+            TMaybe<TFullState> LastSend;
 
             bool AddSendFullStateReason(ESendReasons reason, ui64 inflightMessagesCount);
             bool AddSendFullStateReason(ESendReasons reason);

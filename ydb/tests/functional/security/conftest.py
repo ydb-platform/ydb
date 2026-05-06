@@ -109,11 +109,14 @@ def create_ydb_configurator(
     enforce_user_token_requirement=True,
     require_counters_authentication=None,
     require_healthcheck_authentication=None,
+    extra_feature_flags=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
         'enforce_user_token_requirement': enforce_user_token_requirement,
     }
+    if extra_feature_flags:
+        cluster_config['extra_feature_flags'] = extra_feature_flags
     config_generator = KikimrConfigGenerator(**cluster_config)
 
     if 'grpc_config' not in config_generator.yaml_config:
@@ -200,6 +203,35 @@ def ydb_cluster_with_require_healthcheck_auth(certificates):
         certificates,
         enforce_user_token_requirement=True,
         require_healthcheck_authentication=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_external_access_controls(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        extra_feature_flags=['enable_viewer_external_http_access_controls'],
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_config_sids_flag(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        extra_feature_flags=[
+            'enable_viewer_external_http_access_controls',
+            'enable_viewer_allowed_sids_for_config_and_legacy_sysinfo',
+        ],
     )
     cluster = KiKiMR(configurator)
     cluster.start()

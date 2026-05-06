@@ -164,14 +164,16 @@ private:
 public:
     static TString ValidatePath(const TString& basePath) {
         TFsPath path(basePath);
+        path.Fix();
         Y_ENSURE(path.Exists(), "BasePath must exist: " << basePath);
 
         TString realPath = path.RealPath().GetPath();
-        Y_ENSURE(realPath == basePath, "BasePath must not contain symlinks"
+        TString normalizedPath = path.GetPath();
+        Y_ENSURE(realPath == normalizedPath, "BasePath must not contain symlinks"
             << ": basePath# " << basePath
             << ", realPath# " << realPath);
 
-        return realPath;
+        return normalizedPath;
     }
 
     TFsOperationActor(const TString& basePath)
@@ -185,7 +187,6 @@ public:
 
     void Bootstrap() {
         FS_LOG_T("TFsOperationActor Bootstrap called");
-
         Become(&TThis::StateWork);
     }
 
@@ -474,18 +475,7 @@ public:
         try {
             TFsPath dirPath(prefix);
 
-            if (!dirPath.Exists()) {
-                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix does not exist");
-                return;
-            }
-
-            if (!dirPath.IsDirectory()) {
-                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is not a directory");
-                return;
-            }
-
-            TFsPath realDirPath = dirPath.RealPath();
-            if (!realDirPath.IsNonStrictSubpathOf(BasePath)) {
+            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
                 ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
                 return;
             }
@@ -493,8 +483,19 @@ public:
             Aws::S3::Model::ListObjectsResult awsResult;
             bool truncated = false;
 
-            if (dirPath.Exists() && dirPath.IsDirectory()) {
-                truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+            if (dirPath.Exists()) {
+                TFsPath realDirPath = dirPath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(BasePath)) {
+                    ReplyError<TEvListObjectsResponse>(ev->Sender,
+                        TStringBuilder() << "Prefix resolves outside of base path after symlink resolution"
+                            << ": prefix# " << dirPath.GetPath()
+                            << ", realPath# " << realDirPath.GetPath());
+                    return;
+                }
+
+                if (dirPath.IsDirectory()) {
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                }
             }
 
             awsResult.SetIsTruncated(truncated);

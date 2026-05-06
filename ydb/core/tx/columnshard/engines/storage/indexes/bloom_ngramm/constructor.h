@@ -1,10 +1,10 @@
 #pragma once
 
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
-#include <ydb/core/local_indexes/bloom/const.h>
 
 #include <optional>
 

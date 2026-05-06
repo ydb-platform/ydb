@@ -34,6 +34,16 @@ TString NormalizeRemoteAddress(const TString& peerName) {
     return addr ? NAddr::PrintHost(*addr) : peerName;
 }
 
+TString NormalizeSubjectId(const TString& subjectId) {
+    if (subjectId.Contains('@')) {
+        size_t pos = subjectId.find('@');
+        if (pos != TString::npos) {
+            return subjectId.substr(0, pos);
+        }
+    }
+    return subjectId;
+}
+
 std::string GetOperationType(const NKikimrSchemeOp::TModifyScheme& operation) {
     switch (operation.GetOperationType()) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
@@ -208,7 +218,7 @@ template <typename TEvent>
 void FillCommonEventFields(TEvent& ev, const TCloudEventInfo& info) {
     // Authentication
     ev.mutable_authentication()->set_authenticated(true);
-    ev.mutable_authentication()->set_subject_id(info.UserSID);
+    ev.mutable_authentication()->set_subject_id(NormalizeSubjectId(info.UserSID));
     ev.mutable_authentication()->set_subject_type(
         yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
 

@@ -21,7 +21,7 @@
 namespace NKikimr {
 
 namespace {
-static ui64 NextRequestIdx = 0;
+static std::atomic<ui64> NextRequestIdx = 0;
 
 class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersistentBufferWriterLoadTestActor> {
     static constexpr ui32 SectorSize = 4096;
@@ -82,7 +82,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     std::vector<TWriteInfo> WriteInfos;
     TWeightedIndices WriteInfosByWeight;
 
-    std::map<ui64, ui64> Lsns;
+    std::deque<std::pair<ui64, ui64>> Lsns;
     double FreeSpace = 1;
 
 
@@ -273,7 +273,7 @@ public:
     void CheckDie(const TActorContext& ctx) {
         if (!MaxInFlight && !InFlight) {
             if (Connected && !DisconnectSent) {
-                auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.rbegin()->first);
+                auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
                 SendRequest(ctx, std::move(eraseEv), NextRequestIdx++);
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
@@ -340,16 +340,16 @@ public:
         while (InFlight < MaxInFlight) {
             if (!Lsns.empty() && ReadRatio != 0 && WritesCount > 0 && ReadsCount / WritesCount < ReadRatio / 100.0) {
                 ReadsCount++;
-                auto it = Lsns.rbegin();
-                const ui64 requestIdx = NewTRequestInfo(it->second, TRequestInfo::READ);
+                auto it = Lsns.back();
+                const ui64 requestIdx = NewTRequestInfo(it.second, TRequestInfo::READ);
                 if (MeasureType == NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::READ) {
-                    Report->Size += it->second;
+                    Report->Size += it.second;
                 }
                 auto msg = std::make_unique<NDDisk::TEvReadPersistentBuffer>();
                 NDDisk::TQueryCredentials creds = Credentials;
                 creds.FromPersistentBuffer = true;
                 creds.Serialize(msg->Record.MutableCredentials());
-                msg->Record.SetLsn(it->first);
+                msg->Record.SetLsn(it.first);
                 msg->Record.SetGeneration(Credentials.Generation);
                 SendRequest(ctx, std::move(msg), requestIdx);
                 ++Read_RequestsSent;
@@ -367,11 +367,11 @@ public:
                 ui64 eraseSize = 0;
                 for (ui32 _ : xrange((ui32)(100.0 / EraseRatio))) {
                     Y_ABORT_UNLESS(!Lsns.empty());
-                    lsn = Lsns.begin()->first;
+                    lsn = Lsns.front().first;
                     if (MeasureType == NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::ERASE) {
-                        eraseSize += Lsns.begin()->second;
+                        eraseSize += Lsns.front().second;
                     }
-                    Lsns.erase(Lsns.begin());
+                    Lsns.pop_front();
                 }
                 Y_ABORT_UNLESS(lsn != Max<ui64>());
                 Report->Size += eraseSize;
@@ -486,7 +486,7 @@ public:
             } else {
                 ++Write_Error;
             }
-            Lsns.insert({requestIdx, request.Size});
+            Lsns.push_back({requestIdx, request.Size});
             if (MeasureType == NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::WRITE) {
                 *BytesWritten += request.Size;
 

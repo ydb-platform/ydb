@@ -71,13 +71,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
-
-        auto tableId = NKikimr::TTableId(
-            Self->CurrentSchemeShardId,
-            request.GetLocalPathId(),
-            request.GetSchemaVersion()
-        );
-        TReadDescription read(Self->TabletID(), tableId, snapshot, sorting);
+        TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.Orbit = orbit;
         read.TxId = txId;

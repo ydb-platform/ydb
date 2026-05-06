@@ -32,7 +32,6 @@ private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
     YDB_READONLY(ui64, TabletId, 0);
-    YDB_READONLY_DEF(NKikimr::TTableId, TableId);
 
 public:
     ui64 TxId = 0;
@@ -101,11 +100,10 @@ public:
         }
     }
 
-    TReadDescription(const ui64 tabletId, const NKikimr::TTableId& tableId, const TSnapshot& snapshot, const ERequestSorting sorting)
+    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting)
         : Snapshot(snapshot)
         , Sorting(sorting)
         , TabletId(tabletId)
-        , TableId(tableId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
     {
     }

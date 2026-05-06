@@ -104,7 +104,6 @@ namespace TEvColumnShard {
     private:
         YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
-        YDB_READONLY_DEF(ui64, SchemaVersion);
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_READONLY_DEF(bool, ReadOnlyConflicts);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -123,12 +122,10 @@ namespace TEvColumnShard {
         TEvInternalScan(
             const NColumnShard::TUnifiedPathId pathId,
             const NOlap::TSnapshot& snapshot,
-            const ui64 schemaVersion,
             const std::optional<ui64> lockId,
             const bool readOnlyConflicts)
             : PathId(pathId)
             , Snapshot(snapshot)
-            , SchemaVersion(schemaVersion)
             , LockId(lockId)
             , ReadOnlyConflicts(readOnlyConflicts)
         {
@@ -144,7 +141,7 @@ namespace TEvColumnShard {
                 }
             }
             columns << "]";
-            return TStringBuilder() << "TEvInternalScan { PathId: " << PathId << ", Snapshot: " << Snapshot << ", SchemaVersion: " << SchemaVersion
+            return TStringBuilder() << "TEvInternalScan { PathId: " << PathId << ", Snapshot: " << Snapshot
                                     << ", LockId: " << LockId
                                     << ", Reverse: " << Reverse << ", ItemsLimit: " << ItemsLimit << ", ColumnIds: " << columns << " }";
         }

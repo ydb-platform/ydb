@@ -15,14 +15,14 @@ In this class, we need only minSnapshotForNewReads and scan1.
 We do not need scan2 and scan3 because we consider the whole range [minSnapshotForNewReads, now] as "in flight",
 because any number of new scans may come there.
 */
-class TSnapshotHolders {
+class TSnapshotHoldersPerTable {
     // It is the oldest snapshot new scans can start at
     const TSnapshot MinSnapshotForNewReads;
     // Sorted from older to younger
     const std::vector<TSnapshot> TxInFlight;
 
 public:
-    TSnapshotHolders(TSnapshot minSnapshotForNewReads, std::vector<TSnapshot> txInFlight)
+    TSnapshotHoldersPerTable(TSnapshot minSnapshotForNewReads, std::vector<TSnapshot> txInFlight)
         : MinSnapshotForNewReads(std::move(minSnapshotForNewReads))
         , TxInFlight(std::move(txInFlight)) {
         AFL_VERIFY(std::is_sorted(TxInFlight.begin(), TxInFlight.end()));
@@ -63,6 +63,21 @@ public:
         // We have not found txs that could use it.
         return false;
     }
+};
+
+class ISnapshotHolders {
+public:
+    virtual TSnapshot GetMinSnapshotForNewReads() const = 0;
+    virtual bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const = 0;
+
+    template <class TIsRemovedFor, class TIsVisible>
+    bool CouldUse(const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds, const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const;
+};
+
+class TLegacySnapshotHolders : public ISnapshotHolders {
+}; 
+
+class TRegistrySnapshotHolders : public ISnapshotHolders {
 };
 
 }   // namespace NKikimr::NOlap

@@ -26,7 +26,8 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
         return std::shared_ptr<TReadMetadataBase>();
     }
 
-    if (!self->MayStartScanAt(read.GetSnapshot(), read.GetTableId())) {
+    auto pathId = read.TableMetadataAccessor->GetPathIdVerified();
+    if (!self->MayStartScanAt(read.GetSnapshot(), pathId.GetSchemeShardLocalPathId())) {
         return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
                                                         << self->GetMinSnapshotForNewReads() << ". now: " << TInstant::Now());
     }

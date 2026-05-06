@@ -233,7 +233,7 @@ NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     return minSnapshot;
 }
 
-bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NKikimr::TTableId& tableId) const {
+bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const {
     if (GetMinSnapshotForNewReads() <= snapshot) {
         return true;
     }
@@ -241,6 +241,11 @@ bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NKikim
     if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
         if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
             if (const auto& registry = holder->Get()) {
+                auto tableId = NKikimr::TTableId(
+                    CurrentSchemeShardId,
+                    schemeShardLocalPathId.GetRawValue(),
+                    0
+                );
                 return registry->HasSnapshot(
                     tableId,
                     TRowVersion(snapshot.GetPlanStep(), snapshot.GetTxId())

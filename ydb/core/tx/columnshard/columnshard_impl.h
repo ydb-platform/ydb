@@ -576,7 +576,7 @@ private:
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
-    bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NKikimr::TTableId& tableId) const;
+    bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
     NOlap::TSnapshotHolders GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
     TDuration GetTxCompleteLag() const {

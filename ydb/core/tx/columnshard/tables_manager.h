@@ -461,7 +461,7 @@ public:
         return PathsToDrop;
     }
 
-    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::TSnapshotHolders& snapshotHolders) const {
+    THashSet<TInternalPathId> GetPathsToDrop(const NOlap::ISnapshotHolders& snapshotHolders) const {
         THashSet<TInternalPathId> result;
         for (auto& [dropSnapshot, tableIds] : PathsToDrop) {
             // new transactions may come to any snapshot younger than minReadSnapshot, so we cannot drop there anything
@@ -471,6 +471,7 @@ public:
             for (const auto& tableId : tableIds) {
                 auto& table = GetTable(tableId, true);
                 if (!snapshotHolders.CouldUse(
+                    ResolveSchemeShardLocalPathIdsVerified(tableId),
                     // isRemovedFor
                     [&dropSnapshot](const NOlap::TSnapshot& heldSnapshot) { return dropSnapshot <= heldSnapshot;},
                     // isVisibleAt

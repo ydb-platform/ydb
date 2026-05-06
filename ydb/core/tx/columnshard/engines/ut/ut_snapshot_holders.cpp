@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         {}
     };
 
-    bool CouldUse(const TSnapshotHolders& holders, const TMyPortion& portion) {
+    bool CouldUse(const TSnapshotHoldersPerTable& holders, const TMyPortion& portion) {
         return holders.CouldUse(
             [&portion](const TSnapshot& heldSnapshot) { return portion.Removed <= heldSnapshot; },
             [&portion](const TSnapshot& heldSnapshot) { return portion.Appeared <= heldSnapshot; }
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         // p1             [.....................................)
         // p2                                                   [11....................20)
         // p3             [................................)
-        const TSnapshotHolders holders(Step(10), {});
+        const TSnapshotHoldersPerTable holders(Step(10), {});
         const TMyPortion p1(1, 11);
         const TMyPortion p2(11, 20);
         const TMyPortion p3(1, 10);
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         //                        ^ tx                         ^ minSnapshotForNewReads
         // portion1     [.......................)
         // portion2              [5.............)
-        const TSnapshotHolders holders(Step(20), { Step(5) });
+        const TSnapshotHoldersPerTable holders(Step(20), { Step(5) });
         const TMyPortion portion1(1, 10);
         const TMyPortion portion2(5, 10);
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         // portion1       [1......5)
         // portion2                 [6....10)
         // portion3                                [13..18)
-        const TSnapshotHolders holders(Step(20), { Step(5), Step(12) });
+        const TSnapshotHoldersPerTable holders(Step(20), { Step(5), Step(12) });
         const TMyPortion portion1(1, 5);
         const TMyPortion portion2(6, 10);
         const TMyPortion portion3(13, 18);
@@ -102,13 +102,13 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
     Y_UNIT_TEST(ConstructorVerifiesInvariants) {
 #ifndef _win_
         const int unsortedTxs = RunInChild([] {
-            [[maybe_unused]] TSnapshotHolders holders(Step(20), { Step(12), Step(5) });
+            [[maybe_unused]] TSnapshotHoldersPerTable holders(Step(20), { Step(12), Step(5) });
         });
         UNIT_ASSERT_C(!WIFEXITED(unsortedTxs) || WEXITSTATUS(unsortedTxs) != 0,
             "unsorted tx list must fail constructor checks");
 
         const int tooYoungTx = RunInChild([] {
-            [[maybe_unused]] TSnapshotHolders holders(Step(20), { Step(20) });
+            [[maybe_unused]] TSnapshotHoldersPerTable holders(Step(20), { Step(20) });
         });
         UNIT_ASSERT_C(!WIFEXITED(tooYoungTx) || WEXITSTATUS(tooYoungTx) != 0,
             "tx snapshot >= minReadSnapshot must fail constructor checks");

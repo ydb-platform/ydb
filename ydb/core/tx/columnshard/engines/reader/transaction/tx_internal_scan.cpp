@@ -45,12 +45,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TScannerConstructorContext context(snapshot, 0, sorting);
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
-        auto tableId = NKikimr::TTableId(
-            Self->CurrentSchemeShardId,
-            request.GetPathId().GetSchemeShardLocalPathId().GetRawValue(),
-            request.GetSchemaVersion()
-        );
-        TReadDescription read(Self->TabletID(), tableId, snapshot, sorting);
+        TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         {
             auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId());

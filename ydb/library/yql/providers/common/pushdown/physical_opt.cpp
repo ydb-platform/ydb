@@ -11,7 +11,7 @@ using namespace NNodes;
 
 namespace {
 
-TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {   
+TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {
     if (predicateTree.CanBePushed) {
         return predicateTree;
     }

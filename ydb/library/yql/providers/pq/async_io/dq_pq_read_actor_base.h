@@ -23,8 +23,10 @@ protected:
                 && !EndWriteTime) {                         
                 return false;
             }
-            bool endByOffset = *EndOffset == 0              // No data in partition on start.
-                || (Offset && *EndOffset <= *Offset);
+            bool endByOffset = 
+                EndOffset
+                && (*EndOffset == 0             // No data in partition on start.
+                    || (Offset && *EndOffset <= *Offset));
             if (endByOffset) {
                 return true;
             }

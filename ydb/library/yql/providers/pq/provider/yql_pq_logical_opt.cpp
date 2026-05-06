@@ -641,9 +641,17 @@ private:
         TExprContext& ctx,
         std::optional<ui64> min = std::nullopt
     ) const {
-        auto settings = TPushdownSettings();
+        auto settings = NPushdown::TSettings(NLog::EComponent::ProviderPq);
         settings.EnableMember(memberName);
-        settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
+
+        using EFlag = NPushdown::TSettings::EFeatureFlag;
+        settings.Enable(
+            EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 |
+            EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+            EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression |
+            EFlag::SplitOrOperator | EFlag::TimestampCtor
+        );
+
         NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
         if (predicate.IsEmpty()) {
             return {};

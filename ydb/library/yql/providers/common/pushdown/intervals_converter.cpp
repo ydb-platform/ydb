@@ -234,7 +234,9 @@ bool ConvertInPredicate(
         ctx.Err << "TCoSqlIn with empty collection";
         return false;
     }
-    InsertInterval(tree, *values.begin(), *values.rbegin() + 1);
+    i64 min = *values.begin();
+    i64 max = *values.rbegin();
+    InsertInterval(tree, min, max != Max<i64>() ? max + 1: max);
     return true;
 }
 

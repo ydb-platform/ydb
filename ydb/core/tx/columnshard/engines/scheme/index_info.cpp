@@ -503,6 +503,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
+        NIndexes::NCountMinSketch::TIndexMeta fpp{};
         auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
         if (index->GetColumnIds() == columnIds) {
             return index;

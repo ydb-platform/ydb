@@ -1537,11 +1537,18 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
     case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
 >>>>>>> 138fa72a7cc (LOGBROKER-10215 Better)
+=======
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
+
+>>>>>>> 48e72984935 (LOGBROKER-10215 Better)
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return CancelBuildIndex(op.NextPartId(), tx, context);
 

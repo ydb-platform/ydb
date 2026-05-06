@@ -250,13 +250,9 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
             NActors::NLog::PRI_INFO
         );
 
-        auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
-
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
-        auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
-        runtime.EnableScheduleForActor(actorId);
+        auto events = std::make_shared<TVector<TString>>();
 
         const TVector<std::pair<TString, TString>> cases = {
             {"user@iam", "user"},
@@ -269,6 +265,9 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
             auto info = MakeCreateTopicEventInfo("/root/my/topic");
             info.UserSID = subjectId;
 
+            auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+            auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
+            runtime.EnableScheduleForActor(actorId);
             runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(std::move(info))), 0, true);
             runtime.DispatchEvents();
 

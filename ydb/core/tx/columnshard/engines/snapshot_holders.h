@@ -4,6 +4,10 @@
 
 #include <algorithm>
 
+namespace NKikimr::NColumnShard {
+    class TTableInfo;
+}
+
 namespace NKikimr::NOlap {
 
 /**
@@ -41,6 +45,8 @@ public:
             [&portion](const TSnapshot& snapshot) { return portion->IsVisible(snapshot, true); });
     }
 
+    bool CouldUseTable(const NColumnShard::TTableInfo& table) const;
+
     template <class TIsRemovedFor, class TIsVisible>
     bool CouldUse(const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const {
         // The object can be used by new scans.
@@ -67,17 +73,34 @@ public:
 
 class ISnapshotHolders {
 public:
+    virtual ~ISnapshotHolders() = default;
     virtual TSnapshot GetMinSnapshotForNewReads() const = 0;
     virtual bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const = 0;
-
-    template <class TIsRemovedFor, class TIsVisible>
-    bool CouldUse(const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds, const TIsRemovedFor& isRemovedFor, const TIsVisible& isVisible) const;
+    virtual bool CouldUseTable(const NColumnShard::TTableInfo& table) const = 0;
 };
 
 class TLegacySnapshotHolders : public ISnapshotHolders {
+    TSnapshotHoldersPerTable impl;
+
+public:
+    TLegacySnapshotHolders(TSnapshot minSnapshotForNewReads, std::vector<TSnapshot> txInFlight)
+        : impl(minSnapshotForNewReads, std::move(txInFlight)) {
+    }
+
+    TSnapshot GetMinSnapshotForNewReads() const override {
+        return impl.GetMinSnapshotForNewReads();
+    }
+    
+    bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override {
+        return impl.CouldUsePortion(portion);
+    }
+
+    bool CouldUseTable(const NColumnShard::TTableInfo& table) const override {
+        return impl.CouldUseTable(table);
+    }
 }; 
 
-class TRegistrySnapshotHolders : public ISnapshotHolders {
-};
+// class TRegistrySnapshotHolders : public ISnapshotHolders {
+// };
 
 }   // namespace NKikimr::NOlap

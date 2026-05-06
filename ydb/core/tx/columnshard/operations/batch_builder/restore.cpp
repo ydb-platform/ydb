@@ -13,7 +13,6 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(
         writeMetaData.GetPathId(),
         Context.GetApplyToSnapshot(),
-        Context.GetActualSchema()->GetVersion(),
         Context.GetLockId(),
         ReadOnlyConflicts);
     request->TaskIdentifier = GetTaskId();

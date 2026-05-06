@@ -470,13 +470,8 @@ public:
             }
             for (const auto& tableId : tableIds) {
                 auto& table = GetTable(tableId, true);
-                if (!snapshotHolders.CouldUse(
-                    ResolveSchemeShardLocalPathIdsVerified(tableId),
-                    // isRemovedFor
-                    [&dropSnapshot](const NOlap::TSnapshot& heldSnapshot) { return dropSnapshot <= heldSnapshot;},
-                    // isVisibleAt
-                    [&table](const NOlap::TSnapshot& heldSnapshot) { return table.CanBeUsedAt(heldSnapshot); }
-                )) {
+                AFL_VERIFY(table.GetDropVersionVerified() == dropSnapshot);
+                if (!snapshotHolders.CouldUseTable(table)) {
                     result.insert(tableId);
                 }
             }

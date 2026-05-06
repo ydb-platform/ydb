@@ -262,14 +262,14 @@ bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColum
     return InFlightReadsTracker.HasLiveSnapshot(snapshot);
 }
 
-NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
+std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
     auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
     // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
     // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
     // so we will get a live snapshot at that moment.
     // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
     auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
-    return NOlap::TSnapshotHolders(minSnapshotForNewReads, std::move(inFlightTxs));
+    return std::make_unique<NOlap::TLegacySnapshotHolders>(minSnapshotForNewReads, std::move(inFlightTxs));
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -877,9 +877,9 @@ void TColumnShard::SetupCleanupPortions() {
     }
 
     const auto snapshotHolders = GetSnapshotHolders();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(snapshotHolders);
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop(*snapshotHolders);
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*snapshotHolders, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -908,7 +908,7 @@ void TColumnShard::SetupCleanupTables() {
 
     const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(snapshotHolders)) {
+    for (auto&& i : TablesManager.GetPathsToDrop(*snapshotHolders)) {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 

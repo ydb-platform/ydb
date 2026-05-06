@@ -18,12 +18,14 @@ class TJsonKeyValueWriter {
 public:
     using TNameSet = std::unordered_set<TString>;
 
-    TJsonKeyValueWriter(NJsonWriter::TBuf& jsonWriter, const TJsonKeyValueWriter::TNameSet& busyKeyNames, bool jsonStarted)
-        : JsonWriter(jsonWriter)
-        , BusyKeyNames(busyKeyNames)
-        , JsonStartedState(jsonStarted?EJsonStartedState::ParentStarted:EJsonStartedState::NotStarted)
-    {
-    }
+    TJsonKeyValueWriter(
+        NJsonWriter::TBuf& jsonWriter,
+        const TJsonKeyValueWriter::TNameSet& busyKeyNames,
+        bool jsonStarted
+    )
+        : JsonWriter(jsonWriter),
+          BusyKeyNames(busyKeyNames),
+          JsonStartedState(jsonStarted ? EJsonStartedState::ParentStarted : EJsonStartedState::NotStarted) {}
 
     void Done() {
         switch (JsonStartedState) {
@@ -59,13 +61,13 @@ public:
 
         // Check context equality length
         std::size_t index = 0;
-        while (index < currentContext.size() && index < requiredContext.size() && currentContext[index] == requiredContext[index]) {
+        while (index < currentContext.size() && index < requiredContext.size() &&
+               currentContext[index] == requiredContext[index]) {
             index++;
         }
 
         // Check json name suffix
-        if (LastAppendedKey.size() < key.size() &&
-            index == LastAppendedKey.size() - 1 &&
+        if (LastAppendedKey.size() < key.size() && index == LastAppendedKey.size() - 1 &&
             LastAppendedKey[index] == key[index]) {
             requiredContext[index] = TString("_") + requiredContext[index].ToString();
         }
@@ -103,7 +105,6 @@ public:
     }
 
 protected:
-
     NJsonWriter::TBuf& JsonWriter;
     const TJsonKeyValueWriter::TNameSet& BusyKeyNames;
 
@@ -129,22 +130,22 @@ protected:
 class TJsonWriter {
 public:
     TJsonWriter(const TJsonKeyValueWriter::TNameSet& busyKeyNames = TJsonKeyValueWriter::TNameSet())
-        : BusyKeyNames{busyKeyNames}
-    {}
+        : BusyKeyNames{busyKeyNames} {}
 
     bool Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage& message, bool jsonStarted = false) {
         TJsonKeyValueWriter keyValueWriter{jsonWriter, BusyKeyNames, jsonStarted};
         KeyValueWriter = &keyValueWriter;
 
-        auto processValue = [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
+        auto processValue =
+            [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
+                auto it = TypeValueWriterMap.find(typeCode);
+                if (it != end(TypeValueWriterMap)) {
+                    ValueWriter.KeyName = &name;
+                    return it->second(data, length);
+                } else {
+                    return false;
+                }
+            };
         if (!message.ForEachSerialized(processValue)) {
             return false;
         };
@@ -156,13 +157,12 @@ public:
     }
 
 protected:
-
     const TJsonKeyValueWriter::TNameSet& BusyKeyNames;
     TJsonKeyValueWriter* KeyValueWriter{nullptr};
 
     struct TJsonValueWriter {
         TJsonWriter& Writer;
-        const std::vector<TKeyName>* KeyName {nullptr};
+        const std::vector<TKeyName>* KeyName{nullptr};
 
         TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
 
@@ -173,7 +173,6 @@ protected:
     };
     TJsonValueWriter ValueWriter{*this};
     TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
-
 };
 
-}
+}  // namespace NKikimr::NStructuredLog

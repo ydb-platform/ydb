@@ -9,13 +9,12 @@ namespace NKikimr::NStructuredLog {
 
 class TKeyName {
 public:
-
     TKeyName() = default;
     TKeyName(const TKeyName&) = default;
     TKeyName(TKeyName&&) = default;
 
-    template<unsigned N>
-    constexpr TKeyName(const char(&name)[N]) : CompileTime(name), CompileTimeLength(N - 1 /* zero char */) {}
+    template <unsigned N>
+    constexpr TKeyName(const char (&name)[N]) : CompileTime(name), CompileTimeLength(N - 1 /* zero char */) {}
     TKeyName(const char* name, std::size_t length) : CompileTime(name), CompileTimeLength(length) {}
     TKeyName(const TString& name) : RunTime(name) {}
     TKeyName(const TStringBuf& name) : RunTime(name) {}
@@ -37,25 +36,15 @@ public:
         }
     }
 
-    TString ToString() const {
-        return TString(GetData(), GetLength());
-    }
+    TString ToString() const { return TString(GetData(), GetLength()); }
 
-    bool operator==(const TKeyName& value) const {
-        return Compare(*this, value) == ECompareResult::Equal;
-    }
+    bool operator==(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Equal; }
 
-    bool operator!=(const TKeyName& value) const {
-        return !(*this == value);
-    }
+    bool operator!=(const TKeyName& value) const { return !(*this == value); }
 
-    bool operator<(const TKeyName& value) const {
-        return Compare(*this, value) == ECompareResult::Less;
-    }
+    bool operator<(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Less; }
 
-    bool operator>(const TKeyName& value) const {
-        return Compare(*this, value) == ECompareResult::Great;
-    }
+    bool operator>(const TKeyName& value) const { return Compare(*this, value) == ECompareResult::Great; }
 
     bool operator>(const TString& value) const {
         ECompareResult cmp;
@@ -111,4 +100,4 @@ protected:
     }
 };
 
-}
+}  // namespace NKikimr::NStructuredLog

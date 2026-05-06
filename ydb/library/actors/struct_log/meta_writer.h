@@ -21,15 +21,16 @@ public:
     bool Write(TLogRecord::TMetaFlags& metaFlags, const TStructuredMessage& message) {
         MetaFlags = &metaFlags;
 
-        auto processValue = [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
+        auto processValue =
+            [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
+                auto it = TypeValueWriterMap.find(typeCode);
+                if (it != end(TypeValueWriterMap)) {
+                    ValueWriter.KeyName = &name;
+                    return it->second(data, length);
+                } else {
+                    return false;
+                }
+            };
         if (!message.ForEachSerialized(processValue)) {
             return false;
         };
@@ -43,7 +44,7 @@ protected:
 
     struct TValueWriter {
         TMetaWriter& Writer;
-        const std::vector<TKeyName>* KeyName {nullptr};
+        const std::vector<TKeyName>* KeyName{nullptr};
 
         TValueWriter(TMetaWriter& writer) : Writer(writer) {}
 
@@ -51,7 +52,7 @@ protected:
         void operator()(const T& value) const {
             TStringBuilder metakeyName;
             metakeyName << "meta";
-            for(auto& keyItem: *KeyName) {
+            for (auto& keyItem : *KeyName) {
                 metakeyName << ".";
                 metakeyName << keyItem.ToString();
             }
@@ -62,5 +63,4 @@ protected:
     TInvokerMap TypeValueWriterMap = TTypesMapping::CreateInvokerMap(ValueWriter);
 };
 
-
-}
+}  // namespace NKikimr::NStructuredLog

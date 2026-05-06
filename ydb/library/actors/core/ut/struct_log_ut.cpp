@@ -14,7 +14,7 @@ template <typename T>
 void TestType(const std::vector<T>& values) {
     auto typeCode = TTypesMapping::GetCode<T>();
 
-    for(auto  value: values) {
+    for (auto value : values) {
         auto originalStr = TTypesMapping::ToString(value);
 
         TBinaryData data;
@@ -29,14 +29,12 @@ void TestType(const std::vector<T>& values) {
             recoveredStr = TTypesMapping::ToString(readValue);
         }
 
-        UNIT_ASSERT(value==readValue);
+        UNIT_ASSERT(value == readValue);
     }
 }
 
 Y_UNIT_TEST_SUITE(StructLog) {
-    Y_UNIT_TEST(NativeTypes) {
-        TestType<TString>({"", "a", "ab", "abc"});
-    }
+    Y_UNIT_TEST(NativeTypes) { TestType<TString>({"", "a", "ab", "abc"}); }
 
     Y_UNIT_TEST(TestKeyName) {
         // compile vs compile
@@ -70,7 +68,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     template <typename T>
     void TestCreateMessageTypedValueRead(const std::vector<T>& values) {
-        for(auto value: values) {
+        for (auto value : values) {
             auto message = YDBLOG_CREATE_MESSAGE({"value", value});
 
             auto index = message.GetValueIndex("value");
@@ -144,22 +142,20 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(ScanValues) {
-        auto message = YDBLOG_CREATE_MESSAGE( {"string", static_cast<TString>("abc")} );
+        auto message = YDBLOG_CREATE_MESSAGE({"string", static_cast<TString>("abc")});
 
-        message.ForEachTyped(
-            MakeOverloaded(
-                [](const std::vector<TKeyName>& name, const TString& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc"); }
-            ));
+        message.ForEachTyped(MakeOverloaded([](const std::vector<TKeyName>& name, const TString& value) {
+            UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc");
+        }));
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
         TString result;
-        auto append = [&result](const std::vector<TKeyName>& name, const auto& value)
-        {
-            if (!result.empty()) result +=", ";
+        auto append = [&result](const std::vector<TKeyName>& name, const auto& value) {
+            if (!result.empty()) result += ", ";
 
             bool addDot = false;
-            for(auto& nameItem: name) {
+            for (auto& nameItem : name) {
                 if (addDot) {
                     result += ".";
                 } else {
@@ -172,15 +168,18 @@ Y_UNIT_TEST_SUITE(StructLog) {
             result += TTypesMapping::ToString(value);
         };
 
-        message.ForEachTyped(
-            MakeOverloaded(
-                [&](const std::vector<TKeyName>& name, const TString& value) { append(name, value); }
-            ));
+        message.ForEachTyped(MakeOverloaded([&](const std::vector<TKeyName>& name, const TString& value) {
+            append(name, value);
+        }));
         return result;
     }
 
-    #define TEST_MESSAGE(M, S) { auto m = M; auto str = GetMessageString(m); \
-        UNIT_ASSERT_STRINGS_EQUAL(str, S); }
+#define TEST_MESSAGE(M, S)                 \
+    {                                      \
+        auto m = M;                        \
+        auto str = GetMessageString(m);    \
+        UNIT_ASSERT_STRINGS_EQUAL(str, S); \
+    }
 
     Y_UNIT_TEST(CreateMessageVaryValuesCount) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(), "");
@@ -216,7 +215,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // Actor id
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{}}), "value=[0:0:0]");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{1,2}}), "value=[0:1:2]");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{1, 2}}), "value=[0:1:2]");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", NActors::TActorId{1, 2, 3, 4}}), "value=[1:3:4]");
     }
 
@@ -226,11 +225,17 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage), "subValue1=1, subValue2=2");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, subMessage), "subValue1=1, subValue2=2");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", subMessage}), "value.subValue1=1, value.subValue2=2");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}), "subValue1=1, subValue2=2, value.subValue1=1, value.subValue2=2");
+        TEST_MESSAGE(
+            YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}),
+            "subValue1=1, subValue2=2, value.subValue1=1, value.subValue2=2"
+        );
 
         // optional subMessages
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), "");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), "value.subValue1=1, value.subValue2=2");
+        TEST_MESSAGE(
+            YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}),
+            "value.subValue1=1, value.subValue2=2"
+        );
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), "");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), "subValue1=1, subValue2=2");
     }
@@ -317,8 +322,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         return jsonWriter.Str();
     }
 
-    #define TEST_JSON_MESSAGE(M, S) { auto m = M; auto str = GetMessageJsonString(m); \
-        UNIT_ASSERT_STRINGS_EQUAL(str, S); }
+#define TEST_JSON_MESSAGE(M, S)             \
+    {                                       \
+        auto m = M;                         \
+        auto str = GetMessageJsonString(m); \
+        UNIT_ASSERT_STRINGS_EQUAL(str, S);  \
+    }
 
     Y_UNIT_TEST(GenerateJson) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(), R"({})");
@@ -351,8 +360,13 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage), R"({"subValue1":"1","subValue2":"2"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":"1","subValue2":"2"})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":"1","subValue2":"2"}})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}), R"({"subValue1":"1","subValue2":"2","value":{"subValue1":"1","subValue2":"2"}})");
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":"1","subValue2":"2"}})"
+        );
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE(subMessage, {"value", subMessage}),
+            R"({"subValue1":"1","subValue2":"2","value":{"subValue1":"1","subValue2":"2"}})"
+        );
 
         // optional values
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({})");
@@ -360,17 +374,32 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // optional subMessages
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}), R"({"value":{"subValue1":"1","subValue2":"2"}})");
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}),
+            R"({"value":{"subValue1":"1","subValue2":"2"}})"
+        );
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":"1","subValue2":"2"})");
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":"1","subValue2":"2"})"
+        );
 
         // subMessage name conflict
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}),
-            R"({"value":"1","_value":{"value":"1"}})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1}, {"value2", 2})}),
-            R"({"value":"1","_value":{"value":"1","value2":"2"}})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}, {"xvalue", YDBLOG_CREATE_MESSAGE({"value", 10})}),
-            R"({"value":"1","_value":{"value":"1"},"xvalue":{"value":"10"}})");
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1})}),
+            R"({"value":"1","_value":{"value":"1"}})"
+        );
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE({"value", 1}, {"value", YDBLOG_CREATE_MESSAGE({"value", 1}, {"value2", 2})}),
+            R"({"value":"1","_value":{"value":"1","value2":"2"}})"
+        );
+        TEST_JSON_MESSAGE(
+            YDBLOG_CREATE_MESSAGE(
+                {"value", 1},
+                {"value", YDBLOG_CREATE_MESSAGE({"value", 1})},
+                {"xvalue", YDBLOG_CREATE_MESSAGE({"value", 10})}
+            ),
+            R"({"value":"1","_value":{"value":"1"},"xvalue":{"value":"10"}})"
+        );
     }
 }
-}
+}  // namespace NKikimr::NStructuredLog

@@ -782,9 +782,9 @@ public:
     {
         ptrdiff_t beginOffset = 0;
         if constexpr (std::is_same_v<std::decay_t<T>, IContiguousChunk::TPtr>) {
-            beginOffset = backend->GetData().data() - data.data();
+            beginOffset = data.data() - backend->GetData().data();
         } else {
-            beginOffset = backend.GetData().data() - data.data();
+            beginOffset = data.data() - backend.GetData().data();
         }
         Backend = std::move(backend);
         Begin = Backend.GetData().data() + beginOffset;

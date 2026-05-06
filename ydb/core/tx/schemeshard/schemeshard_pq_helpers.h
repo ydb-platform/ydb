@@ -24,7 +24,9 @@ void ScheduleSendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
     TOperationContext& context,
     NKikimrScheme::EStatus status,
-    const TString& reason);
+    const TString& reason,
+    const TString& userSID = TString(),
+    const TString& peerName = TString());
 
 void FinishWithError(
     TProposeResponse* result,
@@ -35,12 +37,18 @@ void FinishWithError(
 
 class TPQDoneWithCloudEvents : public TDone {
 public:
-    explicit TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx);
+    TPQDoneWithCloudEvents(
+        const TOperationId& id,
+        const TTxTransaction& tx,
+        const TString& userSID = TString(),
+        const TString& peerName = TString());
 
     bool ProgressState(TOperationContext&) override;
 
 private:
     const TTxTransaction Transaction;
+    const TString UserSID;
+    const TString PeerName;
 };
 
 } // NKikimr::NSchemeShard

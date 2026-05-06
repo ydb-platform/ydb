@@ -35,6 +35,7 @@ static TCloudEventInfo MakeCreateTopicEventInfo(const TString& topicPath = "/roo
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
@@ -72,6 +73,7 @@ static TCloudEventInfo MakeAlterTopicEventInfo(const TString& topicPath = "/root
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";
@@ -143,6 +145,12 @@ static void AssertCloudEventJsonStructure(const NJson::TJsonValue& cloudEvent, c
     UNIT_ASSERT_C(auth != nullptr, "Missing authentication");
     UNIT_ASSERT_STRINGS_EQUAL((*auth)["subject_id"].GetString(), "user@iam");
 
+    const auto* authz = cloudEvent.GetValueByPath("authorization");
+    UNIT_ASSERT_C(authz != nullptr, "Missing authorization");
+    const auto& permissions = (*authz)["permissions"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(permissions.size(), 1u);
+    UNIT_ASSERT_STRINGS_EQUAL(permissions[0]["resource_id"].GetString(), TString("database1") + expectedPath);
+
     const auto* evMetadata = cloudEvent.GetValueByPath("event_metadata");
     UNIT_ASSERT_C(evMetadata != nullptr, "Missing event_metadata");
     UNIT_ASSERT(evMetadata->GetMap().find("cloud_id") != evMetadata->GetMap().end());
@@ -157,6 +165,7 @@ static TCloudEventInfo MakeDeleteTopicEventInfo(const TString& topicPath = "/roo
     TCloudEventInfo info;
     info.CloudId = "cloud1";
     info.FolderId = "folder1";
+    info.DatabaseId = "database1";
     info.TopicPath = topicPath;
     info.Issue = "";
     info.UserSID = "user@iam";

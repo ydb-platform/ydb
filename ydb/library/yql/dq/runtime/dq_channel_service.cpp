@@ -1763,11 +1763,21 @@ TString TNodeState::LogIdent() {
 
 void TNodeState::DoReconciliation() {
     if (ReconciliationCount >= Limits.ReconciliationCount) {
-        // give up and request destroy
-        LOG_E("DESTROYED " << LogIdent() << " after RECONCILIATION FAILURE x" << ReconciliationCount);
-        ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, true));
-        return;
+        const bool stuckData = !Queue.empty();
+        const bool idle = !stuckData && InputDescriptors.empty() && OutputDescriptors.empty() && WaitersQueue.empty();
+        if (stuckData || idle) {
+            // stuckData: real delivery failure, propagate upward via destruction.
+            // idle: nothing to do and peer unreachable, safe to free the NodeState.
+            LOG_E("DESTROYED " << LogIdent() << (idle ? " (idle)" : "") << " after RECONCILIATION FAILURE x" << ReconciliationCount);
+            ActorSystem->Send(MakeChannelServiceActorID(NodeActorId.NodeId()), new TEvPrivate::TEvFreeNodeSession(NodeId, true));
+            return;
+        }
+        // Active descriptors or waiters but no queued data — peer transiently unreachable
+        // (e.g. discovery handshake taking longer than 3 retries). Reset count and keep
+        // trying so we can recover the connection without aborting still-running channels.
+        ReconciliationCount = 0;
     }
+
     ReconciliationCount++;
 
     auto reconciliationTimeout = ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20));

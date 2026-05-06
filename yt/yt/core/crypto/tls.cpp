@@ -49,22 +49,22 @@ constexpr auto TlsBufferSize = 1_MB;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Get all saved SSL errors for current thread.
+// Gets all saved SSL errors for current thread.
 TError GetLastSslError(TString message)
 {
     auto lastSslError = ERR_peek_last_error();
-    TStringBuilder errorStr;
+    TStringBuilder errorBuilder;
     ERR_print_errors_cb([] (const char* str, size_t len, void* ctx) {
         auto& out = *reinterpret_cast<TStringBuilder*>(ctx);
-        if (!out.GetLength()) {
+        if (out.GetLength() > 0) {
             out.AppendString(", ");
         }
         out.AppendString(TStringBuf(str, len));
         return 1;
-    }, &errorStr);
+    }, &errorBuilder);
     return TError(NRpc::EErrorCode::SslError, std::move(message), TError::DisableFormat)
         << TErrorAttribute("ssl_last_error_code", lastSslError)
-        << TErrorAttribute("ssl_error", errorStr.Flush());
+        << TErrorAttribute("ssl_error", errorBuilder.Flush());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,16 +109,82 @@ TString GetFingerprintSHA256(const TX509Ptr& certificate)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TSslContextImpl
+TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem)
+{
+    if (!pem) {
+        THROW_ERROR_EXCEPTION("Cannot read certificate from null PEM blob config");
+    }
+
+    auto blob = pem->LoadBlob(/*pathResolver*/ nullptr);
+
+    TBioPtr bio(BIO_new_mem_buf(blob.c_str(), blob.size()));
+    if (!bio) {
+        THROW_ERROR_EXCEPTION("Failed to load PEM blob into BIO")
+            << TErrorAttribute("openssl_error_code", ERR_get_error());
+    }
+
+    TX509Ptr cert(PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+    if (!cert) {
+        THROW_ERROR_EXCEPTION("Failed to read certificate from BIO")
+            << TErrorAttribute("openssl_error_code", ERR_get_error());
+    }
+
+    return cert;
+}
+
+double GetCertTimeToExpiry(const TX509Ptr& cert)
+{
+    if (!cert) {
+        THROW_ERROR_EXCEPTION("Cannot get expiry time from null certificate");
+    }
+
+    const auto* notAfter = X509_get0_notAfter(cert.get());
+    if (!notAfter) {
+        THROW_ERROR_EXCEPTION("Failed to get not-after time from certificate")
+            << TErrorAttribute("openssl_error_code", ERR_get_error());
+    }
+
+    time_t currentTime = time(nullptr);
+
+    struct TAsn1TimeDeleter
+    {
+        void operator()(ASN1_TIME* p) const
+        {
+            ASN1_TIME_free(p);
+        }
+    };
+    std::unique_ptr<ASN1_TIME, TAsn1TimeDeleter> asn1Current(ASN1_TIME_set(nullptr, currentTime));
+
+    if (!asn1Current) {
+        THROW_ERROR_EXCEPTION("Failed to create ASN1_TIME from current time");
+    }
+
+    int days = 0;
+    int seconds = 0;
+    if (!ASN1_TIME_diff(&days, &seconds, asn1Current.get(), notAfter)) {
+        THROW_ERROR_EXCEPTION("Failed to calculate certificate time difference")
+            << TErrorAttribute("openssl_error_code", ERR_get_error());
+    }
+
+    constexpr int SecondsInDay = 86400;
+    return static_cast<double>(days) * SecondsInDay + static_cast<double>(seconds);
+}
+
+double GetCertTimeToExpiry(const TPemBlobConfigPtr& pem)
+{
+    auto cert = ReadCertFromPemBlob(pem);
+    return GetCertTimeToExpiry(cert);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSslContextImpl
     : public TRefCounted
 {
+public:
     TSslContextImpl()
     {
         Reset();
-    }
-
-    ~TSslContextImpl()
-    {
     }
 
     SSL_CTX* GetContext() const

@@ -789,7 +789,7 @@ namespace NKikimr {
                     // we have to encrypt this message
                 } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
                     // send this message as is
-                } else {
+                } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
                     // enable reducing interpile traffic
                     res = std::make_unique<TEvBlobStorage::TEvPut>(ev.Id, TRope(ev.Buffer), ev.Deadline, ev.HandleClass,
                         ev.Tactic, ev.IssueKeepFlag, ev.IgnoreBlock, ev.AlreadyEncrypted,

@@ -1,355 +1,380 @@
-# Enabling logging
+﻿# Enabling logging
 
 Below are examples of code that enables logging in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  There are several ways to enable logs in an application that uses `ydb-go-sdk`:
+  {% list tabs %}
 
-  {% cut "Using the `YDB_LOG_SEVERITY_LEVEL` environment variable" %}
+  - Native SDK
 
-  This environment variable enables the built-in `ydb-go-sdk` logger (synchronous, non-block) and prints to the standard output stream.
-  You can set the environment variable as follows:
+    There are several ways to enable logs in an application that uses `ydb-go-sdk`:
 
-  ```shell
-  export YDB_LOG_SEVERITY_LEVEL=info
-  ```
+    {% cut "Using the `YDB_LOG_SEVERITY_LEVEL` environment variable" %}
 
-  (possible values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `quiet`, defaults to `quiet`).
+    This environment variable enables the built-in `ydb-go-sdk` logger (synchronous, non-block) and prints to the standard output stream.
+    You can set the environment variable as follows:
 
-  {% endcut %}
+    ```shell
+    export YDB_LOG_SEVERITY_LEVEL=info
+    ```
 
-  {% cut "Enable a third-party logger `go.uber.org/zap`" %}
+    (possible values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `quiet`, defaults to `quiet`).
 
-  ```go
-  package main
+    {% endcut %}
 
-  import (
-    "context"
-    "os"
+    {% cut "Enable a third-party logger `go.uber.org/zap`" %}
 
-    "go.uber.org/zap"
+    ```go
+    package main
 
-    ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
+    import (
+      "context"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log *zap.Logger // zap-logger with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZap.WithTraces(
-        log,
-        trace.DetailsAll,
-      ),
+      "go.uber.org/zap"
+
+      ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log *zap.Logger // zap-logger with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZap.WithTraces(
+          log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Enable a third-party logger `github.com/rs/zerolog`" %}
+    {% cut "Enable a third-party logger `github.com/rs/zerolog`" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "os"
+    import (
+      "context"
+      "os"
 
-    "github.com/rs/zerolog"
+      "github.com/rs/zerolog"
 
-    ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log zerolog.Logger // zap-logger with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZerolog.WithTraces(
-        &log,
-        trace.DetailsAll,
-      ),
+      ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log zerolog.Logger // zap-logger with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZerolog.WithTraces(
+          &log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% include [overlay](_includes/debug-logs-go-appendix.md) %}
+    {% include [overlay](_includes/debug-logs-go-appendix.md) %}
 
-  {% cut "Enable a custom logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+    {% cut "Enable a custom logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "os"
+    import (
+      "context"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/log"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var logger log.Logger // logger implementation with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithLogger(
-        logger,
-        trace.DetailsAll,
-      ),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/log"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var logger log.Logger // logger implementation with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithLogger(
+          logger,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Implement your own logging package" %}
+    {% cut "Implement your own logging package" %}
 
-  You can implement your own logging package based on the driver events in the `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package. The `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package describes all logged driver events.
+    You can implement your own logging package based on the driver events in the `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package. The `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package describes all logged driver events.
 
-  {% endcut %}
+    {% endcut %}
 
-- Go (database/sql)
+    {% cut "Iterate over server errors with `IterateByIssues`" %}
 
-  There are several ways to enable logs in an application that uses `ydb-go-sdk`:
+    When using {{ ydb-short-name }} through the Go SDK, you can enable logging of requests and responses and also obtain detailed information about server errors (issues) — extra messages YDB returns in the response when operations fail. To iterate over issues in the server response, use [IterateByIssues](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3#IterateByIssues).
 
-  {% cut "Using the `YDB_LOG_SEVERITY_LEVEL` environment variable" %}
+    {% endcut %}
 
-  This environment variable enables the built-in `ydb-go-sdk` logger (synchronous, non-block) and prints to the standard output stream.
-  You can set the environment variable as follows:
+  - database/sql
 
-  ```shell
-  export YDB_LOG_SEVERITY_LEVEL=info
-  ```
+    There are several ways to enable logs in an application that uses `ydb-go-sdk`:
 
-  (possible values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `quiet`, defaults to `quiet`).
+    {% cut "Using the `YDB_LOG_SEVERITY_LEVEL` environment variable" %}
 
-  {% endcut %}
+    This environment variable enables the built-in `ydb-go-sdk` logger (synchronous, non-block) and prints to the standard output stream.
+    You can set the environment variable as follows:
 
-  {% cut "Enable a third-party logger `go.uber.org/zap`" %}
+    ```shell
+    export YDB_LOG_SEVERITY_LEVEL=info
+    ```
 
-  ```go
-  package main
+    (possible values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `quiet`, defaults to `quiet`).
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    {% endcut %}
 
-    "go.uber.org/zap"
+    {% cut "Enable a third-party logger `go.uber.org/zap`" %}
 
-    ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log *zap.Logger // zap-logger with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZap.WithTraces(
-        log,
-        trace.DetailsAll,
-      ),
+    import (
+      "context"
+      "database/sql"
+      "os"
+
+      "go.uber.org/zap"
+
+      ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log *zap.Logger // zap-logger with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZap.WithTraces(
+          log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% cut "Enable a third-party logger `github.com/rs/zerolog`" %}
 
-  {% endcut %}
+    ```go
+    package main
 
-  {% cut "Enable a third-party logger `github.com/rs/zerolog`" %}
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-  ```go
-  package main
+      "github.com/rs/zerolog"
 
-  import (
-    "context"
-    "database/sql"
-    "os"
-
-    "github.com/rs/zerolog"
-
-    ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log zerolog.Logger // zap-logger with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZerolog.WithTraces(
-        &log,
-        trace.DetailsAll,
-      ),
+      ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log zerolog.Logger // zap-logger with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZerolog.WithTraces(
+          &log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
 
-  {% endcut %}
+    {% cut "Enable a custom logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
-  {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
+    ```go
+    package main
 
-  {% cut "Enable a custom logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-  ```go
-  package main
-
-  import (
-    "context"
-    "database/sql"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/log"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var logger log.Logger // logger implementation with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithLogger(
-        logger,
-        trace.DetailsAll,
-      ),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/log"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var logger log.Logger // logger implementation with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithLogger(
+          logger,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% cut "Implement your own logging package" %}
 
-  {% endcut %}
+    You can implement your own logging package based on the driver events in the `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package. The `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package describes all logged driver events.
 
-  {% cut "Implement your own logging package" %}
+    {% endcut %}
 
-  You can implement your own logging package based on the driver events in the `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package. The `github.com/ydb-platform/ydb-go-sdk/v3/trace` tracing package describes all logged driver events.
+  {% endlist %}
 
-  {% endcut %}
 
 - Java
 
-  For logging purposes, the {{ ydb-short-name }} Java SDK uses the slf4j library, which supports multiple logging levels (`error`, `warn`, `info`, `debug`, `trace`) for one or many loggers. The current implementation supports the following loggers:
+  {% list tabs %}
 
-  * The `com.yandex.ydb.core.grpc` logger provides information about the internal implementation of the gRPC protocol
-  * The `debug` level logs all operations run over gRPC, so we recommend using it only for debugging purposes.
-  * The `info` level is recommended by default
-  * On the `debug` level, the `com.yandex.ydb.table.impl` logger enables you to track the internal status of the {{ ydb-short-name }} driver, including session pool health.
-  * On the `debug` level, the `com.yandex.ydb.table.SessionRetryContext` logger will inform you of the number of retries, results of executed queries, execution time of specific retries, and the total operation execution time
-  * On the `debug` level, the `com.yandex.ydb.table.Session` logger gives you details about the query text, response status, and execution time of specific operations within the session
+  - Native SDK
 
-  Enabling and configuration the Java SDK loggers depends on the `slf4j-api` implementation used.
-  Here's an example of a `log4j2` configuration for the `log4j-slf4j-impl` library
+    For logging purposes, the {{ ydb-short-name }} Java SDK uses the slf4j library, which supports multiple logging levels (`error`, `warn`, `info`, `debug`, `trace`) for one or many loggers. The current implementation supports the following loggers:
 
-  ```xml
-  <Configuration status="WARN">
-    <Appenders>
-      <Console name="Console" target="SYSTEM_OUT">
-        <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
-      </Console>
-    </Appenders>
+    * The `tech.ydb.core.grpc` logger provides information about the internal gRPC implementation
+    * The `debug` level logs all gRPC operations; use it only for debugging
+    * The `info` level is recommended by default
+    * On the `debug` level, the `tech.ydb.table.impl` logger lets you track the internal state of the {{ ydb-short-name }} driver, including the session pool
+    * On the `debug` level, the `tech.ydb.table.SessionRetryContext` logger reports the number of retries, query results, per-retry duration, and total operation time
+    * On the `debug` level, the `tech.ydb.table.Session` logger provides the query text, response status, and execution time for session operations
 
-    <Loggers>
-      <Logger name="io.netty" level="warn" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="io.grpc.netty" level="warn" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="com.yandex.ydb.core.grpc" level="info" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="com.yandex.ydb.table.impl" level="info" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="com.yandex.ydb.table.SessionRetryContext" level="debug" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
-      <Logger name="com.yandex.ydb.table.Session" level="debug" additivity="false">
-        <AppenderRef ref="Console"/>
-      </Logger>
+    Enabling and configuring the Java SDK loggers depends on the `slf4j-api` implementation you use.
+    Here is an example `log4j2` configuration for the `log4j-slf4j-impl` library:
 
-      <Root level="debug" >
-        <AppenderRef ref="Console"/>
-      </Root>
-    </Loggers>
-  </Configuration>
-  ```
+    ```xml
+    <Configuration status="WARN">
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+      </Appenders>
+
+      <Loggers>
+        <Logger name="io.netty" level="warn" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="io.grpc.netty" level="warn" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.core.grpc" level="info" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.impl" level="info" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.SessionRetryContext" level="debug" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+        <Logger name="tech.ydb.table.Session" level="debug" additivity="false">
+          <AppenderRef ref="Console"/>
+        </Logger>
+
+        <Root level="debug" >
+          <AppenderRef ref="Console"/>
+        </Root>
+      </Loggers>
+    </Configuration>
+    ```
+
+  - JDBC
+
+    The JDBC driver uses the same logging stack via `slf4j`; configure the `tech.ydb.*` loggers the same way as in the native SDK.
+
+    The same debug logs are available in other stacks built on JDBC (Spring Boot, ORMs, connection pools, and so on): they reach {{ ydb-short-name }} through this driver, so it is enough to attach the same `slf4j` / log4j2 / logback configuration in the application.
+
+  {% endlist %}
 
 - PHP
 
@@ -377,5 +402,10 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
 
   logging.getLogger('ydb').setLevel(logging.DEBUG)
   ```
+
+- JavaScript
+
+  The SDK uses the [debug](https://www.npmjs.com/package/debug) library for logging.
+  To enable logs, set the `DEBUG` environment variable to filter SDK events, for example `DEBUG=ydbjs:*`.
 
 {% endlist %}

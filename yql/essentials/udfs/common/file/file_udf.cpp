@@ -569,7 +569,9 @@ public:
 
         builder.UserType(userType);
 
-        ui32 indexP, indexT, indexA;
+        ui32 indexP;
+        ui32 indexT;
+        ui32 indexA;
         auto itemType = builder.Struct()
                             ->AddField<const char*>("Path", &indexP)
                             .AddField<const char*>("Type", &indexT)

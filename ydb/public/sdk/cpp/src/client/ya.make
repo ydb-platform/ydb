@@ -26,9 +26,11 @@ RECURSE(
     impl/internal/scheme_helpers
     impl/internal/thread_pool
     impl/internal/value_helpers
+    impl/observability
     impl/session
     impl/stats
     import
+    metrics
     operation
     params
     persqueue_public
@@ -47,6 +49,7 @@ RECURSE(
     topic
     topic/codecs
     topic/impl
+    trace
     types
     types/credentials
     types/exceptions

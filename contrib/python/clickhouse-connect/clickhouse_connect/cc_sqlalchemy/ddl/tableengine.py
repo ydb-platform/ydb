@@ -198,6 +198,7 @@ class VersionedCollapsingMergeTree(TableEngine):
 
 class GraphiteMergeTree(TableEngine):
     arg_names = ['config_section']
+    quoted_args = set(arg_names)
     eng_params = MergeTree.eng_params
 
     # pylint: disable=unused-argument
@@ -228,6 +229,95 @@ class ReplicatedAggregatingMergeTree(ReplicatedMergeTree):
 
 class ReplicatedSummingMergeTree(ReplicatedMergeTree):
     pass
+
+
+class ReplicatedReplacingMergeTree(TableEngine):
+    arg_names = ["zk_path", "replica", "ver"]
+    quoted_args = {"zk_path", "replica"}
+    optional_args = {"zk_path", "replica", "ver"}
+    eng_params = MergeTree.eng_params
+
+    # pylint: disable=unused-argument
+    def __init__(
+        self,
+        ver: str = None,
+        order_by: str = None,
+        primary_key: str = None,
+        partition_by: str = None,
+        sample_by: str = None,
+        zk_path: str = None,
+        replica: str = None,
+    ):
+        if not order_by and not primary_key:
+            raise ArgumentError(None, "Either PRIMARY KEY or ORDER BY must be specified")
+        super().__init__(locals())
+
+
+class ReplicatedCollapsingMergeTree(TableEngine):
+    arg_names = ["zk_path", "replica", "sign"]
+    quoted_args = {"zk_path", "replica"}
+    optional_args = {"zk_path", "replica"}
+    eng_params = MergeTree.eng_params
+
+    # pylint: disable=unused-argument
+    def __init__(
+        self,
+        sign: str = None,
+        order_by: str = None,
+        primary_key: str = None,
+        partition_by: str = None,
+        sample_by: str = None,
+        zk_path: str = None,
+        replica: str = None,
+    ):
+        if not order_by and not primary_key:
+            raise ArgumentError(None, "Either PRIMARY KEY or ORDER BY must be specified")
+        super().__init__(locals())
+
+
+class ReplicatedVersionedCollapsingMergeTree(TableEngine):
+    arg_names = ["zk_path", "replica", "sign", "version"]
+    quoted_args = {"zk_path", "replica"}
+    optional_args = {"zk_path", "replica"}
+    eng_params = MergeTree.eng_params
+
+    # pylint: disable=unused-argument
+    def __init__(
+        self,
+        sign: str = None,
+        version: str = None,
+        order_by: str = None,
+        primary_key: str = None,
+        partition_by: str = None,
+        sample_by: str = None,
+        zk_path: str = None,
+        replica: str = None,
+    ):
+        if not order_by and not primary_key:
+            raise ArgumentError(None, "Either PRIMARY KEY or ORDER BY must be specified")
+        super().__init__(locals())
+
+
+class ReplicatedGraphiteMergeTree(TableEngine):
+    arg_names = ["zk_path", "replica", "config_section"]
+    quoted_args = {"zk_path", "replica", "config_section"}
+    optional_args = {"zk_path", "replica"}
+    eng_params = MergeTree.eng_params
+
+    # pylint: disable=unused-argument
+    def __init__(
+        self,
+        config_section: str = None,
+        order_by: str = None,
+        primary_key: str = None,
+        partition_by: str = None,
+        sample_by: str = None,
+        zk_path: str = None,
+        replica: str = None,
+    ):
+        if not order_by and not primary_key:
+            raise ArgumentError(None, "Either PRIMARY KEY or ORDER BY must be specified")
+        super().__init__(locals())
 
 
 class SharedReplacingMergeTree(ReplacingMergeTree):

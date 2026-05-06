@@ -1,18 +1,11 @@
 #pragma once
 
 #include "defs.h"
+#include "persistent_buffer_header.h"
 
 #include <queue>
 
 namespace NKikimr::NDDisk {
-
-    struct TPersistentBufferSectorInfo {
-        ui64 ChunkIdx : 32;
-        ui64 SectorIdx : 16;
-        ui64 HasSignatureCorrection : 1;
-        ui64 Reserved : 15;
-        ui64 Checksum : 64;
-    };
 
     class TPersistentBufferSpaceAllocator {
     protected:
@@ -69,12 +62,15 @@ namespace NKikimr::NDDisk {
             TChunkSpaceOccupation(TChunksQueue& ownerChunksQueue, ui32 chunkIdx, ui32 first, ui32 last);
 
             TString ToString() const;
+            ui32 VerifyFreeSpace();
         };
 
         ui32 SectorsInChunk;
         std::unordered_map<ui32, TChunkSpaceOccupation> FreeSpaceMap;
         TChunksQueue ChunksPriorityQueue;
         ui32 FreeSpace = 0;
+
+        ui32 VerifyFreeSpace();
 
     public:
         std::vector<ui32> OwnedChunks;

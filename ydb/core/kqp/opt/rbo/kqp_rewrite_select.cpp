@@ -12,11 +12,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-struct TJoinTableAliases {
-    THashSet<TString> LeftSideAliases;
-    THashSet<TString> RightSideAliases;
-};
-
 struct TAggregationTraits {
     TVector<TExprNode::TPtr> AggTraitsList;
     TVector<TInfoUnit> KeyColumns;
@@ -98,40 +93,14 @@ TVector<TExprNode::TPtr> CollectAggregations(TExprNode::TPtr node) {
     return aggregations;
 }
 
-TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
-    TJoinTableAliases joinAliases;
-    for (const auto &joinKey : joinKeys) {
-        if (processedInputs.count(joinKey.GetAlias())) {
-            joinAliases.LeftSideAliases.insert(joinKey.GetAlias());
-        } else {
-            joinAliases.RightSideAliases.insert(joinKey.GetAlias());
-        }
-    }
-    Y_ENSURE(joinAliases.LeftSideAliases.size(), "Left side of the join inputs are empty");
-    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
-    return joinAliases;
-}
-
-TJoinTableAliases GatherJoinAliasesTwoInputs(const TVector<TInfoUnit> &joinKeys) {
-    TJoinTableAliases joinAliases;
-    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
-        joinAliases.LeftSideAliases.insert(joinKeys[i].GetAlias());
-        joinAliases.RightSideAliases.insert(joinKeys[i + 1].GetAlias());
-    }
-
-    Y_ENSURE(joinAliases.LeftSideAliases.size() == 1, "Left side of the join should have only one input");
-    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
-    return joinAliases;
-}
-
-TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTableAliases &joinAliases, THashSet<TString> &processedInputs,
+TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TVector<TString> &leftSideAliases,
                               TExprContext &ctx, TPositionHandle pos) {
-    Y_ENSURE(joinKeys.size() >= 2 && !(joinKeys.size() & 1), "Invalid join key size");
+    Y_ENSURE(!(joinKeys.size() & 1), "Join key size is not even");
     TVector<TDqJoinKeyTuple> keys;
     for (ui32 i = 0; i < joinKeys.size(); i += 2) {
         auto leftSideKey = joinKeys[i];
         auto rightSideKey = joinKeys[i + 1];
-        if (joinAliases.LeftSideAliases.count(rightSideKey.GetAlias())) {
+        if (std::find(leftSideAliases.begin(), leftSideAliases.end(), rightSideKey.GetAlias()) != leftSideAliases.end()) {
             std::swap(leftSideKey, rightSideKey);
         }
         // clang-format off
@@ -150,8 +119,6 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTab
                            .Build()
                       .Done());
         // clang-format on
-        processedInputs.insert(leftSideKey.GetAlias());
-        processedInputs.insert(rightSideKey.GetAlias());
     }
     return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
 }
@@ -549,9 +516,6 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
 }
 
 void SplitByAnd(TExprNode::TPtr node, TVector<TExprNode::TPtr>& predicates) {
-    // TODO: Here we need to build a predicate tree to handle OR.
-    Y_ENSURE(!TCoOr::Match(node.Get()), "OR in join predicate is not supported");
-
     if (!TCoAnd::Match(node.Get())) {
         predicates.push_back(node);
         return;
@@ -580,6 +544,12 @@ bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
 void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
     Y_ENSURE(node->IsLambda());
     auto lambda = TCoLambda(node);
+
+    // YQL select contains a bunch of these for some reason
+    if (node->Child(1)->IsCallable("Bool") && node->Child(1)->Child(0)->Content() == "true") {
+        return;
+    }
+
     TVector<TExprNode::TPtr> predicates;
     SplitByAnd(lambda.Body().Ptr(), predicates);
 
@@ -594,8 +564,8 @@ void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& join
     }
 }
 
-void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TString& leftSideAlias, const TString& rightSideAlias,
-                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates) {
+void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TVector<TString>& leftSideAliases, const TString& rightSideAlias,
+                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates, TVector<TExprNode::TPtr>& joinFilters) {
     for (const auto& predicate : joinPredicates) {
         TVector<TInfoUnit> members;
         GetAllMembers(predicate, members);
@@ -603,7 +573,7 @@ void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates
         bool isRightSidePredicate = false;
         for (const auto& member : members) {
             const auto alias = member.GetAlias();
-            if (alias == leftSideAlias) {
+            if (std::find(leftSideAliases.begin(), leftSideAliases.end(), alias) != leftSideAliases.end()) {
                 isLeftSidePredicate = true;
             } else if (alias == rightSideAlias) {
                 isRightSidePredicate = true;
@@ -611,8 +581,11 @@ void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates
                 Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
             }
         }
-        Y_ENSURE((isLeftSidePredicate && !isRightSidePredicate) || (isRightSidePredicate && !isLeftSidePredicate));
-        if (isLeftSidePredicate) {
+
+        if (isLeftSidePredicate && isRightSidePredicate) {
+            joinFilters.push_back(predicate);
+        }
+        else if (isLeftSidePredicate) {
             leftSidePredicates.push_back(predicate);
         } else {
             rightSidePredicates.push_back(predicate);
@@ -638,6 +611,22 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
     // clang-format off
     return Build<TKqpOpFilter>(ctx, pos)
         .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({"_filter_arg_"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(predicate))
+                .With(TExprBase(lambdaArg), "_filter_arg_")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildJoinFilter(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprNode::TPtr lambdaArg, TExprNode::TPtr predicate, TExprContext &ctx, TPositionHandle pos) {
+    // clang-format off
+    return Build<TKqpOpJoinFilter>(ctx, pos)
+        .LeftInput(leftInput)
+        .RightInput(rightInput)
         .Lambda<TCoLambda>()
             .Args({"_filter_arg_"})
             .Body<TExprApplier>()
@@ -1144,6 +1133,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         auto from = GetSetting(setItem->Tail(), "from");
         THashMap<TString, TExprNode::TPtr> aliasToInputMap;
         TVector<TExprNode::TPtr> inputsInOrder;
+        TVector<TString> fromAliases;
 
         if (from) {
             for (auto fromItem : from->Child(1)->Children()) {
@@ -1153,6 +1143,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
                 auto childExpr = fromItem->ChildPtr(0);
                 auto alias = fromItem->Child(1);
+                fromAliases.push_back(TString(alias->Content()));
                 TExprNode::TPtr fromExpr;
 
                 if (TKqpOpRoot::Match(childExpr.Get())) {
@@ -1208,9 +1199,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         // FIXME: Correlated subqueries may contain a correlation column in join conditions
         // We currently don't handle it
 
-        THashSet<TString> processedInputs;
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
         ui32 ansiCrossJoinCount = 0;
+        ui32 currentFromEntry = 0;
+        TVector<TString> leftSideAliases;
+        TString rightSideAlias;
+
         if (joinOps) {
             for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
                 ui32 tableInputsCount = 0;
@@ -1219,7 +1213,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                     auto join = tuple->Child(j);
                     auto joinType = join->Child(0)->Content();
                     if (joinType == "push") {
+                        if (leftSideAliases.empty()) {
+                            leftSideAliases.push_back(fromAliases[0]);
+                        }
+                        rightSideAlias = fromAliases[currentFromEntry];
                         ++tableInputsCount;
+                        ++currentFromEntry;
                         continue;
                     }
 
@@ -1248,36 +1247,26 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
                     }
 
-                    TJoinTableAliases joinAliases;
                     TExprNode::TPtr leftInput;
                     TExprNode::TPtr rightInput;
                     TVector<TExprNode::TPtr> leftSidePredicates;
                     TVector<TExprNode::TPtr> rightSidePredicates;
-                    TString leftSideAlias;
-                    TString rightSideAlias;
+                    TVector<TExprNode::TPtr> joinFilterPredicates;
+                    TVector<TExprNode::TPtr> joinFilters;
 
-                    if (joinKeys.empty()) {
+                    if (joinKeys.empty() && joinPredicates.empty()) {
                         // Ansi cross join.
                         ++ansiCrossJoinCount;
                         continue;
                     }
 
-                    Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
+                    Y_ENSURE((joinKeys.size() || joinPredicates.size()) && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
+
                     if (tableInputsCount == 2) {
-                        joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
-                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
-                        rightSideAlias = *joinAliases.RightSideAliases.begin();
-                        Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
-                        Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
-                        leftInput = aliasToInputMap[leftSideAlias];
+                        leftInput = aliasToInputMap[leftSideAliases[0]];
                         rightInput = aliasToInputMap[rightSideAlias];
 
                    } else if (tableInputsCount == 1) {
-                        joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
-                        // TODO: Add support to build a join filter with multi input side.
-                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
-                        rightSideAlias = *joinAliases.RightSideAliases.begin();
-                        Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
                         leftInput = joinExpr;
                         rightInput = aliasToInputMap[rightSideAlias];
                     }
@@ -1285,15 +1274,23 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                     auto joinKind = TString(joinType);
                     ToCamelCase(joinKind.MutRef());
 
-                    if (joinLambda && (joinKind == "Left" || joinKind == "Inner")) {
+                    if (joinLambda) {
                         auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
-                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates);
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAliases, rightSideAlias, leftSidePredicates, rightSidePredicates, joinFilterPredicates);
                         if (leftSidePredicates.size()) {
                             leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
                         }
                         if (rightSidePredicates.size()) {
                             rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
                         }
+                        for (const auto & joinFilter : joinFilterPredicates) {
+                            auto joinF = BuildJoinFilter(leftInput, rightInput, lambdaArg, joinFilter, ctx, node->Pos());
+                            joinFilters.push_back(joinF);
+                        }
+                    }
+
+                    if (joinKind == "Inner" && joinKeys.empty() && joinFilters.empty()) {
+                        joinKind = "Cross";
                     }
 
                     // clang-format off
@@ -1303,10 +1300,14 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         .JoinKind()
                             .Value(joinKind)
                         .Build()
-                        .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
+                        .JoinKeys(BuildJoinKeys(joinKeys, leftSideAliases, ctx, node->Pos()))
+                        .JoinFilters()
+                            .Add(joinFilters)
+                        .Build()
                     .Done().Ptr();
                     // clang-format on
                     tableInputsCount = 0;
+                    leftSideAliases.push_back(rightSideAlias);
                 }
             }
 
@@ -1327,6 +1328,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                                 .Value("Cross")
                             .Build()
                             .JoinKeys(joinKeys)
+                            .JoinFilters().Build()
                         .Done().Ptr();
                         // clang-format on
                         inputIndex += (inputIndex == 0 ? 2 : 1);

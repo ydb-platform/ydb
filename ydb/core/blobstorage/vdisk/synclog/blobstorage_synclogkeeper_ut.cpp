@@ -110,6 +110,7 @@ namespace NKikimr {
             TActorId{},
             TActorId{},
             TActorId{},
+            TActorId{},
             syncLogMaxDiskAmount,
             syncLogMaxEntryPointSize,
             syncLogMaxMemAmount,
@@ -117,6 +118,7 @@ namespace NKikimr {
             nullptr,
             false,
             TControlWrapper(0, 0, 1),
+            false,
             TControlWrapper(20'000'000, 1, 100'000'000'000));
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,

@@ -184,6 +184,15 @@ message TVDiskSatisfactionRank {
     optional TRank LevelRank = 2;
 }
 
+message TVDiskDetailedReplicationStatus {
+    enum E {
+        Replicated = 0;         // Disk is fully replicated, no replication needed
+        WaitingForToken = 1;    // Replication is waiting for a token from the broker
+        InProgress = 2;         // Replication is in progress, data is being transferred to VDisk
+        PhantomsOnly = 3;       // Replication cannot finish due to phantom blobs
+    }
+}
+
 message TVDiskStateInfo {
     optional NKikimrBlobStorage.TVDiskID VDiskId = 1 [(DefaultField) = true];
     optional uint64 CreateTime = 2;
@@ -210,6 +219,8 @@ message TVDiskStateInfo {
     optional bool UnreplicatedPhantoms = 20 [default = false, (DefaultField) = true];
     // The same for the non-phantom-like blobs.
     optional bool UnreplicatedNonPhantoms = 21 [default = false,  (DefaultField) = true];
+    // Detailed replication status.
+    optional TVDiskDetailedReplicationStatus.E DetailedReplicationStatus = 37;
     // Replication progress (0 to 1). Only for replication, not blob scrubbing.
     optional float ReplicationProgress = 30 [(DefaultField) = true];
     // Replication ETA.

@@ -1014,7 +1014,7 @@ public:
             TExploringNodeVisitor explorer;
             explorer.Walk(runPgm.GetNode(), Env);
             TComputationPatternOpts opts(Alloc.Ref(), Env,
-                GetFlatShardExecutionFactory(execData, true, Settings.UserSID),
+                GetFlatShardExecutionFactory(execData, true, Settings.UserCtx),
                 Settings.FunctionRegistry,
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                 Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
@@ -1343,7 +1343,7 @@ public:
                     }
 
                     TComputationPatternOpts opts(Alloc.Ref(), Env,
-                        GetFlatShardExecutionFactory(execData, false, Settings.UserSID),
+                        GetFlatShardExecutionFactory(execData, false, Settings.UserCtx),
                         Settings.FunctionRegistry,
                         NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);

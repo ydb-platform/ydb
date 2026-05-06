@@ -1,6 +1,6 @@
 #include "init_impl.h"
 #include "mock.h"
-#include <ydb/library/yaml_json/yaml_to_json.h>
+#include "yaml_config_helpers.h"
 #include <ydb/core/util/backoff.h>
 #include <util/generic/overloaded.h>
 
@@ -32,8 +32,11 @@ class TDefaultErrorCollector
 {
 public:
     // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
-    void Fatal(TString error) override {
-        ythrow yexception() << error;
+    void Fatal(TString error, TStringBuf errorCode) override {
+        if (errorCode) {
+            throw TInitializationException(TString(errorCode)) << error;
+        }
+        throw TInitializationException() << error;
     }
 };
 
@@ -71,11 +74,11 @@ public:
     TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
         fs::path filePath(path.c_str());
         if (!fs::is_regular_file(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s doesn't exists", path.c_str()));
+            errorCollector.Fatal(Sprintf("File %s does not exist", path.c_str()), "YDB-CFG25");
             return {};
         }
         if (!IsFileReadable(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s isn't readable", path.c_str()));
+            errorCollector.Fatal(Sprintf("File %s is not readable", path.c_str()), "YDB-CFG26");
             return {};
         }
         TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
@@ -94,7 +97,7 @@ public:
             return (*opt)->ParsedOption.GetRef();
         }
         // TODO(Enjection): CFG-UX-0 replace with IErrorCollector call
-        ythrow yexception() << "option " << optName.Quote() << " undefined";
+        throw TMisuseException() << "option " << optName.Quote() << " undefined";
     }
 };
 
@@ -204,7 +207,7 @@ class TDefaultNodeBrokerClient
             const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, nodeRegistrationToken);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -350,11 +353,11 @@ RetryResult RetryWithJitter(
         ui64 multiplier = 1ULL << exponent;
         TDuration delay = baseDelay * multiplier;
         delay = Min(delay, maxDelay);
-        
+
         ui64 maxMs = delay.MilliSeconds();
         ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
         TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
-        
+
         env.Sleep(jitteredDelay);
     };
 
@@ -367,22 +370,22 @@ RetryResult RetryWithJitter(
         for (const auto& addr : addrs) {
             success = attempt(addr);
             ++totalAttempts;
-            
+
             if (success) {
                 break;
             }
-            
+
             // Exponential delay between individual addresses - delay grows with each address in the round
             if (addrs.size() > 1) {
                 sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
             }
-            
+
             ++addressIndex;
         }
-        
+
         if (!success) {
             ++round;
-            
+
             if (round < maxRounds) {
                 sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
             }
@@ -459,8 +462,8 @@ public:
         const auto result = RetryWithJitter(addrs, env, attempt);
 
         if (!result.Success) {
-            logger.Err() << "WARNING: couldn't load config from Console after " 
-                        << result.TotalAttempts << " attempts across " << result.Rounds 
+            logger.Err() << "WARNING: couldn't load config from Console after "
+                        << result.TotalAttempts << " attempts across " << result.Rounds
                         << " rounds: " << error << Endl;
         }
 
@@ -472,8 +475,13 @@ class TConfigResultWrapper
     : public IStorageConfigResult
 {
 public:
-    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString()) 
-        : SourceAddress(sourceAddress)
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString())
+        : Success(result.IsSuccess())
+        , TransportError(result.IsTransportError())
+        , Endpoint(result.GetEndpoint())
+        , PrimaryIssueMessage(result.GetIssues().Empty() ? TString() : TString(result.GetIssues().begin()->GetMessage()))
+        , IssuesText(result.GetIssues().ToOneLineString())
+        , SourceAddress(sourceAddress)
         , Transient(result.Transient())
     {
         for (const auto& entry : result.GetConfigs()) {
@@ -484,6 +492,26 @@ public:
                 [&](const std::monostate&) { Y_DEBUG_ABORT(); }
             }, entry.Identity);
         }
+    }
+
+    bool IsSuccess() const override {
+        return Success;
+    }
+
+    bool IsTransportError() const override {
+        return TransportError;
+    }
+
+    const TString& GetEndpoint() const override {
+        return Endpoint;
+    }
+
+    const TString& GetPrimaryIssueMessage() const override {
+        return PrimaryIssueMessage;
+    }
+
+    const TString& GetIssuesText() const override {
+        return IssuesText;
     }
 
     const std::optional<TString>& GetMainYamlConfig() const override {
@@ -503,6 +531,11 @@ public:
     }
 
 private:
+    bool Success;
+    bool TransportError;
+    TString Endpoint;
+    TString PrimaryIssueMessage;
+    TString IssuesText;
     std::optional<TString> MainYamlConfig;
     std::optional<TString> StorageYamlConfig;
     TString SourceAddress;
@@ -566,8 +599,8 @@ private:
         const auto retryResult = RetryWithJitter(addrs, env, attempt);
 
         if (!retryResult.Success) {
-             logger.Err() << "WARNING: couldn't fetch config from Console after " 
-                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
+             logger.Err() << "WARNING: couldn't fetch config from Console after "
+                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds
                         << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
         }
         return {*result, sourceAddress};
@@ -583,9 +616,6 @@ public:
         int interconnectPort) const override
     {
         auto fetchResult = FetchConfigImpl(grpcSettings, addrs, env, logger, hostOptions, interconnectPort);
-        if (!fetchResult.Result.IsSuccess()) {
-            return nullptr;
-        }
         return std::make_shared<TConfigResultWrapper>(std::move(fetchResult.Result), std::move(fetchResult.SourceAddress));
     }
 };
@@ -753,9 +783,15 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
         /*
          * FIXME: if (ErrorCollector.HasFatal()) { return; }
          */
-        const bool result = ParsePBFromString(protoString, &parsedConfig);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, &parsedConfig, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDB-CFG24");
             return;
         }
         out.MergeFrom(parsedConfig);
@@ -764,20 +800,21 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
 
 void ApplyMainYamlConfig(
     TConfigRefs refs,
-    const TString& mainYamlConfigString,
-    const std::optional<TString>& storageYamlConfigString,
-    bool loadedFromStore,
+    const TYamlConfigs& yamlConfigs,
     NKikimrConfig::TAppConfig& appConfig,
     const NCompat::TSourceLocation location)
 {
     IConfigUpdateTracer& configUpdateTracer = refs.Tracer;
+    Y_ABORT_UNLESS(yamlConfigs.Main);
+    const TString& mainYamlConfigString = *yamlConfigs.Main;
+    const auto& storageYamlConfigString = yamlConfigs.Storage;
 
     appConfig.SetStartupConfigYaml(mainYamlConfigString);
     if (storageYamlConfigString) {
         appConfig.SetStartupStorageYaml(*storageYamlConfigString);
     }
 
-    if (loadedFromStore) {
+    if (yamlConfigs.LoadedFromStore) {
         auto *yamlConfig = appConfig.MutableStoredConfigYaml();
         yamlConfig->SetMainConfig(mainYamlConfigString);
         yamlConfig->SetMainConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));
@@ -793,17 +830,15 @@ void ApplyMainYamlConfig(
 
     NKikimrConfig::TAppConfig parsedConfig;
 
+    auto main = LoadYamlAsJsonOrThrow(mainYamlConfigString, yamlConfigs.MainSource);
     if (storageYamlConfigString) {
-        auto storage = NKikimr::NYaml::Yaml2Json(YAML::Load(*storageYamlConfigString), true);
-        auto main = NKikimr::NYaml::Yaml2Json(YAML::Load(mainYamlConfigString), true);
+        auto storage = LoadYamlAsJsonOrThrow(*storageYamlConfigString, yamlConfigs.StorageSource ? *yamlConfigs.StorageSource : TStringBuf{});
         auto& target = main["config"].GetMapSafe();
         for (auto&& [key, value] : std::move(storage["config"].GetMapSafe())) {
             target.emplace(std::move(key), std::move(value));
         }
-        NKikimr::NYaml::Parse(main, NKikimr::NYaml::GetJsonToProtoConfig(), parsedConfig, true);
-    } else {
-        parsedConfig = NKikimr::NYaml::Parse(mainYamlConfigString); // FIXME
     }
+    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig);
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
@@ -936,7 +971,7 @@ void UpdateConfigUpdateTracer(
     }
 }
 
-NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::string& database, const std::optional<TString>& authToken) {
     TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
     NYdb::TDriverConfig config;
     if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
@@ -949,6 +984,7 @@ NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, con
             config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
         }
     }
+    config.SetDatabase(database);
     if (authToken) {
         config.SetAuthToken(authToken.value());
     }

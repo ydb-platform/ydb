@@ -1736,6 +1736,24 @@ struct TUniquePtrSerializer
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TDerefSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& obj)
+    {
+        TUnderlyingSerializer::Save(context, *obj);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& obj)
+    {
+        TUnderlyingSerializer::Load(context, *obj);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TUnderlyingSerializer = TDefaultSerializer>
 struct TNonNullableIntrusivePtrSerializer
 {
     template <class T, class C>
@@ -2046,6 +2064,26 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
         static void Load(C& context, TMaybeInf<T>& value)
         {
             value.UnsafeAssign(NYT::Load<T>(context));
+        }
+    };
+};
+
+template <class T, class C>
+struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
+{
+    struct TSerializer
+    {
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+        {
+            object.Read([&] (const T& value) {
+                TDefaultSerializer::Save(context, value);
+            });
+        }
+        static void Load(C& context, NThreading::TAtomicObject<T>& object)
+        {
+            object.Transform([&] (T& value) {
+                TDefaultSerializer::Load(context, value);
+            });
         }
     };
 };

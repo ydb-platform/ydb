@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Window and aggregation functions are not allowed in this context */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -49,8 +48,8 @@ FROM (
             AND d_month_seq BETWEEN 1212 AND 1212 + 11
         GROUP BY
             ROLLUP (i_category, i_class, i_brand, i_product_name, d_year, d_qoy, d_moy, s_store_id)
-    ) dw1
-) dw2
+    ) AS dw1
+) AS dw2
 WHERE
     rk <= 100
 ORDER BY

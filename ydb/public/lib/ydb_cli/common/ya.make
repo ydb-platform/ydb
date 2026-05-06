@@ -2,6 +2,7 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    build_info.cpp
     cert_format_converter.cpp
     client_command_options.cpp
     colors.cpp
@@ -21,6 +22,7 @@ SRCS(
     ftxui.cpp
     interactive.cpp
     interruptable.cpp
+    local_paths.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp

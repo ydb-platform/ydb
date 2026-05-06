@@ -410,6 +410,8 @@ message TExpression {
         TMaxOf max_of = 10;
 
         TCurrentUtcTimestamp current_utc_timestamp = 11;
+
+        TPredicate predicate = 12;
     }
 }
 

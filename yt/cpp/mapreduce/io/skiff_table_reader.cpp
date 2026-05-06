@@ -1,5 +1,6 @@
 #include "skiff_table_reader.h"
 
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -155,6 +156,16 @@ bool TSkiffTableReader::IsRawReaderExhausted() const
     return Finished_;
 }
 
+void TSkiffTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TSkiffTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TVector<TSkiffTableReader::TSkiffTableSchema> TSkiffTableReader::CreateSkiffTableSchemas(
@@ -288,6 +299,9 @@ void TSkiffTableReader::ReadRow()
 
 void TSkiffTableReader::EnsureValidity() const
 {
+    if (IsAborted()) {
+        ythrow TInputStreamAbortedError() << "Stream was aborted";
+    }
     Y_ENSURE(Valid_, "Iterator is not valid");
 }
 

@@ -594,7 +594,7 @@ parse_int_string(UC const *p, UC const *pend, T &value,
           ((digits + 0x46464646u) | (digits - 0x30303030u)) & 0x80808080u;
       uint32_t tz = (uint32_t)countr_zero_32(magic); // 7, 15, 23, 31, or 32
       uint32_t nd = (tz == 32) ? 4 : (tz >> 3);
-      nd = (uint32_t)std::min((size_t)nd, len);
+      nd = (uint32_t)(nd < len ? nd : len);
       if (nd == 0) {
         if (has_leading_zeros) {
           value = 0;

@@ -113,6 +113,7 @@ public:
     {
         THttpServer::TOptions opts;
         opts.AddBindAddress(Host_, Port_);
+        opts.SetThreads(settings.Threads);
         HttpServer_ = MakeHolder<THttpServer>(this, opts.EnableKeepAlive(true).EnableCompression(true));
 
         THandler putTableDataServiceHandler = std::bind(&TTableDataServiceServer::PutTableDataServiceHandler, this, std::placeholders::_1);
@@ -134,7 +135,7 @@ public:
 
     void Start() override {
         HttpServer_->Start();
-        Cerr << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
+        YQL_CLOG(INFO, FastMapReduce) << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_);
     }
 
     void Stop() override {

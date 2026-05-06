@@ -158,6 +158,8 @@ namespace NKikimr {
                         str << " of allocated " << (b->AllocatedChunks * sectorsInChunk);
                         str << " max " << (b->MaxChunks * sectorsInChunk);
                         str << "<br> InMemory cache: " << beautySize(b->InMemoryCacheSize) << " of " << beautySize(b->InMemoryCacheLimit);
+                        str << "<br> Pending events: " << b->PendingEvents;
+                        str << "<br> Disk operations inflight: " << b->DiskOperationsInflight;
 
                         if (inflight.DescribeFreeSpace && !b->FreeSpace.empty() && b->SectorSize > 0 && b->ChunkSize > 0) {
                             const ui32 sectorsPerChunk = b->ChunkSize / b->SectorSize;
@@ -170,6 +172,7 @@ namespace NKikimr {
                                     TABLER() {
                                         TABLEH() {str << "TabletId";}
                                         TABLEH() {str << "Generation";}
+                                        TABLEH() {str << "Barrier";}
                                         TABLEH() {str << "Lsns count";}
                                         TABLEH() {str << "Total space";}
                                         TABLEH() {str << "First lsn";}
@@ -183,6 +186,11 @@ namespace NKikimr {
                                         TABLER() {
                                             TABLED() {str << ti.TabletId;}
                                             TABLED() {str << ti.Generation;}
+                                            if (auto it = b->EraseBarriers.find(ti.TabletId); it != b->EraseBarriers.end()) {
+                                                TABLED() {str << it->second;}
+                                            } else {
+                                                TABLED() {str << "No barrier";}
+                                            }
                                             TABLED() {str << ti.LsnsCount;}
                                             TABLED() {str << beautySize(ti.Size);}
                                             TABLED() {str << ti.FirstLsn;}

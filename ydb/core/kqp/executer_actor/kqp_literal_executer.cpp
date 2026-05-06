@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
@@ -93,7 +92,7 @@ public:
 
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -272,7 +271,7 @@ public:
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats(), false);
                     response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                 }
             }

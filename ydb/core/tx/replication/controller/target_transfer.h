@@ -21,7 +21,7 @@ public:
         using TPtr = std::shared_ptr<TTransferConfig>;
 
         TTransferConfig(const TString& srcPath, const TString& dstPath, const NKikimrReplication::TReplicationConfig& cfg);
-        
+
         const TString& GetTransformLambda() const;
         const TString& GetRunAsUser() const;
         const TString& GetDirectoryPath() const;
@@ -43,7 +43,7 @@ public:
     TString GetStreamPath() const override;
     void EnsureCounters();
 
-    void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) override;
+    bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) override;
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     void RemoveWorker(ui64 id) override;
 

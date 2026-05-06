@@ -7,6 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -68,9 +69,9 @@ private:
     }
 
 public:
-    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
+    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
         const TIntrusivePtr<TTxProxyMon>& mon,
-        const TString& userSID)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Services(services)
         , TxId(txid)
         , Sender(ev->Sender)
@@ -78,7 +79,7 @@ public:
         , Request(ev->Release())
         , TxProxyMon(mon)
         , DefaultTimeoutMs(60000, 0, 360000)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     { }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -301,7 +302,9 @@ private:
             auto event = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_COMMIT_WRITES,
                 ctx.SelfID, TxId, txBody,
                 TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0));
-            event->Record.SetUserSID(UserSID);
+            if (UserCtx != nullptr) {
+                UserCtx->SerializeToEvent(event->Record);
+            }
             Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(event, shardId, true));
 
             state.AffectedFlags |= TPerShardState::AffectedRead;
@@ -989,7 +992,7 @@ private:
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
-    const TString UserSID;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
@@ -1030,15 +1033,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
-    const TIntrusivePtr<TTxProxyMon>& mon, const TString& userSID) 
+IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+    const TIntrusivePtr<TTxProxyMon>& mon, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasTransaction());
     const auto& tx = record.GetTransaction();
 
     if (tx.HasCommitWrites()) {
-        return new TCommitWritesReq(services, txid, std::move(ev), mon, userSID);
+        return new TCommitWritesReq(services, txid, std::move(ev), mon, userCtx);
     }
 
     Y_ABORT("Unexpected transaction proposal");

@@ -324,7 +324,7 @@ TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& buil
     TOptionsSchema ret;
     auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-    OPTIONS_MAP(FIELD_HANDLE)
+    OPTIONS_MAP(FIELD_HANDLE) // NOLINT(readability-container-data-pointer)
 #undef FIELD_HANDLE
 
     ret.StructType = structBuilder->Build();
@@ -529,7 +529,37 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::MATCH));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::GREP));
-        sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE))->SetTypeAwareness();
+        auto capture = sink.Add(TRe2Udf::Name(TRe2Udf::EMode::CAPTURE));
+        capture->SetTypeAwareness();
+        capture->SetPolyArgs(R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalStructType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["TupleType";[
+                        ["DataType";"String"];
+                        ["OptionalType";["StructType";[
+                            ["CaseSensitive";["DataType";"Bool"]];
+                            ["DotNl";["DataType";"Bool"]];
+                            ["Literal";["DataType";"Bool"]];
+                            ["LogErrors";["DataType";"Bool"]];
+                            ["LongestMatch";["DataType";"Bool"]];
+                            ["MaxMem";["DataType";"Uint64"]];
+                            ["NeverCapture";["DataType";"Bool"]];
+                            ["NeverNl";["DataType";"Bool"]];
+                            ["OneLine";["DataType";"Bool"]];
+                            ["PerlClasses";["DataType";"Bool"]];
+                            ["PosixSyntax";["DataType";"Bool"]];
+                            ["Utf8";["DataType";"Bool"]];
+                            ["WordBoundary";["DataType";"Bool"]]
+                        ]]]
+                    ]]
+                }
+            ]]
+        )");
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::REPLACE));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::COUNT));
         sink.Add(TRe2Udf::Name(TRe2Udf::EMode::FIND_AND_CONSUME));

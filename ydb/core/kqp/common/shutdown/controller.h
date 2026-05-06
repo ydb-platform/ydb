@@ -2,7 +2,6 @@
 #include "state.h"
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr::NKqp {

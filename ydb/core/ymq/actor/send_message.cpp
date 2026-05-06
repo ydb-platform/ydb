@@ -164,16 +164,60 @@ private:
     void DoAction() override {
         Y_ABORT_UNLESS(QueueAttributes_.Defined());
         if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
-            DoActionTopicImplementation();
+            if (IsFifoQueue() && !FeatureFlags_.EnableSQSMigrationFinished_) {
+                DoActionDeduplicateTopicImplementation();
+            } else {
+                DoActionTopicImplementation();
+            }
         } else {
             DoActionTableImplementation();
         }
     }
 
+    void DoActionDeduplicateTopicImplementation() {
+        Become(&TThis::StateFunc);
+
+        auto req = MakeHolder<TSqsEvents::TEvDeduplicateMessageBatch>();
+        req->RequestId = RequestId_;
+        req->SenderId = UserSID_;
+
+        for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
+            auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
+
+            try {
+                req->DeduplicationMessageIds.push_back(GetDeduplicationMessageId(*currentRequest));
+            } catch (const std::exception& ex) {
+                RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+            }
+        }
+
+        if (req->DeduplicationMessageIds.empty()) {
+            DoActionTopicImplementation();
+        } else {
+            Send(QueueLeader_, std::move(req));
+        }
+    }
+
+    TString GetDeduplicationMessageId(auto& request) {
+        if (!IsFifoQueue()) {
+            return {};
+        }
+
+        const auto& dedupParam = request.GetMessageDeduplicationId();
+        if (dedupParam) {
+            return dedupParam;
+        }
+
+        if (QueueAttributes_->ContentBasedDeduplication) {
+            return CalcSHA256(request.GetMessageBody());
+        }
+
+        return {};
+    }
+
     void DoActionTopicImplementation() {
         Become(&TThis::StateFunc);
 
-        const bool isFifo = IsFifoQueue();
         NPQ::NMLP::TWriterSettings writerSettings;
         writerSettings.DatabasePath = GetDatabaseName();
         writerSettings.TopicName = GetTopicName();
@@ -189,18 +233,20 @@ private:
             }
 
             TString deduplicationId;
-            if (isFifo) {
-                const TString& dedupParam = currentRequest->GetMessageDeduplicationId();
-                if (dedupParam) {
-                    deduplicationId = dedupParam;
-                } else if (QueueAttributes_->ContentBasedDeduplication) {
-                    try {
-                        deduplicationId = CalcSHA256(currentRequest->GetMessageBody());
-                    } catch (const std::exception& ex) {
-                        RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
-                        MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
-                        continue;
-                    }
+            if (IsFifoQueue()) {
+                try {
+                    deduplicationId = GetDeduplicationMessageId(*currentRequest);
+                } catch (const std::exception& ex) {
+                    RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                    continue;
+                }
+
+                auto it = BlockedDeduplicationMessageIds_.find(deduplicationId);
+                if (it != BlockedDeduplicationMessageIds_.end()) {
+                    const auto& [messageId, sequenceNumber] = it->second;
+                    AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
+                    continue;
                 }
             }
 
@@ -260,17 +306,12 @@ private:
 
             TString deduplicationId;
             if (isFifo) {
-                const TString& dedupParam = currentRequest->GetMessageDeduplicationId();
-                if (dedupParam) {
-                    deduplicationId = dedupParam;
-                } else if (QueueAttributes_->ContentBasedDeduplication) {
-                    try {
-                        deduplicationId = CalcSHA256(currentRequest->GetMessageBody());
-                    } catch (const std::exception& ex) {
-                        RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
-                        MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
-                        continue;
-                    }
+                try {
+                    deduplicationId = GetDeduplicationMessageId(*currentRequest);
+                } catch (const std::exception& ex) {
+                    RLOG_SQS_ERROR("Failed to calculate SHA-256 of message body: " << ex.what());
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                    continue;
                 }
             }
 
@@ -321,7 +362,21 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,         HandleWakeup);
             hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
+            hFunc(TSqsEvents::TEvDeduplicateMessageBatchResponse, Handle);
             hFunc(TSqsEvents::TEvSendMessageBatchResponse, HandleSendResponseTableImplementation);
+        }
+    }
+
+    void AddResponse(const auto* currentRequest, auto* currentResponse, const TString& messageId, ui64 sequenceNumber) {
+        currentResponse->SetMessageId(messageId);
+        if (IsFifoQueue()) {
+            currentResponse->SetSequenceNumber(sequenceNumber);
+        }
+        currentResponse->SetMD5OfMessageBody(MD5::Calc(currentRequest->GetMessageBody()));
+        if (currentRequest->MessageAttributesSize() > 0) {
+            const TString md5 = CalcMD5OfMessageAttributes(currentRequest->GetMessageAttributes());
+            currentResponse->SetMD5OfMessageAttributes(md5);
+            RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
         }
     }
 
@@ -329,7 +384,6 @@ private:
         const auto* response = ev->Get();
         const auto& messages = response->Messages;
 
-        const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = messages.size(); i < size; ++i) {
             const auto& message = messages[i];
 
@@ -342,22 +396,36 @@ private:
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE,
                     NPQ::NDescriber::Description(GetTopicName(), response->DescribeStatus));
             } else if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {
-                currentResponse->SetMessageId(ToMessageId(message.MessageId.value()));
-                if (isFifo) {
-                    currentResponse->SetSequenceNumber(message.MessageId->Offset); // TODO: как быть с несколькими партициями?
-                }
-                currentResponse->SetMD5OfMessageBody(MD5::Calc(currentRequest->GetMessageBody()));
-                if (currentRequest->MessageAttributesSize() > 0) {
-                    const TString md5 = CalcMD5OfMessageAttributes(currentRequest->GetMessageAttributes());
-                    currentResponse->SetMD5OfMessageAttributes(md5);
-                    RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
-                }
+                AddResponse(
+                    currentRequest,
+                    currentResponse,
+                    ToMessageId(message.MessageId.value()),
+                    message.MessageId->Offset // TODO: как быть с несколькими партициями?
+                );
             } else {
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
             }
         }
 
         SendReplyAndDie();
+    }
+
+    void Handle(TSqsEvents::TEvDeduplicateMessageBatchResponse::TPtr& ev) {
+        if (ev->Get()->StatusCode == Ydb::StatusIds::SUCCESS) {
+            BlockedDeduplicationMessageIds_ = std::move(ev->Get()->BlockedDeduplicationMessageIds);
+            DoActionTopicImplementation();
+        } else {
+            RLOG_SQS_DEBUG("Message deduplication error");
+            if (IsBatch_) {
+                for (size_t i = 0, size = BatchRequest().EntriesSize(); i < size; ++i) {
+                    auto* currentResponse = Response_.MutableSendMessageBatch()->MutableEntries(i);
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                }
+            } else {
+                MakeError(Response_.MutableSendMessage(), NErrors::INTERNAL_FAILURE);
+            }
+            SendReplyAndDie();
+        }
     }
 
     void HandleSendResponseTableImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {
@@ -399,6 +467,8 @@ private:
     std::vector<size_t> RequestToReplyIndexMapping_;
 
     const bool IsBatch_;
+    // deduplication message id -> sequenceNumber
+    std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

@@ -46,6 +46,7 @@ public:
         Count += 1;
         RecordsCount += p->GetRecordsCount();
     }
+
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
@@ -63,13 +64,15 @@ private:
 
 public:
     TPortionsGroupInfo(const std::shared_ptr<TPortionCategoryCounters>& signals)
-        : Signals(signals) {
+        : Signals(signals)
+    {
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::AddPortion(p);
         Signals->AddPortion(p);
     }
+
     void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::RemovePortion(p);
         Signals->RemovePortion(p);
@@ -84,6 +87,7 @@ private:
     TSimplePortionsGroupInfo BucketInfo;
     std::shared_ptr<TCounters> Counters;
     const TDuration FutureDetector;
+
     bool AddActual(const std::shared_ptr<TPortionInfo>& portion) {
         if (Actuals.emplace(portion->GetPortionId(), portion).second) {
             BucketInfo.AddPortion(portion);
@@ -259,7 +263,8 @@ public:
 
     TPortionsPool(const std::shared_ptr<TCounters>& counters, const TDuration futureDetector)
         : Counters(counters)
-        , FutureDetector(futureDetector) {
+        , FutureDetector(futureDetector)
+    {
     }
 
     ~TPortionsPool() {
@@ -702,7 +707,8 @@ public:
         TModificationGuard(TPortionsBucket& owner)
             : Owner(owner)
             , IsEmptyOthers(Owner.Others.ActualsEmpty())
-            , HasNextBorder(Owner.NextBorder) {
+            , HasNextBorder(Owner.NextBorder)
+        {
             AFL_VERIFY_DEBUG(Owner.Validate());
         }
 
@@ -738,7 +744,8 @@ public:
         const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TCounters>& counters)
         : MainPortion(portion)
         , Counters(counters)
-        , Others(Counters, GetCommonFreshnessCheckDuration()) {
+        , Others(Counters, GetCommonFreshnessCheckDuration())
+    {
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition sBatchPosition(
                 MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false);
@@ -869,13 +876,11 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
-            NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
@@ -953,6 +958,7 @@ private:
     std::map<NArrow::TSimpleRow, std::shared_ptr<TPortionsBucket>> Buckets;
     std::map<i64, THashSet<TPortionsBucket*>, TReverseComparator> BucketsByWeight;
     std::shared_ptr<TCounters> Counters;
+
     std::vector<std::shared_ptr<TPortionsBucket>> GetAffectedBuckets(
         const NArrow::TSimpleRow& fromInclude, const NArrow::TSimpleRow& toInclude) {
         std::vector<std::shared_ptr<TPortionsBucket>> result;
@@ -995,6 +1001,7 @@ private:
             AddBucketToRating(i);
         }
     }
+
     void AddOther(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         auto buckets = GetAffectedBuckets(portion->IndexKeyStart(), portion->IndexKeyEnd());
         for (auto&& i : buckets) {
@@ -1003,6 +1010,7 @@ private:
             AddBucketToRating(i);
         }
     }
+
     bool RemoveBucket(const std::shared_ptr<TPortionInfo>& portion) {
         auto it = Buckets.find(portion->IndexKeyStart());
         if (it == Buckets.end()) {
@@ -1028,8 +1036,7 @@ private:
     }
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto insertInfo =
-            Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
+        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
         AFL_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
@@ -1051,16 +1058,19 @@ public:
         : PrimaryKeysSchema(primaryKeysSchema)
         , StoragesManager(storagesManager)
         , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, primaryKeysSchema, counters))
-        , Counters(counters) {
+        , Counters(counters)
+    {
         AddBucketToRating(LeftBucket);
     }
 
     bool IsEmpty() const {
         return Buckets.empty() && LeftBucket->IsEmpty();
     }
+
     TString DebugString() const {
         return "";
     }
+
     NJson::TJsonValue SerializeToJson() const {
         return NJson::JSON_NULL;
     }
@@ -1179,6 +1189,7 @@ private:
     std::shared_ptr<TCounters> Counters;
     TPortionBuckets Buckets;
     const std::shared_ptr<IStoragesManager> StoragesManager;
+
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const override {
         return Buckets.GetTasksDescription();
     }
@@ -1205,10 +1216,12 @@ protected:
             Buckets.AddPortion(i, now);
         }
     }
+
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         return Buckets.BuildOptimizationTasks(granule, locksManager);
     }
+
     virtual void DoActualize(const TInstant currentInstant) override {
         Buckets.Actualize(currentInstant);
     }
@@ -1220,9 +1233,11 @@ protected:
             return TOptimizationPriority::Zero();
         }
     }
+
     virtual TString DoDebugString() const override {
         return Buckets.DebugString();
     }
+
     virtual NJson::TJsonValue DoSerializeToJsonVisual() const override {
         return Buckets.SerializeToJson();
     }
@@ -1237,7 +1252,8 @@ public:
         : TBase(pathId, nodePortionsCountLimit)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 };
 

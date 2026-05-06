@@ -25,6 +25,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/long_tx_service_config.proto";
 import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -305,6 +306,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinSecurity = 19;
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
+        optional bool HideAuthenticationFailureReasons = 22 [default = true];
     }
 
     repeated TDomain Domain = 1;
@@ -1699,6 +1701,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 300,
             DefaultValue: 0 }];
+        optional uint64 HullCompFreeSpaceThresholdPerMille = 41 [(ControlOptions) = {
+            Description: "Garbage threshold for FreeSpace compaction strategy. This value is divided by 1000 and converted to double. Zero value entirely disables the FreeSpace compaction strategy.",
+            MinValue: 0,
+            MaxValue: 100000,
+            DefaultValue: 2000 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1833,6 +1840,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 EnablePersistentPhantomFlagStorage = 42 [(ControlOptions) = {
+            Description: "Enables Persistent Phantom Flag Storage",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -1929,6 +1943,24 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 60 }]; // 1 minute
+
+        optional uint64 PostponePumpMsHDD = 14 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for HDD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 50 }];
+
+        optional uint64 PostponePumpMsSSD = 15 [(ControlOptions) = {
+            Description: "Postpone backpressure pump delay for SSD, ms (disabled if 0)",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 5 }];
+
+        optional uint64 PostponePumpResetAfterMs = 16 [(ControlOptions) = {
+            Description: "Postpone backpressure pump reset exponential backoff after this duration, ms",
+            MinValue: 0,
+            MaxValue: 60000,
+            DefaultValue: 1000 }];
     }
 
     message TPDiskControls {
@@ -2897,6 +2929,7 @@ message TKafkaProxyConfig {
     optional string Cert = 8 [(Ydb.sensitive) = true];
     optional string Key = 9 [(Ydb.sensitive) = true];
     optional string CA = 17 [(Ydb.sensitive) = true];
+    optional bool EnableSelfSignedCerts = 19 [default = false];
     optional bool MtlsEnable = 18 [default = false];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];
@@ -3155,6 +3188,8 @@ message TAppConfig {
     optional TNbsConfig NbsConfig = 119;
 
     optional TTliConfig TliConfig = 120;
+
+    optional TLongTxServiceConfig LongTxServiceConfig = 121;
 }
 
 message TYdbVersion {

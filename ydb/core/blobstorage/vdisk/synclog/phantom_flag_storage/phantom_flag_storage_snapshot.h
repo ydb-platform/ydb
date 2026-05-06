@@ -7,10 +7,15 @@ namespace NKikimr {
 
 namespace NSyncLog {
 
-// TODO: include thresholds in snapshot
 struct TPhantomFlagStorageSnapshot {
-    TPhantomFlagStorageSnapshot(const TPhantomFlags& flags);
+    TPhantomFlagStorageSnapshot(TPhantomFlags&& flags,
+            TPhantomFlagThresholds&& thresholds);
+
+    TPhantomFlagStorageSnapshot(const TPhantomFlags& flags,
+            const TPhantomFlagThresholds& thresholds);
+
     TPhantomFlags Flags;
+    TPhantomFlagThresholds Thresholds;
 };
 
 } // namespace NSyncLog

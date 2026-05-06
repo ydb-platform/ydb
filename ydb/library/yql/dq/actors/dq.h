@@ -9,6 +9,9 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+
 namespace NYql::NDq {
 
 enum class EStatusCompatibilityLevel {
@@ -33,6 +36,12 @@ struct TEvDq {
 
         static THolder<TEvAbortExecution> Aborted(const TString& s, const TIssues& subIssues = {}) {
             return MakeHolder<TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, s, subIssues);
+        }
+
+        static THolder<TEvAbortExecution> Build(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
+            TIssue issue(message);
+            SetIssueCode(issueCode, issue);
+            return MakeHolder<TEvAbortExecution>(statusCode, TIssues{issue});
         }
 
         TEvAbortExecution() = default;

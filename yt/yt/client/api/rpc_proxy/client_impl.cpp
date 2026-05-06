@@ -2032,6 +2032,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
+    req->set_fetch_cookie_node_descriptors(options.FetchCookieNodeDescriptors);
 
     req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
 

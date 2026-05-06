@@ -818,9 +818,12 @@ public:
 
     TRcBuf(const TRcBuf& other)
         : Backend(other.Backend)
-        , Begin(other.Begin)
-        , End(other.End)
-    {}
+    {
+        ptrdiff_t beginOffset = other.Begin - other.Backend.GetData().data();
+        ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+        Begin = Backend.GetData().data() + beginOffset;
+        End = Backend.GetData().data() + endOffset;
+    }
 
     TRcBuf(TRcBuf&& other)
         : Backend(std::move(other.Backend))
@@ -828,7 +831,18 @@ public:
         , End(other.End)
     {}
 
-    TRcBuf& operator =(const TRcBuf&) = default;
+    TRcBuf& operator =(const TRcBuf& other) {
+        if (this != &other) {
+            Backend = other.Backend;
+            ptrdiff_t beginOffset =
+                other.Begin - other.Backend.GetData().data();
+            ptrdiff_t endOffset = other.End - other.Backend.GetData().data();
+            Begin = Backend.GetData().data() + beginOffset;
+            End = Backend.GetData().data() + endOffset;
+        }
+        return *this;
+    }
+
     TRcBuf& operator =(TRcBuf&&) = default;
 
     static TRcBuf Uninitialized(size_t size, size_t headroom = 0, size_t tailroom = 0)

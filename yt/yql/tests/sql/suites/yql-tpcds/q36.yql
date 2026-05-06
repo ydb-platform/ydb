@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: Window and aggregation functions are not allowed in this context */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -14,6 +13,7 @@ SELECT
             Grouping(i_category) + Grouping(i_class),
             CASE
                 WHEN Grouping(i_class) == 0 THEN i_category
+                ELSE NULL
             END
         ORDER BY
             Sum(ss_net_profit) / Sum(ss_ext_sales_price) ASC
@@ -41,6 +41,7 @@ ORDER BY
     lochierarchy DESC,
     CASE
         WHEN lochierarchy == 0 THEN i_category
+        ELSE NULL
     END,
     rank_within_parent
 LIMIT 100;

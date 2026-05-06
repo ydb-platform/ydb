@@ -256,6 +256,9 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
+            query_stat_mode = get_external_param('query-stat-mode', None)
+            if query_stat_mode:
+                cmd += ['--stats', query_stat_mode]
             return cmd
 
         def run(self) -> bool:

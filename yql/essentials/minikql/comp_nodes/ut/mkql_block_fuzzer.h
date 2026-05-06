@@ -14,9 +14,10 @@ namespace NKikimr::NMiniKQL {
 struct TFuzzOptions {
     bool FuzzZeroOptionalBitmaskRemove = false;
     bool FuzzOffsetShift = false;
+    bool FuzzImmutable = false;
 
     static TFuzzOptions FuzzAll() {
-        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true};
+        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true, .FuzzImmutable = true};
     }
 };
 

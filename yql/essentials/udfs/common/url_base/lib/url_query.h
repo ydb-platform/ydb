@@ -130,6 +130,8 @@ public:
     TUnboxedValue Run(const IValueBuilder* valueBuilder,
                       const TUnboxedValuePod* args) const override;
 
+    static const TStringRef& BuildPolyArgs();
+
     static bool DeclareSignature(const TStringRef& name,
                                  TType* userType,
                                  IFunctionTypeInfoBuilder& builder,

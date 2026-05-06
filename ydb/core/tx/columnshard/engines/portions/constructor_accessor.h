@@ -30,14 +30,17 @@ private:
 
         TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
             : Address(address)
-            , BlobIdx(blobIdx) {
+            , BlobIdx(blobIdx)
+        {
         }
     };
+
     std::vector<TAddressBlobId> BlobIdxs;
     bool NeedBlobIdxsSort = false;
 
     TPortionAccessorConstructor(TPortionDataAccessor&& accessor)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(true)) {
+        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(true))
+    {
         BlobIds = accessor.ExtractBlobIds();
         Indexes = accessor.ExtractIndexes();
         Records = accessor.ExtractRecords();
@@ -45,7 +48,8 @@ private:
 
     TPortionAccessorConstructor(
         const TPortionDataAccessor& accessor, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata)) {
+        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata))
+    {
         if (!withMetadata) {
             AFL_VERIFY(!withMetadataBlobs);
         }
@@ -159,7 +163,8 @@ public:
     }
 
     TPortionAccessorConstructor(std::unique_ptr<TPortionInfoConstructor>&& portionInfo)
-        : PortionInfo(std::move(portionInfo)) {
+        : PortionInfo(std::move(portionInfo))
+    {
     }
 
     ui64 GetTotalBlobsSize() const {

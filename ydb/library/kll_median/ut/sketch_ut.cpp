@@ -192,6 +192,29 @@ Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
         UNIT_ASSERT_VALUES_EQUAL(d1.Median(), d2.Median());
     }
 
+    Y_UNIT_TEST(MergeWithEmptySketchDoesNothing) {
+        TDynamicKllSketch<TString> sketch(40, 42u);
+        TDynamicKllSketch<TString> empty(40, 777u);
+
+        for (int i = 0; i < 10; ++i) {
+            sketch.Add(TStringBuilder() << "k" << i, 1);
+        }
+
+        sketch.Merge(empty);
+
+        TString median = sketch.Median();
+        UNIT_ASSERT(median.StartsWith("k"));
+    }
+
+    Y_UNIT_TEST(MergeWithDifferentInitialWeightThrows) {
+        TDynamicKllSketch<TString> base(40, 42u, 1);
+        TDynamicKllSketch<TString> other(40, 777u, 2);
+
+        other.Add(TString{"x"}, 2);
+
+        UNIT_ASSERT_EXCEPTION(base.Merge(other), yexception);
+    }
+
     Y_UNIT_TEST(StreamingLexPaddedKeysApproxCentral) {
         TDynamicKllSketch<TString> d(55, 2024u);
         for (int i = 0; i < 10000; ++i) {

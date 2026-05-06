@@ -28,6 +28,7 @@ namespace NUnifiedAgent {
         , GrpcInflightBytes(GetCounter("GrpcInflightBytes", false))
         , GrpcCalls(GetCounter("GrpcCalls", true))
         , GrpcCallsInitialized(GetCounter("GrpcCallsInitialized", true))
+        , GrpcCallsClosedByInactivity(GetCounter("GrpcCallsClosedByInactivity", true))
         , DroppedMessages(GetCounter("DroppedMessages", true))
         , DroppedBytes(GetCounter("DroppedBytes", true))
         , ErrorsCount(GetCounter("ErrorsCount", true))

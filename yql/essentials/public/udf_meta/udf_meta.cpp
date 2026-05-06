@@ -18,6 +18,13 @@ public:
                 TMeta meta;
                 if (auto ptr = map.FindPtr("isTypeAwareness")) {
                     meta.IsTypeAwareness = ptr->GetBooleanSafe();
+                    if (auto ptr = map.FindPtr("polyArgs")) {
+                        meta.PolyArgs = ptr->GetStringSafe();
+                    }
+
+                    if (auto ptr = map.FindPtr("resolvedCallableTypes")) {
+                        meta.ResolvedCallableTypes = ptr->GetStringSafe();
+                    }
                 }
 
                 if (!meta.IsTypeAwareness) {

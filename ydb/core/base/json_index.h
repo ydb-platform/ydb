@@ -2,113 +2,101 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/types/binary_json/format.h>
 
+#include <set>
 #include <variant>
 
 namespace NKikimr {
 
 namespace NJsonIndex {
 
-class TResult {
+// Result of the JSON index collection process
+// Contains tokens for the JSON index or an error if the collection process failed
+class TCollectResult {
 public:
-    using TQueries = TVector<TString>;
+    using TTokens = std::set<TString>;
     using TError = NYql::TIssue;
 
-    TResult(const TQueries& queries);
+    enum class ETokensMode {
+        NotSet = 0,
+        And = 1,
+        Or = 2,
+    };
 
-    TResult(TQueries&& queries);
+public:
+    // Constructs a collect result with the given tokens
+    TCollectResult(TTokens&& tokens);
 
-    TResult(const TString& query);
+    // Constructs a collect result with the given token
+    TCollectResult(TString&& token);
 
-    TResult(TString&& query);
+    // Constructs a collect result with the given error
+    TCollectResult(TError&& issue);
 
-    TResult(TError&& issue);
+    // Returns the collected tokens for the JSON index
+    const TTokens& GetTokens() const;
 
-    const TQueries& GetQueries() const;
+    // Returns the collected tokens for the JSON index for modification
+    TTokens& GetTokens();
 
-    TQueries& GetQueries();
-
+    // Returns the error if the collection process failed
     const TError& GetError() const;
 
+    // Returns true if the collection process failed
     bool IsError() const;
 
-    bool IsDone() const;
+    // Returns true if the collection process can be continued
+    // If it is true, the result token can be extended with the next token (e.g. literal)
+    // It does not affect collecting multiple tokens (AND, OR, etc.)
+    bool CanCollect() const;
 
-    void MarkDone();
+    // Stops the collection process
+    // It means that the result token is completed and cannot be extended
+    // It does not affect collecting multiple tokens (AND, OR, etc.)
+    void StopCollecting();
+
+    // Returns the tokens mode
+    ETokensMode GetTokensMode() const;
+
+    // Sets the tokens mode
+    void SetTokensMode(ETokensMode mode);
 
 private:
-    std::variant<TQueries, TError> Result;
-    bool Done = false;
+    std::variant<TTokens, TError> Result;
+    ETokensMode TokensMode = ETokensMode::NotSet;
+    bool Stopped = false;
 };
 
-class TQueryCollector {
-public:
-    TQueryCollector(const NYql::NJsonPath::TJsonPathPtr path);
-
-    TResult Collect();
-
-private:
-    TResult Collect(const NYql::NJsonPath::TJsonPathItem& item);
-
-    // Evaluates a literal node directly, without requiring a preceding ContextObject.
-    // Use this for sub-expressions that are unconditionally literal by design
-    // (e.g. the prefix argument of starts_with). Returns an error for non-literal nodes.
-    TResult EvaluateLiteral(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult Finalize(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult FinalizeEmpty(const NYql::NJsonPath::TJsonPathItem& item);
-
-    // The next methods are used to build the query step by step.
-    TResult ContextObject();
-
-    TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult ArrayAccess(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult WildcardArrayAccess(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult LastArrayIndex(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult NullLiteral();
-    TResult BooleanLiteral(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult NumberLiteral(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult StringLiteral(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult UnaryMinus(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult UnaryPlus(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryAdd(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinarySubstract(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryMultiply(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryDivide(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryModulo(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryLess(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult StartsWithPredicate(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult IsUnknownPredicate(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult ExistsPredicate(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult LikeRegexPredicate(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult FilterObject(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult FilterPredicate(const NYql::NJsonPath::TJsonPathItem& item);
-
-    TResult Variable(const NYql::NJsonPath::TJsonPathItem& item);
-
-private:
-    NYql::NJsonPath::TJsonPathReader Reader;
+// Type of the callable function that is used for the JSON index collection
+// It is given from the predicate of the SELECT statement
+enum class ECallableType {
+    JsonExists = 0,
+    JsonValue = 1,
+    JsonQuery = 2,
 };
 
-TVector<TString> BuildSearchTerms(const TString& jsonPathStr);
-
+// Tokenizes the given JSON string into a list of tokens
+// The tokenization result is filled into the JSON index table
 TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error);
+
+// Tokenizes the given binary JSON into a list of tokens
+// The tokenization result is filled into the JSON index table
 TVector<TString> TokenizeBinaryJson(const TStringBuf text);
+
+// Builds tokens for the given jsonpath expression
+// The tokens are used for searching in the JSON index
+TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
+
+// Merges two collect results with AND semantics (all tokens must match)
+TCollectResult MergeAnd(TCollectResult left, TCollectResult right);
+
+// Merges two collect results with OR semantics (any token must match)
+TCollectResult MergeOr(TCollectResult left, TCollectResult right);
+
+// Appends NULL, binary JSON entry type byte, and scalar payload (the index token layout)
+void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
+    const double* numberPayload = nullptr);
 
 }  // namespace NJsonIndex
 

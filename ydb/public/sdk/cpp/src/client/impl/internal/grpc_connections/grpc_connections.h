@@ -18,6 +18,14 @@
 
 namespace NYdb::inline Dev {
 
+namespace NMetrics {
+    class IMetricRegistry;
+} // namespace NMetrics
+
+namespace NTrace {
+    class ITraceProvider;
+} // namespace NTrace
+
 constexpr TDeadline::Duration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = std::chrono::seconds(10);
 constexpr TDeadline::Duration INITIAL_DEFERRED_CALL_DELAY = std::chrono::milliseconds(10); // The delay before first deferred service call
 constexpr TDeadline::Duration GET_ENDPOINTS_TIMEOUT = std::chrono::seconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
@@ -78,6 +86,8 @@ public:
 
     static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
 
+    static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
+
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
@@ -101,6 +111,8 @@ public:
         }
 
         clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
+
+        SetGrpcCompressionAlgorithm(clientConfig, GRpcCompressionAlgorithm_);
 
         if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
             if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
@@ -581,6 +593,9 @@ public:
     ::NMonitoring::TMetricRegistry* GetMetricRegistry() override;
     void RegisterExtension(IExtension* extension);
     void RegisterExtensionApi(IExtensionApi* api);
+    std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override;
+    std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const;
+
     void SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb);
     const TLog& GetLog() const override;
 
@@ -699,6 +714,7 @@ private:
     const TDeadline::Duration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const std::string GRpcLoadBalancingPolicy_;
+    const EGrpcCompressionAlgorithm GRpcCompressionAlgorithm_;
     const std::uint64_t MemoryQuota_;
     const std::uint64_t MaxInboundMessageSize_;
     const std::uint64_t MaxOutboundMessageSize_;
@@ -716,8 +732,12 @@ private:
 
     std::vector<std::unique_ptr<IExtension>> Extensions_;
     std::vector<std::unique_ptr<IExtensionApi>> ExtensionApis_;
+    std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry_;
+    std::shared_ptr<NTrace::ITraceProvider> TraceProvider_;
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
+
+    const std::string BuildInfo_;
 
     const std::size_t NetworkThreadsNum_;
     bool UsePerChannelTcpConnection_;

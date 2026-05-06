@@ -161,8 +161,8 @@ TStringBuf UnescapeResultToString(EUnescapeResult result)
 void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 {
     out->Write(quoteChar);
-    const ui8 *p = reinterpret_cast<const ui8*>(atom.begin()),
-              *e = reinterpret_cast<const ui8*>(atom.end());
+    const ui8* p = reinterpret_cast<const ui8*>(atom.begin());
+    const ui8* e = reinterpret_cast<const ui8*>(atom.end());
     while (p != e) {
         wchar32 rune = 0;
         size_t rune_len = 0;
@@ -180,8 +180,8 @@ void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 EUnescapeResult UnescapeArbitraryAtom(
     TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
 {
-    const char *p = atom.begin(),
-               *e = atom.end();
+    const char* p = atom.begin();
+    const char* e = atom.end();
 
     while (p != e) {
         char current = *p++;
@@ -292,8 +292,8 @@ void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 EUnescapeResult UnescapeBinaryAtom(
     TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
 {
-    const char *p = atom.begin(),
-               *e = atom.end();
+    const char* p = atom.begin();
+    const char* e = atom.end();
 
     while (p != e) {
         char current = *p;

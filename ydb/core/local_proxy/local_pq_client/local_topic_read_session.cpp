@@ -136,6 +136,7 @@ class TLocalTopicReadSessionActor final
         std::optional<TInstant> ReadFrom;
         std::optional<TDuration> MaxLag;
         std::vector<i64> PartitionIds;
+        bool AutoPartitioningSupport = false;
     };
 
 public:
@@ -187,6 +188,7 @@ protected:
         if (ReadSettings.MaxLag) {
             *topic.mutable_max_lag() = NProtoInterop::CastToProto(*ReadSettings.MaxLag);
         }
+        initRequest.set_auto_partitioning_support(ReadSettings.AutoPartitioningSupport);
 
         AddSessionEvent(std::move(message));
     }
@@ -246,6 +248,7 @@ private:
             Y_VALIDATE(partitionId <= std::numeric_limits<i64>::max(), "PartitionId is too large");
             settings.PartitionIds.emplace_back(partitionId);
         }
+        settings.AutoPartitioningSupport = sessionSettings.AutoPartitioningSupport_;
 
         return settings;
     }
@@ -693,7 +696,6 @@ private:
     static void ValidateSettings(const TReadSessionSettings& settings) {
         TBase::ValidateSettings(settings);
 
-        Y_VALIDATE(!settings.AutoPartitioningSupport_, "AutoPartitioningSupport is not supported for local topic read session");
         Y_VALIDATE(settings.Decompress_, "Read session without decompression is not supported");
 
         const auto& eventHandlers = settings.EventHandlers_;

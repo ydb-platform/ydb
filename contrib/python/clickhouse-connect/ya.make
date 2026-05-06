@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.14.1)
+VERSION(0.15.1)
 
 LICENSE(Apache-2.0)
 
@@ -109,7 +109,6 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
-    clickhouse_connect/py.typed
 )
 
 END()

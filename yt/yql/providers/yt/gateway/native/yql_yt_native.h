@@ -2,7 +2,9 @@
 
 #include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/lib/access_provider/yt_access_provider.h>
 #include <yt/yql/providers/yt/lib/secret_masker/secret_masker.h>
+#include <yt/yql/providers/yt/lib/tvm_client/tvm_client.h>
 #include <yt/yql/providers/yt/lib/yt_token_resolver/yt_token_resolver.h>
 
 #include <yql/essentials/core/file_storage/file_storage.h>
@@ -20,6 +22,8 @@ struct TYtNativeServices: public TYtBaseServices {
 
     IMetricsRegistryPtr Metrics;
     ISecretMasker::TPtr SecretMasker;
+    ITvmClient::TPtr TvmClient;
+    IYtAccessProvider::TPtr YtAccessProvider;
     IYtTokenResolver::TPtr YtTokenResolver;
 };
 

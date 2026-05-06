@@ -10,7 +10,8 @@ public:
     TString GetFilter(const TString& userName) const;
 
 private:
-    TString GetFormatSearchFilter(const TString& userName) const;
+    // Must already be RFC 2254 filter-escaped for embedding in a filter
+    TString GetFormatSearchFilter(const TString& escapedUserName) const;
 
 private:
     const NKikimrProto::TLdapAuthentication& Settings;

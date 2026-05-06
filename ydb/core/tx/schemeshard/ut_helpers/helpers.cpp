@@ -1726,7 +1726,7 @@ namespace NSchemeShardUT_Private {
                 // Check if full-key bloom is enabled
                 // Full-key bloom is represented as a prefix entry with length = key column count
                 for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
-                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                    if (d.GetByKeyFilterPrefixes(j).GetPrefixLength() == keyColumnCount && keyColumnCount > 0) {
                         return true;
                     }
                 }
@@ -2341,16 +2341,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_cascade(cascade);
         settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2359,18 +2360,19 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        bool cascade,
         ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, cascade, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight, expectedStatus);
     }
 
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(

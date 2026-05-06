@@ -14,12 +14,18 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'labeled'
+# Only 'rebase-and-check' and 'ok-to-test' labels should re-trigger checks.
+# Other labels must not cancel running checks or start new ones.
+# To achieve this we assign irrelevant label events a unique concurrency group
+# (by appending run_id) so they never cancel an in-progress run, and the job-level
+# condition below skips them immediately.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}${{ github.event.action == 'labeled' && github.event.label.name != 'rebase-and-check' && github.event.label.name != 'ok-to-test' && format('-ignore-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 jobs:
   check-running-allowed:
-    if: ${{github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
+    # Skip runs triggered by irrelevant labels (anything other than rebase-and-check / ok-to-test)
+    if: ${{ (github.event.action != 'labeled' || github.event.label.name == 'rebase-and-check' || github.event.label.name == 'ok-to-test') && github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true }}
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:

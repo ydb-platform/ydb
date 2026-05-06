@@ -30,7 +30,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <library/cpp/json/json_writer.h>
@@ -1932,7 +1931,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         }
 
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        NKikimrPQClient::TDataChunk proto;
         std::optional<TString> deduplicationId;
 
         TString errorStr = "";
@@ -1986,13 +1984,22 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (proto.ParseFromString(cmd.GetData())) {
-            for (auto& attr : *proto.MutableMessageMeta()) {
-                if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
-                    deduplicationId = attr.value();
-                    break;
+        if (cmd.HasMessageDeduplicationId()) {
+            deduplicationId = cmd.GetMessageDeduplicationId();
+
+            auto deduplicationIdFromMetadata = [&cmd] () -> TString {
+                NKikimrPQClient::TDataChunk proto;
+                if (proto.ParseFromString(cmd.GetData())) {
+                    for (auto& attr : *proto.MutableMessageMeta()) {
+                        if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                            return attr.value();
+                        }
+                    }
                 }
-            }
+                return TString();
+            };
+
+            Y_ASSERT(deduplicationId.value() == deduplicationIdFromMetadata());
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
@@ -2206,15 +2213,15 @@ void TPersQueue::HandleReadRequest(
     if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no offset in read request: " << ToString(req).data());
+    } else if (cmd.GetOffset() < 0) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (!cmd.HasClientId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in read request: " << ToString(req).data());
+        TStringBuilder() << "no clientId in read request: " << ToString(req).data());
     } else if (cmd.HasCount() && cmd.GetCount() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid count in read request: " << ToString(req).data());
-    } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (cmd.HasBytes() && cmd.GetBytes() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid bytes in read request: " << ToString(req).data());

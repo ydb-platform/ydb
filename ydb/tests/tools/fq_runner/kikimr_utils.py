@@ -139,7 +139,7 @@ class DefaultConfigExtension(ExtensionPoint):
 
 class YQv2Extension(ExtensionPoint):
 
-    def __init__(self, yq_version, is_replace_if_exists=False):
+    def __init__(self, yq_version, is_replace_if_exists=False, enable_schema_inference=True):
         YQv2Extension.__init__.__annotations__ = {
             'yq_version': str,
             'return': None
@@ -147,14 +147,16 @@ class YQv2Extension(ExtensionPoint):
         super().__init__()
         self.yq_version = yq_version
         self.is_replace_if_exists = is_replace_if_exists
+        self.enable_schema_inference = enable_schema_inference
 
     def apply_to_kikimr_conf(self, request, configuration):
         extra_feature_flags = [
             'enable_external_data_sources',
             'enable_script_execution_operations',
-            'enable_external_source_schema_inference',
             'enable_pg_syntax',
         ]
+        if self.enable_schema_inference:
+            extra_feature_flags.append('enable_external_source_schema_inference')
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
 

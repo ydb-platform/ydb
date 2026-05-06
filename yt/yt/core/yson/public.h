@@ -53,6 +53,14 @@ DEFINE_ENUM(EUnknownYsonFieldsMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_ERROR_ENUM(
+    ((ParseError)          (4000))
+    ((MemoryLimitExceeded) (4001))
+    ((DepthLimitExceeded)  (4002))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 //
 // We need two limits for YSON parsing:
 //  - the smaller (CypressWriteNestingLevelLimit) is used for commands like set or create.

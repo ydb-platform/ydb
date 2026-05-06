@@ -1582,7 +1582,11 @@ Y_UNIT_TEST(TableChangefeeds) {
                 PRIMARY KEY (Key)
             );
             ALTER TABLE test_show_create
-                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', USER_SIDS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', TRACE_IDS = TRUE);
         )", "test_show_create",
         R"(
             CREATE TABLE `test_show_create` (
@@ -1592,7 +1596,15 @@ Y_UNIT_TEST(TableChangefeeds) {
             );
 
             ALTER TABLE `test_show_create`
-                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+            ;
+
+            ALTER TABLE `test_show_create`
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', USER_SIDS = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
+            ;
+
+            ALTER TABLE `test_show_create`
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', TRACE_IDS = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
             ;
         )"
     );
@@ -2439,6 +2451,26 @@ Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
                 INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`),
                 INDEX `idx_bloom_2` LOCAL USING bloom_filter ON (`Key1`, `Key2`),
                 PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+
+    // Custom false_positive_probability — should appear in SHOW CREATE output
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
             );
         )"
     );

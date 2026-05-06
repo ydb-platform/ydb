@@ -2,7 +2,6 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/locks/locks.h>
@@ -10,10 +9,6 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/common/rope_over_buffer.h>
-#include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <util/generic/size_literals.h>
 
@@ -203,7 +198,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     }
 
     // Volatile transactions cannot work with non-generic readsets
-    YQL_ENSURE(useGenericReadSets);
+    Y_ENSURE(useGenericReadSets);
 
     // We may have some stale data since before the restart
     // We expect all stale data to be cleared on restarts

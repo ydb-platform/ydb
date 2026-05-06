@@ -72,9 +72,9 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     const double cost = props.Cost.has_value() ? *props.Cost : 0.0;
 
     return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         props.Metadata->ColumnsCount,
-        withStatsAndCosts ? props.Statistics->DataSize : 0.0,
+        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,
         TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
             new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
@@ -145,7 +145,7 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
 TString TRBOStatistics::ToString(ui32 printOptions) {
     Y_UNUSED(printOptions);
-    return TStringBuilder() << "N records: " << RecordsCount << ", Size: " << DataSize << ", Selectivity: " << Selectivity; 
+    return TStringBuilder() << "N records: " << ERows << ", Size: " << EBytes << ", Selectivity: " << Selectivity;
 }
 
 }

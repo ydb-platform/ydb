@@ -23,6 +23,12 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
+// Time window during which a second Ctrl+C after the first is treated as "exit" rather
+// than "cancel current input". Must be large enough to tolerate slow builds (debug /
+// sanitizers), where each cancel round-trip — read → disable raw mode → enable raw mode
+// → redraw prompt → next read — can take up to a second on its own.
+constexpr auto DoubleCtrlCWindow = TDuration::Seconds(3);
+
 class TLineReader final : public ILineReader {
     inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
@@ -123,8 +129,7 @@ public:
         Y_VALIDATE(Rx, "Can not read lines before Setup call");
 
         if (defaultValue) {
-            // TODO use set_preload_buffer_without_changes
-            Rx->set_preload_buffer(defaultValue);
+            Rx->set_preload_buffer_without_changes(defaultValue);
         }
 
         while (true) {
@@ -137,19 +142,25 @@ public:
             }
 
             if (input == nullptr) {
-                if (errno == EAGAIN && ContinueAfterCancel) {
-                    continue;
+                const auto now = TInstant::Now();
+                if (errno != EAGAIN || !ContinueAfterCancel || (LastCtrlCTime && (now - LastCtrlCTime) <= DoubleCtrlCWindow)) {
+                    break;
                 }
-                break;
+
+                LastCtrlCTime = now;
+                continue;
             }
 
+            LastCtrlCTime = TInstant::Zero();
+
             TString line = Strip(input);
+            AddToHistory(line);
+
             if (EnableSwitchMode && to_lower(line) == "/switch") {
                 SwitchRequested = true;
                 break;
             }
 
-            AddToHistory(line);
             return TLine{std::move(line)};
         }
 
@@ -276,22 +287,14 @@ private:
             return replxx::Replxx::ACTION_RESULT::BAIL;
         });
 
-        Rx->bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t) {
-            Rx->invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, '\n');
-            return replxx::Replxx::ACTION_RESULT::CONTINUE;
-        });
-
         if (EnableSwitchMode) {
             Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
                 SwitchRequested = true;
                 Rx->invoke(replxx::Replxx::ACTION::KILL_TO_BEGINING_OF_LINE, '\n');
                 ClearScreen();
+                Cout << Endl;
                 return replxx::Replxx::ACTION_RESULT::BAIL;
             });
-        } else {
-             Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
-                 return replxx::Replxx::ACTION_RESULT::CONTINUE;
-             });
         }
 
         for (const auto [lhs, rhs] : THashMap<char, char>{
@@ -333,7 +336,7 @@ private:
         Rx->history_add(line);
 
         if (!History) {
-            YDB_CLI_LOG(Notice, "Skip save line '" << line << "' to history, history storage is not set.");
+            YDB_CLI_LOG(Debug, "Skip save line '" << line << "' to history, history storage is not set.");
             return;
         }
 
@@ -364,6 +367,7 @@ private:
     std::optional<THistory> History;
     bool SwitchRequested = false;
     bool HintsEnabled = true;
+    TInstant LastCtrlCTime;
 };
 
 } // anonymous namespace

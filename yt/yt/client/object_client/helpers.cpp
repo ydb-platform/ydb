@@ -31,116 +31,147 @@ bool IsSequoiaNode(NObjectClient::EObjectType type)
 
 bool IsVersionedType(EObjectType type)
 {
-    return
-        type == EObjectType::StringNode ||
-        type == EObjectType::Int64Node ||
-        type == EObjectType::Uint64Node ||
-        type == EObjectType::DoubleNode ||
-        type == EObjectType::BooleanNode ||
-        type == EObjectType::MapNode ||
-        type == EObjectType::File ||
-        type == EObjectType::Table ||
-        type == EObjectType::ReplicatedTable ||
-        type == EObjectType::ReplicationLogTable ||
-        type == EObjectType::Journal ||
-        type == EObjectType::ChunkMap ||
-        type == EObjectType::LostChunkMap ||
-        type == EObjectType::LostVitalChunkMap ||
-        type == EObjectType::LostVitalChunksSampleMap ||
-        type == EObjectType::PrecariousChunkMap ||
-        type == EObjectType::PrecariousVitalChunkMap ||
-        type == EObjectType::OverreplicatedChunkMap ||
-        type == EObjectType::UnderreplicatedChunkMap ||
-        type == EObjectType::DataMissingChunkMap ||
-        type == EObjectType::DataMissingChunksSampleMap ||
-        type == EObjectType::ParityMissingChunkMap ||
-        type == EObjectType::ParityMissingChunksSampleMap ||
-        type == EObjectType::OldestPartMissingChunkMap ||
-        type == EObjectType::OldestPartMissingChunksSampleMap ||
-        type == EObjectType::QuorumMissingChunkMap ||
-        type == EObjectType::QuorumMissingChunksSampleMap ||
-        type == EObjectType::UnsafelyPlacedChunkMap ||
-        type == EObjectType::InconsistentlyPlacedChunkMap ||
-        type == EObjectType::InconsistentlyPlacedChunksSampleMap ||
-        type == EObjectType::UnexpectedOverreplicatedChunkMap ||
-        type == EObjectType::ReplicaTemporarilyUnavailableChunkMap ||
-        type == EObjectType::ForeignChunkMap ||
-        type == EObjectType::LocalLostChunkMap ||
-        type == EObjectType::LocalLostVitalChunkMap ||
-        type == EObjectType::LocalPrecariousChunkMap ||
-        type == EObjectType::LocalPrecariousVitalChunkMap ||
-        type == EObjectType::LocalOverreplicatedChunkMap ||
-        type == EObjectType::LocalUnderreplicatedChunkMap ||
-        type == EObjectType::LocalDataMissingChunkMap ||
-        type == EObjectType::LocalParityMissingChunkMap ||
-        type == EObjectType::LocalOldestPartMissingChunkMap ||
-        type == EObjectType::LocalQuorumMissingChunkMap ||
-        type == EObjectType::LocalUnsafelyPlacedChunkMap ||
-        type == EObjectType::LocalInconsistentlyPlacedChunkMap ||
-        type == EObjectType::LocalUnexpectedOverreplicatedChunkMap ||
-        type == EObjectType::LocalReplicaTemporarilyUnavailableChunkMap ||
-        type == EObjectType::RackMap ||
-        type == EObjectType::DataCenterMap ||
-        type == EObjectType::HostMap ||
-        type == EObjectType::ChunkLocationMap ||
-        type == EObjectType::ChunkListMap ||
-        type == EObjectType::ChunkViewMap ||
-        type == EObjectType::MediumMap ||
-        type == EObjectType::ForeignTransactionMap ||
-        type == EObjectType::TopmostTransactionMap ||
-        type == EObjectType::TransactionMap ||
-        type == EObjectType::ClusterNodeNode ||
-        type == EObjectType::ClusterNodeMap ||
-        type == EObjectType::DataNodeMap ||
-        type == EObjectType::ExecNodeMap ||
-        type == EObjectType::TabletNodeMap ||
-        type == EObjectType::ChaosNodeMap ||
-        type == EObjectType::Orchid ||
-        type == EObjectType::AccountMap ||
-        type == EObjectType::UserMap ||
-        type == EObjectType::GroupMap ||
-        type == EObjectType::AccountResourceUsageLeaseMap ||
-        type == EObjectType::SchedulerPoolTreeMap ||
-        type == EObjectType::Link ||
-        type == EObjectType::SequoiaLink ||
-        type == EObjectType::Document ||
-        type == EObjectType::LockMap ||
-        type == EObjectType::TabletMap ||
-        type == EObjectType::TabletCellMap ||
-        type == EObjectType::VirtualTabletCellMap ||
-        type == EObjectType::TabletCellNode ||
-        type == EObjectType::TabletCellBundleMap ||
-        type == EObjectType::TabletActionMap ||
-        type == EObjectType::CellOrchidNode ||
-        type == EObjectType::AreaMap ||
-        type == EObjectType::ChaosCellMap ||
-        type == EObjectType::VirtualChaosCellMap ||
-        type == EObjectType::ChaosCellBundleMap ||
-        type == EObjectType::SysNode ||
-        type == EObjectType::PortalEntrance ||
-        type == EObjectType::PortalExit ||
-        type == EObjectType::PortalEntranceMap ||
-        type == EObjectType::PortalExitMap ||
-        type == EObjectType::CypressShardMap ||
-        type == EObjectType::EstimatedCreationTimeMap ||
-        type == EObjectType::NetworkProjectMap ||
-        type == EObjectType::HttpProxyRoleMap ||
-        type == EObjectType::RpcProxyRoleMap ||
-        type == EObjectType::MasterTableSchemaMap ||
-        type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::AccessControlObjectNamespaceMap ||
-        type == EObjectType::HunkStorage ||
-        type == EObjectType::ZookeeperShardMap ||
-        type == EObjectType::Rootstock ||
-        type == EObjectType::RootstockMap ||
-        type == EObjectType::Scion ||
-        type == EObjectType::ScionMap ||
-        type == EObjectType::ClusterProxyNode ||
-        type == EObjectType::SequoiaMapNode ||
-        type == EObjectType::Pipeline ||
-        type == EObjectType::QueueConsumer ||
-        type == EObjectType::QueueProducer ||
-        type == EObjectType::CypressProxyMap;
+    switch (type) {
+        case EObjectType::StringNode:
+        case EObjectType::Int64Node:
+        case EObjectType::Uint64Node:
+        case EObjectType::DoubleNode:
+        case EObjectType::BooleanNode:
+        case EObjectType::MapNode:
+        case EObjectType::File:
+        case EObjectType::Table:
+        case EObjectType::ReplicatedTable:
+        case EObjectType::ReplicationLogTable:
+        case EObjectType::Journal:
+        case EObjectType::ChunkMap:
+        case EObjectType::LostChunkMap:
+        case EObjectType::LostVitalChunkMap:
+        case EObjectType::LostVitalChunksSampleMap:
+        case EObjectType::PrecariousChunkMap:
+        case EObjectType::PrecariousVitalChunkMap:
+        case EObjectType::OverreplicatedChunkMap:
+        case EObjectType::UnderreplicatedChunkMap:
+        case EObjectType::DataMissingChunkMap:
+        case EObjectType::DataMissingChunksSampleMap:
+        case EObjectType::ParityMissingChunkMap:
+        case EObjectType::ParityMissingChunksSampleMap:
+        case EObjectType::OldestPartMissingChunkMap:
+        case EObjectType::OldestPartMissingChunksSampleMap:
+        case EObjectType::QuorumMissingChunkMap:
+        case EObjectType::QuorumMissingChunksSampleMap:
+        case EObjectType::UnsafelyPlacedChunkMap:
+        case EObjectType::InconsistentlyPlacedChunkMap:
+        case EObjectType::InconsistentlyPlacedChunksSampleMap:
+        case EObjectType::UnexpectedOverreplicatedChunkMap:
+        case EObjectType::ReplicaTemporarilyUnavailableChunkMap:
+        case EObjectType::ForeignChunkMap:
+        case EObjectType::LocalLostChunkMap:
+        case EObjectType::LocalLostVitalChunkMap:
+        case EObjectType::LocalPrecariousChunkMap:
+        case EObjectType::LocalPrecariousVitalChunkMap:
+        case EObjectType::LocalOverreplicatedChunkMap:
+        case EObjectType::LocalUnderreplicatedChunkMap:
+        case EObjectType::LocalDataMissingChunkMap:
+        case EObjectType::LocalParityMissingChunkMap:
+        case EObjectType::LocalOldestPartMissingChunkMap:
+        case EObjectType::LocalQuorumMissingChunkMap:
+        case EObjectType::LocalUnsafelyPlacedChunkMap:
+        case EObjectType::LocalInconsistentlyPlacedChunkMap:
+        case EObjectType::LocalUnexpectedOverreplicatedChunkMap:
+        case EObjectType::LocalReplicaTemporarilyUnavailableChunkMap:
+        case EObjectType::RackMap:
+        case EObjectType::DataCenterMap:
+        case EObjectType::HostMap:
+        case EObjectType::ChunkLocationMap:
+        case EObjectType::ChunkListMap:
+        case EObjectType::ChunkViewMap:
+        case EObjectType::MediumMap:
+        case EObjectType::ForeignTransactionMap:
+        case EObjectType::TopmostTransactionMap:
+        case EObjectType::TransactionMap:
+        case EObjectType::ClusterNodeNode:
+        case EObjectType::ClusterNodeMap:
+        case EObjectType::DataNodeMap:
+        case EObjectType::ExecNodeMap:
+        case EObjectType::TabletNodeMap:
+        case EObjectType::ChaosNodeMap:
+        case EObjectType::Orchid:
+        case EObjectType::AccountMap:
+        case EObjectType::UserMap:
+        case EObjectType::GroupMap:
+        case EObjectType::AccountResourceUsageLeaseMap:
+        case EObjectType::SchedulerPoolTreeMap:
+        case EObjectType::Link:
+        case EObjectType::SequoiaLink:
+        case EObjectType::Document:
+        case EObjectType::LockMap:
+        case EObjectType::TabletMap:
+        case EObjectType::TabletCellMap:
+        case EObjectType::VirtualTabletCellMap:
+        case EObjectType::TabletCellNode:
+        case EObjectType::TabletCellBundleMap:
+        case EObjectType::TabletActionMap:
+        case EObjectType::CellOrchidNode:
+        case EObjectType::AreaMap:
+        case EObjectType::ChaosCellMap:
+        case EObjectType::VirtualChaosCellMap:
+        case EObjectType::ChaosCellBundleMap:
+        case EObjectType::SysNode:
+        case EObjectType::PortalEntrance:
+        case EObjectType::PortalExit:
+        case EObjectType::PortalEntranceMap:
+        case EObjectType::PortalExitMap:
+        case EObjectType::CypressShardMap:
+        case EObjectType::EstimatedCreationTimeMap:
+        case EObjectType::NetworkProjectMap:
+        case EObjectType::HttpProxyRoleMap:
+        case EObjectType::RpcProxyRoleMap:
+        case EObjectType::MasterTableSchemaMap:
+        case EObjectType::ChaosReplicatedTable:
+        case EObjectType::AccessControlObjectNamespaceMap:
+        case EObjectType::HunkStorage:
+        case EObjectType::ZookeeperShardMap:
+        case EObjectType::Rootstock:
+        case EObjectType::RootstockMap:
+        case EObjectType::Scion:
+        case EObjectType::ScionMap:
+        case EObjectType::ClusterProxyNode:
+        case EObjectType::SequoiaMapNode:
+        case EObjectType::Pipeline:
+        case EObjectType::QueueConsumer:
+        case EObjectType::QueueProducer:
+        case EObjectType::CypressProxyMap:
+            return true;
+
+        default:
+            return false;
+    };
+}
+
+bool IsChunkType(EObjectType type)
+{
+    switch (type) {
+        case EObjectType::Chunk:
+        case EObjectType::ErasureChunk:
+        case EObjectType::JournalChunk:
+        case EObjectType::ErasureJournalChunk:
+            return true;
+
+        default:
+            if (ToUnderlying(type) >= ToUnderlying(MinErasureChunkPartType) &&
+                ToUnderlying(type) <= ToUnderlying(MaxErasureChunkPartType))
+            {
+                return true;
+            }
+
+            if (ToUnderlying(type) >= ToUnderlying(MinErasureJournalChunkPartType) &&
+                ToUnderlying(type) <= ToUnderlying(MaxErasureJournalChunkPartType))
+            {
+                return true;
+            }
+
+            return false;
+    }
 }
 
 bool IsUserType(EObjectType type)

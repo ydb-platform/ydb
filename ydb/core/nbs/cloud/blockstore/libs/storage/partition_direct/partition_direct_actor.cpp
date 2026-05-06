@@ -1,9 +1,11 @@
 #include "partition_direct_actor.h"
 
+#include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
@@ -33,6 +35,7 @@ TPartitionActor::TPartitionActor(
           tablet,
           NKikimr::TTabletStorageInfoPtr(info),
           nullptr)
+    , StorageConfig(GetNbsService()->StorageConfig)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
@@ -62,20 +65,6 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         NKikimrServices::NBS_PARTITION,
         "Started NBS partition: actor id %s",
         SelfId().ToString().data());
-
-    // Initialize StorageConfig from NBS service
-    if (auto nbsService = GetNbsService()) {
-        const auto& nbsConfig = nbsService->GetConfig();
-        if (nbsConfig.has_nbsstorageconfig()) {
-            StorageConfig =
-                std::make_shared<NYdb::NBS::NStorage::TStorageConfig>(
-                    nbsConfig.nbsstorageconfig());
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "Initialized StorageConfig from NBS service config");
-        }
-    }
 
     if (!Executor()->GetStats().IsFollower()) {
         LOG_INFO(
@@ -159,8 +148,10 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
+    const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
-    auto executors = ExecutorPool.GetExecutors(NumDirectBlockGroups);
+    auto executors =
+        nbsService->ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         const auto& conn =
@@ -178,8 +169,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
-            GetNbsService()->Scheduler,
-            GetNbsService()->Timer,
+            nbsService->StorageConfig,
+            nbsService->Scheduler,
+            nbsService->Timer,
             executors[i],
             TabletID(),
             1,   // generation

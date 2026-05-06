@@ -29,7 +29,8 @@ bool ParseLangVersion(TStringBuf str, TLangVersion& result) {
         return false;
     }
 
-    ui32 year, minor;
+    ui32 year;
+    ui32 minor;
     if (!TryFromString(str.SubString(0, 4), year)) {
         return false;
     }

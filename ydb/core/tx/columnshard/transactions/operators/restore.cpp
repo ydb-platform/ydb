@@ -1,7 +1,8 @@
 #include "restore.h"
-#include <ydb/core/tx/columnshard/common/tablet_id.h>
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+
 #include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -15,8 +16,10 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
     const auto& columns = schema->GetIndexInfo().GetColumns();
-    ImportTask = std::make_shared<NOlap::NImport::TImportTask>(TInternalPathId::FromRawValue(txBody.GetRestoreTask().GetTableId()), TVector<NOlap::TNameTypeInfo>{columns.begin(), columns.end()}, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
-    NOlap::NBackground::TTask task(::ToString(txBody.GetRestoreTask().GetTableId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ImportTask);
+    ImportTask = std::make_shared<NOlap::NImport::TImportTask>(TInternalPathId::FromRawValue(txBody.GetRestoreTask().GetTableId()),
+        TVector<NOlap::TNameTypeInfo>{ columns.begin(), columns.end() }, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
+    NOlap::NBackground::TTask task(
+        ::ToString(txBody.GetRestoreTask().GetTableId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ImportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
@@ -29,7 +32,8 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     return true;
 }
 
-TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStartProposeOnExecute(
+    TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!TaskExists) {
         AFL_VERIFY(!!TxAddTask);
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
@@ -47,7 +51,8 @@ void TRestoreTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
 bool TRestoreTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!TxRemove);
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
+    auto status =
+        owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
     owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
     auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
     opResult.SetSuccess(status.Success);
@@ -55,11 +60,12 @@ bool TRestoreTransactionOperator::ProgressOnExecute(
     TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
     NIceDb::TNiceDb db(txc.DB);
     Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedBackupTransaction, owner.LastCompletedBackupTransaction.SerializeAsString());
-    return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext()); 
+    return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
 bool TRestoreTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
+    auto status =
+        owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();
@@ -85,8 +91,8 @@ TString TRestoreTransactionOperator::DoDebugString() const {
 }
 
 bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    if (TxAbort) { 
-        TxAbort->Complete(ctx); 
+    if (TxAbort) {
+        TxAbort->Complete(ctx);
     }
     return true;
 }
@@ -99,14 +105,14 @@ TString TRestoreTransactionOperator::DoGetOpType() const {
     return "Restore";
 }
 
-void TRestoreTransactionOperator::DoFinishProposeOnComplete(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+void TRestoreTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
 }
 
-void TRestoreTransactionOperator::DoFinishProposeOnExecute(TColumnShard & /*owner*/, NTabletFlatExecutor::TTransactionContext & /*txc*/) {
+void TRestoreTransactionOperator::DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
 }
 
-void TRestoreTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
+void TRestoreTransactionOperator::RegisterSubscriber(const TActorId& actorId) {
     NotifySubscribers.insert(actorId);
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

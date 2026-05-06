@@ -4,10 +4,12 @@ RECURSE(
     common
     ctas
     kafka
+    kafka_serverless
     kv
     kv_volume
     log
     mixedpy
+    nfs_backups
     node_broker
     olap_workload
     oltp_workload

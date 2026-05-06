@@ -3,6 +3,7 @@
 
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
@@ -198,7 +199,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 IEngineFlat::TValidationInfo validationInfo;
                 IEngineFlat::EResult result = dataEngine->Validate(validationInfo);
@@ -216,7 +217,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
                 auto result = dataEngine->PrepareOutgoingReadsets();
                 if (result != IEngineFlat::EResult::Ok) {
@@ -252,7 +253,7 @@ namespace {
             for (const auto& shardPgm : shardPrograms) {
                 ShardDbState.BeginTransaction(shardPgm.first);
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
-                    *RandomProvider, *TimeProvider, "", hosts[shardPgm.first].Get()));
+                    *RandomProvider, *TimeProvider, NACLib::TUserContextBuilder().Build(), hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
 
                 if (incomingReadsets.contains(shardPgm.first)) {

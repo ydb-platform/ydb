@@ -169,17 +169,14 @@
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
 
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // ...
   ```
 
 - JavaScript
@@ -189,6 +186,21 @@
 
   const driver = new Driver('grpc://localhost:2136/local')
   await driver.ready()
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
   ```
 
 - PHP
@@ -217,14 +229,6 @@
   ];
 
   $ydb = new Ydb($config);
-  ```
-
-- Rust
-
-  ```rust
-  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
-        .with_credentials(AccessTokenCredentials::from("..."))
-        .client()?
   ```
 
 {% endlist %}

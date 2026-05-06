@@ -24,8 +24,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns,
-        PortionInfo.GetPortionInfo().GetPathId().DebugString());
+    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns);
 }
 
 TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
@@ -42,8 +41,7 @@ TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
 }
 
 std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-    const TVersionedIndex& tables) {
+    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         const auto schema = i.GetPortionInfo().GetSchema(tables);

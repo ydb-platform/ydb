@@ -16,6 +16,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -1982,9 +1983,15 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
-    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
-    );
+    if (IsLocalId(pathId)) {
+        db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    } else {
+        db.Table<Schema::MigratedTableIndex>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    }
 }
 
 void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) {
@@ -2010,7 +2017,8 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State),
-        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs)
+        NIceDb::TUpdate<Schema::CdcStream::UserSIDs>(alterData->UserSIDs),
+        NIceDb::TUpdate<Schema::CdcStream::TraceIds>(alterData->TraceIds)
     );
 
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -2038,7 +2046,8 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::SchemaChanges>(alterData->SchemaChanges),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State),
-        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs)
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::UserSIDs>(alterData->UserSIDs),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::TraceIds>(alterData->TraceIds)
     );
 }
 
@@ -3000,6 +3009,12 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings);
     }
 
+    TString detailedMetricsSettings;
+    if (tableInfo->HasDetailedMetricsSettings()) {
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->GetDetailedMetricsSettings()
+            .SerializeToString(&detailedMetricsSettings);
+    }
+
     TString replicationConfig;
     if (tableInfo->HasReplicationConfig()) {
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->ReplicationConfig().SerializeToString(&replicationConfig);
@@ -3023,7 +3038,9 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig),
+            NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings)
+        );
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -3037,7 +3054,9 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig),
+            NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings)
+        );
     }
 
     for (auto col : tableInfo->Columns) {
@@ -3874,6 +3893,7 @@ void TSchemeShard::PersistBackupSettings(
 
     PERSIST_BACKUP_SETTINGS(YTSettings)
     PERSIST_BACKUP_SETTINGS(S3Settings)
+    PERSIST_BACKUP_SETTINGS(FSSettings)
 
 #undef PERSIST_BACKUP_SETTINGS
 }

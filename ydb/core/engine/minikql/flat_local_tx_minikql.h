@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -76,7 +77,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-    const TString UserSID;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -251,7 +252,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 IEngineFlat::EProtocol::V1,
                 functionRegistry,
                 *TAppData::RandomProvider, *TAppData::TimeProvider,
-                UserSID,
+                UserCtx,
                 nullptr, poolCounters
             );
             proxySettings.EvaluateResultType = true;
@@ -299,7 +300,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     IEngineFlat::EProtocol::V1,
                     functionRegistry,
                     *TAppData::RandomProvider, *TAppData::TimeProvider,
-                    UserSID,
+                    UserCtx,
                     &host, poolCounters
                 );
                 TAutoPtr<IEngineFlat> engine = CreateEngineFlat(engineSettings);
@@ -367,11 +368,11 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            const TString& userSID)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {}
 };
 

@@ -115,14 +115,15 @@ class Workload(unittest.TestCase):
                 targetCount = len(targetPartitionMess)
                 totalMessCountTest += testCount
                 totalMessCountTarget += targetCount
+
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
-                  f"totalMessCountTarget = {totalMessCountTarget}")
+                  "totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
                        f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 
@@ -145,12 +146,6 @@ class Workload(unittest.TestCase):
             pass
 
         self.driver.topic_client.create_topic(topic, consumers=consumers, min_active_partitions=10)
-
-    def drop_topic(self, topic: str):
-        try:
-            self.driver.topic_client.drop_topic(topic)
-        except ydb.SchemeError:
-            pass
 
     def __enter__(self):
         return self

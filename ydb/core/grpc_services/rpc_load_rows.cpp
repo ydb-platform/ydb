@@ -7,6 +7,8 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/minikql/dom/json.h>
@@ -174,7 +176,10 @@ class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::T
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
-            GetUserSID(request),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
@@ -333,7 +338,10 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec,TString>>>(),
-            GetUserSID(request),
+            NACLib::TUserContextBuilder()
+                .WithUserSID(GetUserSID(request))
+                .WithUserTraceId(request->GetWilsonTraceId())
+                .Build(),
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))

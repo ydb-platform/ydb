@@ -78,15 +78,17 @@ private:
     }
 
     bool DoTypeCheck(EMode mode, TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues) {
-        if (mode == EMode::Library) {
-            return true;
-        }
-
         if (!udfMeta) {
             udfMeta = GetDefaultUdfMeta();
         }
 
-        return PartialAnnonateTypes(astRoot, langver, udfMeta, issues, [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); }, [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); });
+        // clang-format off
+        return PartialAnnonateTypes(astRoot, mode == EMode::Library, langver, udfMeta, issues,
+            [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); },
+            [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); },
+            [](const TTypeAnnotationNode* type) { return NCommon::WriteTypeToYson(type); }
+        );
+        // clang-format on
     }
 };
 

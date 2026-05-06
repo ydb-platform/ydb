@@ -533,7 +533,9 @@ Y_UNIT_TEST(DeprecatedSettingCustomMessage) {
 
 Y_UNIT_TEST(EnumerateSkipsDeprecatedAndUnderscoreNames) {
     TSettingDispatcher dispatcher;
-    TConfSetting<TString> s1, s2, s3;
+    TConfSetting<TString> s1;
+    TConfSetting<TString> s2;
+    TConfSetting<TString> s3;
     dispatcher.AddSetting("Normal", s1);
     dispatcher.AddSetting("DeprecatedOne", s2).Deprecated();
     dispatcher.AddSetting("_HiddenInternal", s3);
@@ -783,5 +785,235 @@ Y_UNIT_TEST(ParseContainerEmptyItemThrows) {
 }
 
 } // Y_UNIT_TEST_SUITE(TDefaultParserTest)
+
+Y_UNIT_TEST_SUITE(TDefaultSerializerTest) {
+
+Y_UNIT_TEST(SerializeString) {
+    auto s = NPrivate::GetDefaultSerializer<TString>();
+    UNIT_ASSERT_VALUES_EQUAL("hello", s("hello"));
+    UNIT_ASSERT_VALUES_EQUAL("", s(""));
+    UNIT_ASSERT_VALUES_EQUAL("with spaces", s("with spaces"));
+}
+
+Y_UNIT_TEST(SerializeBoolTrue) {
+    auto s = NPrivate::GetDefaultSerializer<bool>();
+    UNIT_ASSERT_VALUES_EQUAL("true", s(true));
+}
+
+Y_UNIT_TEST(SerializeBoolFalse) {
+    auto s = NPrivate::GetDefaultSerializer<bool>();
+    UNIT_ASSERT_VALUES_EQUAL("false", s(false));
+}
+
+Y_UNIT_TEST(SerializeBoolRoundTrip) {
+    auto parser = NPrivate::GetDefaultParser<bool>();
+    auto ser = NPrivate::GetDefaultSerializer<bool>();
+    UNIT_ASSERT_VALUES_EQUAL(true, parser(ser(true)));
+    UNIT_ASSERT_VALUES_EQUAL(false, parser(ser(false)));
+}
+
+Y_UNIT_TEST(SerializeGuidRoundTrip) {
+    TGUID original;
+    CreateGuid(&original);
+    auto ser = NPrivate::GetDefaultSerializer<TGUID>();
+    auto parser = NPrivate::GetDefaultParser<TGUID>();
+    TString serialized = ser(original);
+    TGUID parsed = parser(serialized);
+    UNIT_ASSERT_VALUES_EQUAL(GetGuidAsString(original), GetGuidAsString(parsed));
+}
+
+Y_UNIT_TEST(SerializeInstantRoundTrip) {
+    TInstant original = TInstant::Seconds(1700000000); // a fixed timestamp
+    auto ser = NPrivate::GetDefaultSerializer<TInstant>();
+    auto parser = NPrivate::GetDefaultParser<TInstant>();
+    TString serialized = ser(original);
+    TInstant parsed = parser(serialized);
+    UNIT_ASSERT_VALUES_EQUAL(original, parsed);
+}
+
+Y_UNIT_TEST(SerializeSizeToBytes) {
+    auto ser = NPrivate::GetDefaultSerializer<NSize::TSize>();
+    UNIT_ASSERT_VALUES_EQUAL("1024", ser(NSize::FromKiloBytes(1)));
+    UNIT_ASSERT_VALUES_EQUAL("0", ser(NSize::TSize(0)));
+    UNIT_ASSERT_VALUES_EQUAL("42", ser(NSize::TSize(42)));
+}
+
+Y_UNIT_TEST(SerializeUnsignedIntegers) {
+    UNIT_ASSERT_VALUES_EQUAL("42", NPrivate::GetDefaultSerializer<ui8>()(42));
+    UNIT_ASSERT_VALUES_EQUAL("1000", NPrivate::GetDefaultSerializer<ui16>()(1000));
+    UNIT_ASSERT_VALUES_EQUAL("100000", NPrivate::GetDefaultSerializer<ui32>()(100000));
+    UNIT_ASSERT_VALUES_EQUAL("1000000000000", NPrivate::GetDefaultSerializer<ui64>()(1000000000000ULL));
+}
+
+Y_UNIT_TEST(SerializeSignedIntegers) {
+    UNIT_ASSERT_VALUES_EQUAL("-5", NPrivate::GetDefaultSerializer<i8>()(-5));
+    UNIT_ASSERT_VALUES_EQUAL("-1000", NPrivate::GetDefaultSerializer<i16>()(-1000));
+    UNIT_ASSERT_VALUES_EQUAL("-100000", NPrivate::GetDefaultSerializer<i32>()(-100000));
+    UNIT_ASSERT_VALUES_EQUAL("-1000000000000", NPrivate::GetDefaultSerializer<i64>()(-1000000000000LL));
+}
+
+Y_UNIT_TEST(SerializeIntegersRoundTrip) {
+    auto serI64 = NPrivate::GetDefaultSerializer<i64>();
+    auto parseI64 = NPrivate::GetDefaultParser<i64>();
+    UNIT_ASSERT_VALUES_EQUAL(-42LL, parseI64(serI64(-42LL)));
+    UNIT_ASSERT_VALUES_EQUAL(0LL, parseI64(serI64(0LL)));
+
+    auto serUi64 = NPrivate::GetDefaultSerializer<ui64>();
+    auto parseUi64 = NPrivate::GetDefaultParser<ui64>();
+    UNIT_ASSERT_VALUES_EQUAL(123456789ULL, parseUi64(serUi64(123456789ULL)));
+}
+
+Y_UNIT_TEST(SerializeDoubleRoundTrip) {
+    auto ser = NPrivate::GetDefaultSerializer<double>();
+    auto parser = NPrivate::GetDefaultParser<double>();
+    UNIT_ASSERT_DOUBLES_EQUAL(3.14159, parser(ser(3.14159)), 1e-9);
+    UNIT_ASSERT_DOUBLES_EQUAL(-2.5, parser(ser(-2.5)), 1e-9);
+    UNIT_ASSERT_DOUBLES_EQUAL(0.0, parser(ser(0.0)), 1e-15);
+}
+
+Y_UNIT_TEST(SerializeDurationRoundTrip) {
+    auto ser = NPrivate::GetDefaultSerializer<TDuration>();
+    auto parser = NPrivate::GetDefaultParser<TDuration>();
+    UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(5), parser(ser(TDuration::Seconds(5))));
+    UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(500), parser(ser(TDuration::MilliSeconds(500))));
+    UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), parser(ser(TDuration::Zero())));
+}
+
+Y_UNIT_TEST(SerializeVectorString) {
+    auto ser = NPrivate::GetDefaultSerializer<TVector<TString>>();
+    UNIT_ASSERT_VALUES_EQUAL("a,b,c", ser({"a", "b", "c"}));
+    UNIT_ASSERT_VALUES_EQUAL("single", ser({"single"}));
+    UNIT_ASSERT_VALUES_EQUAL("", ser({}));
+}
+
+Y_UNIT_TEST(SerializeVectorStringRoundTrip) {
+    auto ser = NPrivate::GetDefaultSerializer<TVector<TString>>();
+    auto parser = NPrivate::GetDefaultParser<TVector<TString>>();
+    TVector<TString> original = {"foo", "bar", "baz"};
+    auto result = parser(ser(original));
+    UNIT_ASSERT_VALUES_EQUAL(original.size(), result.size());
+    for (size_t i = 0; i < original.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(original[i], result[i]);
+    }
+}
+
+Y_UNIT_TEST(SerializeSetString) {
+    auto ser = NPrivate::GetDefaultSerializer<TSet<TString>>();
+    // TSet is sorted, so output is deterministic
+    TSet<TString> s = {"c", "a", "b"};
+    UNIT_ASSERT_VALUES_EQUAL("a,b,c", ser(s));
+}
+
+Y_UNIT_TEST(SerializeSetStringRoundTrip) {
+    auto ser = NPrivate::GetDefaultSerializer<TSet<TString>>();
+    auto parser = NPrivate::GetDefaultParser<TSet<TString>>();
+    TSet<TString> original = {"x", "y", "z"};
+    auto result = parser(ser(original));
+    UNIT_ASSERT_VALUES_EQUAL(original, result);
+}
+
+Y_UNIT_TEST(SerializeHashSetStringRoundTrip) {
+    auto ser = NPrivate::GetDefaultSerializer<THashSet<TString>>();
+    auto parser = NPrivate::GetDefaultParser<THashSet<TString>>();
+    THashSet<TString> original = {"foo", "bar", "baz"};
+    auto result = parser(ser(original));
+    UNIT_ASSERT_VALUES_EQUAL(original, result);
+}
+
+} // Y_UNIT_TEST_SUITE(TDefaultSerializerTest)
+
+Y_UNIT_TEST_SUITE(TSettingDispatcherSerializeTest) {
+
+Y_UNIT_TEST(StaticSettingWithValueIsEmitted) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> setting;
+    dispatcher.AddSetting("MyStatic", setting);
+    setting[ALL_CLUSTERS] = "hello";
+
+    TVector<std::pair<TString, TString>> collected;
+    dispatcher.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        collected.emplace_back(name, value);
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(1u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL("MyStatic", collected[0].first);
+    UNIT_ASSERT_VALUES_EQUAL("hello", collected[0].second);
+}
+
+Y_UNIT_TEST(StaticSettingWithoutValueNotEmitted) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> setting;
+    dispatcher.AddSetting("MyStatic", setting);
+    // setting is not set
+
+    TVector<std::pair<TString, TString>> collected;
+    dispatcher.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        collected.emplace_back(name, value);
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(0u, collected.size());
+}
+
+Y_UNIT_TEST(MixedSettingsOnlyStaticEmitted) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> staticSetting;
+    TConfSetting<TString> dynamicSetting;
+    TConfSetting<TString, EConfSettingType::StaticPerCluster> perClusterSetting;
+    dispatcher.AddSetting("Static", staticSetting);
+    dispatcher.AddSetting("Dynamic", dynamicSetting);
+    dispatcher.AddSetting("PerCluster", perClusterSetting);
+
+    staticSetting[ALL_CLUSTERS] = "static_val";
+    dynamicSetting[ALL_CLUSTERS] = "dynamic_val";
+    perClusterSetting[ALL_CLUSTERS] = "per_cluster_val";
+
+    TVector<std::pair<TString, TString>> collected;
+    UNIT_ASSERT_EXCEPTION_SATISFIES(dispatcher.SerializeStaticSettings([&](const TString&, const TString&) {}), yexception, [](const yexception& e) {
+        return TString(e.what()).Contains("Only serialization for static settings is supported now");
+    });
+}
+
+Y_UNIT_TEST(MultipleStaticSettingsAllEmitted) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> s1;
+    TConfSetting<i64, EConfSettingType::Static> s2;
+    TConfSetting<bool, EConfSettingType::Static> s3;
+    dispatcher.AddSetting("StrSetting", s1);
+    dispatcher.AddSetting("IntSetting", s2);
+    dispatcher.AddSetting("BoolSetting", s3);
+
+    s1[ALL_CLUSTERS] = "text";
+    s2[ALL_CLUSTERS] = 42LL;
+    s3[ALL_CLUSTERS] = true;
+
+    THashMap<TString, TString> collected;
+    dispatcher.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        collected[name] = value;
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(3u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL("text", collected["StrSetting"]);
+    UNIT_ASSERT_VALUES_EQUAL("42", collected["IntSetting"]);
+    UNIT_ASSERT_VALUES_EQUAL("true", collected["BoolSetting"]);
+}
+
+Y_UNIT_TEST(CustomSerializerOverride) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> setting;
+    dispatcher.AddSetting("MySetting", setting)
+        .Serializer([](const TString& v) -> TString { return "custom_" + v; });
+
+    setting[ALL_CLUSTERS] = "value";
+
+    TVector<std::pair<TString, TString>> collected;
+    dispatcher.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        collected.emplace_back(name, value);
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(1u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL("custom_value", collected[0].second);
+}
+
+} // Y_UNIT_TEST_SUITE(TSettingDispatcherSerializeTest)
 
 } // namespace NYql::NCommon

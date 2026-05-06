@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -60,11 +61,13 @@ private:
         LOG_D("KqpSnapshotManager: got snapshot request from " << ClientActorId);
 
         if (MvccSnapshot) {
+            AFL_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(Orbit)));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
+            AFL_ENSURE(ev->Get()->TableIds.empty());
             auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
             req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
             req->Record.SetDatabaseName(Database);
@@ -113,22 +116,21 @@ private:
         Y_ABORT_UNLESS(Tables.empty());
         Orbit = std::move(ev->Get()->Orbit);
 
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        const auto* msg = ev->Get();
+        if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            Snapshot = IKqpGateway::TKqpSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
 
             LOG_D("KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
+                    Snapshot, std::move(ev->Get()->SnapshotHandle), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
                     0, Cookie);
 
             PassAway();
         } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            NYql::TIssues issues = msg->Issues;
             LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status="
-                      << record.GetStatus() << ", issues:" << issues.ToString());
+                      << msg->Status << ", issues:" << issues.ToString());
             ReplyErrorAndDie(NKikimrIssues::TStatusIds::ERROR, std::move(issues));
         }
     }
@@ -154,7 +156,7 @@ private:
         issues.AddIssue("stale propose TEvProposeTransactionStatus in cleanup state");
 
         Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-            IKqpGateway::TKqpSnapshot::InvalidSnapshot, NKikimrIssues::TStatusIds::TIMEOUT, std::move(issues), std::move(Orbit)),
+            IKqpGateway::TKqpSnapshot::InvalidSnapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::TIMEOUT, std::move(issues), std::move(Orbit)),
             0, Cookie);
 
         PassAway();
@@ -174,7 +176,7 @@ private:
             LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
+                Snapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
                 0, Cookie);
 
             Become(&TThis::StateRefreshing);
@@ -277,7 +279,7 @@ private:
     void ReplyErrorAndDie(NKikimrIssues::TStatusIds::EStatusCode status, NYql::TIssues&& issues) {
         if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) {
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues), std::move(Orbit)),
+                IKqpGateway::TKqpSnapshot::InvalidSnapshot, TSnapshotHandle(), status, std::move(issues), std::move(Orbit)),
                 0, Cookie);
         } else {
             SendDiscard();

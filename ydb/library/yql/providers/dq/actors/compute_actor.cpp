@@ -37,7 +37,6 @@ IActor* CreateComputeActor(
     memoryLimits.MinMemFreeSize = options.MkqlMinAllocSize;
 
     auto computeRuntimeSettings = NDq::TComputeRuntimeSettings();
-    computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
     computeRuntimeSettings.AsyncInputPushLimit = 64_MB;

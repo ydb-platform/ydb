@@ -71,6 +71,8 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
 }
 
 class TSolomonDqIntegration: public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 1000;
+
 public:
     explicit TSolomonDqIntegration(const TSolomonState::TPtr& state)
         : State_(state.Get())
@@ -79,6 +81,7 @@ public:
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         const TDqSource dqSource(&node);
+        auto maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
 
         if (const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>()) {
             const auto soSourceSettings = maybeSettings.Cast();
@@ -86,7 +89,7 @@ public:
                 ui64 totalMetricsCount;
                 YQL_ENSURE(TryFromString(soSourceSettings.TotalMetricsCount().StringValue(), totalMetricsCount));
 
-                for (size_t i = 0; i < std::min<ui64>(settings.MaxPartitions, totalMetricsCount); ++i) {
+                for (size_t i = 0; i < std::min<ui64>(maxPartitions, totalMetricsCount); ++i) {
                     partitions.push_back(TStringBuilder() << "partition" << i);
                 }
 
@@ -407,7 +410,7 @@ public:
             YQL_ENSURE(NActors::TlsActivationContext);
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    std::min<ui64>(maxTasksPerStage, totalMetricsCount),
+                    std::min<ui64>(maxTasksPerStage ? maxTasksPerStage : DefaultMaxPartitions, totalMetricsCount),
                     readParams,
                     credentialsProvider
                 ),

@@ -1,7 +1,9 @@
 #include "region.h"
 
 #include "range_translate.h"
-#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+#include "vchunk.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,8 +29,10 @@ TRegion::TRegion(
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHandoffDelay,
-    TDuration traceSamplePeriod)
+    TDuration writeHedgingDelay,
+    TDuration writeRequestTimeout,
+    TDuration traceSamplePeriod,
+    NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
 {
     Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
@@ -38,6 +42,9 @@ TRegion::TRegion(
             (regionIndex * vChunksPerRegionCount) + static_cast<ui32>(i);
         const size_t dbgIndex = i % directBlockGroups.size();
 
+        NMonitoring::TDynamicCounterPtr vChunkCounters =
+            counters->GetSubgroup("vchunk", ToString(vChunkIndex));
+
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
             partitionDirectService,
@@ -45,8 +52,10 @@ TRegion::TRegion(
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,
-            writeHandoffDelay,
-            traceSamplePeriod);
+            writeHedgingDelay,
+            writeRequestTimeout,
+            traceSamplePeriod,
+            vChunkCounters);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
     }

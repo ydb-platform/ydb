@@ -152,7 +152,8 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 }
             }
 
-            bool useQLFilter = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
+            const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+            const bool useQLFilter = enableQLFilter && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
             TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
@@ -232,8 +233,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
 }
 
 void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash) {
-    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_);
-    const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
     const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
     size_t loggedTable = 0;
@@ -247,7 +247,7 @@ void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::
             outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
         }
         TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
-        auto attrSpec = tableInfo.GetAttrSpecNode(nativeYtTypeCompatibility, rowSpecCompactForm);
+        auto attrSpec = tableInfo.GetAttrSpecNode(rowSpecCompactForm);
         OutTables_.emplace_back(
             outTableName,
             outTablePath,
@@ -275,12 +275,11 @@ void TExecContextBaseSimple::SetCache(const TVector<TString>&, const TVector<NYT
 }
 
 void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings) {
-    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_);
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
     YQL_ENSURE(!outTable.Cluster || outTable.Cluster == Cluster_);
     TString outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
     TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
 
-    const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
     const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
 
@@ -288,7 +287,7 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
         outTableName,
         outTablePath,
         outTable.GetCodecSpecNode(),
-        outTable.GetAttrSpecNode(nativeYtTypeCompatibility, rowSpecCompactForm),
+        outTable.GetAttrSpecNode(rowSpecCompactForm),
         ToYTSortColumns(outTable.RowSpec->GetForeignSort()),
         optimizeForScan ? outTable.GetColumnGroups() : NYT::TNode{}
     );
@@ -296,20 +295,20 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
     YQL_CLOG(INFO, ProviderYt) << "Output: " << Cluster_ << '.' << outTableName;
 }
 
-TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const {
-    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, intermediateInput);
+TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, bool intermediateInput) const {
+    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, intermediateInput);
 }
 
-TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
+TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
 }
 
-TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
+TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
 }
 
 template <class TTableType>
-TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) {
+TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialSpec, bool ensureOldTypesOnly, bool intermediateInput) {
     YQL_ENSURE(beginIdx <= endIdx);
     YQL_ENSURE(endIdx <= tables.size());
     NYT::TNode specNode = initialSpec;
@@ -317,23 +316,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
         specNode = NYT::TNode::CreateMap();
     }
     NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
-
-    auto updateFlags = [nativeTypeCompatibilityFlags](NYT::TNode& spec) {
-        if (spec.HasKey(YqlRowSpecAttribute)) {
-            auto& rowSpec = spec[YqlRowSpecAttribute];
-            ui64 nativeYtTypeFlags = 0;
-            if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
-            } else {
-                if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                }
-            }
-            rowSpec[RowSpecAttrNativeYtTypeFlags] = (nativeYtTypeFlags & nativeTypeCompatibilityFlags);
-        }
-    };
 
     if (!intermediateInput && (endIdx - beginIdx) > 1) {
         NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
@@ -344,8 +326,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
             auto spec = table.Spec;
             if (ensureOldTypesOnly) {
                 EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
-            } else {
-                updateFlags(spec);
             }
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(spec), refName);
             if (res.second) {
@@ -362,8 +342,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
         auto spec = table.Spec;
         if (ensureOldTypesOnly) {
             EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
-        } else {
-            updateFlags(spec);
         }
 
         tablesNode.Add(std::move(spec));
@@ -383,7 +361,7 @@ TString TExecContextBaseSimple::GetTransformedPath(const TString& path, const TS
     if (!NeedToTransformTmpTablePaths_) {
         return path;
     }
-    TString tmpFolder = GetTablesTmpFolder(*settings, cluster);
+    TString tmpFolder = GetTablesTmpFolder(*settings, cluster, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
     return NYql::TransformPath(tmpFolder, path, isTemp, BaseSession_->UserName_);
 }
 

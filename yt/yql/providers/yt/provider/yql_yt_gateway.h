@@ -14,9 +14,11 @@
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
@@ -114,6 +116,7 @@ public:
         OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
         OPTION_FIELD_DEFAULT(TQContext, QContext, {})
         OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
+        OPTION_FIELD(TSecureTmpStatePtr, UseSecureTmp)
     };
 
     //////////////////////////////////////////////////////////////
@@ -261,6 +264,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -372,6 +376,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
@@ -401,6 +406,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
@@ -451,6 +457,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, NYql::MakeRuntimeSettings())
     };
 
     struct TCalcResult : public NCommon::TOperationResult {

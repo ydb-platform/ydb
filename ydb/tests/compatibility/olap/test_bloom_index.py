@@ -84,7 +84,8 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
             stmt = (
                 f'ALTER OBJECT `{path}` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME={self.index_ngram_name}, '
                 f'TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{{"column_name": "{column}", "ngramm_size": 3, '
-                f'"false_positive_probability": 0.01, "case_sensitive": true}}`);'
+                f'"hashes_count": 2, "filter_size_bytes": 4096, "records_count": 50000, '
+                f'"case_sensitive": true}}`);'
             )
 
             with ydb.SessionPool(self.driver, size=1) as pool:

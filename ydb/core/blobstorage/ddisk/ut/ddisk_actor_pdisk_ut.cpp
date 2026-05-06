@@ -1,4 +1,6 @@
-#include "ddisk_actor_pdisk_ut.inl"
+#include "ddisk_actor_pdisk_common_ut.h"
+
+namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     Y_UNIT_TEST(WriteAndRead_4KiB_Uring) {
@@ -111,6 +113,22 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
 
     Y_UNIT_TEST(ReadWithoutConnect_PDiskFallback) {
         TestReadWithoutConnect({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_Uring) {
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/false);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_Uring) {
+        TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/true);
+    }
+
+    Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_PDiskFallback) {
+        TestPDiskRestartWithReservedChunks({.ForcePDiskFallback = true}, /*restartDDisk=*/true);
     }
 
     Y_UNIT_TEST(Smoke_2Tablets_2VChunks_1Segment) {

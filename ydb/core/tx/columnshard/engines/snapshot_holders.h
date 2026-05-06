@@ -2,6 +2,9 @@
 
 #include "portions/portion_info.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+
 #include <algorithm>
 
 namespace NKikimr::NColumnShard {
@@ -100,7 +103,31 @@ public:
     }
 }; 
 
-// class TRegistrySnapshotHolders : public ISnapshotHolders {
-// };
+class TRegistrySnapshotHolders : public ISnapshotHolders {
+private:
+    const TSnapshot MinSnapshotForNewReads;
+    const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
+    const ui64 SchemeShardId;
+    const IPathIdTranslator& PathIdTranslator;
+    mutable THashMap<TInternalPathId, TSnapshotHoldersPerTable> HoldersByPathId;
+
+private:
+    TSnapshotHoldersPerTable BuildHoldersForTable(const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const;
+    const TSnapshotHoldersPerTable& GetHoldersByPathId(const TInternalPathId pathId) const;
+
+public:
+    TRegistrySnapshotHolders(
+        const TSnapshot minSnapshotForNewReads,
+        TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
+        const ui64 schemeShardId,
+        const IPathIdTranslator& pathIdTranslator);
+
+    TSnapshot GetMinSnapshotForNewReads() const override {
+        return MinSnapshotForNewReads;
+    }
+
+    bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override;
+    bool CouldUseTable(const NColumnShard::TTableInfo& table) const override;
+};
 
 }   // namespace NKikimr::NOlap

@@ -263,11 +263,23 @@ bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColum
 }
 
 std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
-    auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
+    const auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
     // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
     // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
     // so we will get a live snapshot at that moment.
     // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
+    if (HasAppData() && AppDataVerified().FeatureFlags.GetEnableSnapshotsLocking()) {
+        if (const auto& holder = AppDataVerified().SnapshotRegistryHolder) {
+            if (const auto& registry = holder->Get()) {
+                return std::make_unique<NOlap::TRegistrySnapshotHolders>(
+                    minSnapshotForNewReads,
+                    registry,
+                    CurrentSchemeShardId,
+                    TablesManager);
+            }
+        }
+    }
+
     auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
     return std::make_unique<NOlap::TLegacySnapshotHolders>(minSnapshotForNewReads, std::move(inFlightTxs));
 }

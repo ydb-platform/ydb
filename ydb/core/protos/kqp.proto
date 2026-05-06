@@ -193,6 +193,8 @@ message TIndexDescriptionProto {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
         NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TBloomFilter BloomFilterDescription = 11;
+        NKikimrSchemeOp.TBloomNGrammFilter BloomNGrammFilterDescription = 12;
     }
 };
 

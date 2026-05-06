@@ -279,4 +279,111 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
     }
 
+
+    Y_UNIT_TEST(TestNodeShutdownHintDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+        UNIT_ASSERT(sessionId);
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        UNIT_ASSERT(allDoneOk);
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        EnsureSessionClosedWithHint(p,
+            Ydb::StatusIds::SUCCESS,
+            Ydb::Query::SessionState::SESSION_HINT_NOT_SET,
+            allDoneOk);
+
+        p->Cancel();
+        UNIT_ASSERT(allDoneOk);
+    }
+    // todo(anely-d): delete this test after all the sdk are updated
+    Y_UNIT_TEST(TestNodeShutdownHintBackwardCompatibility) {
+        auto check = [](const Ydb::Query::SessionState& msg) {
+            TString bytes;
+            Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&bytes);
+
+            // DeleteSessionResponse has same fields 1+2 (status/issues) but no hint fields — acts as old SDK schema
+            Ydb::Query::DeleteSessionResponse asOldSdk;
+            UNIT_ASSERT(asOldSdk.ParseFromString(bytes));
+            UNIT_ASSERT_VALUES_EQUAL(asOldSdk.status(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(asOldSdk.issues_size(), 0);
+        };
+
+        {
+            Ydb::Query::SessionState msg;
+            msg.set_status(Ydb::StatusIds::SUCCESS);
+            *msg.mutable_node_shutdown() = {};
+            check(msg);
+        }
+        {
+            Ydb::Query::SessionState msg;
+            msg.set_status(Ydb::StatusIds::SUCCESS);
+            *msg.mutable_session_shutdown() = {};
+            check(msg);
+        }
+    }
+
+
+    Y_UNIT_TEST(TestMultipleSessionsNodeShutdownHint) {
+        constexpr int kSessionCount = 5;
+
+        TKikimrWithGrpcAndRootSchema server;
+        auto* runtime = server.GetRuntime();
+        runtime->GetAppData().FeatureFlags.SetEnableNodeShutdownHints(true);
+        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        NYdbGrpc::TGRpcClientLow clientLow;
+        TVector<NYdbGrpc::IStreamRequestCtrl::TPtr> attachHandles;
+        attachHandles.reserve(kSessionCount);
+
+        for (int i = 0; i < kSessionCount; ++i) {
+            TString sessionId = CreateQuerySession(clientConfig);
+            UNIT_ASSERT(sessionId);
+            auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+            UNIT_ASSERT(allDoneOk);
+            attachHandles.push_back(std::move(p));
+        }
+
+        auto shutdownState = MakeIntrusive<NKikimr::NKqp::TKqpShutdownState>();
+        auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        runtime->Send(
+            kqpProxy,
+            runtime->AllocateEdgeActor(),
+            new NKikimr::NKqp::TEvKqp::TEvInitiateShutdownRequest(shutdownState));
+
+        for (auto& p : attachHandles) {
+            EnsureSessionClosedWithHint(p,
+                Ydb::StatusIds::SUCCESS,
+                Ydb::Query::SessionState::kNodeShutdown,
+                allDoneOk);
+            p->Cancel();
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
+
 }

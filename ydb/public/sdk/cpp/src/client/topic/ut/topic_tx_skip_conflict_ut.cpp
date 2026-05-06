@@ -25,6 +25,8 @@ class TFixtureTopicTxMatrixBase : public FixtureBase {
 protected:
     using typename FixtureBase::TTableRecord;
     using FixtureBase::AugmentWriteSessionSettings;
+    using FixtureBase::CheckTabletKeys;
+    using FixtureBase::CloseTopicWriteSession;
     using FixtureBase::CreateSession;
     using FixtureBase::CreateTable;
     using FixtureBase::CreateTopic;
@@ -33,6 +35,8 @@ protected:
     using FixtureBase::GetTopicUtPath;
     using FixtureBase::ReadFromTopic;
     using FixtureBase::UpsertToTable;
+    using FixtureBase::WaitForAcks;
+    using FixtureBase::WriteToTopic;
 
     size_t CountTableRowsWithKey(const std::string& tablePath, const std::string& key) {
         auto session = CreateSession();
@@ -210,6 +214,55 @@ protected:
             break;
         }
     }
+
+    /// Verifies user rollback under SkipConflictCheck: no committed topic data and no orphan tx keys.
+    void RunRollbackCleanupTopicOnly() {
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-1", tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-2", tx.get());
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+        session->RollbackTx(*tx, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+
+        CheckTabletKeys("topic_A");
+        CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    /// Same as RunRollbackCleanupTopicOnly, but with data-shard participation in the same transaction.
+    void RunRollbackCleanupDistributed() {
+        static constexpr const char* kTable = "table_A";
+        const std::vector<TTableRecord> rows = {
+            {"dist_rb_tx_a", "v1"},
+            {"dist_rb_tx_b", "v2"},
+        };
+
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+        CreateTable("/Root/table_A");
+
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-1", tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-2", tx.get());
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        UpsertToTable(kTable, rows, *session, tx.get());
+
+        session->RollbackTx(*tx, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount(kTable), 0u);
+
+        CheckTabletKeys("topic_A");
+        CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
 };
 
 template <bool EnableSkipConflictCheckForTopicsInTransaction, ETrackProducerIdInTxMeta TrackProducerIdInTxMeta, class FixtureBase>
@@ -269,6 +322,22 @@ Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta) {
 FOR_EACH_TOPIC_TX_MATRIX_ROW(REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS)
 #undef REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS
 #undef FOR_EACH_TOPIC_TX_MATRIX_ROW
+
+Y_UNIT_TEST_F(RollbackCleanup_TopicOnly_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunRollbackCleanupTopicOnly();
+}
+
+Y_UNIT_TEST_F(RollbackCleanup_TopicOnly_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunRollbackCleanupTopicOnly();
+}
+
+Y_UNIT_TEST_F(RollbackCleanup_Distributed_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunRollbackCleanupDistributed();
+}
+
+Y_UNIT_TEST_F(RollbackCleanup_Distributed_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunRollbackCleanupDistributed();
+}
 
 // Must expand inside Y_UNIT_TEST_F body: uses TFixture protected helpers.
 #define INVALID_WRITE_SESSION_ATTR_TEST_BODY()                                                                       \

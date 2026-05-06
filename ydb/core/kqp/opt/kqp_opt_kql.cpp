@@ -638,7 +638,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
     return Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(keysToDelete)
-        .ReturningColumns<TCoAtomList>().Build()
+        .ReturningColumns(del.ReturningColumns())
         .IsBatch(del.IsBatch())
         .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
         .Done();

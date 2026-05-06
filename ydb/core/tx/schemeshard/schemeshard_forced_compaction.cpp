@@ -340,7 +340,7 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
 void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
     NIceDb::TNiceDb& db,
     const TPathId& tablePathId,
-    const THashSet<TShardIdx>& srcShardIdxs,
+    const TVector<TShardIdx>& srcShardIdxs,
     const TVector<TShardIdx>& dstShardIdxs)
 {
     auto* compactionPtr = InProgressForcedCompactionsByTable.FindPtr(tablePathId);

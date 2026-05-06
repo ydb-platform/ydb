@@ -1929,7 +1929,7 @@ public:
     void ProcessForcedCompactionOnSplitMerge(
         NIceDb::TNiceDb& db,
         const TPathId& tablePathId,
-        const THashSet<TShardIdx>& srcShardIdxs,
+        const TVector<TShardIdx>& srcShardIdxs,
         const TVector<TShardIdx>& dstShardIdxs);
 
     NTabletFlatExecutor::ITransaction* CreateTxCreateForcedCompaction(TEvForcedCompaction::TEvCreateRequest::TPtr& ev);

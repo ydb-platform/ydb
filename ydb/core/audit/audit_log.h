@@ -11,11 +11,13 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
         if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
             TVector<std::pair<TString, TString>> auditParts;                                                                    \
-            NKikimr::NStructuredLog::TStructuredMessage auditStructMessage;                                                         \
+            NKikimr::NStructuredLog::TStructuredMessage auditStructMessage;                                                     \
             expr                                                                                                                \
             ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
             YDBLOG_COMP_NOTICE(AUDIT_LOG_WRITER, "Audit event", auditStructMessage);                                            \

@@ -6,6 +6,8 @@
 #include <ydb/library/actors/struct_log/native_types_support.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NStructuredLog {
@@ -202,7 +204,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "value=6");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "value=7");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "value=8");
-        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), "value=1");
+        TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), "value=true");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TString("abc")}), "value=abc");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", "abc"}), "value=abc");
         TEST_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
@@ -347,7 +349,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":"6"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":"7"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":"8"})");
-        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), R"({"value":"1"})");
+        TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", true}), R"({"value":"true"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", TString("abc")}), R"({"value":"abc"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", "abc"}), R"({"value":"abc"})");
         TEST_JSON_MESSAGE(YDBLOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":"1.123"})");

@@ -1056,6 +1056,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             )" << databaseDescription
         );
 
+        const TString& olapSchema = defaultStoreSchema;
+
         const auto expectedStorePathId = GetNextLocalPathId(runtime, txId);
         TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);
         env.TestWaitNotification(runtime, txId);

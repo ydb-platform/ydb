@@ -408,7 +408,30 @@ public:
     {
         TVector<TString> children;
         dir.ListNames(children);
-        Sort(children);
+
+        THashSet<TString> directories;
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                directories.insert(name);
+            }
+        }
+
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            if (directories.contains(a) == directories.contains(b)) {
+                return a < b;
+            }
+            TString keyA = a;
+            TString keyB = b;
+            if (directories.contains(a)) {
+                keyA += "/";
+            }
+            if (directories.contains(b)) {
+                keyB += "/";
+            }
+            return keyA < keyB;
+        });
+
         for (const auto& name : children) {
             TFsPath child = dir / name;
             if (child.IsSymlink()) {

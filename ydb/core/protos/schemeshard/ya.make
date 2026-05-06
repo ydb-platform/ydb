@@ -9,7 +9,12 @@ IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()
 ENDIF()
 
+PEERDIR(
+    ydb/core/scheme/protos
+)
+
 SRCS(
+    scheme_change_records.proto
     operations.proto
 )
 

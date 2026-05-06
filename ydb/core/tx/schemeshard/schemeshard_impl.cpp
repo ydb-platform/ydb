@@ -238,6 +238,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
+    Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
+
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     InitializeStatistics(ctx);
@@ -3713,6 +3715,47 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
                 NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextLocalShardIdx)));
 }
 
+void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
+    ++NextSchemeChangeOrderPersistCount;
+}
+
+void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
+}
+
+void TSchemeShard::PersistUserLevelTransaction(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx, const TString& body) const {
+    db.Table<Schema::UserLevelTransactions>().Key(txId, userTxIdx).Update(
+        NIceDb::TUpdate<Schema::UserLevelTransactions::Body>(body));
+}
+
+void TSchemeShard::PersistRemoveUserLevelTransactions(NIceDb::TNiceDb& db, TTxId txId, ui32 count) const {
+    // Point deletes by known count avoid a range scan, which would otherwise
+    // trigger a late Precharge and abort in non-init transactions (reads in
+    // the caller's tx have already set NoMoreUnprechargedReadsFlag without
+    // including table UserLevelTransactions).
+    for (ui32 i = 0; i < count; ++i) {
+        db.Table<Schema::UserLevelTransactions>().Key(txId, i).Delete();
+    }
+}
+
+bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr) const {
+    if (Subscribers.empty()) {
+        return true;
+    }
+    const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder();
+    if (unacked >= MaxSchemeChangeRecords) {
+        errStr = TStringBuilder()
+            << "scheme change records is full: " << unacked
+            << " unacked entries (limit: " << MaxSchemeChangeRecords << ")."
+            << " Subscribers may not be draining.";
+        return false;
+    }
+    return true;
+}
+
 void TSchemeShard::PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_ParentDomainSchemeShard).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(parentDomain.OwnerId)));
@@ -5406,6 +5449,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
+        // scheme change records bounded cleanup continuation
+        HFuncTraced(TEvPrivate::TEvSchemeChangeRecordsCleanup, Handle);
+
         // conditional erase
         HFuncTraced(TEvPrivate::TEvRunConditionalErase, Handle);
         HFuncTraced(TEvPrivate::TEvFlushConditionalEraseBatch, Handle);
@@ -5581,6 +5627,13 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+        HFuncTraced(TEvSchemeShard::TEvRegisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvAckSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvUnregisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvForceAdvanceSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies, Handle);
+        HFuncTraced(TEvSchemeShard::TEvReplaySchemeChangeRecord, Handle);
 
         HFuncTraced(TEvPersQueue::TEvOffloadStatus, Handle);
         HFuncTraced(TEvPrivate::TEvContinuousBackupCleanerResult, Handle);
@@ -8006,6 +8059,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         ConfigureCondErase(schemeShardConfig, ctx);
+        MaxSchemeChangeRecords = schemeShardConfig.GetMaxSchemeChangeRecords();
     }
 
     if (appConfig.HasTableProfilesConfig()) {

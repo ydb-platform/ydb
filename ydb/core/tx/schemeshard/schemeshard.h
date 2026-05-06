@@ -6,6 +6,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/schemeshard/scheme_change_records.pb.h>
 #include <ydb/core/protos/tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -107,6 +108,21 @@ namespace TEvSchemeShard {
         EvShredInfoRequest,
         EvShredInfoResponse,
         EvShredManualStartupRequest,
+
+        // Scheme Change Records events
+        EvRegisterSubscriber,
+        EvRegisterSubscriberResult,
+        EvFetchSchemeChangeRecords,
+        EvFetchSchemeChangeRecordsResult,
+        EvAckSchemeChangeRecords,
+        EvAckSchemeChangeRecordsResult,
+        EvForceAdvanceSubscriber,
+        EvForceAdvanceSubscriberResult,
+        EvUnregisterSubscriber,
+        EvUnregisterSubscriberResult,
+        EvFetchSchemeChangeRecordBodies,
+        EvFetchSchemeChangeRecordBodiesResult,
+        EvReplaySchemeChangeRecord,
 
         EvEnd
     };
@@ -724,6 +740,34 @@ namespace TEvSchemeShard {
     };
 
     struct TEvShredManualStartupRequest : TEventPB<TEvShredManualStartupRequest, NKikimrScheme::TEvShredManualStartupRequest, EvShredManualStartupRequest> {};
+
+    // Scheme Change Records events (proto-backed)
+    struct TEvRegisterSubscriber : public TEventPB<TEvRegisterSubscriber,
+        NKikimrSchemeShard::TEvRegisterSubscriber, EvRegisterSubscriber> {};
+    struct TEvRegisterSubscriberResult : public TEventPB<TEvRegisterSubscriberResult,
+        NKikimrSchemeShard::TEvRegisterSubscriberResult, EvRegisterSubscriberResult> {};
+    struct TEvFetchSchemeChangeRecords : public TEventPB<TEvFetchSchemeChangeRecords,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecords, EvFetchSchemeChangeRecords> {};
+    struct TEvFetchSchemeChangeRecordsResult : public TEventPB<TEvFetchSchemeChangeRecordsResult,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordsResult, EvFetchSchemeChangeRecordsResult> {};
+    struct TEvAckSchemeChangeRecords : public TEventPB<TEvAckSchemeChangeRecords,
+        NKikimrSchemeShard::TEvAckSchemeChangeRecords, EvAckSchemeChangeRecords> {};
+    struct TEvAckSchemeChangeRecordsResult : public TEventPB<TEvAckSchemeChangeRecordsResult,
+        NKikimrSchemeShard::TEvAckSchemeChangeRecordsResult, EvAckSchemeChangeRecordsResult> {};
+    struct TEvForceAdvanceSubscriber : public TEventPB<TEvForceAdvanceSubscriber,
+        NKikimrSchemeShard::TEvForceAdvanceSubscriber, EvForceAdvanceSubscriber> {};
+    struct TEvForceAdvanceSubscriberResult : public TEventPB<TEvForceAdvanceSubscriberResult,
+        NKikimrSchemeShard::TEvForceAdvanceSubscriberResult, EvForceAdvanceSubscriberResult> {};
+    struct TEvUnregisterSubscriber : public TEventPB<TEvUnregisterSubscriber,
+        NKikimrSchemeShard::TEvUnregisterSubscriber, EvUnregisterSubscriber> {};
+    struct TEvUnregisterSubscriberResult : public TEventPB<TEvUnregisterSubscriberResult,
+        NKikimrSchemeShard::TEvUnregisterSubscriberResult, EvUnregisterSubscriberResult> {};
+    struct TEvFetchSchemeChangeRecordBodies : public TEventPB<TEvFetchSchemeChangeRecordBodies,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordBodies, EvFetchSchemeChangeRecordBodies> {};
+    struct TEvFetchSchemeChangeRecordBodiesResult : public TEventPB<TEvFetchSchemeChangeRecordBodiesResult,
+        NKikimrSchemeShard::TEvFetchSchemeChangeRecordBodiesResult, EvFetchSchemeChangeRecordBodiesResult> {};
+    struct TEvReplaySchemeChangeRecord : public TEventPB<TEvReplaySchemeChangeRecord,
+        NKikimrSchemeShard::TEvReplaySchemeChangeRecord, EvReplaySchemeChangeRecord> {};
 };
 
 }

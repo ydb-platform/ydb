@@ -14,6 +14,13 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
+    // User-level transactions (after Phase-Zero rewrite and Phase-One
+    // auto-mkdir split) that drive this operation. Stored verbatim so
+    // that scheme change records can persist the original user-facing
+    // TModifyScheme bodies, which a target cluster can feed back through
+    // IgniteOperation to redo decomposition.
+    TVector<TTxTransaction> UserLevelTransactions;
+
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;

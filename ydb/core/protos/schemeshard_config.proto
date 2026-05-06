@@ -41,4 +41,8 @@ message TSchemeShardConfig {
 
     // maximum time to hold an incomplete conditional erase response batch before processing
     optional uint32 CondEraseResponseBatchMaxTimeMs = 9 [default = 100];
+
+    // scheme change records overflow threshold
+    // new schema operations are rejected when this limit is reached
+    optional uint64 MaxSchemeChangeRecords = 10 [default = 100000];
 }

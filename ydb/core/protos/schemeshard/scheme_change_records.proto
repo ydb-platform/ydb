@@ -1,0 +1,167 @@
+// Scheme change records subscriber protocol.
+//
+// SchemeShard maintains an append-only log of DDL sub-operations.
+// Subscribers register with a stable string ID, fetch records in
+// order, request bodies for the subset they care about, and ack
+// consumed ranges. Acks may trigger inline cleanup of acked
+// records.
+syntax = "proto3";
+
+package NKikimrSchemeShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/scheme/protos/pathid.proto";
+
+// Status enum for scheme change records subscriber protocol results.
+message TSchemeChangeRecordsStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_NOT_REGISTERED = 2;
+        STATUS_INVALID_REQUEST = 3;
+        STATUS_INTERNAL_ERROR = 4;
+    }
+}
+
+// Register a subscriber to the scheme change records log. Idempotent.
+message TEvRegisterSubscriber {
+    string SubscriberId = 1;
+}
+
+// Response to TEvRegisterSubscriber. CurrentOrder is the subscriber's
+// cursor position (0 for new subscribers).
+message TEvRegisterSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 CurrentOrder = 3;
+}
+
+// A single scheme change log entry describing one DDL sub-operation.
+//
+// Under parent-level persistence, the record represents one user-level
+// TModifyScheme. `Body` (fetched via TEvFetchSchemeChangeRecordBodies)
+// is the source of truth for replay. The fields below carry best-effort
+// metadata for filtering/display:
+//   - `OperationType`, `PathId`, `ObjectType`, `SchemaVersion`, `UserSID`:
+//     advisory; may be zero/unset if the user-level op does not target
+//     a single identifiable path. Subscribers should consult `Body` for
+//     authoritative operation details.
+//   - `Path`: best-effort joined path (WorkingDir + target name from the
+//     body's typed sub-message), for human display.
+message TSchemeChangeRecord {
+    uint64 Order = 1;
+    uint64 TxId = 2;
+    uint64 PlanStep = 3;
+    uint32 OperationType = 4;
+    NKikimrProto.TPathID PathId = 5;
+    string Path = 6;
+    uint32 ObjectType = 7;
+    optional uint32 Status = 8;
+    string UserSID = 9;
+    uint64 SchemaVersion = 10;
+    uint64 CompletedAtUs = 11;
+    uint64 BodySize = 13;
+}
+
+// Request metadata for records after the given order, up to MaxCount entries.
+message TEvFetchSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 AfterOrder = 2;
+    uint32 MaxCount = 3;
+}
+
+// Response containing metadata entries. Bodies must be fetched separately
+// via TEvFetchSchemeChangeRecordBodies. Tail order is Entries.back().Order.
+message TEvFetchSchemeChangeRecordsResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    repeated TSchemeChangeRecord Entries = 3;
+    bool HasMore = 5;
+    // Number of entries the server fast-forwarded over because the client's
+    // AfterOrder was behind the persisted LastAckedOrder for this subscriber.
+    // Happens when a client restarts and retries from its local cursor before
+    // re-syncing with the ack state stored on schemeshard. Subscribers should
+    // treat this as informational (e.g., log it) — the skipped records are
+    // already acked and cannot be re-fetched.
+    uint64 SkippedEntries = 6;
+    // Minimum PlanStep among in-flight operations at fetch time.
+    // Subscribers using PlanStep-based ordering should treat records
+    // with PlanStep >= WatermarkPlanStep as not yet safe to process.
+    uint64 WatermarkPlanStep = 7;
+}
+
+// Acknowledge consumption up to UpToOrder. Advances the subscriber cursor
+// and may trigger inline cleanup of acked records.
+message TEvAckSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 UpToOrder = 2;
+}
+
+// Response to ack; LastAckedOrder reflects the actual cursor position
+// after clamping.
+message TEvAckSchemeChangeRecordsResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 LastAckedOrder = 3;
+}
+
+// Admin: advance a subscriber's cursor to the tail regardless of
+// consumption. Used to unblock overflow caused by a dead subscriber.
+message TEvForceAdvanceSubscriber {
+    string SubscriberId = 1;
+}
+
+// Response to force-advance.
+message TEvForceAdvanceSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 LastAckedOrder = 3;
+}
+
+// Remove a subscriber.
+message TEvUnregisterSubscriber {
+    string SubscriberId = 1;
+}
+
+// Response to unregister.
+message TEvUnregisterSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+}
+
+// Pull bodies for specific record orders. Requires a registered subscriber.
+message TEvFetchSchemeChangeRecordBodies {
+    string SubscriberId = 1;
+    repeated uint64 Orders = 2;
+}
+
+// Response containing serialized TModifyScheme bodies for the requested
+// orders. Records that have been cleaned up since the corresponding Fetch
+// are silently skipped.
+message TEvFetchSchemeChangeRecordBodiesResult {
+    message TEntry {
+        uint64 Order = 1;
+        bytes Body = 2;
+    }
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    repeated TEntry Entries = 3;
+}
+
+// Privileged re-execution of a persisted scheme change record body.
+// The server rewrites WorkingDir by substituting SourcePathPrefix with
+// TargetPathPrefix, forces Internal=true and AllowAccessToPrivatePaths=true
+// on the body (caller-supplied values for those fields are ignored), and
+// forwards the body through the usual TEvModifySchemeTransaction pipeline.
+// The response is a TEvModifySchemeTransactionResult for the given TxId.
+//
+// Access control: same as TEvModifySchemeTransaction — cluster-operator
+// only at the frontend/gRPC layer. The value add of this event is that
+// its flag-injection cannot be reached through the normal DDL path.
+message TEvReplaySchemeChangeRecord {
+    bytes Body = 1;                  // serialized NKikimrSchemeOp.TModifyScheme
+    uint64 TxId = 2;                 // tx id for the forwarded TEvModifySchemeTransaction
+    string SourcePathPrefix = 3;     // e.g. "/Source/Db"
+    string TargetPathPrefix = 4;     // e.g. "/Target/Db"
+}

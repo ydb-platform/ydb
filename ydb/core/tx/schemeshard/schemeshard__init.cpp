@@ -1367,6 +1367,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextPathId, Self->NextLocalPathId));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeOrder, Self->NextSchemeChangeOrder));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_LastAssignedPlanStep, Self->LastAssignedPlanStep));
+
+        {
+            auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
+            if (!subRowset.IsReady()) return false;
+            Self->Subscribers.clear();
+            while (!subRowset.EndOfSet()) {
+                TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
+                TSchemeShard::TSubscriberInfo info;
+                info.LastAckedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+                info.LastActivityAt = TInstant::MicroSeconds(
+                    subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAt>());
+                Self->Subscribers.emplace(std::move(id), info);
+                if (!subRowset.Next()) return false;
+            }
+        }
 
         {
             ui64 isReadOnlyModeVal = 0;
@@ -3655,6 +3672,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 txState.MinStep =       txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::MinStep>(InvalidStepId);
                 txState.PlanStep =      txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::PlanStep>(InvalidStepId);
+                // Belt-and-braces for pre-SysParam_LastAssignedPlanStep tablets:
+                // fold any surviving TxInFlight PlanStep into the ceiling.
+                if (txState.PlanStep != InvalidStepId && ui64(txState.PlanStep) > Self->LastAssignedPlanStep) {
+                    Self->LastAssignedPlanStep = ui64(txState.PlanStep);
+                }
 
                 TString extraData =     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::ExtraBytes>("");
                 txState.StartTime =     TInstant::MicroSeconds(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::StartTime>());
@@ -3850,6 +3872,34 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!txInFlightRowset.Next())
                     return false;
+            }
+        }
+
+        // Restore user-level TTxTransaction bodies onto the corresponding
+        // TOperation so DoPersistSchemeChangeRecords can emit parent records
+        // post-reboot.
+        {
+            auto rowset = db.Table<Schema::UserLevelTransactions>().Range().Select();
+            if (!rowset.IsReady()) return false;
+            THashMap<TTxId, TMap<ui32, NKikimrSchemeOp::TModifyScheme>> byTx;
+            while (!rowset.EndOfSet()) {
+                TTxId txId = rowset.GetValue<Schema::UserLevelTransactions::TxId>();
+                ui32 idx = rowset.GetValue<Schema::UserLevelTransactions::UserTxIdx>();
+                TString body = rowset.GetValue<Schema::UserLevelTransactions::Body>();
+                NKikimrSchemeOp::TModifyScheme tx;
+                if (tx.ParseFromString(body)) {
+                    byTx[txId][idx] = std::move(tx);
+                }
+                if (!rowset.Next()) return false;
+            }
+            for (auto& [txId, idxMap] : byTx) {
+                auto opIt = Self->Operations.find(txId);
+                if (opIt == Self->Operations.end()) continue;
+                opIt->second->UserLevelTransactions.clear();
+                opIt->second->UserLevelTransactions.reserve(idxMap.size());
+                for (auto& [idx, tx] : idxMap) {
+                    opIt->second->UserLevelTransactions.push_back(std::move(tx));
+                }
             }
         }
 

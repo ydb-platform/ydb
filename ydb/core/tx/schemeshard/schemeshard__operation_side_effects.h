@@ -160,6 +160,7 @@ private:
     void DoReleasePathState(TSchemeShard* ss, const TActorContext &ctx);
     void DoDoneParts(TSchemeShard* ss, const TActorContext& ctx);
     void DoDoneTransactions(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& ctx);
+    void DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void DoReadyToNotify(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoPersistDependencies(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

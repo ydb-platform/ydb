@@ -1180,6 +1180,7 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     }
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
+    result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
     return result;
 }
 

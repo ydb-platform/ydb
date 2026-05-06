@@ -40,6 +40,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -49,6 +50,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
 
@@ -242,7 +244,7 @@ public:
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -1919,7 +1921,7 @@ public:
         return results;
     }
 
-    NACLib::TUserContext::TPtr CreateUserContext() {
+    TIntrusivePtr<NACLib::TUserContext> CreateUserContext() {
         NACLib::TUserContextBuilder builder;
 
         if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
@@ -2145,7 +2147,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -2611,7 +2613,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);
@@ -2676,7 +2678,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
@@ -3803,7 +3805,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 } // namespace
@@ -3819,7 +3821,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    NACLib::TUserContext::TPtr userCtx)
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),

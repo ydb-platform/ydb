@@ -1,4 +1,6 @@
 #include "kqp_expression.h"
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 using namespace NYql::NNodes;

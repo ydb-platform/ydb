@@ -50,6 +50,13 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
 
         Typically, it is the owning company name. Defaults to `appname`. You may pass ``False`` to disable it.
 
+        .. note::
+
+            On Windows, the directory structure is ``<base>/<appauthor>/<appname>``. When ``appauthor`` is ``None`` (the
+            default), it falls back to ``appname``, resulting in ``<base>/<appname>/<appname>`` (e.g.
+            ``AppData/Local/myapp/myapp``). Pass ``appauthor=False`` to omit the author directory entirely and get
+            ``<base>/<appname>``.
+
         """
         self.version = version
         """An optional version path element to append to the path.
@@ -124,6 +131,10 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
         """:returns: data directory shared by users"""
 
     @property
+    def _site_data_dirs(self) -> list[str]:
+        raise NotImplementedError
+
+    @property
     @abstractmethod
     def user_config_dir(self) -> str:
         """:returns: config directory tied to the user"""
@@ -132,6 +143,10 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     @abstractmethod
     def site_config_dir(self) -> str:
         """:returns: config directory shared by users"""
+
+    @property
+    def _site_config_dirs(self) -> list[str]:
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -212,6 +227,10 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     @abstractmethod
     def site_applications_dir(self) -> str:
         """:returns: applications directory shared by users"""
+
+    @property
+    def _site_applications_dirs(self) -> list[str]:
+        raise NotImplementedError
 
     @property
     @abstractmethod

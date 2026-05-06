@@ -495,9 +495,11 @@ private:
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
     switch (GetNodeType(value)) {
-        case ENodeType::String:
-            callbacks.OnString(value.AsStringRef());
+        case ENodeType::String: {
+            auto cleanValue = ClearUtf8Mark(value);
+            callbacks.OnString(cleanValue.AsStringRef());
             break;
+        }
         case ENodeType::Bool:
             callbacks.OnBoolean(value.Get<bool>());
             break;
@@ -536,7 +538,8 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
                 TUnboxedValue key;
                 TUnboxedValue value;
                 while (it.NextPair(key, value)) {
-                    callbacks.OnMapKey(key.AsStringRef());
+                    auto cleanKey = ClearUtf8Mark(key);
+                    callbacks.OnMapKey(cleanKey.AsStringRef());
                     DomToJsonIndex(value, callbacks);
                 }
             }

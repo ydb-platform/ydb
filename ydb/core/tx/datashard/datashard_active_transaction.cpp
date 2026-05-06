@@ -7,6 +7,7 @@
 #include "key_conflicts.h"
 
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
 namespace NKikimr {
@@ -19,7 +20,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody,
                                    bool usesMvccSnapshot,
-                                   NACLib::TUserContext::TPtr userCtx,
+                                   TIntrusivePtr<NACLib::TUserContext> userCtx,
                                    bool)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
@@ -232,7 +233,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags,
-                                    NACLib::TUserContext::TPtr userCtx)
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UntrackMemory();
 
@@ -270,7 +271,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 void TActiveTransaction::FillVolatileTxData(TDataShard *self,
                                             TTransactionContext &txc,
                                             const TActorContext &ctx,
-                                            NACLib::TUserContext::TPtr userCtx)
+                                            TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UntrackMemory();
 
@@ -298,7 +299,7 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx,
-                                                       NACLib::TUserContext::TPtr userCtx,
+                                                       TIntrusivePtr<NACLib::TUserContext> userCtx,
                                                        bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
@@ -557,7 +558,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UserCtx = userCtx;
     if (!DataTx) {

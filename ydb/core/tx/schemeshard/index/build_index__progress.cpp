@@ -2754,6 +2754,9 @@ public:
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
             buildInfo.DoneShards.emplace_back(shardIdx);
+            if (!issues.Empty()) {
+                Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
+            }
             HandleDone(db, buildInfo);
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);

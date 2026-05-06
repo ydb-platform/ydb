@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/protos
+    ydb/core/security/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/login
@@ -39,4 +40,5 @@ RECURSE(
     certificate_check
     ldap_auth_provider
     sasl
+    util
 )

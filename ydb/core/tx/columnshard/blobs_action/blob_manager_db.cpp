@@ -1,4 +1,5 @@
 #include "blob_manager_db.h"
+
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
@@ -11,8 +12,7 @@ bool TBlobManagerDb::LoadGCBarrierPreparation(TGenStep& genStep) {
     ui64 step = 0;
     NIceDb::TNiceDb db(Database);
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationGen, gen) ||
-        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationStep, step))
-    {
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationStep, step)) {
         return false;
     }
     genStep = TGenStep(gen, step);
@@ -48,8 +48,7 @@ void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
 }
 
 bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
-    const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId)
-{
+    const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) {
     blobsToKeep.clear();
     TTabletsByBlob blobsToDeleteLocal;
 
@@ -57,8 +56,9 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
 
     {
         auto rowset = db.Table<Schema::BlobsToKeep>().Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
         TString error;
 
@@ -76,8 +76,9 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
 
     {
         auto rowset = db.Table<Schema::BlobsToDelete>().Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
         TString error;
 
@@ -95,8 +96,9 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
 
     {
         auto rowset = db.Table<Schema::BlobsToDeleteWT>().Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
         TString error;
 
@@ -141,7 +143,8 @@ void TBlobManagerDb::EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabl
     db.Table<Schema::BlobsToDeleteWT>().Key(blobId.ToStringNew(), (ui64)tabletId).Delete();
 }
 
-bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) {
+bool TBlobManagerDb::LoadTierLists(
+    const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) {
     TTabletsByBlob localBlobsToDelete;
     std::deque<TUnifiedBlobId> localDraftBlobsToDelete;
 
@@ -206,7 +209,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
             }
         }
     }
-    
+
     std::swap(localBlobsToDelete, blobsToDelete);
     std::swap(localDraftBlobsToDelete, draftBlobsToDelete);
 
@@ -252,7 +255,9 @@ void TBlobManagerDb::RemoveBorrowedBlob(const TString& storageId, const TUnified
 
 void TBlobManagerDb::AddBorrowedBlob(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
-    db.Table<Schema::BorrowedBlobIds>().Key(storageId, blobId.ToStringNew()).Update(NIceDb::TUpdate<Schema::BorrowedBlobIds::TabletId>((ui64)tabletId));
+    db.Table<Schema::BorrowedBlobIds>()
+        .Key(storageId, blobId.ToStringNew())
+        .Update(NIceDb::TUpdate<Schema::BorrowedBlobIds::TabletId>((ui64)tabletId));
 }
 
-}
+}   // namespace NKikimr::NOlap

@@ -277,6 +277,69 @@ message TTTLSettings {
     reserved 3;
 }
 
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message TTableDetailedMetricsSettings {
+    /**
+     * The level at which detailed metrics are aggregated and reported.
+     */
+    enum EMetricsLevel {
+        /**
+         * The detailed metrics level is not specified.
+         */
+        MetricsLevelUnspecified = 0;
+
+        /**
+         * All detailed metrics are disabled for the given table.
+         */
+        MetricsLevelDisabled = 1;
+
+        /**
+         * Detailed metrics are aggregated and reported for the entire table.
+         */
+        MetricsLevelTable = 2;
+
+        /**
+         * Detailed metrics are aggregated and reported for individual partitions.
+         */
+        MetricsLevelPartition = 3;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly configured.
+     */
+    message TConfigured {
+        /**
+         * The level at which detailed metrics are aggregated and reported.
+         */
+        optional EMetricsLevel MetricsLevel = 1;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly removed.
+     */
+    message TNotConfigured {
+    }
+
+    oneof Status {
+        /**
+         * Set, if the detailed metrics settings are explicitly configured.
+         */
+        TConfigured Configured = 1;
+
+        /**
+         * Set, if the detailed metrics settings are explicitly removed.
+         *
+         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
+         *       which are currently configured for the given table. If the detailed metrics
+         *       settings are not configured, the corresponding DetailedMetricsSettings field
+         *       in the table description will not be set.
+         */
+        TNotConfigured NotConfigured = 2;
+    }
+}
+
 message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
@@ -369,6 +432,32 @@ message TTableDescription {
 
     // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
     optional uint32 UniqueIndexKeySize = 50;
+
+    /**
+     * The detailed metrics settings for the given table.
+     *
+     * @note When returning the description for an existing table, this field
+     *       will be populated, if the detailed metrics settings are explicitly configured
+     *       for the given table. If the detailed metrics settings are not configured,
+     *       this field will not be populated in the table description.
+     *
+     * @note When used for ALTER TABLE requests, this field should be left unset
+     *       to keep the current detailed metrics settings for the given table.
+     *       To configure/change the detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.Configured field set to the desired settings.
+     *       To remove the current detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.NotConfigured field set.
+     *
+     * @note If the detailed metrics settings are not configured for a table,
+     *       the default metrics settings from the parent database are used instead
+     *       (by default, no detailed metrics settings are configured at the database
+     *       level). Setting the detailed metrics level to TABLE/PARTITION for a table,
+     *       enables detailed metrics for the given table regardless of the detailed
+     *       metrics settings at the database level. Setting the detailed metrics
+     *       level to DISABLED for a table, disables detailed metrics for the given table
+     *       regardless of the detailed metrics settings at the database level.
+     */
+    optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 }
 
 message TCompressionOptions {

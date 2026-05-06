@@ -6,6 +6,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
+{
+    VChunks.push_back(std::move(vChunk));
+}
+
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;

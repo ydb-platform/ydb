@@ -1,9 +1,10 @@
 #pragma once
 
-#include <set>
-#include <map>
 #include <util/generic/fwd.h>
 #include <util/system/types.h>
+
+#include <map>
+#include <set>
 
 namespace NKikimr::NColumnShard {
 struct THistorgamBorders {
@@ -15,4 +16,4 @@ struct THistorgamBorders {
 
     static const std::set<i64> PortionRecordBorders;
 };
-}
+}   // namespace NKikimr::NColumnShard

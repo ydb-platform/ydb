@@ -243,6 +243,23 @@ A **consumer** is an entity that reads messages from a topic.
 
 **Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
 
+### Backup collection {#backup-collection}
+
+A **backup collection** is a [schema object](#scheme-object) that organizes full and incremental [backups](#backup) for selected [row-oriented tables](#row-oriented-table). Collections enable recovery to any saved backup point in the chain by maintaining [backup chains](#backup-chain) and ensuring consistent restoration across multiple tables. A table can only belong to one backup collection at a time.
+
+For more information, see [{#T}](datamodel/backup-collection.md).
+
+#### Backup {#backup}
+
+A **backup** is a copy of data at a specific point in time that can be used to restore the data. In the context of [backup collections](#backup-collection), there are two types:
+
+- **Full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
+- **Incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
+
+#### Backup chain {#backup-chain}
+
+A **backup chain** is an ordered sequence of [backups](#backup) starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain. Deleting any backup in the chain makes subsequent incremental backups unrestorable.
+
 ### Asynchronous replication instance {#async-replication-instance}
 
 **Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
@@ -265,9 +282,13 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 {% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
 
-**Resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article (link)
+### Resource pool {#resource-pool}
 
-**Resource pool classifier** is an object designed to manage the distribution of queries between resource pools(link). It describes the rules by which a pool of resources is selected for each query. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article (link)
+A **resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in that pool. A query is always executed in some resource pool. By default, all queries run in a resource pool named `default`, which does not impose any restrictions. For more on using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+
+### Resource pool classifier {#resource-pool-classifier}
+
+A **resource pool classifier** is an object used to control how queries are distributed across [resource pools](#resource-pool). It defines the rules by which a resource pool is chosen for each query. These classifiers are global to the entire [database](#database) and apply to all queries submitted to it. For more on how they are used, see [{#T}](../dev/resource-consumption-management.md).
 
 {% endif %}
 
@@ -354,11 +375,12 @@ An **access control list** or **ACL** is a list of all [rights](#access-right) g
 
 An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
 
-{{ ydb-short-name }} uses three access levels:
+{{ ydb-short-name }} uses hierarchical access levels:
 
-- viewer
-- operator
-- administrator
+- Database;
+- Viewer;
+- Monitoring;
+- Administration.
 
 An access level is granted by adding an access subject to an [access level list](#access-level-list).
 
@@ -367,6 +389,8 @@ An access level is granted by adding an access subject to an [access level list]
 An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
 
 {{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
+For detailed information about access level lists, their hierarchy, and how they work, see [Access level lists](../security/authorization.md#access-level-lists) in the Authorization documentation.
 
 ### Owner {#access-owner}
 

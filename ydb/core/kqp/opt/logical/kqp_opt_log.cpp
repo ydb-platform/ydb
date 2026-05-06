@@ -63,6 +63,7 @@ public:
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToDqJoin));
         AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
         AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
         AddHandler(0, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
@@ -284,7 +285,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx, *getParents());
+        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -367,6 +368,14 @@ protected:
         auto output = NDq::ExtractMembersOverDqReadWrap(node, ctx, getParents, true, TypesCtx);
         if (output) {
             DumpAppliedRule("ExtractMembersOverDqReadWrap", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushExtractMembersToDqJoin(TExprBase node, TExprContext& ctx) {
+        auto output = NDq::DqPushExtractMembersToDqJoin(node, ctx);
+        if (output) {
+            DumpAppliedRule("PushExtractMembersToDqJoin", node.Ptr(), output.Cast().Ptr(), ctx);
         }
         return output;
     }

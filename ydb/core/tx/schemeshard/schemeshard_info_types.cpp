@@ -676,6 +676,52 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
+    if (op.HasDetailedMetricsSettings()) {
+        switch (op.GetDetailedMetricsSettings().GetStatusCase()) {
+        case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
+            if (op.GetDetailedMetricsSettings().HasConfigured()) {
+                // The new detailed metrics settings are explicitly specified,
+                // use them, but only if the new metrics level is valid
+                switch (op.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()) {
+                case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled:
+                case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable:
+                case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition:
+                    alterData->TableDescriptionFull
+                        ->MutableDetailedMetricsSettings()
+                        ->MutableConfigured()
+                        ->CopyFrom(op.GetDetailedMetricsSettings().GetConfigured());
+
+                    break;
+
+                default:
+                    // NOTE: The code, which parses CREATE TABLE and ALTER TABLE requests,
+                    //       should have already verified this and returned an error,
+                    //       if these conditions were not met. The check here is a precaution.
+                    errStr = "Only DISABLED, TABLE and PARTITION detailed metrics levels are supported";
+                    return nullptr;
+                }
+            }
+
+            break;
+
+        case NKikimrSchemeOp::TTableDetailedMetricsSettings::kNotConfigured:
+            // The request asks for the current detailed metrics settings to be dropped,
+            // keep this as NotConfigured in the table description. It will be processed
+            // and removed in FinishAlter().
+            if (op.GetDetailedMetricsSettings().HasNotConfigured()) {
+                alterData->TableDescriptionFull
+                    ->MutableDetailedMetricsSettings()
+                    ->MutableNotConfigured();
+            }
+
+            break;
+
+        default:
+            // Neither Configured nor NotConfigured is set, just ignore this configuration
+            break;
+        }
+    }
+
     if (op.HasReplicationConfig()) {
         const auto& cfg = op.GetReplicationConfig();
 
@@ -1743,6 +1789,34 @@ void TTableInfo::FinishAlter() {
     // Apply TTL params
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) {
         MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
+    }
+
+    // Apply the new metrics settings (if specified) or drop the existing ones (if requested)
+    if (AlterData->TableDescriptionFull.Defined()
+            && AlterData->TableDescriptionFull->HasDetailedMetricsSettings()) {
+        const auto& newMetricsSettings = AlterData->TableDescriptionFull->GetDetailedMetricsSettings();
+
+        switch (newMetricsSettings.GetStatusCase()) {
+        case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
+            if (newMetricsSettings.HasConfigured()) {
+                TableDescription.MutableDetailedMetricsSettings()
+                    ->MutableConfigured()
+                    ->CopyFrom(newMetricsSettings.GetConfigured());
+            }
+
+            break;
+
+        case NKikimrSchemeOp::TTableDetailedMetricsSettings::kNotConfigured:
+            if (newMetricsSettings.HasNotConfigured()) {
+                TableDescription.ClearDetailedMetricsSettings();
+            }
+
+            break;
+
+        default:
+            // Neither Configured nor NotConfigured is set, just ignore this configuration
+            break;
+        }
     }
 
     // Apply replication config
@@ -2953,6 +3027,46 @@ float TForcedCompactionInfo::CalcProgress() const {
 
 bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
     return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
+}
+
+bool ValidateTableDetailedMetricsSettings(
+    bool forCreate,
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings& metricsSettings,
+    TString& errorString
+) {
+    switch (metricsSettings.GetStatusCase()) {
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
+        // Allow only DISABLED, TABLE and PARTITION levels
+        if (metricsSettings.HasConfigured()) {
+            switch (metricsSettings.GetConfigured().GetMetricsLevel()) {
+            case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled:
+            case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable:
+            case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition:
+                break;
+
+            default:
+                errorString = "Only DISABLED, TABLE and PARTITION detailed metrics levels are supported";
+                return false;
+            }
+        }
+
+        break;
+
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::kNotConfigured:
+        // Do not allow dropping the metrics settings in CREATE TABLE
+        if (forCreate && metricsSettings.HasNotConfigured()) {
+            errorString = "Unable to remove the detailed metrics settings in CREATE TABLE";
+            return false;
+        }
+
+        break;
+
+    default:
+        // Neither Configured nor NotConfigured is set, just ignore this configuration
+        break;
+    }
+
+    return true;
 }
 
 } // namespace NSchemeShard

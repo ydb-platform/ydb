@@ -242,7 +242,7 @@ message TFeatureFlags {
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
     optional bool EnableColumnTablesBackup = 216 [default = true];
     optional bool EnableReplication = 217 [default = true];
-    optional bool EnableShuttingDownNodeState = 218 [default = false];
+    optional bool EnableShuttingDownNodeState = 218 [default = true];
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
@@ -290,4 +290,10 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
     optional bool EnableInterpileTrafficOptimization = 253 [default = false];
     optional bool EnableSnapshotsLocking = 254 [default = true];
+    optional bool EnableTicketParserErrorBasedOnPeernameFormat = 255 [default = false];
+    optional bool UseRealUserIpForBlackbox = 256 [default = false];
+    optional bool EnableNodeShutdownHints = 257 [default = false];
+    optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
+    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    optional bool EnableStreamingQueryDisposition = 260 [default = true];
 }

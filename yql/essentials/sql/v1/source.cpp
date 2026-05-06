@@ -118,14 +118,14 @@ void ISource::SetGroupBySuffix(const TString& suffix) {
     GroupBySuffix_ = suffix;
 }
 
-bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions, EExprSeat exprSeat) {
+bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& columns, EExprSeat exprSeat) {
     YQL_ENSURE(exprSeat < EExprSeat::Max);
     THashSet<TString> names;
     THashSet<TString> aliasSet;
     // TODO: merge FlattenBy with FlattenByExpr
     const bool isFlatten = (exprSeat == EExprSeat::FlattenBy || exprSeat == EExprSeat::FlattenByExpr);
     THashSet<TString>& aliases = isFlatten ? FlattenByAliases_ : aliasSet;
-    for (const auto& expr : expressions) {
+    for (const auto& expr : columns) {
         const auto& alias = expr->GetLabel();
         const auto& columnNamePtr = expr->GetColumnName();
         if (alias) {
@@ -334,21 +334,21 @@ bool ISource::IsFlattenByExprs() const {
     return !Expressions(EExprSeat::FlattenByExpr).empty();
 }
 
-bool ISource::IsAlias(EExprSeat exprSeat, const TString& column) const {
+bool ISource::IsAlias(EExprSeat exprSeat, const TString& label) const {
     for (const auto& exprNode : Expressions(exprSeat)) {
         const auto& labelName = exprNode->GetLabel();
-        if (labelName && labelName == column) {
+        if (labelName && labelName == label) {
             return true;
         }
     }
     return false;
 }
 
-bool ISource::IsExprAlias(const TString& column) const {
+bool ISource::IsExprAlias(const TString& label) const {
     std::array<EExprSeat, 5> exprSeats = {{EExprSeat::FlattenBy, EExprSeat::FlattenByExpr, EExprSeat::GroupBy,
                                            EExprSeat::WindowPartitionBy, EExprSeat::DistinctAggr}};
     for (auto seat : exprSeats) {
-        if (IsAlias(seat, column)) {
+        if (IsAlias(seat, label)) {
             return true;
         }
     }
@@ -440,9 +440,9 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
     return true;
 }
 
-bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& grouingColumn) {
+bool ISource::AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& groupingColumn) {
     Y_UNUSED(columns);
-    Y_UNUSED(grouingColumn);
+    Y_UNUSED(groupingColumn);
     ctx.Error() << "Source not support grouping hint";
     return false;
 }

@@ -1,4 +1,5 @@
 #include "gc_actor.h"
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
@@ -48,7 +49,8 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     for (auto i = GCTask->GetBlobsToRemove().GetDirect().GetIterator(); i.IsValid(); ++i) {
         BlobIdsToRemove.emplace(i.GetBlobId().GetLogoBlobId());
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "starting")(
+        "storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
     for (auto&& i : GCTask->GetDraftBlobIds()) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
@@ -90,4 +92,4 @@ std::optional<TDuration> TGarbageCollectionActor::NextRetryDelay(const Aws::S3::
     return std::nullopt;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

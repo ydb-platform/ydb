@@ -218,6 +218,23 @@ Y_FORCE_INLINE bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWith
 
 ////////////////////////////////////////////////////////////////////////////////
 
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState()
+    : TChunkIdWithIndex()
+    , State(EChunkReplicaState::Generic)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(const TChunkIdWithIndex& chunkIdWithIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(chunkIdWithIndex)
+    , State(state)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(TChunkId id, int replicaIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(id, replicaIndex)
+    , State(state)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 inline bool IsArtifactChunkId(TChunkId id)
 {
     return NObjectClient::TypeFromId(id) == NObjectClient::EObjectType::Artifact;
@@ -374,4 +391,10 @@ inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexes>::operator()(const NY
 {
     return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
         value.ReplicaIndex + value.MediumIndex * 8;
+}
+
+inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexAndState>::operator()(const NYT::NChunkClient::TChunkIdWithIndexAndState& value) const
+{
+    return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
+        value.ReplicaIndex + static_cast<size_t>(value.State) * 16;
 }

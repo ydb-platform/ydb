@@ -581,11 +581,21 @@ public:
 
         auto cgi = ev->Get()->Cgi();
         if (const auto& path = cgi.Get("restoreBackup")) {
-            if (RestoreState == ERestoreState::NotStarted) {
-                bool skipChecksum = cgi.Has("skipChecksumValidation");
-                bool dryRun = cgi.Has("dryRun");
-                StartRestore(path, {}, skipChecksum, dryRun);
-            }
+            if (ev->Get()->GetMethod() == HTTP_METHOD_POST) {
+                if (RestoreState == ERestoreState::NotStarted) {
+                    bool skipChecksum = cgi.Has("skipChecksumValidation");
+                    bool dryRun = cgi.Has("dryRun");
+                    StartRestore(path, {}, skipChecksum, dryRun);
+                }
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                    "HTTP/1.1 405 Method Not Allowed\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Allow: POST\r\n"
+                    "\r\n"
+                    "restoreBackup requires POST"));
+                return true;
+            } 
         }
 
         TStringStream str;
@@ -668,9 +678,8 @@ public:
                             }
 
                             $.ajax({
-                                type: "GET",
-                                url: window.location.href,
-                                data: form.serialize(),
+                                type: "POST",
+                                url: window.location.href + '&' + form.serialize(),
                                 success: function(response) {
                                     $('body').html(response);
                                 },

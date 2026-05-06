@@ -24,13 +24,15 @@ public:
     }
 
     TPortionDataAccessors(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo)
-        : BuildInfo(std::move(buildInfo)) {
+        : BuildInfo(std::move(buildInfo))
+    {
     }
 };
 
 class TPortionsLoadContext {
 private:
     THashMap<ui64, TPortionDataAccessors> Constructors;
+
     TPortionDataAccessors& MutableConstructorVerified(const ui64 portionId) {
         auto it = Constructors.find(portionId);
         AFL_VERIFY(it != Constructors.end());
@@ -50,6 +52,7 @@ public:
         auto& constructor = MutableConstructorVerified(chunk.GetPortionId());
         constructor.MutableIndexes().emplace_back(std::move(chunk));
     }
+
     void Add(TColumnChunkLoadContextV2&& chunk) {
         AFL_VERIFY(Constructors.emplace(chunk.GetPortionId(), chunk.CreateBuildInfo()).second);
     }
@@ -72,7 +75,8 @@ public:
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
-        , VersionedIndex(versionedIndex) {
+        , VersionedIndex(versionedIndex)
+    {
         AFL_VERIFY(!!DsGroupSelector);
         AFL_VERIFY(VersionedIndex);
         AFL_VERIFY(Self);
@@ -84,15 +88,18 @@ private:
     using TBase = ITxReader;
     TGranuleMeta* Self = nullptr;
     bool Started = false;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
+
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
 
 public:
     TGranuleFinishCommonLoading(const TString& name, TGranuleMeta* self)
         : TBase(name)
-        , Self(self) {
+        , Self(self)
+    {
         AFL_VERIFY(Self);
     }
 };
@@ -114,7 +121,8 @@ public:
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
         , VersionedIndex(versionedIndex)
-        , Context(context) {
+        , Context(context)
+    {
         AFL_VERIFY(!!DsGroupSelector);
         AFL_VERIFY(VersionedIndex);
         AFL_VERIFY(Self);
@@ -125,10 +133,12 @@ public:
 class TGranuleStartAccessorsLoading: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
+
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         Context->Clear();
         return true;
     }
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -163,6 +173,7 @@ class TGranuleFinishAccessorsLoading: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }

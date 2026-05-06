@@ -1759,7 +1759,7 @@ public:
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
     ui64 ForcedCompactionTotalInQueues = 0;
 
-    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> DoneShardsToPersist;
+    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> ForcedCompactionsDoneShardsToPersist; // info may be null
     ui32 ForcedCompactionPersistBatchSize = 100;
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
@@ -1796,17 +1796,19 @@ public:
     };
 
     void AddForcedCompaction(const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
-    void AddForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
+    void AddForcedCompactionShard(const TShardIdx& shardId, const TPathId& tablePathId, const TForcedCompactionInfo::TPtr& forcedCompactionInfo);
+    void ForgetForcedCompactionShard(const TShardIdx& shardId, const TForcedCompactionInfo::TPtr& forcedCompactionInfo); // info may be null
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
-    void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
+    void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
 
     void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
 
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
-    void RetryForcedCompactionForShard(const TShardIdx& shardIdx);
+    bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
+    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
     void ProcessForcedCompactionQueues();
     void UpdateForcedCompactionQueueMetrics();
 

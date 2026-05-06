@@ -22,7 +22,8 @@ private:
 
 public:
     TGranulesNormalizer(const TNormalizationController::TInitContext& context)
-        : TBase(context) {
+        : TBase(context)
+    {
     }
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {

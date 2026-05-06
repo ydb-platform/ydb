@@ -59,7 +59,9 @@ public:
                 CreatePqNativeGateway(std::move(pqServices)),
                 1,
                 true,
-                freeSpace
+                freeSpace,
+                {},
+                TDuration::Seconds(1)
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -515,6 +517,36 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             TWatermarkOr<TString>{Message2}
         };
         PQRead(expected);
+    }
+
+    Y_UNIT_TEST_F(TestRescaling, TFixture) {
+        const TString topicName = "TestRescaling";
+        PQCreateStream(topicName);
+        InitSource(topicName);
+
+        const std::vector<TString> data = { "1",};
+        auto messages = std::vector{Message0};
+        PQWrite(messages, topicName);
+        auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+        PQRead(expected);
+
+        Sleep(TDuration::MilliSeconds(100));
+        ChangePartitionCount(topicName, 7);
+
+        TInstant deadline = Now() + TDuration::Seconds(5);
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
+        bool failed = false;
+        while (Now() < deadline) {
+            SourceRead<TString>(UVParser);
+            if (future.HasValue()) {
+                auto message = future.GetValue().ToOneLineString();
+                UNIT_ASSERT_STRING_CONTAINS(message, "Number of partitions in the topic");
+                failed = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(failed, "Failure timeout");
     }
 }
 

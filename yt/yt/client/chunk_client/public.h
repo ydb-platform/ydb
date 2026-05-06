@@ -227,6 +227,13 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     ((HunkJournal)                         (10))
 );
 
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkReplicaState, i8,
+    ((Generic)               (0))
+    ((Active)                (1))
+    ((Unsealed)              (2))
+    ((Sealed)                (3))
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChunkClient

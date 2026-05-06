@@ -1053,10 +1053,14 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     if (scheme) {
         int idx = changefeeds.size() + 1;
         for (const auto& index : scheme->indexes()) {
-            const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
+            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+            if (!indexType) {
+                continue;
+            }
+
             const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
 
-            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                 const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                 TString exportPrefix;
                 if (encrypted) {

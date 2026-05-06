@@ -24,7 +24,7 @@ DEFINE_REFCOUNTED_TYPE(IClientsCache)
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Creates clients cache which explicitly given config. Server name is always overwritten with requested.
-IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthentificationOptionsPtr& options);
+IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& options);
 
 //! Creates clients cache which shares same options.
 IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& defaultClientOptions);

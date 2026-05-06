@@ -212,7 +212,8 @@ public:
     TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , Table(table) {
+        , Table(table)
+    {
     }
 };
 
@@ -233,12 +234,14 @@ public:
     TFetchedResult(
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, columnIds, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+    {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, {}, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+    {
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {

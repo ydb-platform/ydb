@@ -4,12 +4,23 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void THostStat::OnRequest(EOperation operation)
+{
+    ++AccessInflightCount(operation);
+}
+
 void THostStat::OnError(TInstant now, EOperation operation)
 {
-    Y_UNUSED(operation);
-    if (!LastError) {
-        LastError = now;
+    auto& inflight = AccessInflightCount(operation);
+    // Clamp to 0 to be defensive against unbalanced OnRequest/OnError pairs.
+    if (inflight > 0) {
+        --inflight;
     }
+
+    if (!FirstErrorAt) {
+        FirstErrorAt = now;
+    }
+    LastErrorAt = now;
     ++ErrorCount;
 }
 
@@ -19,22 +30,39 @@ void THostStat::OnSuccess(
     EOperation operation)
 {
     Y_UNUSED(executionTime);
-    Y_UNUSED(operation);
 
-    LastSuccess = now;
-    LastError = TInstant();
+    auto& inflight = AccessInflightCount(operation);
+    if (inflight > 0) {
+        --inflight;
+    }
+
+    LastSuccessAt = now;
+    FirstErrorAt = TInstant();
+    LastErrorAt = TInstant();
     ErrorCount = 0;
 }
 
-TDuration THostStat::ErrorsDuration(TInstant now, size_t* errorCount) const
+THostStat::TErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
 {
-    if (errorCount) {
-        *errorCount = ErrorCount;
+    TErrorsInfo result;
+    if (FirstErrorAt) {
+        result.FromFirstError = now - FirstErrorAt;
     }
-    if (LastError) {
-        return now - LastError;
+    if (LastErrorAt) {
+        result.FromLastError = now - LastErrorAt;
     }
-    return TDuration();
+    result.ErrorCount = ErrorCount;
+    return result;
+}
+
+size_t THostStat::InflightCount(EOperation operation) const
+{
+    return InflightByOperation[static_cast<size_t>(operation)];
+}
+
+size_t& THostStat::AccessInflightCount(EOperation operation)
+{
+    return InflightByOperation[static_cast<size_t>(operation)];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,22 +1,22 @@
 #include "overload_manager_service.h"
 
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_actor.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 
 namespace {
 
-std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{0};
-std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{0};
+std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{ 0 };
+std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
 
-} // namespace
+}   // namespace
 
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesInFlight;
 TPositiveControlInteger TOverloadManagerServiceOperator::WritesSizeInFlight;
-std::atomic<EResourcesStatus> TOverloadManagerServiceOperator::ResourcesStatus{EResourcesStatus::Ok};
+std::atomic<EResourcesStatus> TOverloadManagerServiceOperator::ResourcesStatus{ EResourcesStatus::Ok };
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
     if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
@@ -24,8 +24,9 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesInFlyLimit() {
         const uint64_t newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 10000, ui32(100000));
         DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit()) ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit()
-                                                                                                        : DEFAULT_WRITES_IN_FLY_LIMIT.load();
+    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestsCountLimit())
+               ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit()
+               : DEFAULT_WRITES_IN_FLY_LIMIT.load();
 }
 
 ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
@@ -34,9 +35,9 @@ ui64 TOverloadManagerServiceOperator::GetShardWritesSizeInFlyLimit() {
         const uint64_t newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
         DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
-    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestBytesLimit()) ?
-            AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() :
-            DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
+    return (HasAppData() && AppDataVerified().ColumnShardConfig.HasWritingInFlightRequestBytesLimit())
+               ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit()
+               : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
 }
 
 NActors::TActorId TOverloadManagerServiceOperator::MakeServiceId() {
@@ -48,7 +49,8 @@ std::unique_ptr<NActors::IActor> TOverloadManagerServiceOperator::CreateService(
 }
 
 void TOverloadManagerServiceOperator::NotifyIfResourcesAvailable(bool force) {
-    if ((force || ResourcesStatus.load() != EResourcesStatus::Ok) && WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
+    if ((force || ResourcesStatus.load() != EResourcesStatus::Ok) &&
+        WritesInFlight.Val() <= GetShardWritesInFlyLimit() * WritesInFlightSoftLimitCoefficient &&
         WritesSizeInFlight.Val() <= GetShardWritesSizeInFlyLimit() * WritesInFlightSizeSoftLimitCoefficient) {
         ResourcesStatus = EResourcesStatus::Ok;
         auto& context = NActors::TActorContext::AsActorContext();
@@ -79,4 +81,4 @@ void TOverloadManagerServiceOperator::ReleaseResources(ui64 writesCount, ui64 wr
     NotifyIfResourcesAvailable(false);
 }
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

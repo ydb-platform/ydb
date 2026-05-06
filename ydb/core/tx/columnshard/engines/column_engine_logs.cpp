@@ -12,8 +12,8 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -58,9 +58,9 @@ class TPortionsSelector {
 
 public:
     TPortionsSelector(std::shared_ptr<TGranuleMeta> granuleMeta, TInternalPathId pathId, TSnapshot snapshot,
-                      const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
-                      const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit,
-                      ui64 tabletId, ui64 txId, ui64 scanId)
+        const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
+        const std::optional<THashSet<TInsertWriteId>>& ownPortions, const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 tabletId, ui64 txId,
+        ui64 scanId)
         : GranuleMeta(std::move(granuleMeta))
         , PathId(pathId)
         , Snapshot(snapshot)
@@ -73,8 +73,8 @@ public:
         , TabletId(tabletId)
         , TxId(txId)
         , ScanId(scanId)
-        { }
-
+    {
+    }
 
     std::vector<TColumnEngineForLogs::TSelectedPortionInfo> Select() {
         Result.clear();
@@ -95,8 +95,8 @@ public:
 
         if (CalculateProbe) {
             AFL_VERIFY(Orbit);
-            LWTRACK(ColumnEngineForLogsSelect, *Orbit, PathId.GetRawValue(), TabletId, TxId, ScanId, timeOfInserted.MilliSeconds(), timeOfCommitted.MilliSeconds(),
-                    TotalPortionsCount, TotalFilteredPortionsCount, Result.size());
+            LWTRACK(ColumnEngineForLogsSelect, *Orbit, PathId.GetRawValue(), TabletId, TxId, ScanId, timeOfInserted.MilliSeconds(),
+                timeOfCommitted.MilliSeconds(), TotalPortionsCount, TotalFilteredPortionsCount, Result.size());
         }
 
         return std::move(Result);
@@ -120,7 +120,8 @@ private:
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
 
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)("portion", portion->DebugString());
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)(
+                "portion", portion->DebugString());
             if (takePortion) {
                 Result.emplace_back(portion, nonconflicting);
             } else {
@@ -150,7 +151,8 @@ private:
 
             bool takePortion = PkRangesFilter.IsUsed(*portion);
 
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)("portion", portion->DebugString());
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", PathId)(
+                "portion", portion->DebugString());
             if (takePortion) {
                 Result.emplace_back(portion, nonconflicting);
             } else {
@@ -166,7 +168,7 @@ private:
         std::unordered_map<ui64, TColumnEngineForLogs::TSelectedPortionInfo> selectedPortionsMap;
 
         const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
-                                const std::shared_ptr<TPortionInfo>& portion) -> bool {
+                                   const std::shared_ptr<TPortionInfo>& portion) -> bool {
             if (portion->IsRemovedFor(Snapshot)) {
                 return true;
             }
@@ -197,10 +199,14 @@ private:
             const auto& from = filter.GetPredicateFrom();
             const auto& to = filter.GetPredicateTo();
 
-            const auto& leftBorder = from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
-                                                  : TBorder::MakeLeft(TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0)), from.IsInclude());
-            const auto& rightBorder = to.IsAll() ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
-                                                 : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0)), to.IsInclude());
+            const auto& leftBorder =
+                from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
+                             : TBorder::MakeLeft(
+                                   TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0)), from.IsInclude());
+            const auto& rightBorder =
+                to.IsAll()
+                    ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
+                    : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0)), to.IsInclude());
 
             intervals.EachIntersection(leftBorder, rightBorder, collector);
         }
@@ -213,10 +219,9 @@ private:
             Result.emplace_back(std::move(pi));
         }
     }
-
 };
 
-}
+}   // namespace
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
@@ -230,7 +235,8 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , TabletId(tabletId)
     , Counters(counters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
@@ -248,7 +254,8 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , TabletId(tabletId)
     , Counters(counters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
@@ -387,9 +394,7 @@ bool TColumnEngineForLogs::FinishLoading() {
 }
 
 ui64 TColumnEngineForLogs::GetCompactionPriority(
-    const std::set<TInternalPathId>& pathIds,
-    const std::optional<ui64> waitingPriority
-) const noexcept {
+    const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept {
     auto granules = GranulesStorage->GetGranulesForCompaction(pathIds, waitingPriority);
     if (granules.empty()) {
         return 0;
@@ -398,22 +403,25 @@ ui64 TColumnEngineForLogs::GetCompactionPriority(
     }
 }
 
-std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
 
     std::shared_ptr<TGranuleMeta> granuleToCompact = nullptr;
     std::vector<std::shared_ptr<TColumnEngineChanges>> changes;
-    for (auto& orderedG: granulesSortedDesc) {
+    for (auto& orderedG : granulesSortedDesc) {
         auto granule = orderedG.GetGranule();
         TMonotonic startTime = TMonotonic::Now();
         changes = granule->GetOptimizationTasks(granule, dataLocksManager);
         NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
         if (changes.empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
+                "weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
         } else {
             granuleToCompact = granule;
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found granule for compaction")("weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found granule for compaction")("weight", orderedG.GetPriority().DebugString())(
+                "path_id", granule->GetPathId());
             break;
         }
     }
@@ -466,7 +474,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         auto& [removePlanStep, portions] = *it;
         if (minPlanStepForNewReads < removePlanStep) {
             // no point to proceed, we do not delete portions that are younger than minReadSnapshot
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("min_snapshot_for_new_reads", snapshotHolders.GetMinSnapshotForNewReads().DebugString())("remove_planstep", removePlanStep.MilliSeconds());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("min_snapshot_for_new_reads",
+                snapshotHolders.GetMinSnapshotForNewReads().DebugString())("remove_planstep", removePlanStep.MilliSeconds());
             break;
         }
         for (ui32 i = 0; i < portions.size();) {
@@ -543,10 +552,11 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     using namespace NKikimr::NColumnShard;
     if (LWPROBE_ENABLED(StartCleanup)) {
         ui64 totalPortions = 0;
-        for (const auto& [_, portions]: CleanupPortions) {
+        for (const auto& [_, portions] : CleanupPortions) {
             totalPortions += portions.size();
         }
-        LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop, skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
+        LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop,
+            skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
     }
 
     if (changes->GetPortionsToAccess().empty()) {
@@ -671,7 +681,9 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         return {};
     }
 
-    return TPortionsSelector(granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions, orbit, TabletId, txId, scanId).Select();
+    return TPortionsSelector(
+        granuleMeta, pathId, snapshot, pkRangesFilter, withNonconflicting, withConflicting, ownPortions, orbit, TabletId, txId, scanId)
+        .Select();
 }
 
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {
@@ -690,6 +702,7 @@ bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TT
     ActualizationStarted = true;
     return true;
 }
+
 void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     StartActualization({});

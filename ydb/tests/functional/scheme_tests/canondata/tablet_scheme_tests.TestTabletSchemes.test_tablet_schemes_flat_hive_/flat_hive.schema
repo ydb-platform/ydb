@@ -1,86 +1,5 @@
 [
     {
-        "TableId": 17,
-        "TableName": "SubDomain",
-        "TableKey": [
-            1,
-            2
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "SchemeshardId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "PathId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "Path",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "Primary",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 5,
-                "ColumnName": "HiveId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 6,
-                "ColumnName": "ServerlessComputeResourcesMode",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "ScaleRecommenderPolicies",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 8,
-                "ColumnName": "Stopped",
-                "ColumnType": "Bool"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3,
-                    4,
-                    5,
-                    6,
-                    7,
-                    8
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
         "TableId": 0,
         "TableName": "State",
         "TableKey": [
@@ -116,44 +35,6 @@
                     1,
                     2,
                     3
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
-        "TableId": 18,
-        "TableName": "BlockedOwner",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "OwnerId",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -363,57 +244,6 @@
         }
     },
     {
-        "TableId": 19,
-        "TableName": "TabletOwners",
-        "TableKey": [
-            1,
-            2
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "Begin",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "End",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "OwnerId",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
         "TableId": 2,
         "TableName": "TabletChannel",
         "TableKey": [
@@ -456,57 +286,6 @@
                     8,
                     1,
                     5
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
-        "TableId": 20,
-        "TableName": "TabletAvailabilityRestrictions",
-        "TableKey": [
-            1,
-            2
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "Node",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "TabletType",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "MaxCount",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -583,62 +362,6 @@
                     4,
                     5,
                     6
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
-        "TableId": 21,
-        "TableName": "OperationsLog",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "Index",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "User",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "Operation",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "OperationTimestamp",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3,
-                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -749,68 +472,6 @@
                     11,
                     12,
                     13
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1,
-                "ExternalBlobs": [
-                    1
-                ]
-            }
-        }
-    },
-    {
-        "TableId": 22,
-        "TableName": "BridgePile",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "Id",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "State",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "IsPrimary",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "IsPromoted",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 5,
-                "ColumnName": "Drain",
-                "ColumnType": "Bool"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2,
-                    3,
-                    4,
-                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1217,6 +878,395 @@
                     3,
                     102,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 17,
+        "TableName": "SubDomain",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "SchemeshardId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Path",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Primary",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "HiveId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ScaleRecommenderPolicies",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Stopped",
+                "ColumnType": "Bool"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 18,
+        "TableName": "BlockedOwner",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 19,
+        "TableName": "TabletOwners",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Begin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "End",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "OwnerId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 20,
+        "TableName": "TabletAvailabilityRestrictions",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Node",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "TabletType",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "MaxCount",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 21,
+        "TableName": "OperationsLog",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Index",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "User",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Operation",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "OperationTimestamp",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 22,
+        "TableName": "BridgePile",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "IsPrimary",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "IsPromoted",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Drain",
+                "ColumnType": "Bool"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 23,
+        "TableName": "Group",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "StoragePool",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

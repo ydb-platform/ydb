@@ -24,7 +24,6 @@ public:
         , Records(std::move(records))
         , Indexes(std::move(indexes))
     {
-
     }
 };
 
@@ -34,8 +33,10 @@ private:
 
 public:
     TChanges(std::vector<TPatchItem>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -75,7 +76,6 @@ public:
     virtual ui64 GetSize() const override {
         return Patches.size();
     }
-
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
@@ -98,7 +98,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     THashMap<ui64, TPortionLoadContext> dbPortions;
     THashMap<ui64, std::vector<TColumnChunkLoadContext>> recordsByPortion;
     THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesByPortion;
-    
+
     {
         auto rowset = db.Table<Schema::IndexPortions>().Select();
         if (!rowset.IsReady()) {
@@ -185,4 +185,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NSyncChunksWithPortions1

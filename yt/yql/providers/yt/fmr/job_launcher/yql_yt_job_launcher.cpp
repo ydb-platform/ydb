@@ -61,9 +61,7 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     }
 
     YQL_ENSURE(!FmrJobBinaryPath_.empty(), "Job should be executed in separate process");
-    YQL_ENSURE(!TableDataServiceDiscoveryFilePath_.empty());
     YQL_ENSURE(GatewayType_ == "native" || GatewayType_ == "file");
-    // serialize to temporary file
 
     YQL_ENSURE(jobEnvironmentDir.Defined());
     auto jobtmpDir = TFsPath(*jobEnvironmentDir);
@@ -73,9 +71,13 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateNew | RdWr);
     TFile mapResultStatsFile(jobtmpDir.Child("stats.bin"), CreateNew | RdWr);
 
-    TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
-    NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, jobtmpDir.Child(tmpDirTableDataServiceDiscoveryPath));
-    job.SetTableDataService(tmpDirTableDataServiceDiscoveryPath);
+    if (!TableDataServiceDiscoveryFilePath_.empty()) {
+        TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
+        NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, jobtmpDir.Child(tmpDirTableDataServiceDiscoveryPath));
+        job.SetTableDataService(tmpDirTableDataServiceDiscoveryPath);
+    }
+    // If TableDataServiceDiscoveryFilePath_ is empty, the job is expected to carry
+    // its own discovery info (e.g. TVanillaInfo set via FillMapFmrJob).
 
     job.SetYtJobServiceType(GatewayType_);
 

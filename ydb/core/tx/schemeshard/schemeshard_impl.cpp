@@ -1983,9 +1983,15 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
-    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
-    );
+    if (IsLocalId(pathId)) {
+        db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    } else {
+        db.Table<Schema::MigratedTableIndex>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(indexInfo->AlterVersion)
+        );
+    }
 }
 
 void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) {
@@ -3003,6 +3009,12 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings);
     }
 
+    TString detailedMetricsSettings;
+    if (tableInfo->HasDetailedMetricsSettings()) {
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->GetDetailedMetricsSettings()
+            .SerializeToString(&detailedMetricsSettings);
+    }
+
     TString replicationConfig;
     if (tableInfo->HasReplicationConfig()) {
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->ReplicationConfig().SerializeToString(&replicationConfig);
@@ -3026,7 +3038,9 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig),
+            NIceDb::TUpdate<Schema::Tables::DetailedMetricsSettings>(detailedMetricsSettings)
+        );
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -3040,7 +3054,9 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig),
+            NIceDb::TUpdate<Schema::MigratedTables::DetailedMetricsSettings>(detailedMetricsSettings)
+        );
     }
 
     for (auto col : tableInfo->Columns) {

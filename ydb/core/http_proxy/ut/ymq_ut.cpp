@@ -1875,6 +1875,94 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributes, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "DLQ.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto attributes = NJson::TJsonMap{
+            {"DelaySeconds", "2"},
+            {"MaximumMessageSize", "12345"},
+            {"MessageRetentionPeriod", "678"},
+            {"ReceiveMessageWaitTimeSeconds", "9"},
+            {"VisibilityTimeout", "1234"},
+
+            {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\",\"maxReceiveCount\":3}"},
+
+            // 2024-10-07: RedriveAllowPolicy not supported yet.
+            // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+            // High throughput for FIFO queues not supported yet.
+            // {"DeduplicationScope", "messageGroup"},
+            // {"FifoThroughputLimit", "perMessageGroupId"}
+        };
+
+        SetQueueAttributes({{"QueueUrl", queueUrl}, {"Attributes", attributes}});
+
+        WaitQueueAttributes(queueUrl, 10, [&attributes](NJson::TJsonMap json) {
+            for (auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k].GetStringSafe() != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        {
+            auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerName(), "sqs_consumer");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetKeepMessagesOrder(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDefaultProcessingTimeout(), TDuration::Seconds(1234));
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetEnabled(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/DLQ.fifo");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+        }
+
+        driver.Stop(true);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "-1"}}}
+        }, 400);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "901"}}}
+        }, 400);
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["DelaySeconds"] == "2";
+        });
+
+        json = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
+        }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributes_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({
             {"QueueName", "DLQ.fifo"},
             {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}

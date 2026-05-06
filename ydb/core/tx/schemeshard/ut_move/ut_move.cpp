@@ -1641,4 +1641,69 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
         UNIT_ASSERT_VALUES_EQUAL(value, 2);
     }
+
+    /* Test that multiple bloom filter prefixes are preserved during CopyTable and MoveTable operations */
+    Y_UNIT_TEST(CopyMovePreservesMultipleBloomPrefixes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Create source table with multiple bloom filter prefixes
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key1"       Type: "Utf8"}
+            Columns { Name: "key2"       Type: "Uint32"}
+            Columns { Name: "key3"       Type: "Utf8"}
+            Columns { Name: "Value"      Type: "Utf8"}
+            KeyColumnNames: ["key1", "key2", "key3"]
+            PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 }
+                ByKeyFilterPrefixes { PrefixLength: 3 FalsePositiveProbability: 0.001 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify source table has multiple bloom filter prefixes
+        {
+            auto srcTable = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable();
+            const auto& srcConfig = srcTable.GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(srcConfig.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+        }
+
+        // Perform CopyTable operation
+        TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify copied table has all bloom filter prefixes
+        {
+            auto dstTable = DescribePath(runtime, "/MyRoot/TableCopy", true).GetPathDescription().GetTable();
+            const auto& dstConfig = dstTable.GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(dstConfig.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+        }
+
+        // Perform MoveTable operation on the copied table
+        TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify original copied table no longer exists
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+                           {NLs::PathNotExist});
+
+        // Verify moved table has all bloom filter prefixes
+        {
+            auto movedTable = DescribePath(runtime, "/MyRoot/TableMove", true).GetPathDescription().GetTable();
+            const auto& config = movedTable.GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(config.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+        }
+    }
+
 }

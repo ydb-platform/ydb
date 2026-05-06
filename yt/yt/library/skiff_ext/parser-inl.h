@@ -6,11 +6,11 @@
 
 #include <yt/yt/core/concurrency/coroutine.h>
 
+#include <library/cpp/yt/error/error.h>
+
 #include <library/cpp/skiff/skiff.h>
 
 namespace NYT::NSkiffExt {
-
-using namespace NSkiff;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,7 +20,7 @@ class TSkiffMultiTableParser<TConsumer>::TImpl
 public:
     TImpl(
         TConsumer* consumer,
-        TSkiffSchemaList skiffSchemaList,
+        NSkiff::TSkiffSchemaList skiffSchemaList,
         const std::vector<TSkiffTableColumnIds>& tablesColumnIds,
         const std::string& rangeIndexColumnName,
         const std::string& rowIndexColumnName)
@@ -60,7 +60,7 @@ public:
         }
     }
 
-    Y_FORCE_INLINE void ParseField(ui16 columnId, const TString& name, EWireType wireType, bool required = false)
+    Y_FORCE_INLINE void ParseField(ui16 columnId, const TString& name, NSkiff::EWireType wireType, bool required = false)
     {
         if (!required) {
             ui8 tag = Parser_->ParseVariant8Tag();
@@ -75,22 +75,22 @@ public:
             }
         }
         switch (wireType) {
-            case EWireType::Yson32:
+            case NSkiff::EWireType::Yson32:
                 Consumer_->OnYsonString(Parser_->ParseYson32(), columnId);
                 break;
-            case EWireType::Int64:
+            case NSkiff::EWireType::Int64:
                 Consumer_->OnInt64Scalar(Parser_->ParseInt64(), columnId);
                 break;
-            case EWireType::Uint64:
+            case NSkiff::EWireType::Uint64:
                 Consumer_->OnUint64Scalar(Parser_->ParseUint64(), columnId);
                 break;
-            case EWireType::Double:
+            case NSkiff::EWireType::Double:
                 Consumer_->OnDoubleScalar(Parser_->ParseDouble(), columnId);
                 break;
-            case EWireType::Boolean:
+            case NSkiff::EWireType::Boolean:
                 Consumer_->OnBooleanScalar(Parser_->ParseBoolean(), columnId);
                 break;
-            case EWireType::String32:
+            case NSkiff::EWireType::String32:
                 Consumer_->OnStringScalar(Parser_->ParseString32(), columnId);
                 break;
             default:
@@ -101,7 +101,7 @@ public:
 
     void DoParse(IZeroCopyInput* stream)
     {
-        Parser_ = std::make_unique<TCheckedInDebugSkiffParser>(CreateVariant16Schema(SkiffSchemaList_), stream);
+        Parser_ = std::make_unique<NSkiff::TCheckedInDebugSkiffParser>(CreateVariant16Schema(SkiffSchemaList_), stream);
 
         while (Parser_->HasMoreData()) {
             auto tag = Parser_->ParseVariant16Tag();
@@ -118,7 +118,7 @@ public:
 
             if (!TableDescriptions_[tag].SparseFields.empty()) {
                 for (auto sparseFieldIdx = Parser_->ParseVariant16Tag();
-                    sparseFieldIdx != EndOfSequenceTag<ui16>();
+                    sparseFieldIdx != NSkiff::EndOfSequenceTag<ui16>();
                     sparseFieldIdx = Parser_->ParseVariant16Tag())
                 {
                     if (sparseFieldIdx >= TableDescriptions_[tag].SparseFields.size()) {
@@ -150,11 +150,11 @@ private:
     struct TField
     {
         TString Name;
-        EWireType WireType;
+        NSkiff::EWireType WireType;
         ui16 ColumnId = 0;
         bool Required = false;
 
-        TField(TString name, EWireType wireType, ui16 columnId, bool required)
+        TField(TString name, NSkiff::EWireType wireType, ui16 columnId, bool required)
             : Name(std::move(name))
             , WireType(wireType)
             , ColumnId(columnId)
@@ -170,9 +170,9 @@ private:
     };
 
     TConsumer* const Consumer_;
-    TSkiffSchemaList SkiffSchemaList_;
+    NSkiff::TSkiffSchemaList SkiffSchemaList_;
 
-    std::unique_ptr<TCheckedInDebugSkiffParser> Parser_;
+    std::unique_ptr<NSkiff::TCheckedInDebugSkiffParser> Parser_;
     std::vector<TTableDescription> TableDescriptions_;
 };
 
@@ -181,7 +181,7 @@ private:
 template <class TConsumer>
 TSkiffMultiTableParser<TConsumer>::TSkiffMultiTableParser(
     TConsumer* consumer,
-    TSkiffSchemaList schemaList,
+    NSkiff::TSkiffSchemaList schemaList,
     const std::vector<TSkiffTableColumnIds>& tablesColumnIds,
     const std::string& rangeIndexColumnName,
     const std::string& rowIndexColumnName)

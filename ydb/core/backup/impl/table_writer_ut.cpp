@@ -2,7 +2,7 @@
 #include "table_writer.h"
 
 #include <ydb/core/protos/datashard_backup.pb.h>
-#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/aclib/user_context.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NBackup::NImpl {
@@ -58,10 +58,10 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             TSerializedCellVec resultCells;
             UNIT_ASSERT(TSerializedCellVec::TryParse(result.GetUpsert().GetData(), resultCells));
             UNIT_ASSERT(resultCells.GetCells().size() == 2);
-            
+
             // Verify the first cell is the value
             UNIT_ASSERT_VALUES_EQUAL(resultCells.GetCells()[0].AsValue<ui64>(), 4567);
-            
+
             NKikimrBackup::TChangeMetadata actualChangeMetadata;
             TString actualSerializedMetadata(resultCells.GetCells()[1].Data(), resultCells.GetCells()[1].Size());
             UNIT_ASSERT(actualChangeMetadata.ParseFromString(actualSerializedMetadata));
@@ -103,10 +103,10 @@ Y_UNIT_TEST_SUITE(TableWriter) {
             TSerializedCellVec resultCells;
             UNIT_ASSERT(TSerializedCellVec::TryParse(result.GetUpsert().GetData(), resultCells));
             UNIT_ASSERT(resultCells.GetCells().size() == 2);
-            
+
             // For erase records, the first cell should be null/empty
             UNIT_ASSERT(resultCells.GetCells()[0].IsNull());
-            
+
             NKikimrBackup::TChangeMetadata actualChangeMetadata;
             TString actualSerializedMetadata(resultCells.GetCells()[1].Data(), resultCells.GetCells()[1].Size());
             UNIT_ASSERT(actualChangeMetadata.ParseFromString(actualSerializedMetadata));

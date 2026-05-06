@@ -140,6 +140,7 @@ struct Schema : NIceDb::Schema {
         struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
         struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
+        struct DetailedMetricsSettings : Column<15, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -156,7 +157,8 @@ struct Schema : NIceDb::Schema {
             ReplicationConfig,
             IsTemporary,
             OwnerActorId,
-            IncrementalBackupConfig
+            IncrementalBackupConfig,
+            DetailedMetricsSettings
         >;
     };
 
@@ -176,7 +178,8 @@ struct Schema : NIceDb::Schema {
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
         struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
-        struct IncrementalBackupConfig :   Column<14, NScheme::NTypeIds::String> {};
+        struct IncrementalBackupConfig : Column<14, NScheme::NTypeIds::String> {};
+        struct DetailedMetricsSettings : Column<16, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -194,7 +197,8 @@ struct Schema : NIceDb::Schema {
             ReplicationConfig,
             IsTemporary,
             OwnerActorId,
-            IncrementalBackupConfig
+            IncrementalBackupConfig,
+            DetailedMetricsSettings
         >;
     };
 
@@ -2315,6 +2319,7 @@ struct Schema : NIceDb::Schema {
         struct DoneShardCount : Column<11, NScheme::NTypeIds::Uint32> {};
         struct SubdomainOwnerId : Column<12, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct SubdomainLocalId : Column<13, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct SerializedData : Column<14, NScheme::NTypeIds::String> {}; // TForcedCompactionData
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -2330,7 +2335,8 @@ struct Schema : NIceDb::Schema {
             TotalShardCount,
             DoneShardCount,
             SubdomainOwnerId,
-            SubdomainLocalId
+            SubdomainLocalId,
+            SerializedData
         >;
     };
 

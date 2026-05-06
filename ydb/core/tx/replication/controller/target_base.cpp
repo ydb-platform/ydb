@@ -181,11 +181,11 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), TLagProvider::GetLag().GetRef());
+        Replication->UpdateLag(GetId(), TLagProvider::GetLag().value());
     }
 }
 
-const TMaybe<TDuration> TTargetBase::GetLag() const {
+const std::optional<TDuration> TTargetBase::GetLag() const {
     return TLagProvider::GetLag();
 }
 

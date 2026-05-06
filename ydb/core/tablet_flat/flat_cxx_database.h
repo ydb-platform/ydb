@@ -345,7 +345,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TInstant> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TInstant& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TInstant& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -353,7 +353,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TInstant, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TInstant() const { return TInstant::FromValue(static_cast<ui64>(Value)); }
+    operator TInstant() const { return TInstant::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -363,7 +363,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TDuration> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TDuration& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TDuration& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -371,7 +371,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TDuration() const { return TDuration::FromValue(static_cast<ui64>(Value)); }
+    operator TDuration() const { return TDuration::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

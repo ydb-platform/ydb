@@ -1,7 +1,8 @@
 #include "context.h"
+
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -16,7 +17,6 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
     , ActualInstant(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , DataLocksManager(dataLocksManager)
 {
-
 }
 
 TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
@@ -29,7 +29,8 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
     }
 
     const auto buildNewTask = [&]() {
-        return TTaskConstructor(TTTLColumnEngineChanges::BuildMemoryPredictor(), std::make_shared<TTTLColumnEngineChanges>(features.GetRWAddress(), SaverContext));
+        return TTaskConstructor(
+            TTTLColumnEngineChanges::BuildMemoryPredictor(), std::make_shared<TTTLColumnEngineChanges>(features.GetRWAddress(), SaverContext));
     };
     auto it = Tasks.find(features.GetRWAddress());
     if (it == Tasks.end()) {
@@ -60,7 +61,8 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         AFL_VERIFY(dWait);
         Counters.OnPortionToDrop(info->GetTotalBlobBytes(), *dWait);
         it->second.back().GetTask()->AddPortionToRemove(info);
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())(
+            "f", it->first.DebugString());
     } else {
         if (!dWait) {
             AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
@@ -68,9 +70,10 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())(
+            "f", it->first.DebugString());
     }
     return EAddPortionResult::SUCCESS;
 }
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

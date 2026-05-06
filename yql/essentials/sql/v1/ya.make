@@ -9,7 +9,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/sql/settings
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
@@ -34,6 +34,7 @@ SRCS(
     secret_settings.cpp
     select_yql.cpp
     select_yql_aggregation.cpp
+    select_yql_window.cpp
     select.cpp
     source.cpp
     sql.cpp
@@ -43,6 +44,7 @@ SRCS(
     sql_match_recognize.cpp
     sql_into_tables.cpp
     sql_query.cpp
+    sql_select_window.cpp
     sql_select_yql.cpp
     sql_select.cpp
     sql_translation.cpp

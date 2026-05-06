@@ -31,15 +31,6 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-// Convert replxx color to FTXUI color
-ftxui::Color ToFtxuiColor(replxx::Replxx::Color rColor) {
-    const int colorIndex = static_cast<int>(rColor);
-    if (rColor == replxx::Replxx::Color::DEFAULT || colorIndex < 0) {
-        return ftxui::Color::Default;
-    }
-    return ftxui::Color::Palette256(static_cast<uint8_t>(colorIndex));
-}
-
 // Get the comment color from a schema as FTXUI color
 ftxui::Color GetCommentColor(const TColorSchema& schema) {
     return ToFtxuiColor(schema.comment.fg);
@@ -70,28 +61,6 @@ ftxui::Element CreateThemePreview(const TColorSchema& schema) {
     return PrintYqlHighlightFtxuiColors(query, colors);
 }
 
-void FlushStdinLocal() {
-#if defined(_unix_)
-    struct termios t;
-    if (tcgetattr(STDIN_FILENO, &t) == 0) {
-        struct termios raw = t;
-        raw.c_lflag &= ~ECHO;
-        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        tcflush(STDIN_FILENO, TCIFLUSH);
-
-        tcsetattr(STDIN_FILENO, TCSANOW, &t);
-    } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        tcflush(STDIN_FILENO, TCIFLUSH);
-    }
-#elif defined(_win_)
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
-#endif
-}
-
 // Common theme selector with preview
 // Returns selected theme index, or nullopt if cancelled
 // currentThemeId - if not empty, marks that theme with "(Current)"
@@ -109,7 +78,7 @@ std::optional<size_t> RunThemeSelector(
     std::optional<size_t> result;
 
     try {
-        auto screen = ftxui::ScreenInteractive::FitComponent();
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
         screen.TrackMouse(false);
         auto exit = screen.ExitLoopClosure();
 
@@ -237,24 +206,23 @@ std::optional<size_t> RunThemeSelector(
                 innerContent,
                 ftxui::separator() | ftxui::color(borderColor),
                 ftxui::text("Use arrows ↑ and ↓ to choose, Enter to confirm, Esc to cancel"),
-            }) | ftxui::borderStyled(borderColor) | ftxui::center;
+            }) | ftxui::borderStyled(borderColor);
         });
 
+        Cout << Endl;
         screen.Loop(renderer);
     } catch (const std::exception& e) {
         Cerr << "FTXUI theme selector failed: " << e.what() << Endl;
         return std::nullopt;
     }
 
-    FlushStdinLocal();
+    FlushStdin();
     return result;
 }
 
 } // anonymous namespace
 
 bool TConfigUI::Run(const TContext& ctx) {
-    Cout << Endl;
-
     // Set border color based on current theme (respects colors mode via GetCurrentColorSchema)
     auto updateBorderColor = []() {
         auto schema = TInteractiveSettings::GetCurrentColorSchema();
@@ -269,8 +237,10 @@ bool TConfigUI::Run(const TContext& ctx) {
         bool hintsEnabled = TInteractiveSettings::IsHintsEnabled();
         options.emplace_back(
             TStringBuilder() << "Enable/Disable hints\t" << (hintsEnabled ? "ON" : "OFF"),
-            [&ctx]() {
-                RunEnableHints(ctx);
+            [&ctx, &exit]() {
+                if (!RunEnableHints(ctx)) {
+                    exit = true;
+                }
             }
         );
 
@@ -278,8 +248,11 @@ bool TConfigUI::Run(const TContext& ctx) {
         EGlobalColorsMode colorsMode = TInteractiveSettings::GetColorsMode();
         options.emplace_back(
             TStringBuilder() << "Enable/Disable colors\t" << ColorsModeToString(colorsMode),
-            [&ctx, &updateBorderColor]() {
-                RunColorsMode(ctx);
+            [&ctx, &updateBorderColor, &exit]() {
+                if (!RunColorsMode(ctx)) {
+                    exit = true;
+                    return;
+                }
                 updateBorderColor();  // Update border color after colors mode change
             }
         );
@@ -288,8 +261,11 @@ bool TConfigUI::Run(const TContext& ctx) {
         TString currentTheme = TInteractiveSettings::GetCurrentThemeName();
         options.emplace_back(
             TStringBuilder() << "Choose color theme\t" << currentTheme,
-            [&ctx, &updateBorderColor]() {
-                RunChooseTheme(ctx);
+            [&ctx, &updateBorderColor, &exit]() {
+                if (!RunChooseTheme(ctx)) {
+                    exit = true;
+                    return;
+                }
                 updateBorderColor();  // Update border color after theme change
             }
         );
@@ -297,14 +273,15 @@ bool TConfigUI::Run(const TContext& ctx) {
         // Clone color theme
         options.emplace_back(
             "Clone color theme...",
-            [&ctx]() {
-                RunCloneTheme(ctx);
+            [&ctx, &exit]() {
+                if (!RunCloneTheme(ctx)) {
+                    exit = true;
+                }
             }
         );
 
         if (!RunFtxuiMenuWithActions("Interactive Mode Settings:", options)) {
             exit = true;
-            Cout << Endl;
         }
     }
 
@@ -504,7 +481,6 @@ bool TConfigUI::RunCloneTheme(const TContext& ctx) {
             Cout << Endl << "Switched to theme: " << themeName << Endl;
         }
 
-        Cout << Endl;
         return true;
     } else {
         Cerr << "Failed to clone theme." << Endl;

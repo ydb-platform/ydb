@@ -11,9 +11,12 @@ FORK_SUBTESTS()
 
 SRCS(
     metrics_ut.cpp
+    spans_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/logger
+    library/cpp/testing/gtest
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/impl/stats
     ydb/public/sdk/cpp/src/client/metrics

@@ -319,7 +319,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -337,7 +337,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::DetailedMetricsSettings>()
         );
     }
 
@@ -1911,6 +1912,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
                 }
 
+                if (const auto detailedMetricsSettings = std::get<14>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(
+                        tableInfo->MutableDetailedMetricsSettings(),
+                        detailedMetricsSettings
+                    );
+
+                    Y_ABORT_UNLESS(parseOk);
+                }
+
                 if (const auto replicationConfig = std::get<9>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_ABORT_UNLESS(parseOk);
@@ -2959,6 +2969,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << indexes.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            // See KIKIMR-25153
+            TVector<std::pair<TPathId, ui64>> migratedAlteredIndexes;
             for (auto& rec: indexes) {
                 TPathId pathId = std::get<0>(rec);
                 ui64 alterVersion = std::get<1>(rec);
@@ -2966,16 +2978,36 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TTableIndexInfo::EState state = std::get<3>(rec);
                 auto description = std::get<4>(rec);
 
-                Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
-                TPathElement::TPtr path = Self->PathsById.at(pathId);
-                Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index"
-                               << ", pathId: " << pathId
-                               << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
+                if (Self->PathsById.contains(pathId)) {
+                    TPathElement::TPtr path = Self->PathsById.at(pathId);
+                    Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index"
+                                   << ", pathId: " << pathId
+                                   << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
-                Y_ABORT_UNLESS(!Self->Indexes.contains(pathId));
-                Self->Indexes[pathId] = new TTableIndexInfo(alterVersion, indexType, state, description);
-                Self->IncrementPathDbRefCount(pathId);
+                    Y_ABORT_UNLESS(!Self->Indexes.contains(pathId));
+                    Self->Indexes[pathId] = new TTableIndexInfo(alterVersion, indexType, state, description);
+                    Self->IncrementPathDbRefCount(pathId);
+                } else {
+                    migratedAlteredIndexes.emplace_back(pathId, alterVersion);
+                }
             }
+
+            // KIKIMR-25153: fixup after altering migrated indexes.
+            // Move index version from Schema::TableIndex to Schema::MigratedTableIndex.
+            for (const auto& [pathId, alterVersion] : migratedAlteredIndexes) {
+                // proper path-id for migrated index has owner-id equal to root schemeshard tablet-id
+                TPathId migratedIndexPathId = TPathId(Self->ParentDomainId.OwnerId, pathId.LocalPathId);
+                if (Self->Indexes.contains(migratedIndexPathId)) {
+                    // update record in Schema::MigratedTableIndex and in memory
+                    db.Table<Schema::MigratedTableIndex>().Key(migratedIndexPathId.OwnerId, migratedIndexPathId.LocalPathId).Update(
+                        NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(alterVersion)
+                    );
+                    Self->Indexes[migratedIndexPathId]->AlterVersion = alterVersion;
+                    // remove record from Schema::TableIndex
+                    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Delete();
+                }
+            }
+            migratedAlteredIndexes.clear();
 
             // Read IndexesAlterData
             {
@@ -5710,7 +5742,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info->TotalShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::TotalShardCount>();
                 info->DoneShardCount = compactionsRowset.GetValueOrDefault<Schema::ForcedCompactions::DoneShardCount>();
 
-                Self->AddForcedCompaction(info);
+                if (compactionsRowset.HaveValue<Schema::ForcedCompactions::SerializedData>()) {
+                    NKikimrForcedCompaction::TForcedCompactionData data;
+                    if (data.ParseFromString(compactionsRowset.GetValue<Schema::ForcedCompactions::SerializedData>())) {
+                        for (const auto& tablePathId : data.GetTablesToCompact()) {
+                            info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
+                        }
+                    }
+                } else {
+                    info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
+                }
+
+                // don't add compactions with empty tables to compact
+                if (!info->TablesToCompact.empty()) {
+                    Self->AddForcedCompaction(info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "empty tables to compact "
+                        << " for compaction: " << info->Id
+                        << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!compactionsRowset.Next()) {
                     return false;
@@ -5731,12 +5782,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
                 if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
-                    Self->AddForcedCompactionShard(shardIdx, *info);
+                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
+                        Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
+                    } else {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown shardIdx " << shardIdx
+                            << " for compaction: " << compactionId
+                            << ", at schemeshard: " << Self->TabletID());
+                        Self->ForgetForcedCompactionShard(shardIdx, *info);
+                    }
                 } else {
                     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "unknown forced compaction id " << compactionId
                             << " for shardIdx: " << shardIdx
                             << ", at schemeshard: " << Self->TabletID());
+                    Self->ForgetForcedCompactionShard(shardIdx, nullptr);
                 }
 
                 if (!shardsRowset.Next()) {
@@ -5811,6 +5871,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ProcessForcedCompactionQueues();
+        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
+            // for cleanup and to progress cancelling forced compactions after restart
+            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
+        }
     }
 };
 

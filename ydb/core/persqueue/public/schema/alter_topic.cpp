@@ -47,7 +47,6 @@ TResult ApplyChangesInt(
     }
 
     if (request.has_set_retention_storage_mb()) {
-        CHECK_CDC;
         partConfig->ClearStorageLimitBytes();
         if (request.set_retention_storage_mb())
             partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
@@ -137,7 +136,6 @@ TResult ApplyChangesInt(
     bool local = true; //todo: check locality
     if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (request.has_set_partition_write_speed_bytes_per_second()) {
-            CHECK_CDC;
             auto partSpeed = request.set_partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {
                 partSpeed = DEFAULT_PARTITION_SPEED;
@@ -146,7 +144,6 @@ TResult ApplyChangesInt(
         }
 
         if (request.has_set_partition_write_burst_bytes()) {
-            CHECK_CDC;
             const auto& burstSpeed = request.set_partition_write_burst_bytes();
             if (burstSpeed == 0) {
                 partConfig->SetBurstSize(partConfig->GetWriteSpeedInBytesPerSecond());
@@ -239,7 +236,7 @@ TResult ApplyChangesInt(
     pqTabletConfig->ClearConsumers();
 
     for (const auto& rr : consumers) {
-        auto result = ProcessAddConsumer(
+        auto result = AddConsumer(
             pqTabletConfig,
             rr.second,
             supportedClientServiceTypes,
@@ -260,7 +257,7 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
+    return {};
 }
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
@@ -357,12 +354,15 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const TString& /*localCluster*/,
+        const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        return ApplyChangesInt(Request, targetConfig, isCdcStream);
+        CopyConfig(targetConfig, sourceConfig);
+
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
     }
 
     Ydb::Topic::AlterTopicRequest Request;
@@ -374,10 +374,11 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
     return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
-        .UserToken = settings.UserToken,
+        .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
-        .Cookie = settings.Cookie,
+        .PrepareOnly = settings.PrepareOnly,
+        .Cookie = settings.Cookie
     });
 }
 

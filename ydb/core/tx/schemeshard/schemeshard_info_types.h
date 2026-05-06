@@ -714,6 +714,38 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TableDescription.MutableTTLSettings();
     }
 
+    /**
+     * Determine if the detailed metrics settings are configured for the given table.
+     *
+     * @return True, if the detailed metrics settings are configured for the given table
+     */
+    bool HasDetailedMetricsSettings() const {
+        return TableDescription.HasDetailedMetricsSettings()
+            && (TableDescription.GetDetailedMetricsSettings().GetStatusCase()
+                    == NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured)
+            && (TableDescription.GetDetailedMetricsSettings().HasConfigured());
+    }
+
+    /**
+     * Return the detailed metrics settings for the given table.
+     *
+     * @warning This function should be called only if HasDetailedMetricsSettings() returns true.
+     *
+     * @return The detailed metrics settings for the given table
+     */
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& GetDetailedMetricsSettings() const {
+        return TableDescription.GetDetailedMetricsSettings().GetConfigured();
+    }
+
+    /**
+     * Return the modifiable version of the detailed metrics settings for the given table.
+     *
+     * @return The modifiable version of the detailed metrics settings for the given table
+     */
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::TConfigured& MutableDetailedMetricsSettings() {
+        return *TableDescription.MutableDetailedMetricsSettings()->MutableConfigured();
+    }
+
     ui32 GetTTLColumnId() const {
         if (!IsTTLEnabled()) {
             return Max<ui32>();
@@ -3863,6 +3895,21 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
 
+/**
+ * Check if the given detailed metrics settings (for a table) are valid.
+ *
+ * @param[in] forCreate Indicates if this is for CREATE TABLE (ALTER TABLE otherwise)
+ * @param[in] metricsSettings The detailed metrics settings to validate
+ * @param[out] errorString Receives the error message, if the metrics settings are not valid
+ *
+ * @return Indicates if the detailed metrics settings are valid
+ */
+bool ValidateTableDetailedMetricsSettings(
+    bool forCreate,
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings& metricsSettings,
+    TString& errorString
+);
+
 TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
@@ -3908,6 +3955,7 @@ struct TForcedCompactionInfo : TSimpleRefCount<TForcedCompactionInfo> {
 
     TMaybe<TString> UserSID;
 
+    THashSet<TPathId> TablesToCompact;
     ui32 TotalShardCount = 0;
     ui32 DoneShardCount = 0; // updates only when persisting
 

@@ -1,5 +1,6 @@
 #include "error.h"
-#include "util/generic/maybe.h"
+#include <util/generic/maybe.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NSQS {
 
@@ -14,7 +15,8 @@ TErrorClass::TErrorClass(TString errorCode, ui32 httpStatusCode, TString default
     , Id(id)
 {
     RegisteredCodes.insert(ErrorCode);
-    IdToErrorAndCode.emplace(Id, std::make_tuple(ErrorCode, HttpStatusCode));
+    const bool uniqueErrorId = IdToErrorAndCode.emplace(Id, std::make_tuple(ErrorCode, HttpStatusCode)).second;
+    Y_ASSERT(uniqueErrorId);
     ErrorToId.emplace(ErrorCode, Id);
 }
 
@@ -266,7 +268,7 @@ extern const TErrorClass LEADER_SESSION_ERROR = {
     "InternalFailure",
     500,
     "Queue leader session error.",
-    30
+    33
 };
 
 extern const TErrorClass TIMEOUT = {

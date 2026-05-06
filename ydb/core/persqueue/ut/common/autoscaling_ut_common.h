@@ -42,6 +42,7 @@ ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition,
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary);
+ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const std::map<ui32, TString>& partitionBoundaries);
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 

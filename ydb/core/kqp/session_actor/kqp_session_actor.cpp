@@ -1280,7 +1280,7 @@ public:
             if (!QueryState->TxCtx->EnableOltpSink) {
                 QueryState->TxCtx->EnableOltpSink = phyQuery.GetEnableOltpSink();
             }
-            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink()) {
+            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink() && !AppData()->FeatureFlags.GetEnableOltpSinkForTopicOnlyTx()) {
                 ReplyQueryError(Ydb::StatusIds::ABORTED,
                                 "Transaction execution settings have been changed (EnableOltpSink).");
                 return false;

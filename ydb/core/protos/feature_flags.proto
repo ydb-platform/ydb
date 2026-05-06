@@ -284,6 +284,12 @@ message TFeatureFlags {
     optional bool EnableSnapshotsLocking = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+<<<<<<< HEAD
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
+=======
+    optional bool EnableStreamingQueryDisposition = 260 [default = true];
+    // Skip persisting partition rows that are not affected by a split/merge operation.
+    optional bool EnableSplitMergePartialPersistence = 261 [default = true];
+>>>>>>> 873abc2997b (schemeshard: optimize split/merge in-memory update (#38803))
 }

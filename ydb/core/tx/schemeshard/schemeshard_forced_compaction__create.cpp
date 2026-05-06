@@ -135,8 +135,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
         for (const auto& tablePathId : info->TablesToCompact) {
             auto tableInfo = Self->Tables.at(tablePathId);
-            for (const auto& shardInfo : tableInfo->GetPartitions()) {
-                shardsToCompact.emplace_back(shardInfo.ShardIdx, tablePathId);
+            for (const auto* shardInfo : tableInfo->GetPartitions()) {
+                shardsToCompact.emplace_back(shardInfo->ShardIdx, tablePathId);
             }
         }
 

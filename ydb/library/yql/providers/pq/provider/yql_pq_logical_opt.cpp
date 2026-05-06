@@ -643,30 +643,33 @@ private:
     ) const {
         auto settings = TPushdownSettings();
         settings.EnableMember(memberName);
-        settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor); // TODO
+        settings.Enable(NPushdown::TSettings::EFeatureFlag::TimestampCtor);
         NPushdown::TPredicateNode predicate = MakePushdownNode(lambda, ctx, lambda.Pos(), settings);
         if (predicate.IsEmpty()) {
             return {};
         }
         TStringBuilder err;
-        TDisjointIntervalTree<ui64> tree;
+        TDisjointIntervalTree<i64> tree;
         if (!NYql::NPushdown::ConvertPredicateToIntervals(predicate.ExprNode.Cast(), tree, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(lambda.Pos()), "Failed to calculate filter predicate for source: " + err));
             return {};
         }
 
+        YQL_CLOG(TRACE, ProviderPq) << "ConvertPredicateToIntervals result over " << memberName << ": {" << tree.Min() << ", " << tree.Max() << "}" << Endl;;
         NPq::NProto::TOffsetPredicate proto;
         if (tree.Empty()) {
             auto* item = proto.AddItem();
             item->SetBegin(0);
             item->SetEnd(0);
-        } else if (tree.Min() != std::numeric_limits<ui64>::min() || tree.Max() != std::numeric_limits<ui64>::max()) {
+        } else if (tree.Min() != Min<i64>() || tree.Max() != Max<i64>()) {
             auto* item = proto.AddItem();
-            if (tree.Min() != std::numeric_limits<ui64>::min()) {
-                item->SetBegin(!min ? tree.Min() : std::min(tree.Min(), *min)); 
+            if (tree.Min() != Min<i64>()) {
+                ui64 treeMin = std::max(tree.Min(), (i64)0);
+                item->SetBegin(!min ? treeMin : std::min(treeMin, *min));
             }
-            if (tree.Max() != std::numeric_limits<ui64>::max()) {
-                item->SetEnd(tree.Max());
+            if (tree.Max() != Max<i64>()) {
+                ui64 treeMax = std::max(tree.Max(), (i64)0);
+                item->SetEnd(treeMax);
             }
         }
         TString result; 

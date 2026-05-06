@@ -9,7 +9,7 @@ namespace NYql::NPushdown {
 
 bool ConvertPredicateToIntervals(
     const NNodes::TExprBase& predicateBody,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TStringBuilder& err);
 
 } // namespace NYql::NPushdown

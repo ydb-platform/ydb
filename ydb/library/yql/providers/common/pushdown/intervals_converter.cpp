@@ -17,11 +17,11 @@ struct TContext {
 
 bool ConvertPredicate(
     const TExprBase& predicate,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 );
 
-std::optional<ui64> TryConvertExpressionToInt(
+std::optional<i64> TryConvertExpressionToInt(
     const TExprBase& expression,
     TContext& ctx
 ) {
@@ -33,21 +33,22 @@ std::optional<ui64> TryConvertExpressionToInt(
         bool isSigned;
         ui64 valueAbs;
         ExtractIntegralValue(atom.Ref(), false, hasSign, isSigned, valueAbs);
-        if (hasSign) {
-            return 0;
+
+        bool allow = !hasSign && valueAbs <= (ui64)Max<i64>() || hasSign && valueAbs <= (ui64)Max<i64>() + 1;
+        if (allow) {
+            return hasSign ? -(i64)valueAbs : (i64)valueAbs ;
         }
-        return valueAbs;
     }
     if (auto atom = expression.Maybe<TCoTimestamp>()) {   
-        return FromString<ui64>(atom.Cast().Literal().Value());
+        return FromString<i64>(atom.Cast().Literal().Value());
     }
     ctx.Err << "Unsupported expression: " << expression.Raw()->Content();
     return std::nullopt;
 }
 
 void IntersectIntervals(
-    TDisjointIntervalTree<ui64>& tree,
-    const TDisjointIntervalTree<ui64>& other)
+    TDisjointIntervalTree<i64>& tree,
+    const TDisjointIntervalTree<i64>& other)
 {
     // A ∩ B = A \ complement(B)
     // Erase from tree every gap that is not covered by other.
@@ -57,10 +58,10 @@ void IntersectIntervals(
         return;
     }
 
-    ui64 prev = std::numeric_limits<ui64>::min();
+    i64 prev = Min<i64>();
     for (auto it = other.begin(); it != other.end(); ++it) {
-        ui64 gapBegin = prev;
-        ui64 gapEnd = it->first;
+        i64 gapBegin = prev;
+        i64 gapEnd = it->first;
         if (gapBegin < gapEnd) {
             tree.EraseInterval(gapBegin, gapEnd);
         }
@@ -68,14 +69,14 @@ void IntersectIntervals(
     }
 
     // Trailing gap: [last interval end, MAX)
-    if (prev < std::numeric_limits<ui64>::max()) {
-        tree.EraseInterval(prev, std::numeric_limits<ui64>::max());
+    if (prev < Max<i64>()) {
+        tree.EraseInterval(prev, Max<i64>());
     }
 }
 
 void MergeIntervals(
-    TDisjointIntervalTree<ui64>& tree,
-    const TDisjointIntervalTree<ui64>& other)
+    TDisjointIntervalTree<i64>& tree,
+    const TDisjointIntervalTree<i64>& other)
 {
     for (const auto [begin, end] : other) {
         // Erase the range first to remove any overlapping intervals,
@@ -85,7 +86,7 @@ void MergeIntervals(
     }
 }
 
-void InsertInterval(TDisjointIntervalTree<ui64>& tree, ui64 begin, ui64 end) {
+void InsertInterval(TDisjointIntervalTree<i64>& tree, i64 begin, i64 end) {
     if (begin == end) {
         return;
     }
@@ -94,7 +95,7 @@ void InsertInterval(TDisjointIntervalTree<ui64>& tree, ui64 begin, ui64 end) {
 
 bool ConvertComparePredicate(
     const TCoCompare& compare,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
     bool leftIsMember = compare.Left().Maybe<TCoMember>().IsValid();
@@ -113,42 +114,42 @@ bool ConvertComparePredicate(
     if (!optValue) {
         return false;
     }
-    ui64 value = *optValue;
+    i64 value = *optValue;
     tree.Clear();
 
     if (compare.Maybe<TCoCmpEqual>()) {
         InsertInterval(tree, value, value + 1);
         return true;
     } else if (compare.Maybe<TCoCmpNotEqual>()) {
-        InsertInterval(tree, std::numeric_limits<ui64>::min(), value);
-        InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());
+        InsertInterval(tree, Min<i64>(), value);
+        InsertInterval(tree, value + 1, Max<i64>());
         return true;
     } else if (compare.Maybe<TCoCmpLess>()) {
         if (!inverted) {
-            InsertInterval(tree, std::numeric_limits<ui64>::min(), value);             // a < 100
+            InsertInterval(tree, Min<i64>(), value);             // a < 100
         } else {
-            InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());         // 100 < a
+            InsertInterval(tree, value + 1, Max<i64>());         // 100 < a
         }
         return true;
     } else if (compare.Maybe<TCoCmpLessOrEqual>()) {
         if (!inverted) {
-            InsertInterval(tree, std::numeric_limits<ui64>::min(), value + 1);         // a <= 100
+            InsertInterval(tree, Min<i64>(), value + 1);         // a <= 100
         } else {
-            InsertInterval(tree, value, std::numeric_limits<ui64>::max());             // 100 <= a
+            InsertInterval(tree, value, Max<i64>());             // 100 <= a
         }
         return true;
     } else if (compare.Maybe<TCoCmpGreater>()) {
         if (!inverted) {
-            InsertInterval(tree, value + 1, std::numeric_limits<ui64>::max());         // a > 100
+            InsertInterval(tree, value + 1, Max<i64>());         // a > 100
         } else {
-            InsertInterval(tree, std::numeric_limits<ui64>::min(), value);             // 100 > a
+            InsertInterval(tree, Min<i64>(), value);             // 100 > a
         }
         return true;
     } else if (compare.Maybe<TCoCmpGreaterOrEqual>()) {
         if (!inverted) {
-            InsertInterval(tree, value, std::numeric_limits<ui64>::max());             // a >= 100
+            InsertInterval(tree, value, Max<i64>());             // a >= 100
         } else {
-            InsertInterval(tree, std::numeric_limits<ui64>::min(), value + 1);         // 100 >= a
+            InsertInterval(tree, Min<i64>(), value + 1);         // 100 >= a
         }
         return true;
     }
@@ -158,7 +159,7 @@ bool ConvertComparePredicate(
 
 bool ConvertCoalescePredicate(
     const TCoCoalesce& coalesce,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
     auto value = coalesce.Value().Maybe<TCoBool>();
@@ -170,12 +171,12 @@ bool ConvertCoalescePredicate(
 
 bool ConvertAndPredicate(
     const TCoAnd& predicate,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
-    tree.InsertInterval(std::numeric_limits<ui64>::min(), std::numeric_limits<ui64>::max());
+    tree.InsertInterval(Min<i64>(), Max<i64>());
     for (const auto& child : predicate.Ptr()->Children()) {
-        TDisjointIntervalTree<ui64> itemTree;
+        TDisjointIntervalTree<i64> itemTree;
         if (!ConvertPredicate(TExprBase(child), itemTree, ctx)) {
             return false;
         }
@@ -186,11 +187,11 @@ bool ConvertAndPredicate(
 
 bool ConvertOrPredicate(
     const TCoOr& predicate,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
     for (const auto& child : predicate.Ptr()->Children()) {
-        TDisjointIntervalTree<ui64> itemTree;
+        TDisjointIntervalTree<i64> itemTree;
         if (!ConvertPredicate(TExprBase(child), itemTree, ctx)) {
             return false;
         }
@@ -201,7 +202,7 @@ bool ConvertOrPredicate(
 
 bool ConvertInPredicate(
     const TCoSqlIn& sqlIn,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
     const TExprBase& expr = sqlIn.Collection();
@@ -220,7 +221,7 @@ bool ConvertInPredicate(
         ctx.Err << "unknown source for in: " << expr.Ref().Content();
         return false;
     }
-    std::set<ui64> values;
+    std::set<i64> values;
     for (auto& child : collection->Children()) {
         auto value = TryConvertExpressionToInt(TExprBase(child), ctx);
         if (!value){
@@ -239,7 +240,7 @@ bool ConvertInPredicate(
 
 bool ConvertPredicate(
     const TExprBase& predicate,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TContext& ctx
 ) {
     if (auto compare = predicate.Maybe<TCoCompare>()) {
@@ -261,7 +262,7 @@ bool ConvertPredicate(
 
 bool ConvertPredicateToIntervals(
     const TExprBase& predicateBody,
-    TDisjointIntervalTree<ui64>& tree,
+    TDisjointIntervalTree<i64>& tree,
     TStringBuilder& err
 ) {
     TContext context = {.Err = err};

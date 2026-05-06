@@ -497,6 +497,7 @@ struct TEvPrivate {
         EvSendWaiters,
         EvReconciliation,
         EvFreeNodeSession,
+        EvCleanup,
         EvEnd
     };
 
@@ -525,8 +526,12 @@ struct TEvPrivate {
     };
 
     struct TEvFreeNodeSession : public NActors::TEventLocal<TEvFreeNodeSession, EvFreeNodeSession> {
-        TEvFreeNodeSession(ui32 nodeId) : NodeId(nodeId) {}
+        TEvFreeNodeSession(ui32 nodeId, bool force) : NodeId(nodeId), Force(force) {}
         const ui32 NodeId;
+        const bool Force;
+    };
+
+    struct TEvCleanup : public NActors::TEventLocal<TEvCleanup, EvCleanup> {
     };
 };
 
@@ -566,7 +571,7 @@ public:
     std::shared_ptr<TInputDescriptor> GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading);
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
-    void CleanupUnbound();
+    void HandleCleanup();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
@@ -632,6 +637,7 @@ public:
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
+    TInstant LastActivity;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -706,7 +712,7 @@ public:
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
-    void FreeNodeSession(ui32 nodeId);
+    void FreeNodeSession(ui32 nodeId, bool force);
 
     // unbinded stubs
     std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
@@ -722,7 +728,7 @@ public:
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
     // extras
-    void CleanupUnbound();
+    void NotifyCleanup();
     TString GetDebugInfo();
 
     NActors::TActorSystem* ActorSystem;
@@ -1041,11 +1047,11 @@ public:
     }
 
     void Handle(TEvPrivate::TEvFreeNodeSession::TPtr& ev) {
-        ChannelService->FreeNodeSession(ev->Get()->NodeId);
+        ChannelService->FreeNodeSession(ev->Get()->NodeId, ev->Get()->Force);
     }
 
     void HandleWakeup() {
-        ChannelService->CleanupUnbound();
+        ChannelService->NotifyCleanup();
         Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
 
@@ -1073,6 +1079,7 @@ public:
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvReconciliation, Handle);
+            hFunc(TEvPrivate::TEvCleanup, Handle);
         }
     }
 
@@ -1112,6 +1119,10 @@ public:
         NodeState->HandleReconciliation(ev);
     }
 
+    void Handle(TEvPrivate::TEvCleanup::TPtr&) {
+        NodeState->HandleCleanup();
+    }
+
     std::shared_ptr<TNodeState> NodeState;
 };
 
@@ -1132,6 +1143,8 @@ public:
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
+            hFunc(TEvPrivate::TEvReconciliation, Handle);
+            hFunc(TEvPrivate::TEvCleanup, Handle);
             hFunc(TEvPrivate::TEvProcessPending, Handle);
         }
     }
@@ -1192,6 +1205,14 @@ public:
 
     void Handle(TEvPrivate::TEvSendWaiters::TPtr& ev) {
         NodeState->HandleSendWaiters(ev);
+    }
+
+    void Handle(TEvPrivate::TEvReconciliation::TPtr& ev) {
+        NodeState->HandleReconciliation(ev);
+    }
+
+    void Handle(TEvPrivate::TEvCleanup::TPtr&) {
+        NodeState->HandleCleanup();
     }
 
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {

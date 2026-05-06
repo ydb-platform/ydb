@@ -18,13 +18,13 @@ class TCreateMessageArg;
 class TStructuredMessage {
     friend class TCreateMessageArg;
     static const unsigned PreallocatedValueCount = 16;
-    static const unsigned PreallocatedDataSize = 64;
+    static const unsigned PreallocatedDataSize = 256;
 
 public:
 
     TStructuredMessage() {
-        AttachedValues.reserve(16);
-        Data.reserve(64);
+        AttachedValues.reserve(PreallocatedValueCount);
+        Data.reserve(PreallocatedDataSize);
     };
 
     TStructuredMessage(const TStructuredMessage&) = default;
@@ -209,7 +209,7 @@ public:
     }
 
     template<typename C>
-    void ForEach(const C& c) const {
+    void ForEachTyped(const C& c) const {
         CheckSorted();
 
         for(auto& item:AttachedValues) {
@@ -236,12 +236,12 @@ protected:
         TAttachedValue(const TAttachedValue&) = default;
         TAttachedValue(TAttachedValue&&) = default;
 
-        TAttachedValue(std::vector<TKeyName>&& name, TNativeTypeCode typeCode, std::size_t Offset, std::size_t Length, unsigned addNumber):
-            Name(std::move(name)),
-            TypeCode(typeCode),
-            Offset(Offset),
-            Length(Length),
-            AddNumber(addNumber)
+        TAttachedValue(std::vector<TKeyName>&& name, TNativeTypeCode typeCode, std::size_t Offset, std::size_t Length, unsigned addNumber)
+            : Name(std::move(name))
+            , TypeCode(typeCode)
+            , Offset(Offset)
+            , Length(Length)
+            , AddNumber(addNumber)
         {};
 
         TAttachedValue& operator=(const TAttachedValue&) = default;

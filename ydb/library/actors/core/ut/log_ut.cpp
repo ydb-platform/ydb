@@ -338,6 +338,7 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
         TFixture test{NoBufferSettings()};
         const auto LOG_COUNT = 100;
         auto outputLogSize = BufferTest(test, LOG_COUNT);
+
         UNIT_ASSERT(outputLogSize < LOG_COUNT);
     }
 }
@@ -355,7 +356,6 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         env.FlushLogBuffer();
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), 3);
-
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE",)"
                          R"("tag":"KIKIMR","revision":-1,"message":"My log message"})");

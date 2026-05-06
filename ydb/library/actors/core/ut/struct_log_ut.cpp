@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(ScanValues) {
         auto message = YDBLOG_CREATE_MESSAGE( {"string", static_cast<TString>("abc")} );
 
-        message.ForEach(
+        message.ForEachTyped(
             MakeOverloaded(
                 [](const std::vector<TKeyName>& name, const TString& value) { UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc"); }
             ));
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             result += TTypesMapping::ToString(value);
         };
 
-        message.ForEach(
+        message.ForEachTyped(
             MakeOverloaded(
                 [&](const std::vector<TKeyName>& name, const TString& value) { append(name, value); }
             ));

@@ -162,22 +162,8 @@ private:
     }
 
 public:
-    static TString ValidatePath(const TString& basePath) {
-        TFsPath path(basePath);
-        path.Fix();
-        Y_ENSURE(path.Exists(), "BasePath must exist: " << basePath);
-
-        TString realPath = path.RealPath().GetPath();
-        TString normalizedPath = path.GetPath();
-        Y_ENSURE(realPath == normalizedPath, "BasePath must not contain symlinks"
-            << ": basePath# " << basePath
-            << ", realPath# " << realPath);
-
-        return normalizedPath;
-    }
-
-    TFsOperationActor(const TString& basePath)
-        : BasePath(ValidatePath(basePath))
+    explicit TFsOperationActor(const TString& basePath)
+        : BasePath(basePath)
     {
     }
 

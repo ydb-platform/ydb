@@ -14,11 +14,22 @@ struct TWriteWithPbTestFixture : public TBaseFixture {
     const TDuration Timeout;
     const TDuration PBufferReplyTimeout;
 
+    TVector<NThreading::TPromise<TDBGWriteBlocksResponse>> DirectWritePromises;
+
     NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> ManyPBufferPromise;
     TVector<std::pair<TDuration, TCallback>> Scheduled;
 
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler GetManyPBuffersHandlerWithImmediateOkResponse();
+    TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler GetManyPBuffersHandlerHanging();
+
+    TDirectBlockGroupMock::TWriteBlocksToPBufferHandler GetDirectWriteHandlerHanging();
+
     std::shared_ptr<TWriteWithPbReplicationRequestExecutor> CreateRequest(TRequestHeaders headers);
+    TDBGWriteBlocksToManyPBuffersResponse CreateOkResponse();
+    TDBGWriteBlocksToManyPBuffersResponse CreateOneOkResponse();
+    TDBGWriteBlocksResponse CreateOkDirectResponse();
+
+    void RunScheduledHedge();
 };
 
 } // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

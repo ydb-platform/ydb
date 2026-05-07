@@ -6561,7 +6561,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), std::nullopt);
+            UNIT_ASSERT(!desc.GetTopicDescription().GetRetentionStorageMb().has_value());
         }
 
         { // alter (100 MB)
@@ -6577,7 +6577,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb().value(), 100);
         }
     }
 

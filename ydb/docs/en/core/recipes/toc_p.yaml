@@ -22,8 +22,6 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
-<<<<<<< HEAD
-=======
 - name: Import and export data to column tables
   href: import-export-column-tables.md
 - name: Streaming queries
@@ -31,4 +29,3 @@ items:
   include:
     mode: link
     path: streaming_queries/toc_p.yaml
->>>>>>> ff4e63c893e (Translation of PR 25701 YQ-4502 add streaming_queries docs (#39540))

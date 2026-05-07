@@ -304,9 +304,7 @@ namespace TEvPrivate {
         {}
     };
 
-    // Slice F: one-shot grace-period check for a per-table sub-op. Scheduled
-    // when the schema-op TDone fires; if no TEvIncrementalRestoreShardProgress
-    // arrived within the grace period, fall back to TEvSchemaChanged.OpResult.
+    // Slice F: fires after the grace period; falls back to TEvSchemaChanged.OpResult if no TEvIncrementalRestoreShardProgress arrived.
     struct TEvIncrementalRestoreLegacyDSCheck
         : public TEventLocal<TEvIncrementalRestoreLegacyDSCheck, EvIncrementalRestoreLegacyDSCheck> {
         ui64 SubOpTxId;

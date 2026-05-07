@@ -1135,9 +1135,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
     }
 
-    // T-S3: Overall wall-clock deadline anchors are persisted via Schema column 7;
-    // a manual reboot must NOT reset the deadline. The restore eventually fails
-    // once the cumulative elapsed time crosses the overall deadline.
+    // Overall deadline anchors survive SchemeShard reboot and eventually terminate the restore.
     Y_UNIT_TEST(RestoreOverallDeadlineSurvivesReboot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1181,8 +1179,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             "Restore terminated before the overall deadline elapsed: " << elapsed);
     }
 
-    // T-S5: A scheduled retry (RetryScheduled=true, NextRetryAttemptAt set in
-    // the future) survives a SchemeShard reboot via Schema columns 9/10.
+    // A scheduled retry (RetryScheduled=true, NextRetryAttemptAt persisted) survives a SchemeShard reboot.
     Y_UNIT_TEST(RetryScheduledSurvivesReboot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

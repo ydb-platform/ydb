@@ -68,20 +68,15 @@ message TShardOpResult {
     }
     optional bool Success = 1;
     optional string Explain = 2;
-    // Used by the non-incremental Backup/Restore code path
-    // (schemeshard__operation_backup_restore_common.h). The incremental
-    // restore data-work channel (TEvIncrementalRestoreShardProgress) carries
-    // its own per-shard scan stats; these fields stay on TShardOpResult only
-    // to support the legacy paths and Slice F wire-compat.
+    // Used by non-incremental Backup/Restore and Slice F wire-compat.
+    // Incremental restore carries scan stats on TEvIncrementalRestoreShardProgress instead.
     optional uint64 BytesProcessed = 3;
     optional uint64 RowsProcessed = 4;
     optional EOpEndStatus EndStatus = 6;
 }
 
-// Data-work completion event for per-shard incremental restore scans.
-// Sent DS->SS once the scan terminates. Carried on a dedicated channel so the
-// schema op (TEvSchemaChanged) can complete immediately after planStep without
-// waiting for the scan.
+// Per-shard scan-completion event sent DS->SS on a dedicated channel,
+// decoupled from TEvSchemaChanged so the schema op can finish immediately.
 message TEvIncrementalRestoreShardProgress {
     optional uint64 OperationId = 1;          // SS-side restore long-op id (TIncrementalRestoreState key)
     optional uint64 SubOpTxId = 2;            // per-table sub-op TxId (TableOperations[opId] correlator)

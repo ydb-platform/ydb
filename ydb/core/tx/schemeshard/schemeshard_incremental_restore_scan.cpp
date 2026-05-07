@@ -1206,10 +1206,8 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
     return nullptr;
 }
 
-// Channel-split: TTx that consumes TEvIncrementalRestoreShardProgress and
-// records per-shard scan completion on TableOperationState. Idempotent against
-// re-delivery (RecordShardResult drops duplicates) and stale generations
-// (caller already filtered by SS Generation).
+// Consumes TEvIncrementalRestoreShardProgress and records per-shard scan completion.
+// Idempotent: drops duplicates and stale generations.
 class TSchemeShard::TTxIncrementalRestoreShardProgress : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
@@ -1236,9 +1234,7 @@ public:
             return true;
         }
 
-        // SubOpTxId -> long-op id lookup. The SubOpTxId on the wire is the
-        // per-table sub-op TxId allocated by TxAllocatorClient and tracked
-        // in IncrementalRestoreOperationToState via TOperationId(txId, 0).
+        // Map SubOpTxId (per-table TxAllocatorClient TxId) to the owning long-op id.
         const TOperationId opId(subOpTxId, 0);
         auto opStateIt = Self->IncrementalRestoreOperationToState.find(opId);
         if (opStateIt == Self->IncrementalRestoreOperationToState.end()) {
@@ -1309,9 +1305,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr
     Execute(new TTxIncrementalRestoreShardProgress(this, std::move(ev)), ctx);
 }
 
-// Slice F: grace-timer TTx. Falls back to per-shard OpResult.Success captured
-// from TEvSchemaChanged.HandleReply when no TEvIncrementalRestoreShardProgress
-// arrived for the sub-op within IncrementalRestoreLegacyDSGracePeriodSeconds.
+// Slice F: grace-timer TTx. Falls back to captured TEvSchemaChanged.OpResult.Success if no new-channel event arrived.
 class TSchemeShard::TTxIncrementalRestoreLegacyDSCheck : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
@@ -1344,10 +1338,8 @@ public:
             return true;
         }
 
-        // Fallback: pull each shard's TEvSchemaChanged.OpResult.Success from
-        // the captured ShardOpResultSuccess map and call RecordShardResult.
-        // Treat success=true as terminal-success (non-retriable), success=false
-        // as TRANSIENT_FAILURE (retry budget decides).
+        // Fallback: apply captured TEvSchemaChanged.OpResult.Success per shard.
+        // success=false is treated as TRANSIENT_FAILURE (retriable).
         ui32 fellBack = 0;
         for (const auto& [shardIdx, shardSuccess] : tableOp.ShardOpResultSuccess) {
             if (tableOp.CompletedShards.contains(shardIdx)
@@ -1386,10 +1378,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvIncrementalRestoreLegacyDSCheck::TPtr& 
     Execute(new TTxIncrementalRestoreLegacyDSCheck(this, msg->SubOpTxId, msg->OriginalOpId), ctx);
 }
 
-// Slice F: SS-side helper to capture per-shard OpResult.Success from
-// TEvSchemaChanged.HandleReply. Called from CaptureLegacyShardOpResult in
-// schemeshard__operation_create_restore_incremental_backup.cpp so the legacy
-// fallback has data available if the new event never arrives.
+// Slice F: record per-shard OpResult.Success from TEvSchemaChanged for the legacy fallback.
 void TSchemeShard::CaptureIncrementalRestoreShardOpResult(
     const TOperationId& subOpId,
     TShardIdx shardIdx,
@@ -1407,15 +1396,11 @@ void TSchemeShard::CaptureIncrementalRestoreShardOpResult(
     if (opIt == stateIt->second.TableOperations.end()) {
         return;
     }
-    // First-write-wins: we only care about the terminal Success/Failure
-    // signal from the schema op, not intermediate state.
+    // First-write-wins: only the terminal Success/Failure from the schema op matters.
     opIt->second.ShardOpResultSuccess.emplace(shardIdx, success);
 }
 
-// Slice F: arm the grace timer when the schema op transitions to TDone.
-// Called from TDone::ProgressState. If the new event channel has already
-// driven RecordShardResult for some shards, the timer's TTx will only fall
-// back for the rest.
+// Slice F: arm the grace timer on schema-op TDone; only undelivered shards fall back.
 void TSchemeShard::ArmIncrementalRestoreLegacyDSGraceTimer(
     const TOperationId& subOpId,
     const TActorContext& ctx)

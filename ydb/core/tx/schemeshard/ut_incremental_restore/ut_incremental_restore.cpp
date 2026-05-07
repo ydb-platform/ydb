@@ -1899,8 +1899,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // T-S1: Overall wall-clock deadline must terminate the restore as Failed
-    // (with TIMEOUT) once persistent transient failures consume the budget.
+    // Overall wall-clock deadline must terminate the restore with TIMEOUT after persistent transient failures.
     Y_UNIT_TEST(RestoreOverallDeadlineEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -1932,7 +1931,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE(failuresInjected.load(), 1);
     }
 
-    // T-S2: Stage deadline must terminate the restore independently of the overall tier.
+    // Stage deadline must terminate the restore independently of the overall tier.
     Y_UNIT_TEST(RestoreStageDeadlineEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2300,10 +2299,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    // T-S4: With 2 incrementals and a stage budget that's tight enough that a
-    // failure-only restore would die in stage 1 if the stage budget weren't
-    // reset, verify a healthy multi-incremental restore succeeds: each stage
-    // gets a fresh deadline window.
+    // Stage deadline resets on each incremental; multi-incremental restore must succeed even with a tight stage budget.
     Y_UNIT_TEST(RestoreStageDeadlineResetsOnNextIncremental) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2329,9 +2325,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 3u);
     }
 
-    // T-S6: Forget while a restore is in Running state must be rejected.
-    // The post-reboot eligibility window is closed by tightening the predicate
-    // to {Completed, Failed, Finalizing} state.
+    // Forget while a restore is in Running state must be rejected.
     Y_UNIT_TEST(ForgetRunningStateRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2374,12 +2368,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE(failuresInjected.load(), 1);
     }
 
-    // -----------------------------------------------------------------
-    // Channel-split tests (T-P1..T-P5).
-    // -----------------------------------------------------------------
-
-    // T-P1: DS emits TEvIncrementalRestoreShardProgress on the new channel
-    // with the expected per-shard payload.
+    // DS emits TEvIncrementalRestoreShardProgress with the expected per-shard payload.
     Y_UNIT_TEST(IncrementalRestoreEmitsShardProgressEvent) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2413,10 +2402,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_C(capturedGen.load() != 0, "Generation field was zero on the event");
     }
 
-    // T-P2: TEvSchemaChanged.OpResult on the schema-op channel for
-    // ETypeCreateIncrementalRestoreSrc no longer carries scan-only fields
-    // (BytesProcessed/RowsProcessed/EndStatus). Success/Explain remain for
-    // Slice F wire-compat.
+    // TEvSchemaChanged.OpResult for ETypeCreateIncrementalRestoreSrc must not carry scan-only fields (Bytes/Rows/EndStatus).
     Y_UNIT_TEST(IncrementalRestoreSchemaChangedHasNoOpResultScanFields) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2431,11 +2417,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 const auto& rec = ev->Get()->Record;
                 if (!rec.HasOpResult()) return;
                 const auto& res = rec.GetOpResult();
-                // Only the incremental restore path emits OpResult with
-                // Success/Explain via NotifySchemeshard's ETypeCreateIncrementalRestoreSrc
-                // branch. We use Bytes/Rows/EndStatus presence as a proxy for
-                // "this came from the legacy fields". A clean event for incr
-                // restore must NOT have those.
+                // Bytes/Rows/EndStatus presence indicates legacy fields; incremental restore events must not have them.
                 if (res.HasBytesProcessed() || res.HasRowsProcessed() || res.HasEndStatus()) {
                     sawWithBytesOrRowsOrEndStatus.fetch_add(1);
                 }
@@ -2452,21 +2434,15 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         UNIT_ASSERT_C(sawSchemaChangedForRestore.load() >= 1,
             "Expected at least one TEvSchemaChanged with OpResult.Success");
-        // The legacy non-incremental Backup/Restore code path may still
-        // populate Bytes/Rows; the assert focuses on the incremental restore
-        // contract being upheld in the typical path.
     }
 
-    // T-P3: 1-table 2-shard restore drives the orchestrator to Completed
-    // exclusively via the new event channel (Slice F fallback should not
-    // trigger when the new event arrives within the grace window).
+    // Orchestrator must reach Completed via the new event channel, not the Slice F fallback.
     Y_UNIT_TEST(IncrementalRestoreShardProgressDrivesOrchestrator) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Generous grace; if Slice F fallback triggers we'd see a warning,
-        // but the orchestrator should advance from the new event arrival.
+        // Generous grace so Slice F fallback won't race with the new event.
         TControlBoard::SetValue(60,
             runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
 
@@ -2489,15 +2465,13 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "Expected at least one TEvIncrementalRestoreShardProgress");
     }
 
-    // T-P4: Events with a stale Generation are dropped silently. We force
-    // staleness by mutating the Generation field on the wire.
+    // Events with a stale Generation are dropped silently (mutated on the wire to force staleness).
     Y_UNIT_TEST(IncrementalRestoreStaleGenerationDropped) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Tight grace so the Slice F fallback succeeds the restore even
-        // though every progress event is dropped by the SS-side dedup.
+        // Tight grace so Slice F fallback can complete the restore after stale-gen drop.
         TControlBoard::SetValue(5,
             runtime.GetAppData().Icb->SchemeShardControls.IncrementalRestoreLegacyDSGracePeriodSeconds);
 
@@ -2513,7 +2487,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
-        // Slice F fallback should advance the restore via OpResult.Success.
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(60));
         UNIT_ASSERT_C(finalStatus == Ydb::StatusIds::SUCCESS,
@@ -2521,7 +2494,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
-    // T-P5: Events with an unknown SubOpTxId are dropped without crashing.
+    // Events with an unknown SubOpTxId are dropped without crashing.
     Y_UNIT_TEST(IncrementalRestoreSubOpTxIdMismatchDropped) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2549,12 +2522,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedCount.load(), 1, "No events mutated");
     }
 
-    // -----------------------------------------------------------------
-    // Slice F (wire-compat) tests (T-S7..T-S9).
-    // -----------------------------------------------------------------
-
-    // T-S7: Old DS that never sends TEvIncrementalRestoreShardProgress —
-    // schema op succeeds, grace timer fires, fallback drives Completed.
+    // Old DS without TEvIncrementalRestoreShardProgress: grace timer fires and fallback drives Completed.
     Y_UNIT_TEST(OldDSWireCompat) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2589,10 +2557,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(droppedCount.load(), 1, "No new-channel events were intercepted");
     }
 
-    // T-S8: Old DS that reports OpResult.Success=false — Slice F fallback
-    // treats the failure as TRANSIENT_FAILURE (retriable). With
-    // -1/-1 deadlines the orchestrator never gives up, so we set a tight
-    // stage deadline and assert that retries eventually time out.
+    // Old DS reporting OpResult.Success=false: Slice F treats it as TRANSIENT_FAILURE; stage deadline terminates retries.
     Y_UNIT_TEST(OldDSWireCompatFailureCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -2631,8 +2596,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
-        // Restore should NOT succeed — every shard reports failure on the
-        // legacy channel and the new channel is dropped.
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(120));
         UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
@@ -2641,10 +2604,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_GE_C(mutatedSchema.load(), 1, "No TEvSchemaChanged events mutated");
     }
 
-    // T-S9: Mixed old + new DS during a single restore. Half the shards
-    // (by sender tabletId parity) skip the new event; the other half emit
-    // it normally. The orchestrator must handle both — new-channel shards
-    // advance immediately, legacy shards advance via the grace timer.
+    // Mixed old+new DS: even-tabletId shards skip the new event; orchestrator must handle both paths.
     Y_UNIT_TEST(MixedNewAndOldDSDuringRestore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

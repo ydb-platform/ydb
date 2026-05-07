@@ -1673,10 +1673,8 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             break;
         }
         case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
-            // Scan-completion payload (EndStatus / Bytes / Rows) flows on the
-            // dedicated TEvIncrementalRestoreShardProgress channel. Success /
-            // Explain are retained here for Slice F wire-compat (an old DS
-            // that doesn't emit the new event still completes the restore).
+            // Slice F wire-compat: retain Success/Explain so an old DS without
+            // TEvIncrementalRestoreShardProgress can still complete the restore.
             auto* result = event->Record.MutableOpResult();
             result->SetSuccess(op->Success);
             result->SetExplain(op->Error);

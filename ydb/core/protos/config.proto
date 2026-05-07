@@ -1963,6 +1963,14 @@ message TImmediateControlsConfig {
             DefaultValue: 1000 }];
     }
 
+    message TBlobDepotControls {
+        optional uint64 MaxLoadedTrashRecords = 1 [(ControlOptions) = {
+            Description: "Maximum number of trash records kept in BlobDepot memory at once",
+            MinValue: 1,
+            MaxValue: 100000000,
+            DefaultValue: 1000000 }];
+    }
+
     message TPDiskControls {
         optional uint64 MaxCommonLogChunksHDD = 1 [(ControlOptions) = {
             Description: "Regulate the maximum of log chunks on the PDisk, setting for HDD",
@@ -2256,6 +2264,7 @@ message TImmediateControlsConfig {
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
     optional TBootstrapperControls BootstrapperControls = 20;
+    optional TBlobDepotControls BlobDepotControls = 22;
 
     message TQuoterControls {
         optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {

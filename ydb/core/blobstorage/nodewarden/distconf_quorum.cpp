@@ -1,4 +1,5 @@
 #include "distconf_quorum.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -164,7 +165,8 @@ namespace NKikimr::NStorage {
             const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
-            STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
+            YDBLOG_COMP_CRIT(BS_NODE, "configuration incorrect", {"Marker", "NWDC41"},
+                {"Error", error});
             //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;

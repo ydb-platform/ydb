@@ -3,6 +3,7 @@
 #include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NDDisk {
 
@@ -24,7 +25,9 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD04, "TDDiskActor::Handle(TEvChunkReserveResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvChunkReserveResult)", {"Marker", "BSDD04"},
+            {"DDiskId", DDiskId},
+            {"Msg", msg.ToString()});
 
         Y_ABORT_UNLESS(ReserveInFlight);
         ReserveInFlight = false;
@@ -88,12 +91,11 @@ namespace NKikimr::NDDisk {
             }, chunkAllocate);
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD28,
-                "TDDiskActor::HandleChunkReserved requesting chunk reserve",
-                (DDiskId, DDiskId),
-                (ChunkReserveSize, ChunkReserve.size()),
-                (MinChunksReserved, MinChunksReserved),
-                (RequestCount, MinChunksReserved - ChunkReserve.size()));
+            YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::HandleChunkReserved requesting chunk reserve", {"Marker", "BSDD28"},
+                {"DDiskId", DDiskId},
+                {"ChunkReserveSize", ChunkReserve.size()},
+                {"MinChunksReserved", MinChunksReserved},
+                {"RequestCount", MinChunksReserved - ChunkReserve.size()});
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
                 MinChunksReserved - ChunkReserve.size()));
             ReserveInFlight = true;
@@ -126,7 +128,9 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD06, "TDDiskActor::Handle(TEvCutLog)", (DDiskId, DDiskId), (Msg, msg));
+        YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvCutLog)", {"Marker", "BSDD06"},
+            {"DDiskId", DDiskId},
+            {"Msg", msg});
 
         if (ChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
             IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(), &ChunkMapSnapshotLsn, {});

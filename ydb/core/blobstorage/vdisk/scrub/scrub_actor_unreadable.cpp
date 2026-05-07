@@ -1,6 +1,7 @@
 #include "scrub_actor_impl.h"
 #include "restore_corrupted_blob_actor.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -79,9 +80,11 @@ namespace NKikimr {
                     data.RecoveryInFlightCookie);
                 const auto& p = data;
                 const auto& q = blobId;
-                STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS22, VDISKP(LogPrefix, "going to restore unreadable blob"),
-                    (Cookie, p.RecoveryInFlightCookie), (BlobId, q), (UnreadableParts, p.UnreadableParts),
-                    (CorruptedPart, p.CorruptedPart));
+                YDBLOG_COMP_INFO(BS_VDISK_SCRUB, VDISKP(LogPrefix, "going to restore unreadable blob"), {"Marker", "VDS22"},
+                    {"Cookie", p.RecoveryInFlightCookie},
+                    {"BlobId", q},
+                    {"UnreadableParts", p.UnreadableParts},
+                    {"CorruptedPart", p.CorruptedPart});
             }
         }
 
@@ -120,8 +123,9 @@ namespace NKikimr {
                     ++MonGroup.BlobsFixed();
 
                 } else {
-                    STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),
-                        (BlobId, item.BlobId), (Status, item.Status));
+                    YDBLOG_COMP_WARN(BS_VDISK_SCRUB, VDISKP(LogPrefix, "failed to restore corrupted blob"), {"Marker", "VDS07"},
+                        {"BlobId", item.BlobId},
+                        {"Status", item.Status});
                 }
             }
         }

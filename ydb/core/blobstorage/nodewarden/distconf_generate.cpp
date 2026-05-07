@@ -5,6 +5,7 @@
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -42,7 +43,8 @@ namespace NKikimr::NStorage {
 
                     const auto& groups = config->GetBlobStorageConfig().GetServiceSet().GetGroups();
                     const auto& allocatedGroup = groups.at(groups.size() - 1);
-                    STLOG(PRI_DEBUG, BS_NODE, NWDC33, "Allocated static group", (Group, allocatedGroup));
+                    YDBLOG_COMP_DEBUG(BS_NODE, "Allocated static group", {"Marker", "NWDC33"},
+                        {"Group", allocatedGroup});
                 };
 
                 if (const auto& bridge = Cfg->BridgeConfig) {

@@ -4,6 +4,7 @@
 #include "blobstorage_syncer_localwriter.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwriteindexsst.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -37,18 +38,19 @@ class TIndexSstWriterActor :
     void ProcessWrites() {
         while (!MsgQueue.empty() && WritesInFlight < MaxWritesInFlight) {
             std::unique_ptr<NPDisk::TEvChunkWrite> msg = std::move(MsgQueue.front());
-            STLOG(PRI_DEBUG, BS_SYNCER, BSFS12, VDISKP(VCtx->VDiskLogPrefix,
-                "TIndexSstWriterActor: Send TEvChunkWrite"),
-                (Msg, msg->ToString()));
+            YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+                "TIndexSstWriterActor: Send TEvChunkWrite"), {"Marker", "BSFS12"},
+                {"Msg", msg->ToString()});
             MsgQueue.pop();
 
             Send(PDiskCtx->PDiskId, msg.release()); // vdisk quoter?
             ++WritesInFlight;
         }
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS01, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: ProcessWrites"),
-            (WritesInFlight, WritesInFlight), (ReservesInFlight, ReservesInFlight));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: ProcessWrites"), {"Marker", "BSFS01"},
+            {"WritesInFlight", WritesInFlight},
+            {"ReservesInFlight", ReservesInFlight});
 
         if (WritesInFlight == 0 && ReservesInFlight == 0) {
             if (Finished) {
@@ -60,8 +62,8 @@ class TIndexSstWriterActor :
     }
 
     void SendLocalSyncDataResponse() {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS02, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: SendLocalSyncDataResponse"));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: SendLocalSyncDataResponse"), {"Marker", "BSFS02"});
 
         auto msg = std::make_unique<TEvLocalSyncDataResult>(
             NKikimrProto::OK,
@@ -72,9 +74,9 @@ class TIndexSstWriterActor :
     }
 
     void ReserveChunk(EWriterType type) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS03, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Send ReserveChunk"),
-            (Type, (ui64)type));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Send ReserveChunk"), {"Marker", "BSFS03"},
+            {"Type", (ui64)type});
 
         auto msg = std::make_unique<NPDisk::TEvChunkReserve>(
             PDiskCtx->Dsk->Owner,
@@ -88,8 +90,8 @@ class TIndexSstWriterActor :
         auto commit = [this]<class TWriter>(TWriter& writer) {
             auto msg = writer.GenerateCommitMessage(SelfId());
             if (msg) {
-                STLOG(PRI_DEBUG, BS_SYNCER, BSFS05, VDISKP(VCtx->VDiskLogPrefix,
-                    "TIndexSstWriterActor: Send commit"));
+                YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+                    "TIndexSstWriterActor: Send commit"), {"Marker", "BSFS05"});
 
                 Send(writer.GetLevelIndexActorId(), msg.release());
                 ++CommitsInFlight;
@@ -100,9 +102,9 @@ class TIndexSstWriterActor :
         commit(BlockWriter);
         commit(BarrierWriter);
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS05, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Commit"),
-            (CommitsInFlight, CommitsInFlight));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Commit"), {"Marker", "BSFS05"},
+            {"CommitsInFlight", CommitsInFlight});
 
         if (CommitsInFlight == 0) {
             Finish();
@@ -110,16 +112,16 @@ class TIndexSstWriterActor :
     }
 
     void Finish() {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS06, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Finish"));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Finish"), {"Marker", "BSFS06"});
 
         Send(SyncerJobActorId, new TEvFullSyncFinished);
         PassAway();
     }
 
     void Handle(TEvLocalSyncData::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS07, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Handle TEvLocalSyncData"));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Handle TEvLocalSyncData"), {"Marker", "BSFS07"});
 
         TEvLocalSyncData* msg = ev->Get();
         if (msg->Extracted.LogoBlobs && !msg->Extracted.LogoBlobs->Empty()) {
@@ -142,8 +144,8 @@ class TIndexSstWriterActor :
     }
 
     void Handle(TEvLocalSyncFinished::TPtr& /*ev*/) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS08, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Handle TEvLocalSyncFinished"));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Handle TEvLocalSyncFinished"), {"Marker", "BSFS08"});
 
         LogoBlobWriter.Finish();
         BlockWriter.Finish();
@@ -156,8 +158,8 @@ class TIndexSstWriterActor :
     void Handle(NPDisk::TEvChunkWriteResult::TPtr& ev) {
         CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS09, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Handle TEvChunkWriteResult"));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Handle TEvChunkWriteResult"), {"Marker", "BSFS09"});
 
         Y_VERIFY_S(WritesInFlight, VCtx->VDiskLogPrefix);
         --WritesInFlight;
@@ -175,9 +177,10 @@ class TIndexSstWriterActor :
         auto chunkId = msg->ChunkIds.front();
         auto type = (EWriterType)ev->Cookie;
 
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS10, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Handle TEvChunkReserveResult"),
-            (ChunkId, chunkId), (Type, (ui64)type));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Handle TEvChunkReserveResult"), {"Marker", "BSFS10"},
+            {"ChunkId", chunkId},
+            {"Type", (ui64)type});
 
         switch (type) {
             case EWriterType::LOGOBLOBS:
@@ -195,9 +198,9 @@ class TIndexSstWriterActor :
     }
 
     void Handle(TEvAddFullSyncSstsResult::TPtr& /*ev*/) {
-        STLOG(PRI_DEBUG, BS_SYNCER, BSFS11, VDISKP(VCtx->VDiskLogPrefix,
-            "TIndexSstWriterActor: Handle TEvAddFullSyncSstsResult"),
-            (CommitsInFlight, CommitsInFlight));
+        YDBLOG_COMP_DEBUG(BS_SYNCER, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriterActor: Handle TEvAddFullSyncSstsResult"), {"Marker", "BSFS11"},
+            {"CommitsInFlight", CommitsInFlight});
 
         Y_VERIFY_S(CommitsInFlight, VCtx->VDiskLogPrefix);
         if (--CommitsInFlight == 0) {

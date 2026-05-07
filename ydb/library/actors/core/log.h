@@ -762,7 +762,8 @@ namespace NActors {
         if (IS_CTX_LOG_PRIORITY_ENABLED(actorContext, priority, component, 0ull)) { \
             NKikimr::NStructuredLog::TStructuredMessage message = NKikimr::NStructuredLog::TLogStack::GetTop(); \
             YDBLOG_UPDATE_MESSAGE(message, __VA_ARGS__); \
-            MemStructLogAdapter(actorContext, priority, component, __FILE_NAME__, __LINE__, T, std::move(message) ); \
+            TStringStream messageTextStream; messageTextStream << T; \
+            MemStructLogAdapter(actorContext, priority, component, __FILE_NAME__, __LINE__, messageTextStream.Str(), std::move(message) ); \
         } \
     } while (false)
 

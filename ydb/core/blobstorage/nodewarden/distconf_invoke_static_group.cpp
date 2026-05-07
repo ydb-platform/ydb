@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -48,8 +49,10 @@ namespace NKikimr::NStorage {
             const TActorId actorId = GroupInfo->GetActorId(i);
             const ui32 flags = IEventHandle::FlagTrackDelivery |
                 (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            STLOG(PRI_DEBUG, BS_NODE, NWDC73, "sending TEvVStatus", (SelfId, SelfId()), (VDiskId, vdiskId),
-                (ActorId, actorId));
+            YDBLOG_COMP_DEBUG(BS_NODE, "sending TEvVStatus", {"Marker", "NWDC73"},
+                {"SelfId", SelfId()},
+                {"VDiskId", vdiskId},
+                {"ActorId", actorId});
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
@@ -63,7 +66,10 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        STLOG(PRI_DEBUG, BS_NODE, NWDC74, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
+        YDBLOG_COMP_DEBUG(BS_NODE, "TEvVStatusResult", {"Marker", "NWDC74"},
+            {"SelfId", SelfId()},
+            {"Record", record},
+            {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
             throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
         }
@@ -108,7 +114,8 @@ namespace NKikimr::NStorage {
         const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
+        YDBLOG_COMP_DEBUG(BS_NODE, "ReassignGroupDiskExecute", {"Marker", "NWDC75"},
+            {"SelfId", SelfId()});
 
         const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
 

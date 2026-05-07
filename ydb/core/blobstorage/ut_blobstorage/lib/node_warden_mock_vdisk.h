@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "node_warden_mock.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 class TNodeWardenMockActor::TVDiskMockActor : public TActorBootstrapped<TVDiskMockActor> {
     TNodeWardenMockActor *NodeWardenMockActor;
@@ -24,7 +25,9 @@ public:
 
     void Bootstrap() {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM06, "VDisk starting", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDBLOG_COMP_INFO(BS_NODE, "VDisk starting", {"Marker", "NWM06"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             if (vdisk->AllocatedSize) {
                 StartReadLog();
             } else {
@@ -79,7 +82,9 @@ public:
     void StartReplication() {
         State = EState::REPLICATION;
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM09, "VDisk REPLICATING", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDBLOG_COMP_INFO(BS_NODE, "VDisk REPLICATING", {"Marker", "NWM09"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::REPLICATING;
             InvokeOtherActor(*NodeWardenMockActor, &TNodeWardenMockActor::SendUpdateVDiskStatus, vdisk.get());
         }
@@ -101,7 +106,9 @@ public:
 
     void BecomeReady() {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM08, "VDisk READY", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDBLOG_COMP_INFO(BS_NODE, "VDisk READY", {"Marker", "NWM08"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::READY;
             InvokeOtherActor(*NodeWardenMockActor, &TNodeWardenMockActor::SendUpdateVDiskStatus, vdisk.get());
             State = EState::READY;
@@ -129,7 +136,9 @@ public:
 
     void PassAway() override {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM07, "VDisk stopping", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDBLOG_COMP_INFO(BS_NODE, "VDisk stopping", {"Marker", "NWM07"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             UNIT_ASSERT_EQUAL(vdisk->Actor, this);
             vdisk->Actor = nullptr;
         }

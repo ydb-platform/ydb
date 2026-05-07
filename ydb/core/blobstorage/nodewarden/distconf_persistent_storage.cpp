@@ -2,6 +2,7 @@
 #include <google/protobuf/util/json_util.h>
 
 #include <library/cpp/openssl/crypto/sha.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -22,7 +23,8 @@ namespace NKikimr::NStorage {
             void Bootstrap(TActorId parentId) {
                 ParentId = parentId;
 
-                STLOG(PRI_DEBUG, BS_NODE, NWDC40, "TReaderActor bootstrap", (Paths, Paths));
+                YDBLOG_COMP_DEBUG(BS_NODE, "TReaderActor bootstrap", {"Marker", "NWDC40"},
+                    {"Paths", Paths});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 for (size_t index = 0; index < Paths.size(); ++index) {
@@ -41,8 +43,11 @@ namespace NKikimr::NStorage {
                 const TString& path = Paths[index];
                 auto& record = msg->Record;
 
-                STLOG(PRI_DEBUG, BS_NODE, NWDC50, "TReaderActor result", (Path, path), (Outcome, msg->Outcome),
-                    (Guid, msg->Guid), (Record, record));
+                YDBLOG_COMP_DEBUG(BS_NODE, "TReaderActor result", {"Marker", "NWDC50"},
+                    {"Path", path},
+                    {"Outcome", msg->Outcome},
+                    {"Guid", msg->Guid},
+                    {"Record", record});
 
                 switch (msg->Outcome) {
                     case NPDisk::EPDiskMetadataOutcome::OK:
@@ -99,7 +104,8 @@ namespace NKikimr::NStorage {
             void Bootstrap(TActorId parentId) {
                 ParentId = parentId;
 
-                STLOG(PRI_DEBUG, BS_NODE, NWDC51, "TWriterActor bootstrap", (Records, Records));
+                YDBLOG_COMP_DEBUG(BS_NODE, "TWriterActor bootstrap", {"Marker", "NWDC51"},
+                    {"Records", Records});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 for (auto& [path, record] : Records) {
@@ -116,8 +122,10 @@ namespace NKikimr::NStorage {
                 const size_t index = ev->Cookie;
                 Y_ABORT_UNLESS(index < Drives.size());
                 const TString& path = Drives[index];
-                STLOG(PRI_DEBUG, BS_NODE, NWDC52, "TWriterActor result", (Path, path), (Outcome, ev->Get()->Outcome),
-                    (Guid, ev->Get()->Guid));
+                YDBLOG_COMP_DEBUG(BS_NODE, "TWriterActor result", {"Marker", "NWDC52"},
+                    {"Path", path},
+                    {"Outcome", ev->Get()->Outcome},
+                    {"Guid", ev->Get()->Guid});
                 Response->StatusPerPath.emplace_back(path, ev->Get()->Outcome == NPDisk::EPDiskMetadataOutcome::OK, ev->Get()->Guid);
                 --RepliesPending;
                 CheckIfDone();
@@ -160,7 +168,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (MetadataByPath, MetadataByPath));
+        YDBLOG_COMP_DEBUG(BS_NODE, "PersistConfig", {"Marker", "NWDC35"},
+            {"MetadataByPath", MetadataByPath});
 
         TPersistQueueItem& item = PersistQ.emplace_back();
         item.Callback = std::move(callback);
@@ -191,8 +200,10 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!PersistQ.empty());
         auto& item = PersistQ.front();
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC36, "TEvStorageConfigStored", (NumOk, numOk), (NumError, numError),
-            (Passed, TDuration::Seconds(item.Timer.Passed())));
+        YDBLOG_COMP_DEBUG(BS_NODE, "TEvStorageConfigStored", {"Marker", "NWDC36"},
+            {"NumOk", numOk},
+            {"NumError", numError},
+            {"Passed", TDuration::Seconds(item.Timer.Passed())});
 
         if (item.Callback) {
             item.Callback(*ev->Get());
@@ -216,7 +227,9 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev) {
         auto& msg = *ev->Get();
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC32, "TEvStorageConfigLoaded", (Cookie, ev->Cookie), (NumItemsRead, msg.MetadataPerPath.size()));
+        YDBLOG_COMP_DEBUG(BS_NODE, "TEvStorageConfigLoaded", {"Marker", "NWDC32"},
+            {"Cookie", ev->Cookie},
+            {"NumItemsRead", msg.MetadataPerPath.size()});
         if (ev->Cookie) {
             if (const auto it = ScatterTasks.find(ev->Cookie); it != ScatterTasks.end()) {
                 TScatterTask& task = it->second;

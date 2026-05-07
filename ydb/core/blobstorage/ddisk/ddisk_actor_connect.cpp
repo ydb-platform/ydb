@@ -1,13 +1,15 @@
 #include "ddisk_actor.h"
 
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvConnect)", (DDiskId, DDiskId),
-            (Record, record));
+        YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvConnect)", {"Marker", "BSDD00"},
+            {"DDiskId", DDiskId},
+            {"Record", record});
 
         const TQueryCredentials creds(record.GetCredentials());
         const auto [it, inserted] = Connections.try_emplace(creds.TabletId);

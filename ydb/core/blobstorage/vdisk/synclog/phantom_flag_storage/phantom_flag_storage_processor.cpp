@@ -11,6 +11,7 @@
 #include <ydb/core/util/stlog.h>
 
 #include <unordered_set>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NSyncLog {
 
@@ -110,10 +111,10 @@ private:
     }
 
     void Handle(TEvPhantomFlagStorageWriteItems::TPtr ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP03, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvPhantomFlagStorageWriteItems"),
-                (ItemCount, ev->Get()->Items.size()),
-                (WriteQueueSize, WriteQueue.size()));
+        YDBLOG_COMP_DEBUG(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvPhantomFlagStorageWriteItems"), {"Marker", "BSPFP03"},
+            {"ItemCount", ev->Get()->Items.size()},
+            {"WriteQueueSize", WriteQueue.size()});
         std::ranges::move(ev->Get()->Items.begin(), ev->Get()->Items.end(),
                 std::back_inserter(WriteQueue));
         ProcessQueues();
@@ -153,9 +154,9 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkWriteResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP06, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkWriteResult"),
-                (Event, ev->Get()->ToString()));
+        YDBLOG_COMP_DEBUG(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkWriteResult"), {"Marker", "BSPFP06"},
+            {"Event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
@@ -168,9 +169,9 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP07, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkReadResult"),
-                (Event, ev->Get()->ToString()));
+        YDBLOG_COMP_DEBUG(BS_PHANTOM_FLAG_PROCESSOR, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkReadResult"), {"Marker", "BSPFP07"},
+            {"Event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         PendingRead.ChunksToRead.erase(chunkIdx);

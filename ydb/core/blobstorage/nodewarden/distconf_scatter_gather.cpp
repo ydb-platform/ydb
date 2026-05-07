@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -11,9 +12,13 @@ namespace NKikimr::NStorage {
         if (std::holds_alternative<TActorId>(origin)) {
             Y_ABORT_UNLESS(std::get<TActorId>(origin));
         }
-        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie), (Origin, origin),
-            (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt),
-            (AddedNodes, addedNodes));
+        YDBLOG_COMP_DEBUG(BS_NODE, "IssueScatterTask", {"Marker", "NWDC21"},
+            {"Request", request},
+            {"Cookie", cookie},
+            {"Origin", origin},
+            {"Binding", Binding},
+            {"Scepter", Scepter ? std::make_optional(Scepter->Id) : std::nullopt},
+            {"AddedNodes", addedNodes});
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(origin), std::move(request), ScepterCounter,
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
@@ -75,7 +80,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Request, task.Request));
+        YDBLOG_COMP_DEBUG(BS_NODE, "CompleteScatterTask", {"Marker", "NWDC22"},
+            {"Request", task.Request});
 
         if (std::holds_alternative<TBinding>(task.Origin)) {
             Y_ABORT_UNLESS(Binding); // when binding is dropped, all scatter tasks must be dropped too
@@ -110,7 +116,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::AbortScatterTask(ui64 cookie, ui32 nodeId) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC23, "AbortScatterTask", (Cookie, cookie), (NodeId, nodeId));
+        YDBLOG_COMP_DEBUG(BS_NODE, "AbortScatterTask", {"Marker", "NWDC23"},
+            {"Cookie", cookie},
+            {"NodeId", nodeId});
 
         const auto it = ScatterTasks.find(cookie);
         Y_VERIFY_S(it != ScatterTasks.end(), "Cookie# " << cookie << " NodeId# " << nodeId);
@@ -122,7 +130,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks", (Binding, binding));
+        YDBLOG_COMP_DEBUG(BS_NODE, "AbortAllScatterTasks", {"Marker", "NWDC24"},
+            {"Binding", binding});
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
             auto getAborted = [&] {
@@ -165,8 +174,12 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC25, "TEvNodeConfigScatter", (Binding, Binding), (Sender, ev->Sender),
-            (Cookie, ev->Cookie), (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
+        YDBLOG_COMP_DEBUG(BS_NODE, "TEvNodeConfigScatter", {"Marker", "NWDC25"},
+            {"Binding", Binding},
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie},
+            {"SessionId", ev->InterconnectSession},
+            {"Record", ev->Get()->Record});
 
         if (auto& record = ev->Get()->Record; Binding && Binding->Expected(*ev)) {
             IssueScatterTask(*Binding, std::move(record));
@@ -176,8 +189,11 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigGather::TPtr ev) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC26, "TEvNodeConfigGather", (Sender, ev->Sender), (Cookie, ev->Cookie),
-            (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
+        YDBLOG_COMP_DEBUG(BS_NODE, "TEvNodeConfigGather", {"Marker", "NWDC26"},
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie},
+            {"SessionId", ev->InterconnectSession},
+            {"Record", ev->Get()->Record});
 
         auto& record = ev->Get()->Record;
         const ui64 cookie = record.GetCookie();

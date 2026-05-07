@@ -9,6 +9,7 @@
 
 #if defined(__linux__)
 #include <unistd.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 #endif
 
 namespace NKikimr::NDDisk {
@@ -45,7 +46,10 @@ namespace {
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                YDBLOG_COMP_ERROR(BS_DDISK, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", {"Marker", "BSDD10"},
+                    {"DDiskId", DDiskId},
+                    {"PDiskActorId", BaseInfo.PDiskActorID},
+                    {"ChunkIdx", idx});
                 continue;
             }
             PersistentBufferSpaceAllocator.AddNewChunk(idx);
@@ -176,7 +180,8 @@ namespace {
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        YDBLOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Bootstrap", {"Marker", "BSDD09"},
+            {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
@@ -202,14 +207,13 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD23,
-                    "TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    (DDiskId, DDiskId),
-                    (Cookie, ev->Cookie),
-                    (SyncId, syncId),
-                    (FirstRequestId, sync.FirstRequestId),
-                    (RequestsCount, sync.Requests.size()),
-                    (SourceType, sourceType));
+                YDBLOG_COMP_ERROR(BS_DDISK, "TDDiskActor::Handle(TEvUndelivered) request cookie out of range", {"Marker", "BSDD23"},
+                    {"DDiskId", DDiskId},
+                    {"Cookie", ev->Cookie},
+                    {"SyncId", syncId},
+                    {"FirstRequestId", sync.FirstRequestId},
+                    {"RequestsCount", sync.Requests.size()},
+                    {"SourceType", sourceType});
                 return;
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];

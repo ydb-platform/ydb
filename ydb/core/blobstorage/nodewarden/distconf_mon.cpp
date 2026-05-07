@@ -2,6 +2,7 @@
 #include "node_warden_impl.h"
 
 #include <google/protobuf/util/json_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NStorage {
 
@@ -39,7 +40,8 @@ namespace NKikimr::NStorage {
                 if (!status.ok()) {
                     return FinishWithError("failed to parse JSON");
                 }
-                STLOG(PRI_DEBUG, BS_NODE, NWDC04, "sending TEvNodeConfigInvokeOnRoot", (Record, ev->Record));
+                YDBLOG_COMP_DEBUG(BS_NODE, "sending TEvNodeConfigInvokeOnRoot", {"Marker", "NWDC04"},
+                    {"Record", ev->Record});
 
                 // send it to the actor
                 const TActorId nondeliveryId = SelfId();
@@ -49,7 +51,8 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC39, "receive TEvNodeConfigInvokeOnRootResult", (Record, ev->Get()->Record));
+                YDBLOG_COMP_DEBUG(BS_NODE, "receive TEvNodeConfigInvokeOnRootResult", {"Marker", "NWDC39"},
+                    {"Record", ev->Get()->Record});
 
                 TString data;
                 google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);

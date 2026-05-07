@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 #include <util/system/types.h>
 #include <util/system/mutex.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 using namespace NActors;
 
@@ -58,7 +59,8 @@ namespace NKikimr {
             }
 
             void HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD32, "TPersistentBufferMonActor::HandleWakeup", (cookie, ev->Get()->Tag));
+                YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::HandleWakeup", {"Marker", "BSDD32"},
+                    {"cookie", ev->Get()->Tag});
                 for (auto [cookie, _] : Inflight[ev->Get()->Tag].Requests) {
                     PBuffersInflight.erase(cookie);
                 }
@@ -205,7 +207,9 @@ namespace NKikimr {
                     }
                 }
                 Send(inflight.Sender, new NMon::TEvHttpInfoRes(str.Str(), inflight.SubRequestId), 0, inflight.Cookie);
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD39, "TPersistentBufferMonActor::Reply()", (Responses, inflight.Responses.size()), (Requests, inflight.Requests.size()));
+                YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::Reply()", {"Marker", "BSDD39"},
+                    {"Responses", inflight.Responses.size()},
+                    {"Requests", inflight.Requests.size()});
                 Inflight.erase(it);
             }
 
@@ -213,16 +217,19 @@ namespace NKikimr {
                 auto reqCookie = ev->Cookie;
                 auto cookie = PBuffersInflight[reqCookie];
                 PBuffersInflight.erase(reqCookie);
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD33, "TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo)",
-                    (Sender, ev->Sender), (reqCookie, reqCookie), (cookie, cookie));
+                YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo)", {"Marker", "BSDD33"},
+                    {"Sender", ev->Sender},
+                    {"reqCookie", reqCookie},
+                    {"cookie", cookie});
                 auto it = Inflight.find(cookie);
                 if (it == Inflight.end()) {
                     return;
                 }
                 auto& inflight = it->second;
                 if (inflight.Requests.count(ev->Cookie) == 0) {
-                    STLOG(PRI_ERROR, BS_DDISK, BSDD34, "TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo) unknown persistent buffer",
-                        (Sender, ev->Sender), (cookie, cookie));
+                    YDBLOG_COMP_ERROR(BS_DDISK, "TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo) unknown persistent buffer", {"Marker", "BSDD34"},
+                        {"Sender", ev->Sender},
+                        {"cookie", cookie});
                 } else {
                     inflight.Requests.erase(ev->Cookie);
                 }
@@ -234,7 +241,8 @@ namespace NKikimr {
 
             void Handle(TEvNodeWardenListLocalDDisksResult::TPtr& ev) {
                 auto cookie = ev->Cookie;
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD35, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult)", (cookie, cookie));
+                YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult)", {"Marker", "BSDD35"},
+                    {"cookie", cookie});
                 auto it = Inflight.find(cookie);
                 Y_ABORT_UNLESS(it != Inflight.end());
                 auto& inflight = it->second;
@@ -247,8 +255,9 @@ namespace NKikimr {
                     infoReq->DescribeFreeSpace = inflight.DescribeFreeSpace;
                     infoReq->DescribeTablets = inflight.ShowTablets;
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
-                    STLOG(PRI_DEBUG, BS_DDISK, BSDD36, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
-                        (r.PersistentBufferId, r.PersistentBufferId), (reqCookie, reqCookie));
+                    YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send", {"Marker", "BSDD36"},
+                        {"r.PersistentBufferId", r.PersistentBufferId},
+                        {"reqCookie", reqCookie});
                 }
                 Schedule(TDuration::MilliSeconds(5000), new TEvents::TEvWakeup(cookie));
             }
@@ -307,7 +316,8 @@ namespace NKikimr {
                 };
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(nwId, new TEvNodeWardenListLocalDDisks(), 0, cookie);
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD37, "TPersistentBufferMonActor::Handle(TEvHttpInfo)", (cookie, cookie));
+                YDBLOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferMonActor::Handle(TEvHttpInfo)", {"Marker", "BSDD37"},
+                    {"cookie", cookie});
             }
 
             STRICT_STFUNC(StateFunc,

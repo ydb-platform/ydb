@@ -275,7 +275,7 @@ namespace NActors {
         TPollerActor(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
             if (counters) {
                 SyncOperationTimeHistogram = counters->GetHistogram(
-                    "PollerSyncOperationTimeUs", NMonitoring::ExponentialHistogram(16, 2, 1));
+                    "PollerSyncOperationTimeUs", NMonitoring::ExponentialHistogram(16, 2, 4));
             }
         }
 

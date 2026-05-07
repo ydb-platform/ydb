@@ -1,4 +1,6 @@
 #include <ydb/core/tx/columnshard/engines/snapshot_holders.h>
+#include <ydb/core/tx/columnshard/tables_manager.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -36,6 +38,80 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
                 return portion.Appeared <= heldSnapshot;
             });
     }
+
+    NColumnShard::TTableInfo MakeTable(
+        const ui64 internalPathIdRaw, const ui64 ssPathIdRaw, const ui64 firstVersionSnapshotStep, const ui64 dropSnapshotStep) {
+        const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(internalPathIdRaw);
+        const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(ssPathIdRaw);
+        NColumnShard::TTableInfo table({ NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId) });
+        table.AddVersion(Step(firstVersionSnapshotStep));
+        table.SetDropVersion(ssPathId, Step(dropSnapshotStep));
+        return table;
+    }
+
+    class TFakeSnapshotRegistry: public IImmutableSnapshotRegistry {
+    private:
+        std::vector<std::pair<NKikimr::TTableId, TSet<TRowVersion>>> ActiveSnapshots;
+        TRowVersion Border = TRowVersion::Max();
+
+    public:
+        void AddActiveSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& snapshot) {
+            for (auto& [id, snapshots] : ActiveSnapshots) {
+                if (id == tableId) {
+                    snapshots.emplace(snapshot);
+                    return;
+                }
+            }
+            ActiveSnapshots.emplace_back(tableId, TSet<TRowVersion>{ snapshot });
+        }
+
+        bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const override {
+            if (version >= Border) {
+                return true;
+            }
+            for (const auto& [id, snapshots] : ActiveSnapshots) {
+                if (id == tableId && snapshots.contains(version)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const override {
+            for (const auto& [id, snapshots] : ActiveSnapshots) {
+                if (id == tableId) {
+                    return snapshots;
+                }
+            }
+            return {};
+        }
+
+        TRowVersion GetBorder() const override {
+            return Border;
+        }
+    };
+
+    class TFakePathIdTranslator: public IPathIdTranslator {
+    private:
+        THashMap<TInternalPathId, std::set<NColumnShard::TSchemeShardLocalPathId>> InternalToSchemeShardLocal;
+
+    public:
+        void Add(const TInternalPathId internalPathId, std::set<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathIds) {
+            InternalToSchemeShardLocal[internalPathId] = std::move(schemeShardLocalPathIds);
+        }
+
+        std::optional<std::set<NColumnShard::TSchemeShardLocalPathId>> ResolveSchemeShardLocalPathIdsOptional(
+            const TInternalPathId internalPathId) const override {
+            if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
+                return *p;
+            }
+            return std::nullopt;
+        }
+
+        std::optional<TInternalPathId> ResolveInternalPathIdOptional(const NColumnShard::TSchemeShardLocalPathId, const bool) const override {
+            return std::nullopt;
+        }
+    };
 
     Y_UNIT_TEST(PortionsCouldBeUsedAfterMinReadSnapshot) {
         // time        0--1--------------------------------10---11
@@ -80,6 +156,95 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
         UNIT_ASSERT(!CouldUse(holders, portion1));
         UNIT_ASSERT(!CouldUse(holders, portion2));
         UNIT_ASSERT(!CouldUse(holders, portion3));
+    }
+
+    Y_UNIT_TEST(LegacySnapshotHoldersCouldUseTable) {
+        const TLegacySnapshotHolders holders(Step(20), { Step(5) });
+
+        {
+            // Removed later than min snapshot for new reads -> always usable by new scans.
+            auto table = MakeTable(1, 10, 1, 25);
+            UNIT_ASSERT(holders.CouldUseTable(table));
+        }
+
+        {
+            // Removed before min snapshot, but visible to active tx snapshot (step=5).
+            auto table = MakeTable(2, 20, 1, 10);
+            UNIT_ASSERT(holders.CouldUseTable(table));
+        }
+
+        {
+            // Removed before min snapshot and not visible to active tx snapshot (step=5).
+            auto table = MakeTable(3, 30, 1, 4);
+            UNIT_ASSERT(!holders.CouldUseTable(table));
+        }
+    }
+
+    Y_UNIT_TEST(RegistrySnapshotHoldersCouldUseTableByActiveSnapshot) {
+        const ui64 schemeShardId = 777;
+        const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(2);
+        const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(20);
+        auto table = MakeTable(2, 20, 1, 10);
+
+        TFakePathIdTranslator translator;
+        translator.Add(internalPathId, { ssPathId });
+
+        auto* registryImpl = new TFakeSnapshotRegistry();
+        registryImpl->AddActiveSnapshot(NKikimr::TTableId(schemeShardId, ssPathId.GetRawValue(), 0), TRowVersion(5, 1));
+        TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry(registryImpl);
+
+        const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+        UNIT_ASSERT(holders.CouldUseTable(table));
+    }
+
+    Y_UNIT_TEST(RegistrySnapshotHoldersUsesAllSchemeShardLocalPathIds) {
+        const ui64 schemeShardId = 888;
+        const auto internalPathId = NColumnShard::TInternalPathId::FromRawValue(3);
+        const auto ssPathId1 = NColumnShard::TSchemeShardLocalPathId::FromRawValue(30);
+        const auto ssPathId2 = NColumnShard::TSchemeShardLocalPathId::FromRawValue(31);
+        const auto unrelatedSsPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(999);
+        NColumnShard::TTableInfo table({ NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId1),
+            NColumnShard::TUnifiedPathId::BuildValid(internalPathId, ssPathId2) });
+        table.AddVersion(Step(1));
+        table.SetCopyVersion(ssPathId2, Step(8));
+        table.SetDropVersion(ssPathId1, Step(10));
+        table.SetDropVersion(ssPathId2, Step(15));
+
+        TFakePathIdTranslator translator;
+        translator.Add(internalPathId, { ssPathId1, ssPathId2 });
+
+        {
+            auto* registryImpl = new TFakeSnapshotRegistry();
+            // Snapshot for an unrelated table must not keep this table alive.
+            registryImpl->AddActiveSnapshot(NKikimr::TTableId(schemeShardId, unrelatedSsPathId.GetRawValue(), 0), TRowVersion(9, 1));
+            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry(registryImpl);
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+            UNIT_ASSERT(!holders.CouldUseTable(table));
+        }
+        {
+            auto* registryImpl = new TFakeSnapshotRegistry();
+            // Snapshot for this table but outside table lifetime [1..15) must not keep it alive.
+            registryImpl->AddActiveSnapshot(NKikimr::TTableId(schemeShardId, ssPathId1.GetRawValue(), 0), TRowVersion(15, 1));
+            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry(registryImpl);
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+            UNIT_ASSERT(!holders.CouldUseTable(table));
+        }
+        {
+            auto* registryImpl = new TFakeSnapshotRegistry();
+            // Snapshot for the first alias keeps table alive.
+            registryImpl->AddActiveSnapshot(NKikimr::TTableId(schemeShardId, ssPathId1.GetRawValue(), 0), TRowVersion(9, 1));
+            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry(registryImpl);
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+            UNIT_ASSERT(holders.CouldUseTable(table));
+        }
+        {
+            auto* registryImpl = new TFakeSnapshotRegistry();
+            // Snapshot for the second alias also keeps table alive.
+            registryImpl->AddActiveSnapshot(NKikimr::TTableId(schemeShardId, ssPathId2.GetRawValue(), 0), TRowVersion(9, 1));
+            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry(registryImpl);
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator);
+            UNIT_ASSERT(holders.CouldUseTable(table));
+        }
     }
 
 #ifndef _win_

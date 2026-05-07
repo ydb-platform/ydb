@@ -25,7 +25,7 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions.
+Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
 ### Creating a Secondary Index Online {#index-add}
 

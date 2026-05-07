@@ -1326,7 +1326,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             if (alter.encoding_size() > 0) {
                 if (alter.encoding_size() != 1) {
                     status = Ydb::StatusIds::UNSUPPORTED;
-                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << name;
+                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << alter.Getname();
                     return false;
                 }
 
@@ -1349,7 +1349,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                         break;
                     default:
                         status = Ydb::StatusIds::UNSUPPORTED;
-                        error = TStringBuilder() << "Unsupported encoding for column: " << name;
+                        error = TStringBuilder() << "Unsupported encoding for column: " << alter.Getname();
                         return false;
 
                 }

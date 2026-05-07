@@ -57,7 +57,9 @@ public:
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 
+    [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(ui8 hostIndex) const;
+    [[nodiscard]] TString DebugPrintDirtyMap();
 
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);

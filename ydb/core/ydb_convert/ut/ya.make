@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/ydb_convert)
 
+YQL_LAST_ABI_VERSION()
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)

@@ -73,12 +73,8 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
         }
         const auto loadContext = Loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
         if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
-            std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> sourceAdditionalData;
-            if (const auto* chunkPrep = dynamic_cast<const NChunks::TChunkPreparation*>(s.get())) {
-                sourceAdditionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
-            }
-            auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(
-                s->GetData(), s->GetRecordsCountVerified(), std::nullopt, std::move(sourceAdditionalData));
+            auto chunkedArray =
+                sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified(), std::nullopt, additionalData);
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
             if (targetIsDictionary) {
@@ -90,7 +86,11 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
             }
         } else {
-            auto arr = DataAccessorConstructor.DeserializeFromString(s->GetData(), loadContext).DetachResult();
+            // Deserialize using the source serializer (blob was written with sourceColumnFeatures.Loader->Serializer),
+            // then re-serialize using the target serializer in `loadContext`.
+            const auto sourceLoadContext =
+                sourceColumnFeatures.Loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
+            auto arr = DataAccessorConstructor.DeserializeFromString(s->GetData(), sourceLoadContext).DetachResult();
             rawBytes = arr->GetRawSizeVerified();
             if (targetIsDictionary) {
                 auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, loadContext);

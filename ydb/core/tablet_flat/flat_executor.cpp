@@ -5201,7 +5201,7 @@ void TExecutor::StartNewBackup() {
     Y_ENSURE(!BackupSnapshotInProgress);
 
     // Stop the old backup changelog
-    CommitManager->BackupLogic.Stop();
+    CommitManager->BackupLogic.Stop(true);
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);

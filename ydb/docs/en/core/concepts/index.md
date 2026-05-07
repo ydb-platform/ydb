@@ -18,8 +18,14 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Database limits](limits-ydb.md)
 - [Multi-Version Concurrency Control (MVCC)](mvcc.md)
 - [Asynchronous replication](async-replication.md)
+<<<<<<< HEAD
 - [Query optimizer](optimizer.md)
 - [Federated queries](federated_query/index.md)
+=======
+- [Query optimizer](query_execution/optimizer.md)
+- [Federated queries](query_execution/federated_query/index.md)
+- [Streaming queries](streaming-query.md)
+>>>>>>> ff4e63c893e (Translation of PR 25701 YQ-4502 add streaming_queries docs (#39540))
 
 ## See Also {#see-also}
 

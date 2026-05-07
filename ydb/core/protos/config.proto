@@ -1601,11 +1601,16 @@ message TImmediateControlsConfig {
             MinValue: -1,
             MaxValue: 1000000,
             DefaultValue: 32 }];
-        optional int64 MaxIncrementalRestoreRetriesPerIncremental = 17 [(ControlOptions) = {
-            Description: "Max retry attempts per incremental in incremental restore. -1 disables the cap.",
+        optional int64 MaxIncrementalRestoreOverallDurationSeconds = 17 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) of the whole incremental restore from first dispatch to terminal. -1 disables the deadline.",
             MinValue: -1,
-            MaxValue: 1000,
-            DefaultValue: 50 }];
+            MaxValue: 604800,
+            DefaultValue: 86400 }];
+        optional int64 MaxIncrementalRestoreStageDurationSeconds = 18 [(ControlOptions) = {
+            Description: "Max wall-clock duration (seconds) of a single incremental stage; resets on MoveToNextIncremental. -1 disables the deadline.",
+            MinValue: -1,
+            MaxValue: 86400,
+            DefaultValue: 21600 }];
     }
 
     message TTCMallocControls {

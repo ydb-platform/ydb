@@ -5479,12 +5479,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString serializedData = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::SerializedData>("");
                 ui32 finalStatus = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalStatus>(0);
                 TString finalIssues = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::FinalIssues>("");
+                ui64 restoreStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RestoreStartedAt>(0);
+                ui64 currentStageStartedAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::CurrentStageStartedAt>(0);
+                bool retryScheduled = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryScheduled>(false);
+                ui64 nextRetryAttemptAtUs = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
                 state.FinalStatus = finalStatus;
                 state.FinalIssues = finalIssues;
+                state.RestoreStartedAt = TInstant::MicroSeconds(restoreStartedAtUs);
+                state.CurrentStageStartedAt = TInstant::MicroSeconds(currentStageStartedAtUs);
+                state.RetryScheduled = retryScheduled;
+                state.NextRetryAttemptAt = TInstant::MicroSeconds(nextRetryAttemptAtUs);
 
                 // Do NOT restore CompletedOperations for Running states — after reboot we retry
                 // the current incremental from scratch (ops are idempotent; transient failure

@@ -3,6 +3,7 @@
 #include "helpers.h"
 #include "test_env.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -13,6 +14,15 @@
 
 namespace NSchemeShardUT_Private {
 namespace NIncrementalRestoreHelpers {
+
+// Sets both wall-clock deadline ICB controls. -1 disables either tier.
+inline void SetRestoreDeadlines(NActors::TTestActorRuntime& runtime,
+        i64 overallSec, i64 stageSec) {
+    NKikimr::TControlBoard::SetValue(overallSec,
+        runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+    NKikimr::TControlBoard::SetValue(stageSec,
+        runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
+}
 
 // Polls TestGetIncrementalBackup until PROGRESS_DONE; fails on timeout.
 inline void WaitForIncrementalBackupDone(NActors::TTestActorRuntime& runtime, TTestEnv* testEnv,
@@ -178,6 +188,50 @@ inline void SetupBackupCollectionWithNTables(NActors::TTestActorRuntime& runtime
         TestDropTable(runtime, ++txId, "/MyRoot", tbl);
         env.TestWaitNotification(runtime, txId);
     }
+}
+
+// Creates 1 table, takes a full backup, then K incremental backups. Used by stage-deadline tests.
+inline void SetupBackupCollectionWithKIncrementals(NActors::TTestActorRuntime& runtime, TTestEnv& env,
+        ui64& txId, ui32 numIncrementals) {
+    TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
+    env.TestWaitNotification(runtime, txId);
+
+    TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+        Name: "MyCollection1"
+        ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table0" } }
+        Cluster {}
+        IncrementalBackupConfig {}
+    )");
+    env.TestWaitNotification(runtime, txId);
+
+    TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        Name: "Table0"
+        Columns { Name: "key" Type: "Uint32" }
+        Columns { Name: "value" Type: "Uint32" }
+        KeyColumnNames: ["key"]
+    )");
+    env.TestWaitNotification(runtime, txId);
+    UploadRow(runtime, "/MyRoot/Table0", 0, {1}, {2},
+        {NKikimr::TCell::Make(1u)}, {NKikimr::TCell::Make(1u)});
+
+    TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+        R"(Name: ".backups/collections/MyCollection1")");
+    env.TestWaitNotification(runtime, txId);
+
+    for (ui32 i = 0; i < numIncrementals; ++i) {
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table0", 0, {1}, {2},
+            {NKikimr::TCell::Make(2u + i)}, {NKikimr::TCell::Make(2u + i)});
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        const ui64 incrBackupId = txId;
+        env.TestWaitNotification(runtime, txId);
+        WaitForIncrementalBackupDone(runtime, &env, incrBackupId, "/MyRoot");
+    }
+
+    TestDropTable(runtime, ++txId, "/MyRoot", "Table0");
+    env.TestWaitNotification(runtime, txId);
 }
 
 } // namespace NIncrementalRestoreHelpers

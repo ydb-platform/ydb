@@ -57,7 +57,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(TIncrementalRestoreState::EState::Running)),
-            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RestoreStartedAt>(state.RestoreStartedAt.MicroSeconds()),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
         );
 
         CheckForCompletedOperations(state, db, ctx);
@@ -151,26 +153,37 @@ private:
     }
     
     bool HandleRetryPath(TIncrementalRestoreState& state, NIceDb::TNiceDb& db, const TActorContext& ctx) {
-        const i64 cap = Self->IncrementalRestoreSettings.MaxIncrementalRestoreRetriesPerIncremental;
-        // Skip budget check while a retry is in flight to avoid premature failure.
-        const bool budgetExceeded = (cap != -1)
-            && !state.RetryScheduled
-            && (i64)state.CurrentIncrementalRetryCount >= cap;
-        if (state.NonRetriableFailure || budgetExceeded) {
+        // Two-tier wall-clock deadline check. Sentinel -1 disables either tier.
+        const TInstant now = ctx.Now();
+        const i64 overall = Self->IncrementalRestoreSettings.MaxIncrementalRestoreOverallDurationSeconds;
+        const i64 stage = Self->IncrementalRestoreSettings.MaxIncrementalRestoreStageDurationSeconds;
+        const bool overallExpired = (overall != -1)
+            && state.RestoreStartedAt != TInstant::Zero()
+            && (now - state.RestoreStartedAt).Seconds() >= (ui64)overall;
+        const bool stageExpired = (stage != -1)
+            && state.CurrentStageStartedAt != TInstant::Zero()
+            && (now - state.CurrentStageStartedAt).Seconds() >= (ui64)stage;
+        if (state.NonRetriableFailure || overallExpired || stageExpired) {
             LOG_E("Incremental #" << state.CurrentIncrementalIdx
                   << " short-circuiting to Failed: nonRetriable="
                   << state.NonRetriableFailure
-                  << " retryCount=" << state.CurrentIncrementalRetryCount
-                  << " cap=" << cap);
+                  << " overallExpired=" << overallExpired
+                  << " stageExpired=" << stageExpired
+                  << " overall=" << overall
+                  << " stage=" << stage);
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
             // Route through PersistIncrementalRestoreTerminalState so FinalStatus is durable across reboots.
-            const TString failureIssues = state.NonRetriableFailure
-                ? TString("Non-retriable failure during incremental restore")
-                : TString("Retry budget exhausted during incremental restore");
+            const bool deadlineExpiry = (overallExpired || stageExpired);
+            const ui32 finalStatus = deadlineExpiry
+                ? static_cast<ui32>(Ydb::StatusIds::TIMEOUT)
+                : static_cast<ui32>(Ydb::StatusIds::GENERIC_ERROR);
+            const TString failureIssues = deadlineExpiry
+                ? TString("Restore deadline exceeded")
+                : TString("Non-retriable failure during incremental restore");
             TSchemeShard::PersistIncrementalRestoreTerminalState(Self, db, OperationId, state,
                 TIncrementalRestoreState::EState::Failed,
-                static_cast<ui32>(Ydb::StatusIds::GENERIC_ERROR),
+                finalStatus,
                 failureIssues);
             return true;
         }
@@ -179,14 +192,13 @@ private:
             if (ctx.Now() < state.NextRetryAttemptAt) {
                 LOG_I("Backoff window in flight for incremental #"
                       << state.CurrentIncrementalIdx
-                      << " (retry " << state.CurrentIncrementalRetryCount
-                      << ", until " << state.NextRetryAttemptAt
+                      << " (until " << state.NextRetryAttemptAt
                       << "), skipping concurrent retry trigger");
                 return true;
             }
 
             LOG_I("Backoff timer fired for incremental #" << state.CurrentIncrementalIdx
-                  << ", proceeding with retry attempt " << state.CurrentIncrementalRetryCount);
+                  << ", proceeding with retry attempt");
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
             state.RetryNeeded = false;
@@ -202,21 +214,33 @@ private:
 
             TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
             db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty),
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(false),
+                NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(0)
             );
 
             ProcessNextIncrementalBackup(state, db, ctx);
             return true;
         }
 
-        state.CurrentIncrementalRetryCount++;
-        auto delay = NDataShard::GetRetryWakeupTimeoutBackoff(state.CurrentIncrementalRetryCount);
+        // Schedule a backoff. Use elapsed-time-based attempt count to drive
+        // GetRetryWakeupTimeoutBackoff (avoids needing a persistent counter).
+        const TDuration elapsedInStage = state.CurrentStageStartedAt != TInstant::Zero()
+            ? (now - state.CurrentStageStartedAt)
+            : TDuration::Zero();
+        const ui32 attemptHint = static_cast<ui32>(elapsedInStage.Seconds() / 5) + 1;
+        auto delay = NDataShard::GetRetryWakeupTimeoutBackoff(attemptHint);
         state.NextRetryAttemptAt = ctx.Now() + delay;
         state.RetryScheduled = true;
+        db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::RetryScheduled>(true),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::NextRetryAttemptAt>(state.NextRetryAttemptAt.MicroSeconds())
+        );
         LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
-              << ", retry attempt " << state.CurrentIncrementalRetryCount
-              << "/" << (cap == -1 ? "unlimited" : ToString(cap))
-              << " scheduled in " << delay);
+              << ", retry scheduled in " << delay
+              << " (overallDeadline=" << (overall == -1 ? TString("unlimited") : ToString(overall) + "s")
+              << " stageDeadline=" << (stage == -1 ? TString("unlimited") : ToString(stage) + "s")
+              << ")");
         Self->Schedule(delay,
             new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
         return true;
@@ -226,10 +250,13 @@ private:
         LOG_I("All operations for current incremental backup completed, moving to next");
         state.MarkCurrentIncrementalComplete();
         state.MoveToNextIncremental();
+        // Reset the stage deadline anchor for the next incremental.
+        state.CurrentStageStartedAt = ctx.Now();
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
         );
 
         LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
@@ -491,6 +518,9 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     state.OriginalOperationId = ui64(operationId.GetTxId());
     state.CurrentIncrementalIdx = 0;
     state.CurrentIncrementalStarted = false;
+    // Two-tier deadline anchors. Persisted on first TTxProgressIncrementalRestore tx.
+    state.RestoreStartedAt = ctx.Now();
+    state.CurrentStageStartedAt = ctx.Now();
 
     for (const auto& backupName : incrementalBackupNames) {
         TPathId dummyPathId;
@@ -1124,9 +1154,9 @@ private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr Ev;
 
     void ScheduleAllocatorRetry(ui64 originalOpId, ui32 itemSeq, const TActorContext& ctx) {
-        // Re-send TEvAllocate after a backoff. CurrentIncrementalRetryCount is
-        // intentionally not touched — the per-incremental retry budget is
-        // independent of allocator retries.
+        // Re-send TEvAllocate after a backoff. Allocator-level retries do not
+        // touch the per-restore wall-clock deadlines (the deadline anchors
+        // started at first dispatch and continue running regardless).
         Y_UNUSED(itemSeq);
         const TActorId txAllocator = Self->TxAllocatorClient;
         std::unique_ptr<IEventHandle> ev(new IEventHandle(

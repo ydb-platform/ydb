@@ -676,7 +676,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Generous deadlines so deadline-expiry doesn't race the non-retriable bit.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
         TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
         env.TestWaitNotification(runtime, txId);
@@ -838,14 +839,17 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    // Transient backoff state is wiped on reboot; the next attempt fires immediately and restore succeeds.
+    // Backoff state (RetryScheduled, NextRetryAttemptAt) persists across SS reboots
+    // and the deadline anchors are honored: restore eventually succeeds because the
+    // failure observer only runs for the first event of each test process start.
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalRestoreBackoffSurvivesReboot, 2, 1, false) {
         t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TControlBoard::SetValue(5, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+                // Generous deadlines so the reboot path has room to recover.
+                SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -899,8 +903,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             }
 
             // Reboot bucket fires somewhere in here. After reboot, RetryScheduled
-            // and NextRetryAttemptAt are wiped. The next attempt fires immediately;
-            // restore eventually succeeds because the failure observer only runs
+            // and NextRetryAttemptAt persist across reboot via Schema columns 9/10.
+            // Restore eventually succeeds because the failure observer only runs
             // for the first event each time the test process starts.
             {
                 TInactiveZone inactive(activeZone);
@@ -1129,6 +1133,93 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             "TTxInit may not be re-issuing allocate for orphan items.");
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table1"), 2u);
+    }
+
+    // T-S3: Overall wall-clock deadline anchors are persisted via Schema column 7;
+    // a manual reboot must NOT reset the deadline. The restore eventually fails
+    // once the cumulative elapsed time crosses the overall deadline.
+    Y_UNIT_TEST(RestoreOverallDeadlineSurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Tight overall deadline (15s); stage disabled so we exercise the overall arm.
+        SetRestoreDeadlines(runtime, /*overallSec=*/15, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Inject infinite transient failures so the orchestrator never converges.
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for overall-deadline-reboot test");
+
+        const TInstant startedAt = runtime.GetCurrentTime();
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Reboot SchemeShard a couple of times before the deadline elapses.
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        {
+            TActorId sender = runtime.AllocateEdgeActor();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        }
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+        {
+            TActorId sender = runtime.AllocateEdgeActor();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        }
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+        const TDuration elapsed = runtime.GetCurrentTime() - startedAt;
+
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore status was SUCCESS under expired overall deadline + reboots");
+        UNIT_ASSERT_C(elapsed >= TDuration::Seconds(15),
+            "Restore terminated before the overall deadline elapsed: " << elapsed);
+    }
+
+    // T-S5: A scheduled retry (RetryScheduled=true, NextRetryAttemptAt set in
+    // the future) survives a SchemeShard reboot via Schema columns 9/10.
+    Y_UNIT_TEST(RetryScheduledSurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Generous deadlines; we just want a stable retry-scheduled state.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // First failure schedules a backoff. Subsequent attempts succeed.
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected single retriable failure for retry-scheduled-survives-reboot test");
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Let the failure happen and the backoff get persisted.
+        TInstant waitDeadline = runtime.GetCurrentTime() + TDuration::Seconds(30);
+        while (runtime.GetCurrentTime() < waitDeadline && failuresInjected.load() < 1) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_GE_C(failuresInjected.load(), 1, "Failure was not injected in time");
+
+        // Reboot SchemeShard mid-backoff. After reload, RetryScheduled and
+        // NextRetryAttemptAt persist via columns 9/10. Restore eventually succeeds.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Restore did not SUCCESS after retry-scheduled survives reboot");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
 } // Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests)

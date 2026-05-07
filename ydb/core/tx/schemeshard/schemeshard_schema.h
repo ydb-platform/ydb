@@ -2217,6 +2217,11 @@ struct Schema : NIceDb::Schema {
         struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
         struct FinalStatus : Column<5, NScheme::NTypeIds::Uint32> {};
         struct FinalIssues : Column<6, NScheme::NTypeIds::String> {};
+        // TInstant in microseconds; matches IncrementalBackups.{Start,End}Time convention.
+        struct RestoreStartedAt : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CurrentStageStartedAt : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct RetryScheduled : Column<9, NScheme::NTypeIds::Bool> {};
+        struct NextRetryAttemptAt : Column<10, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -2225,7 +2230,11 @@ struct Schema : NIceDb::Schema {
             CurrentIncrementalIdx,
             SerializedData,
             FinalStatus,
-            FinalIssues>;
+            FinalIssues,
+            RestoreStartedAt,
+            CurrentStageStartedAt,
+            RetryScheduled,
+            NextRetryAttemptAt>;
     };
 
     // Deprecated: kept for compatibility

@@ -180,18 +180,23 @@ struct TBackupSettings {
 // Per-incremental restore orchestrator rate-limit settings. Sentinel -1 means unbounded.
 struct TIncrementalRestoreSettings {
     TControlWrapper MaxIncrementalRestoreTablesInFlight;
-    TControlWrapper MaxIncrementalRestoreRetriesPerIncremental;
+    // Wall-clock deadlines (seconds). Sentinel -1 disables the deadline.
+    TControlWrapper MaxIncrementalRestoreOverallDurationSeconds;
+    TControlWrapper MaxIncrementalRestoreStageDurationSeconds;
 
     TIncrementalRestoreSettings()
         : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
-        , MaxIncrementalRestoreRetriesPerIncremental(50, -1, 1000)
+        , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
+        , MaxIncrementalRestoreStageDurationSeconds(21600, -1, 86400)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
         TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
                                              icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
-        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreRetriesPerIncremental,
-                                             icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreOverallDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
     }
 };
 
@@ -3742,7 +3747,11 @@ struct TIncrementalRestoreState {
     bool CurrentIncrementalStarted = false;
 
     bool RetryNeeded = false;
-    ui32 CurrentIncrementalRetryCount = 0;
+
+    // Two-tier wall-clock deadline anchors. Persisted across reboots so the
+    // budget cannot be defeated by a reboot loop.
+    TInstant RestoreStartedAt;
+    TInstant CurrentStageStartedAt;
 
     // Two-phase backoff guard: set when a retry is scheduled, cleared when it fires.
     // Prevents concurrent completion events from double-counting retries.
@@ -3841,7 +3850,8 @@ struct TIncrementalRestoreState {
             TableOperations.clear();
             PendingTables.clear();
 
-            CurrentIncrementalRetryCount = 0;
+            // Stage deadline anchor reset is owned by the caller (HandleAllOperationsComplete)
+            // because it needs ctx.Now() and a paired db.Update.
             RetryScheduled = false;
             NextRetryAttemptAt = TInstant::Zero();
             NonRetriableFailure = false;

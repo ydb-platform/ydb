@@ -81,17 +81,25 @@ public:
             );
         }
 
-        // Check if the restore can be forgotten
+        // Check if the restore can be forgotten.
         // Allow forgetting when:
         // 1. The main operation is no longer active (not in Operations table), AND
-        // 2. Either actual incremental processing progress has been made OR the operation is fully completed, AND
-        // 3. There are no incremental operations still in progress
+        // 2. The orchestrator state has reached a terminal/finalizing phase, AND
+        // 3. There are no incremental operations still in progress.
+        //
+        // Predicate intentionally drops the prior progress-arms (CurrentIncrementalIdx > 0,
+        // !CompletedOperations.empty()) because:
+        //   - mainOperationActive=false already blocks Forget while the long op is alive
+        //     and CompletedOperations is not loaded for Running rows on reboot, leading
+        //     to a brief post-reboot eligibility window where Forget would (incorrectly)
+        //     be accepted only once a heartbeat repopulated CompletedOperations.
+        //   - Restricting to {Completed, Failed, Finalizing} makes Forget unconditionally
+        //     reject Running, which is the only safe outcome.
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
-        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 ||
-                                   !incrementalRestore.CompletedOperations.empty() ||
-                                   incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
-                                   incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
-                                   incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing);
+        bool stateAllowsForget =
+            incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
+            incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
+            incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing;
         bool hasActiveIncrementalOperations = false;
 
         // Check if any of the in-progress operations are still active
@@ -105,7 +113,7 @@ public:
         // PersistIncrementalRestoreTerminalState and LongIncrementalRestoreOps.erase happen in the same
         // finalize tx, so FORGET either sees State==Finalizing (and is blocked below)
         // or State==Completed/Failed with the long-op already released.
-        bool canForget = !mainOperationActive && actualProgressMade
+        bool canForget = !mainOperationActive && stateAllowsForget
                       && !hasActiveIncrementalOperations;
         
         if (!canForget) {

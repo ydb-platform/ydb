@@ -8981,6 +8981,26 @@
                 "ColumnId": 6,
                 "ColumnName": "FinalIssues",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "RestoreStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "CurrentStageStartedAt",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "RetryScheduled",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "NextRetryAttemptAt",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -8992,7 +9012,11 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8,
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

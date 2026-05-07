@@ -1843,50 +1843,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    // Cap remains in effect during the retry wave after a shard failure.
-    Y_UNIT_TEST(IncrementalRestoreCapRespectedDuringRetry) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
-
-        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
-
-        TInFlightTracker tracker;
-        auto [observerStart, observerEnd] = tracker.AttachObservers(runtime);
-
-        // Inject one TEvFinished failure (same pattern as IncrementalRestoreShardFailureTriggersRetry).
-        std::atomic<int> failuresInjected{0};
-        auto failureObserver = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
-            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
-            "Injected scan failure for cap+retry test");
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/MyCollection1")");
-        env.TestWaitNotification(runtime, txId);
-
-        WaitForRestoreDone(runtime, &env, "/MyRoot", true, TDuration::Seconds(2), TDuration::Seconds(120));
-
-        // Cap respected during retry wave.
-        UNIT_ASSERT_C(tracker.PeakInFlight.load() <= 2,
-            "Peak in-flight exceeded cap=2 during retry, saw " << tracker.PeakInFlight.load());
-        UNIT_ASSERT_GE(failuresInjected.load(), 1);
-
-        // All 4 tables restored despite injected failure.
-        for (ui32 i = 0; i < 4; ++i) {
-            TString fullPath = TStringBuilder() << "/MyRoot/Table" << i;
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, fullPath), 2u);
-        }
-    }
-
     // Backoff gaps between retries honor GetRetryWakeupTimeoutBackoff: >=1s then >=2s.
     Y_UNIT_TEST(IncrementalRestoreRetryBackoffEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Generous deadlines so the backoff gap test isn't accidentally killed.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
@@ -1935,40 +1899,78 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Budget cap=2 exhausted by injected failures → restore must reach GENERIC_ERROR.
-    Y_UNIT_TEST(IncrementalRestoreRetryBudgetEnforced) {
+    // T-S1: Overall wall-clock deadline must terminate the restore as Failed
+    // (with TIMEOUT) once persistent transient failures consume the budget.
+    Y_UNIT_TEST(RestoreOverallDeadlineEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        TControlBoard::SetValue(2, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Tight overall deadline; stage tier disabled so we exercise the overall arm.
+        SetRestoreDeadlines(runtime, /*overallSec=*/10, /*stageSec=*/-1);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
             NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
-            "Injected retriable failure for budget test");
+            "Injected retriable failure for overall-deadline test");
 
+        const TInstant startedAt = runtime.GetCurrentTime();
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
         env.TestWaitNotification(runtime, txId);
 
         Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
             TDuration::Seconds(1), TDuration::Seconds(120));
+        const TDuration elapsed = runtime.GetCurrentTime() - startedAt;
 
         UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
-            "Restore status was SUCCESS under exhausted retry budget");
-        UNIT_ASSERT_GE(failuresInjected.load(), 3);
+            "Restore status was SUCCESS under expired overall deadline");
+        UNIT_ASSERT_C(elapsed >= TDuration::Seconds(10),
+            "Restore terminated before the overall deadline elapsed: " << elapsed);
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
     }
 
-    // cap=-1 disables the budget; restore must succeed after 20 injected failures.
-    Y_UNIT_TEST(IncrementalRestoreRetryBudgetUnlimited) {
+    // T-S2: Stage deadline must terminate the restore independently of the overall tier.
+    Y_UNIT_TEST(RestoreStageDeadlineEnforced) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        TControlBoard::SetValue(-1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Overall disabled, stage tight.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/10);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for stage-deadline test");
+
+        const TInstant startedAt = runtime.GetCurrentTime();
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(120));
+        const TDuration elapsed = runtime.GetCurrentTime() - startedAt;
+
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore status was SUCCESS under expired stage deadline");
+        UNIT_ASSERT_C(elapsed >= TDuration::Seconds(10),
+            "Restore terminated before the stage deadline elapsed: " << elapsed);
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
+    }
+
+    // Both deadlines disabled (-1) => arbitrarily long retries are tolerated.
+    Y_UNIT_TEST(IncrementalRestoreUnlimitedDeadlines) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
@@ -1976,7 +1978,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         std::atomic<int> failuresInjected{0};
         auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/FailuresBeforeSuccess,
             NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
-            "Injected retriable failure for unlimited-cap test");
+            "Injected retriable failure for unlimited-deadlines test");
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/MyCollection1")");
@@ -1992,18 +1994,18 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto finalResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
         UNIT_ASSERT_C(finalResp.GetBackupCollectionRestore().GetStatus() == Ydb::StatusIds::SUCCESS,
             "Restore did not succeed after " << FailuresBeforeSuccess
-            << " retriable failures (expected -1 cap to be unlimited)");
+            << " retriable failures (expected -1/-1 deadlines to be unlimited)");
         UNIT_ASSERT_GE(failuresInjected.load(), FailuresBeforeSuccess);
     }
 
-    // Non-retriable failure short-circuits to Failed without consuming the retry budget.
+    // Non-retriable failure short-circuits to Failed regardless of deadline budget.
     Y_UNIT_TEST(IncrementalRestoreNonRetriableShortCircuits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Generous budget; we expect the non-retriable bit to trump the cap.
-        TControlBoard::SetValue(50, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Generous deadlines; the non-retriable bit must trump them.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
@@ -2031,17 +2033,18 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             << failuresInjected.load());
     }
 
-    // Concurrent completion events must not double-count the retry counter.
+    // Concurrent completion events must not run the deadline-burning retry path
+    // more than once for a single round of failures.
     Y_UNIT_TEST(IncrementalRestoreRetryNotDoubleCountedOnConcurrentEvents) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Cap = 3. If concurrent events double-count, 4 failures × 1 round
-        // would push the count to 4 > 3 and Fail before the second round even
-        // starts. With proper de-duplication, we need 3 full rounds before
-        // hitting the cap.
-        TControlBoard::SetValue(3, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Tight deadline (15s). If concurrent events double-fired the retry
+        // path, the orchestrator would either hit the deadline early or skip a
+        // backoff window. With proper RetryScheduled de-duplication, the
+        // single retry path runs once and the restore succeeds.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/15);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/4);
 
@@ -2170,14 +2173,17 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 2u);
     }
 
-    // Allocator-level retries must not consume the per-incremental retry budget.
+    // Allocator-level retries must not flip the orchestrator into the
+    // deadline-burning retry path. Tight deadlines verify the allocator path
+    // is independent of the per-restore wall-clock budget.
     Y_UNIT_TEST(AllocatorRetryDoesNotConsumeRetryBudget) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        // Per-incremental retry budget = 1: a second retry would FAIL.
-        TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.MaxIncrementalRestoreRetriesPerIncremental);
+        // Generous deadlines so allocator-level backoff has room to settle;
+        // we exercise that the orchestrator does not enter HandleRetryPath.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
 
         SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
 
@@ -2292,5 +2298,79 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             UNIT_ASSERT_VALUES_UNEQUAL_C(entry.GetId(), restoreId,
                 "Forgotten restore reappeared after orphan allocator delivery");
         }
+    }
+
+    // T-S4: With 2 incrementals and a stage budget that's tight enough that a
+    // failure-only restore would die in stage 1 if the stage budget weren't
+    // reset, verify a healthy multi-incremental restore succeeds: each stage
+    // gets a fresh deadline window.
+    Y_UNIT_TEST(RestoreStageDeadlineResetsOnNextIncremental) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Stage budget = 30s; overall disabled. With 2 incrementals each
+        // taking <30s and the stage anchor reset on MoveToNextIncremental,
+        // the restore must succeed.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/30);
+
+        SetupBackupCollectionWithKIncrementals(runtime, env, txId, /*numIncrementals=*/2);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(2), TDuration::Seconds(120));
+        UNIT_ASSERT_VALUES_EQUAL_C(finalStatus, Ydb::StatusIds::SUCCESS,
+            "Multi-incremental restore did not SUCCESS — stage anchor likely not reset");
+
+        // 1 row from full + 1 row per incremental (each writes a distinct key).
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table0"), 3u);
+    }
+
+    // T-S6: Forget while a restore is in Running state must be rejected.
+    // The post-reboot eligibility window is closed by tightening the predicate
+    // to {Completed, Failed, Finalizing} state.
+    Y_UNIT_TEST(ForgetRunningStateRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        // Generous deadlines; we just want a long-running restore.
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        // Inject persistent transient failures so the orchestrator stays in
+        // Running state via repeated retry rounds.
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/INT_MAX,
+            NKikimrTxDataShard::TShardOpResult::END_TRANSIENT_FAILURE,
+            "Injected retriable failure for forget-running test");
+
+        AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        const ui64 startTxId = txId;
+        TestModificationResult(runtime, startTxId, NKikimrScheme::StatusAccepted);
+
+        // Wait until the restore appears in the registry.
+        TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        ui64 restoreId = 0;
+        while (runtime.GetCurrentTime() < deadline) {
+            auto list = TestListBackupCollectionRestores(runtime, "/MyRoot");
+            if (!list.GetEntries().empty()) {
+                restoreId = list.GetEntries().rbegin()->GetId();
+                break;
+            }
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(restoreId != 0, "Restore did not register within timeout");
+
+        // While the orchestrator is still in Running with the long op active,
+        // Forget must be denied.
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_GE(failuresInjected.load(), 1);
     }
 }

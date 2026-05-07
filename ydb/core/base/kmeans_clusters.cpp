@@ -973,6 +973,20 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
     }
     constexpr double scoreThreshold = 1500;
 
+    auto clampClusters = [&](ui64 clusters, ui64 levels) -> ui64 {
+        ui64 maxClusters = MaxClusters;
+        if (levels > 0) {
+            double maxByPowLevels = std::pow(static_cast<double>(MaxClustersPowLevels), 1.0 / levels);
+            maxClusters = std::min(maxClusters, static_cast<ui64>(std::floor(maxByPowLevels)));
+        }
+        if (settings.settings().has_vector_dimension() && settings.settings().vector_dimension() != 0) {
+            ui64 maxByDim = MaxVectorDimensionMultiplyClusters / settings.settings().vector_dimension();
+            maxClusters = std::min(maxClusters, maxByDim);
+        }
+        clusters = std::min(clusters, maxClusters);
+        return clusters < MinClusters ? MinClusters : clusters;
+    };
+
     if (!hasLevels && !hasClusters) {
         ui64 bestLevels = 1;
         ui64 bestClusters = MinClusters;
@@ -980,6 +994,7 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
 
         for (ui64 levels = 1; levels <= MaxLevels; ++levels) {
             ui64 clusters = ComputeOptimalClusters(levels, searchWidth, rowCount, avgClustersPerVector);
+            clusters = clampClusters(clusters, levels);
             double score = ComputeEfficiencyScore(levels, clusters, searchWidth, rowCount, avgClustersPerVector);
             if (score < bestScore) {
                 bestScore = score;
@@ -994,6 +1009,7 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
         settings.set_clusters(bestClusters);
     } else if (hasLevels && !hasClusters) {
         ui64 clusters = ComputeOptimalClusters(settings.levels(), searchWidth, rowCount, avgClustersPerVector);
+        clusters = clampClusters(clusters, settings.levels());
         settings.set_clusters(clusters);
     } else if (!hasLevels && hasClusters) {
         ui64 clusters = settings.clusters();

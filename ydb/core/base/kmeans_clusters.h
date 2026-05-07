@@ -67,6 +67,9 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 
+ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
+double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
+
 void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 rowCount, bool isPrefixed = false);
 bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& settings, const TStringBuf& embedding);
 bool NeedsVectorSettingsAutoSelect(const Ydb::Table::VectorIndexSettings& settings);

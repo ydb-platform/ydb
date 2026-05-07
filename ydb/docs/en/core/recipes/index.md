@@ -4,9 +4,6 @@ This section of {{ ydb-short-name }} documentation contains ready-to-use recipes
 
 * [{#T}](ydb-sdk/index.md)
 * [{#T}](ydb-cli/index.md)
-<<<<<<< HEAD
-=======
 * [{#T}](transfer/index.md)
 * [{#T}](./streaming_queries/index.md)
->>>>>>> ff4e63c893e (Translation of PR 25701 YQ-4502 add streaming_queries docs (#39540))
 * [{#T}](../yql/reference/recipes/index.md)

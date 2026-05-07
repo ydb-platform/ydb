@@ -37,14 +37,5 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
-<<<<<<< HEAD
-- name: Query optimizer
-  href: optimizer.md
-- name: Federated query
-  include:
-    path: federated_query/toc_p.yaml
-    mode: link
-=======
 - name: Streaming queries
   href: streaming-query.md
->>>>>>> ff4e63c893e (Translation of PR 25701 YQ-4502 add streaming_queries docs (#39540))

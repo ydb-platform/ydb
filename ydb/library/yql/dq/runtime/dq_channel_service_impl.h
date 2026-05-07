@@ -1058,7 +1058,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
 
     public:
         TBroadcastOutputChannel(std::weak_ptr<TDqChannelService> service, const TBroadcastChannelSettings &broadcastSettings, std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers, bool localChannel)
-            : Service(service), Storage(broadcastSettings.settings[0].ChannelStorage), OutputSize(broadcastSettings.settings.size())
+            : Service(service), Storage(broadcastSettings.settings[0].ChannelStorage), ChannelQuotaManager(broadcastSettings.settings[0].ChannelQuotaManager), OutputSize(broadcastSettings.settings.size())
         {
             auto& settings = broadcastSettings.settings[0];
             PushStats.Level = settings.Level;
@@ -1097,7 +1097,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
         }
 
         void Push(NUdf::TUnboxedValue &&value) override {
-            // std::cout << "pushing through broadcast channel \n";
+            std::cout << "pushing through broadcast channel \n";
             if (!Serializer->Buffer->IsFinished())
             {
                 Serializer->Push(std::move(value));
@@ -1200,6 +1200,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
         std::shared_ptr<TDqFillAggregator> Aggregator;
         IDqChannelStorage::TPtr Storage;
         bool IsLocalChannel = false;
+        IMemoryQuotaManager::TPtr ChannelQuotaManager;
 
         // binding info
         std::unordered_map<ui64, bool> Binded;
@@ -1250,19 +1251,19 @@ class TBroadcastOutputChannel : public IDqOutputChannel
             }
 
             Service.reset();
-            // std::string s;
-            // for(auto& [_, buf] : broadcastBuffer->Buffers) {
-            //     s += std::to_string(buf->Info.ChannelId);
-            //     s += ", ";
-            //     s += buf->Info.OutputActorId.ToString();
-            //     s += ", ";
-            //     s += buf->Info.InputActorId.ToString();
-            //     s += " {";
-            //     for (auto& [x, y] : buf->Info.BroadcastInputActors)
-            //         s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
-            //     s += "}\n";
-            // }
-            // std::cout << "binding finished:\n " << s << "\n";
+            std::string s = "binding finished for node: " + std::to_string(broadcastBuffer->Info.OutputActorId.NodeId()) + '\n';
+            for(auto& [_, buf] : broadcastBuffer->Buffers) {
+                s += std::to_string(buf->Info.ChannelId);
+                s += ", ";
+                s += buf->Info.OutputActorId.ToString();
+                s += ", ";
+                s += buf->Info.InputActorId.ToString();
+                s += " {";
+                for (auto& [x, y] : buf->Info.BroadcastInputActors)
+                    s = s + x.ToString() + " -> "+ std::to_string(y) + ", ";
+                s += "}\n";
+            }
+            std::cout << s << "\n";
         }
     };
 

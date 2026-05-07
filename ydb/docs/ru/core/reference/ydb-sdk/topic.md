@@ -63,6 +63,52 @@
   NYdb::NTopic::TTopicClient topicClient(driver);
   ```
 
+<<<<<<< HEAD
+=======
+- Go
+
+  Для работы с топиками используется экземпляр драйвера {{ ydb-short-name }}, созданный с помощью `ydb.Open`. Клиент топиков доступен через метод `db.Topic()`.
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    // db.Topic() — клиент для работы с топиками
+    writer, err := db.Topic().StartWriter("topic-path")
+    if err != nil {
+      panic(err)
+    }
+
+    reader, err := db.Topic().StartReader("consumer-name",
+      topicoptions.ReadTopic("topic-path"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    _ = writer
+    _ = reader
+  }
+  ```
+
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Java
 
   Для работы с топиками создаются экземпляры транспорта {{ ydb-short-name }} и клиента.
@@ -1932,6 +1978,45 @@
 
 {% list tabs group=lang %}
 
+<<<<<<< HEAD
+=======
+- C++
+
+  В `NYdb::NTopic::TReadSessionSettings` вызовите `WithoutConsumer()`:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .WithoutConsumer()
+      .AppendTopics(
+          NYdb::NTopic::TTopicReadSettings("topic-path")
+              .AppendPartitionIds(0)
+              .AppendPartitionIds(1)
+              .AppendPartitionIds(2));
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  При переподключении прогресс чтения на сервере не сохраняется. Чтобы не начинать с начала, при каждом старте сессии чтения партиции передавайте смещение в `TStartPartitionSessionEvent::Confirm` — см. [хранение позиции на клиенте](#client-commit).
+
+- Go
+
+  Нужно передать пустую строку в качестве имени consumer и опцию `topicoptions.WithReaderWithoutConsumer(false)` (режим **экспериментальный**, см. [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) в репозитории SDK). В селекторе чтения укажите путь топика и список партиций. Коммиты сообщений в этом режиме недоступны (`CommitModeNone`); при переподключениях прогресс нужно восстанавливать на стороне клиента — см. [хранение позиции на клиенте](#client-commit).
+
+  ```go
+  reader, err := db.Topic().StartReader(
+    "",
+    topicoptions.ReadSelectors{{
+      Path:       "topic-path",
+      Partitions: []int64{0, 1, 2},
+    }},
+    topicoptions.WithReaderWithoutConsumer(false),
+  )
+  if err != nil {
+    return err
+  }
+  ```
+
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Java
 
   Для чтения без Consumer'а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
@@ -2525,6 +2610,78 @@
 
 {% list tabs group=lang %}
 
+<<<<<<< HEAD
+=======
+- C++
+
+  Подтверждение обработки вне сессии чтения производится с помощью метода `NYdb::NTopic::TTopicClient::CommitOffset`:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/topic/client.h>
+
+  NYdb::NTopic::TTopicClient topicClient(driver);
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset).GetValueSync());
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (например через `CreateReadSession`), рекомендуется передать её идентификатор с помощью опции `ReadSessionId` в `NYdb::NTopic::TCommitOffsetSettings`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```cpp
+  // Получение идентификатора сессии чтения
+  std::string sessionId = readSession->GetSessionId();
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset,
+      NYdb::NTopic::TCommitOffsetSettings()
+          .ReadSessionId(sessionId)
+  ).GetValueSync());
+  ```
+
+- Go
+
+  Подтверждение обработки вне читателя производится с помощью метода `db.Topic().CommitOffset`:
+
+  ```go
+  // Базовый способ — подтверждение оффсета без активной сессии чтения
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+  )
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (через `StartReader` или `StartListener`), рекомендуется передать её идентификатор с помощью опции `WithCommitOffsetReadSessionID`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```go
+  import (
+    // ...
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  // Получение идентификатора сессии чтения
+  sessionID := reader.ReadSessionID()
+  // или: sessionID := listener.ReadSessionID()
+
+  err = db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+    topicoptions.WithCommitOffsetReadSessionID(sessionID),
+  )
+  ```
+
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:

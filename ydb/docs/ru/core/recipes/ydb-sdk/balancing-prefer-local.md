@@ -4,7 +4,54 @@
 
 {% list tabs %}
 
+<<<<<<< HEAD
 - Go (native)
+=======
+- С++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: true
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
+
+- Go
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   ```go
   package main
@@ -81,6 +128,7 @@
   }
   ```
 
+<<<<<<< HEAD
 - С++
 
   {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
@@ -100,5 +148,108 @@
     return 0;
   }
   ```
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+        credentials=ydb.credentials_from_env_variables(),
+        use_all_nodes=False,  # предпочитать ближайший дата-центр
+    )
+
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=5)
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        driver_config = ydb.DriverConfig(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+            use_all_nodes=False,  # предпочитать ближайший дата-центр
+        )
+        async with ydb.aio.Driver(driver_config) as driver:
+            await driver.wait()
+            # ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        os.environ["YDB_SQLALCHEMY_URL"],
+        connect_args={
+            "driver_config_kwargs": {
+                "use_all_nodes": False,  # предпочитать ближайший дата-центр
+            }
+        },
+    )
+    ```
+
+  {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.detectLocalDs())
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    См. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md); при необходимости задайте политику балансировки через нативный транспорт.
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` или свойства `DataSource`).
+
+  {% endlist %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
 {% endlist %}

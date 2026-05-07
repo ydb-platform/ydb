@@ -59,7 +59,7 @@ protected:
 
 template <typename T>
 auto CreateCallback(std::shared_ptr<T>&& ctx) {
-    return [ctx](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) {
+    return [ctx = std::move(ctx)](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) {
         ctx->OnResponse(statusCode, message);
     };
 }

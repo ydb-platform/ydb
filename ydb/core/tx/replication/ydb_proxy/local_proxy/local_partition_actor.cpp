@@ -7,10 +7,10 @@ using namespace NSchemeCache;
 
 TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(
         const std::string& database,
-        const std::string&& topicPath,
+        const std::string& topicPath,
         ui32 partitionId)
     : Database(database)
-    , TopicPath(std::move(topicPath))
+    , TopicPath(topicPath)
     , PartitionId(partitionId)
 {
 }

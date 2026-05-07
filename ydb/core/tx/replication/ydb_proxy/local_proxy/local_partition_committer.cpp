@@ -18,12 +18,10 @@ public:
             std::string&& topicName,
             ui64 partitionId,
             std::string&& consumerName,
-            std::optional<std::string>&& readSessionId,
             ui64 offset)
-        : TBaseLocalTopicPartitionActor(database, std::move(topicName), partitionId)
+        : TBaseLocalTopicPartitionActor(database, topicName, partitionId)
         , Parent(parent)
         , ConsumerName(std::move(consumerName))
-        , ReadSessionId(std::move(readSessionId))
         , Offset(offset)
     {
     }
@@ -109,7 +107,6 @@ private:
 private:
     const TActorId Parent;
     const TString ConsumerName;
-    const std::optional<TString> ReadSessionId;
     const ui64 Offset;
 
 }; // TLocalTopicPartitionCommitActor
@@ -124,7 +121,6 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
         std::move(topicName),
         partitionId,
         std::move(consumerName),
-        std::move(settings.ReadSessionId_),
         offset
     ));
 }

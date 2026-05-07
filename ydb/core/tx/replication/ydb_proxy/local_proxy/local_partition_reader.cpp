@@ -28,7 +28,7 @@ public:
             TEvYdbProxy::TTopicReaderSettings& settings)
         : TBaseLocalTopicPartitionActor(
             database,
-            std::move(settings.GetBase().Topics_[0].Path_),
+            settings.GetBase().Topics_[0].Path_,
             settings.GetBase().Topics_[0].PartitionIds_[0]
         )
         , Parent(parent)
@@ -333,8 +333,8 @@ private:
 
     std::deque<TReadRequest> RequestsQueue;
 
-    ui64 Offset;
-    ui64 SentOffset;
+    ui64 Offset = 0;
+    ui64 SentOffset = 0;
 
 }; // TLocalTopicPartitionReaderActor
 

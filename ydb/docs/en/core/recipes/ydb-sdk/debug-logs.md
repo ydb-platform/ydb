@@ -403,9 +403,4 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   logging.getLogger('ydb').setLevel(logging.DEBUG)
   ```
 
-- JavaScript
-
-  The SDK uses the [debug](https://www.npmjs.com/package/debug) library for logging.
-  To enable logs, set the `DEBUG` environment variable to filter SDK events, for example `DEBUG=ydbjs:*`.
-
 {% endlist %}
